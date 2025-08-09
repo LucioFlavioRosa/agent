@@ -20,4 +20,4 @@ def connection(repositorio: str):
     auth = Token(github_token)
     g = Github(auth=auth)
     return g.get_repo(repositorio)
-    return g.get_repo(repositorio)
+
