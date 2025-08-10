@@ -2,7 +2,7 @@
 
 from tools import github_connector
 # [NOVO] Importa as funções para interagir com o Redis
-from job_store import get_job, set_job
+from .job_store import get_job, set_job
 
 # [ALTERADO] A função agora recebe o job_id para poder reportar o progresso
 def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, job_id: str):
@@ -74,3 +74,4 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
         job_info['status'] = 'failed'
         set_job(job_id, job_info)
         raise e
+
