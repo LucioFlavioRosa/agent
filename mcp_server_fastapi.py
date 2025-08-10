@@ -1,20 +1,18 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO COMPLETA E FINAL)
+# Arquivo: mcp_server_fastapi.py (VERSÃO COM CORREÇÃO FINAL)
 
 import json
 import uuid
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel
 from typing import Optional, Literal, List, Dict
-
-# [IMPORTANTE] Middleware para permitir a comunicação entre frontend e backend
 from fastapi.middleware.cors import CORSMiddleware
 
 # --- Módulos do seu projeto ---
-# Certifique-se de que estes imports correspondem à sua estrutura de pastas
 from agents import agente_revisor
 from tools import preenchimento, commit_multiplas_branchs
 
 # --- Modelos de Dados (Pydantic) ---
+# ... (sem alterações nos modelos) ...
 class StartJobPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["design", "relatorio_teste_unitario"]
@@ -36,17 +34,18 @@ class UpdateJobPayload(BaseModel):
     action: Literal["approve", "reject"]
     observacoes: Optional[str] = None
 
+
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor com fluxo de status deliberado para análise de código.",
-    version="4.0.0"
+    version="4.1.0" # Versão com a correção final
 )
 
 # Configuração do CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Em produção, restrinja para o domínio do seu frontend
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,6 +55,7 @@ app.add_middleware(
 jobs: Dict[str, Dict] = {} 
 
 # Registro de workflows pós-aprovação
+# ... (sem alterações no WORKFLOW_REGISTRY) ...
 WORKFLOW_REGISTRY = {
     "design": {
         "description": "Analisa o design, refatora o código e agrupa os commits.",
@@ -68,6 +68,7 @@ WORKFLOW_REGISTRY = {
                   {"status_update": "grouping_tests", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_testes"}}]
     }
 }
+
 
 # --- Lógica das Tarefas em Background ---
 
@@ -86,11 +87,14 @@ def run_file_reading_task(job_id: str, payload: StartJobPayload):
         )
         nomes_dos_arquivos = list(codigo_com_conteudo.keys())
 
-        # Atualiza o status para um estado de "parada", aguardando o próximo comando
         jobs[job_id]['status'] = 'files_read_awaits_analysis'
         jobs[job_id]['data']['files_read'] = nomes_dos_arquivos
         jobs[job_id]['data']['codigo_com_conteudo'] = codigo_com_conteudo
-        jobs[job_id]['data'].update(payload.dict())
+        
+        # [CORREÇÃO] Em vez de .update(), atribuímos o dicionário diretamente.
+        # Isso garante que as chaves com valor None sejam preservadas.
+        jobs[job_id]['data'].update(payload.dict(exclude_unset=False)) 
+        
         print(f"[{job_id}] Leitura concluída. Aguardando comando para iniciar análise.")
 
     except Exception as e:
@@ -107,14 +111,13 @@ def run_report_generation_task(job_id: str):
         job_info['status'] = 'generating_report'
         print(f"[{job_id}] Tarefa de geração de relatório iniciada...")
 
-        # Pega os dados salvos na etapa anterior
         codigo_com_conteudo = job_info['data']['codigo_com_conteudo']
         payload_dict = job_info['data']
 
         resposta_agente = agente_revisor.gerar_relatorio_analise(
             tipo_analise=payload_dict['analysis_type'],
             codigo_para_analise=codigo_com_conteudo,
-            instrucoes_extras=payload_dict.get('instrucoes_extras')
+            instrucoes_extras=payload_dict.get('instrucoes_extras') # Agora isso é seguro
         )
         report = resposta_agente['reposta_final']
         
@@ -127,6 +130,7 @@ def run_report_generation_task(job_id: str):
         jobs[job_id]['status'] = 'failed'
         jobs[job_id]['error'] = f"Erro ao comunicar com a OpenAI: {e}"
 
+# ... (run_workflow_task não precisa de alterações) ...
 def run_workflow_task(job_id: str):
     """
     Tarefa 3: Executa o fluxo de trabalho pós-aprovação do usuário.
@@ -189,6 +193,7 @@ def run_workflow_task(job_id: str):
 
 
 # --- Endpoints da API ---
+# ... (sem alterações nos endpoints) ...
 @app.post("/jobs/start", response_model=StartJobResponse, tags=["Jobs"])
 def start_new_job(payload: StartJobPayload, background_tasks: BackgroundTasks):
     """Inicia o primeiro estágio: apenas a leitura dos arquivos."""
