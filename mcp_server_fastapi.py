@@ -158,6 +158,11 @@ def run_report_generation_task(job_id: str):
 
 
 def run_workflow_task(job_id: str):
+    """
+    Tarefa 3: Executa o fluxo de trabalho pós-aprovação do usuário,
+    com salvamento de status intermediários no Redis.
+    """
+    job_info = None  # Inicializa a variável
     try:
         job_info = get_job(job_id)
         print(f"[{job_id}] Iniciando workflow pós-aprovação...")
@@ -165,24 +170,70 @@ def run_workflow_task(job_id: str):
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
-        # ... (resto da lógica do workflow, usando set_job para cada atualização de status) ...
-        # Exemplo:
+        previous_step_result = None
+        resultado_refatoracao = None
+        resultado_agrupamento = None
+
         for i, step in enumerate(workflow['steps']):
+            # Pega a informação mais recente do job antes de cada passo
+            job_info = get_job(job_id) 
             job_info['status'] = step['status_update']
-            set_job(job_id, job_info)
-            # ... resto da lógica do passo ...
+            print(f"[{job_id}] ... Executando passo: {job_info['status']}")
+            set_job(job_id, job_info) # [CORREÇÃO] Salva o status do passo atual no Redis
+            
+            agent_params = step['params'].copy()
+            
+            if i == 0:
+                relatorio_aprovado = job_info['data']['analysis_report']
+                instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
+                observacoes_aprovacao = job_info['data'].get('observacoes_aprovacao')
+
+                instrucoes_completas = relatorio_aprovado
+                if instrucoes_iniciais:
+                    instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
+                if observacoes_aprovacao:
+                    instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
+                
+                agent_params.update({'codigo': instrucoes_completas})
+            else:
+                agent_params['codigo'] = str(previous_step_result)
+            
+            agent_response = step['agent_function'](**agent_params)
+            json_string = agent_response['resultado']['reposta_final'].replace("```json", '').replace("```", '')
+            previous_step_result = json.loads(json_string)
+            if i == 0: resultado_refatoracao = previous_step_result
+            else: resultado_agrupamento = previous_step_result
         
-        job_info['status'] = 'completed'
-        set_job(job_id, job_info)
-        print(f"[{job_id}] Processo concluído com sucesso!")
-        
-    except Exception as e:
         job_info = get_job(job_id)
-        if job_info:
-            job_info['status'] = 'failed'
-            job_info['error'] = str(e)
-            set_job(job_id, job_info)
+        job_info['status'] = 'populating_data'
+        set_job(job_id, job_info) # [CORREÇÃO] Salva o novo status
+        dados_preenchidos = preenchimento.main(json_agrupado=resultado_agrupamento, json_inicial=resultado_refatoracao)
+        
+        dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
+        for nome_grupo, detalhes_pr in dados_preenchidos.items():
+            if nome_grupo == "resumo_geral": continue
+            dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
+        
+        if not dados_finais_formatados.get("grupos"): raise ValueError("Dados para commit vazios.")
+
+        job_info = get_job(job_id)
+        job_info['status'] = 'committing_to_github'
+        set_job(job_id, job_info) # [CORREÇÃO] Salva o novo status
+        commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
+        
+        job_info = get_job(job_id)
+        job_info['status'] = 'completed'
+        set_job(job_id, job_info) # [CORREÇÃO] Salva o status final de sucesso
+        print(f"[{job_id}] Processo concluído com sucesso!")
+
+    except Exception as e:
         print(f"ERRO FATAL na tarefa de workflow [{job_id}]: {e}")
+        # Pega a versão mais recente do job para não sobrescrever dados
+        job_info_on_error = get_job(job_id) 
+        if job_info_on_error:
+            job_info_on_error['status'] = 'failed'
+            job_info_on_error['error'] = str(e)
+            set_job(job_id, job_info_on_error)
 
 
 # --- Endpoints da API (usando Redis) ---
@@ -237,3 +288,4 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         job['status'] = 'rejected'
         set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado a pedido do usuário."}
+
