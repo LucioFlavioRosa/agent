@@ -1,105 +1,99 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL E ROBUSTA)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO API-PURA ROBUSTA)
 
-import subprocess
-import tempfile
-import shutil
-import os
-import re
-
-# [ALTERADO] Importa a nova função para pegar o token
 from tools import github_connector
 from .job_store import get_job, set_job
-
-def run_command(command, working_dir):
-    """Executa um comando de terminal e lida com erros."""
-    print(f"Executando comando: {' '.join(command)} em {working_dir}")
-    result = subprocess.run(command, cwd=working_dir, capture_output=True, text=True)
-    if result.returncode != 0:
-        print("--- ERRO NO COMANDO GIT ---")
-        print("STDOUT:", result.stdout)
-        print("STDERR:", result.stderr)
-        print("---------------------------")
-        raise RuntimeError(f"Falha no comando Git: {result.stderr}")
-    return result.stdout
+from github import GithubException
 
 def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, job_id: str):
     """
-    Clona o repositório, cria branches, aplica mudanças, faz um commit por branch,
-    e reporta o progresso de cada commit de volta para o job no Redis.
+    Processa os dados, cria branches e commita as mudanças usando apenas a API do GitHub (PyGithub).
+    Cria um commit para cada arquivo alterado.
     """
-    # Cria um diretório temporário que será limpo automaticamente no final
-    with tempfile.TemporaryDirectory() as temp_dir:
-        try:
-            # --- 1. Clona o repositório usando o token para autenticação ---
-            print(f"[{job_id}] Obtendo token de autenticação...")
-            token = github_connector.get_github_token()
+    try:
+        repo = github_connector.connection(repositorio=nome_repo)
+        branch_base = repo.get_branch(repo.default_branch)
+        
+        job_info = get_job(job_id)
+        job_info['data']['commit_links'] = []
+        set_job(job_id, job_info)
+
+        print(f"[{job_id}] Iniciando processo de commit via API para {len(dados_agrupados.get('grupos', []))} grupo(s).")
+
+        for grupo in dados_agrupados.get("grupos", []):
+            branch_sugerida = grupo["branch_sugerida"]
+            titulo_commit_base = grupo["titulo_pr"] or f"Refatoração automática para {branch_sugerida}"
             
-            repo_url_with_auth = f"https://{token}@github.com/{nome_repo}.git"
-            print(f"[{job_id}] Clonando repositório para diretório temporário...")
-            run_command(["git", "clone", repo_url_with_auth, "."], working_dir=temp_dir)
+            # --- 1. Criação da Branch (com verificação) ---
+            try:
+                print(f"[{job_id}] Verificando a existência da branch: {branch_sugerida}")
+                repo.get_branch(branch_sugerida)
+                print(f"[{job_id}] Branch '{branch_sugerida}' já existe. Usando-a.")
+            except GithubException as e:
+                if e.status == 404:
+                    print(f"[{job_id}] Branch '{branch_sugerida}' não encontrada. Criando...")
+                    repo.create_git_ref(ref=f'refs/heads/{branch_sugerida}', sha=branch_base.commit.sha)
+                    print(f"[{job_id}] Branch '{branch_sugerida}' criada com sucesso.")
+                else:
+                    raise e
 
-            # Configura o usuário do git para este repositório
-            run_command(["git", "config", "user.name", "MCP Agent"], working_dir=temp_dir)
-            run_command(["git", "config", "user.email", "mcp-agent@example.com"], working_dir=temp_dir)
-
-            job_info = get_job(job_id)
-            job_info['data']['commit_links'] = []
-            set_job(job_id, job_info)
-
-            branch_base = "main" # Assumindo 'main', pode ser pego dinamicamente se necessário
-
-            for grupo in dados_agrupados.get("grupos", []):
-                branch_sugerida = grupo["branch_sugerida"]
-                titulo_commit = grupo["titulo_pr"] or f"Refatoração automática para {branch_sugerida}"
-
-                # --- 2. Cria a branch local e aplica as mudanças ---
-                print(f"[{job_id}] Criando e trocando para a branch: {branch_sugerida}")
-                run_command(["git", "checkout", "-b", branch_sugerida, f"origin/{branch_base}"], working_dir=temp_dir)
+            # --- 2. Aplicação das Mudanças (arquivo por arquivo) ---
+            commit_url_final = ""
+            for i, mudanca in enumerate(grupo.get("conjunto_de_mudancas", [])):
+                caminho_arquivo = mudanca["caminho_do_arquivo"]
+                novo_conteudo = mudanca["novo_conteudo"]
                 
-                for mudanca in grupo.get("conjunto_de_mudancas", []):
-                    caminho_arquivo = os.path.join(temp_dir, mudanca["caminho_do_arquivo"])
-                    novo_conteudo = mudanca["novo_conteudo"]
+                # Mensagem de commit específica para cada arquivo
+                titulo_commit_arquivo = f"{titulo_commit_base} (parte {i+1})"
+
+                try:
+                    # Tenta obter o arquivo para saber se é uma atualização ou criação
+                    arquivo = repo.get_contents(caminho_arquivo, ref=branch_sugerida)
+                    print(f"[{job_id}] Atualizando arquivo '{caminho_arquivo}' na branch '{branch_sugerida}'...")
                     
-                    # Garante que o diretório do arquivo existe
-                    os.makedirs(os.path.dirname(caminho_arquivo), exist_ok=True)
+                    # O PyGithub cria um commit para cada atualização
+                    commit_result = repo.update_file(
+                        path=caminho_arquivo,
+                        message=titulo_commit_arquivo,
+                        content=novo_conteudo,
+                        sha=arquivo.sha,
+                        branch=branch_sugerida
+                    )
+                    commit_url_final = commit_result['commit'].html_url
                     
-                    print(f"[{job_id}] Escrevendo mudanças no arquivo: {caminho_arquivo}")
-                    with open(caminho_arquivo, 'w', encoding='utf-8') as f:
-                        f.write(novo_conteudo)
+                except GithubException as e:
+                    if e.status == 404: # Arquivo não existe, então o criamos
+                        print(f"[{job_id}] Criando novo arquivo '{caminho_arquivo}' na branch '{branch_sugerida}'...")
+                        
+                        # O PyGithub cria um commit para cada criação
+                        commit_result = repo.create_file(
+                            path=caminho_arquivo,
+                            message=titulo_commit_arquivo,
+                            content=novo_conteudo,
+                            branch=branch_sugerida
+                        )
+                        commit_url_final = commit_result['commit'].html_url
+                    else:
+                        raise e
 
-                # --- 3. Faz um único commit com todas as mudanças do grupo ---
-                print(f"[{job_id}] Adicionando todos os arquivos modificados ao stage...")
-                run_command(["git", "add", "."], working_dir=temp_dir)
-
-                print(f"[{job_id}] Fazendo commit na branch '{branch_sugerida}'...")
-                run_command(["git", "commit", "-m", titulo_commit], working_dir=temp_dir)
-                
-                # --- 4. Empurra (push) a nova branch para o repositório remoto ---
-                print(f"[{job_id}] Enviando a branch '{branch_sugerida}' para o GitHub...")
-                run_command(["git", "push", "-u", "origin", branch_sugerida], working_dir=temp_dir)
-                
-                # --- 5. Obtém o SHA do último commit e constrói a URL ---
-                commit_sha = run_command(["git", "rev-parse", "HEAD"], working_dir=temp_dir).strip()
-                commit_url = f"https://github.com/{nome_repo}/commit/{commit_sha}"
-
-                print(f"[{job_id}] Commit realizado com sucesso! URL: {commit_url}")
-
-                # Reporta o progresso para o Redis
+            # --- 3. Reportando o Link do Último Commit da Branch ---
+            if commit_url_final:
+                print(f"[{job_id}] Último commit na branch '{branch_sugerida}': {commit_url_final}")
                 job_info = get_job(job_id)
-                commit_info = {"branch": branch_sugerida, "url": commit_url}
+                commit_info = {"branch": branch_sugerida, "url": commit_url_final}
+                if 'commit_links' not in job_info['data']:
+                    job_info['data']['commit_links'] = []
                 job_info['data']['commit_links'].append(commit_info)
                 set_job(job_id, job_info)
+            else:
+                 print(f"[{job_id}] Nenhum arquivo foi alterado para a branch '{branch_sugerida}'.")
 
-                # Volta para a branch principal para o próximo loop
-                run_command(["git", "checkout", branch_base], working_dir=temp_dir)
+        return {"status": "sucesso", "message": "Todos os commits foram realizados."}
 
-            return {"status": "sucesso", "message": "Todos os commits foram realizados."}
-
-        except Exception as e:
-            print(f"ERRO FATAL ao processar commits: {e}")
-            job_info = get_job(job_id)
-            if job_info:
-                job_info['error'] = f"Falha durante o commit: {e}"
-                job_info['status'] = 'failed'
-                set_job(job_id, job_info)
-            raise e
+    except Exception as e:
+        print(f"ERRO FATAL ao processar commits via API para o repo {nome_repo}: {e}")
+        job_info = get_job(job_id)
+        if job_info:
+            job_info['error'] = f"Falha durante o commit via API: {e}"
+            job_info['status'] = 'failed'
+            set_job(job_id, job_info)
+        raise e
