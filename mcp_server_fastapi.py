@@ -1,4 +1,4 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO FINAL REATORADA)
+# Arquivo: mcp_server_fastapi.py (VERSÃO COMPLETA, FINAL E COM CORREÇÃO CORS)
 
 import json
 import uuid
@@ -6,12 +6,15 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel
 from typing import Optional, Literal, List, Dict
 
+# [NOVO E IMPORTANTE] Importe o CORSMiddleware para corrigir o "Failed to fetch"
+from fastapi.middleware.cors import CORSMiddleware
+
 # --- Módulos do seu projeto ---
+# Certifique-se de que estes imports correspondem à sua estrutura de pastas.
 from agents import agente_revisor
 from tools import preenchimento, commit_multiplas_branchs
 
 # --- Modelos de Dados (Pydantic) ---
-# (Sem alterações aqui, iguais à versão anterior)
 class StartJobPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["design", "relatorio_teste_unitario"]
@@ -37,10 +40,29 @@ class UpdateJobPayload(BaseModel):
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Um servidor para orquestrar agentes de IA com status assíncrono.",
-    version="3.0.0" 
+    version="3.1.0"  # Versão incrementada com a correção CORS
 )
 
+# [NOVO] Bloco de configuração do CORS
+# Permite que o frontend (rodando em uma porta/endereço diferente) se comunique com este backend.
+origins = [
+    "*",  # Permite todas as origens. Ideal para desenvolvimento.
+    # Em produção, você pode restringir, por exemplo:
+    # "https://seu-frontend.azurewebsites.net",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos os métodos (GET, POST, etc)
+    allow_headers=["*"],  # Permite todos os cabeçalhos
+)
+
+# Armazenamento em memória para os jobs.
 jobs: Dict[str, Dict] = {} 
+
+# Registro de workflows pós-aprovação.
 WORKFLOW_REGISTRY = {
     "design": {
         "description": "Analisa o design, refatora o código e agrupa os commits.",
@@ -58,14 +80,13 @@ WORKFLOW_REGISTRY = {
 
 def run_initial_analysis_task(job_id: str, payload: StartJobPayload):
     """
-    [ALTERADO] Orquestra a análise inicial usando as funções refatoradas do agente.
+    Orquestra a análise inicial usando as funções refatoradas do agente.
     """
     try:
         # ESTÁGIO 1: Pede ao agente para LER os arquivos.
         jobs[job_id]['status'] = 'reading_files'
         print(f"[{job_id}] Pedindo ao agente para ler os arquivos...")
         
-        # Chama a função específica do agente para ler o código
         codigo_com_conteudo = agente_revisor.ler_codigo_do_repositorio(
             repositorio=payload.repo_name,
             tipo_analise=payload.analysis_type,
@@ -73,26 +94,24 @@ def run_initial_analysis_task(job_id: str, payload: StartJobPayload):
         )
         nomes_dos_arquivos = list(codigo_com_conteudo.keys())
 
-        # ATUALIZAÇÃO INTERMEDIÁRIA: Disponibiliza a lista de arquivos e o conteúdo lido.
+        # ATUALIZAÇÃO INTERMEDIÁRIA
         jobs[job_id]['status'] = 'files_read_pending_analysis'
         jobs[job_id]['data']['files_read'] = nomes_dos_arquivos
-        # Guarda o conteúdo para a próxima etapa, evitando reler.
         jobs[job_id]['data']['codigo_com_conteudo'] = codigo_com_conteudo
         print(f"[{job_id}] Agente leu {len(nomes_dos_arquivos)} arquivos com sucesso.")
 
-        # ESTÁGIO 2: Pede ao agente para GERAR o relatório (sem reler o repo).
+        # ESTÁGIO 2: Pede ao agente para GERAR o relatório.
         jobs[job_id]['status'] = 'generating_report'
         print(f"[{job_id}] Pedindo ao agente para gerar o relatório...")
 
-        # Chama a função específica do agente para gerar a análise
         resposta_agente = agente_revisor.gerar_relatorio_analise(
             tipo_analise=payload.analysis_type,
-            codigo_para_analise=codigo_com_conteudo, # Passa o código já lido
+            codigo_para_analise=codigo_com_conteudo,
             instrucoes_extras=payload.instrucoes_extras
         )
         report = resposta_agente['reposta_final']
         
-        # ATUALIZAÇÃO FINAL: Disponibiliza o relatório e aguarda aprovação.
+        # ATUALIZAÇÃO FINAL
         jobs[job_id]['status'] = 'pending_approval'
         jobs[job_id]['data']['analysis_report'] = report
         jobs[job_id]['data'].update(payload.dict())
@@ -106,7 +125,7 @@ def run_initial_analysis_task(job_id: str, payload: StartJobPayload):
 
 def run_workflow_task(job_id: str):
     """
-    [ALTERADO] Usa o relatório já salvo no job, evitando reler o repositório.
+    Usa o relatório já salvo no job, evitando reler o repositório.
     """
     try:
         print(f"[{job_id}] Iniciando workflow pós-aprovação...")
@@ -121,7 +140,6 @@ def run_workflow_task(job_id: str):
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
             agent_params = step['params'].copy()
             
-            # PASSA O CÓDIGO/RELATÓRIO APROVADO DIRETAMENTE PARA O AGENTE
             if i == 0:
                 relatorio_aprovado = job_info['data']['analysis_report']
                 instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
@@ -133,22 +151,16 @@ def run_workflow_task(job_id: str):
                 if observacoes_aprovacao:
                     instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
                 
-                # [IMPORTANTE] Passa as instruções como 'codigo' para a função main do agente
-                # e remove os parâmetros de repo/branch para evitar a releitura.
-                agent_params.update({
-                    'codigo': instrucoes_completas
-                })
+                agent_params.update({'codigo': instrucoes_completas})
             else:
                 agent_params['codigo'] = str(previous_step_result)
             
-            # Chama o agente. Como 'codigo' foi fornecido, ele não vai ler o repo.
             agent_response = step['agent_function'](**agent_params)
             json_string = agent_response['resultado']['reposta_final'].replace("```json", '').replace("```", '')
             previous_step_result = json.loads(json_string)
             if i == 0: resultado_refatoracao = previous_step_result
             else: resultado_agrupamento = previous_step_result
         
-        # O resto da função continua igual...
         job_info['status'] = 'populating_data'
         dados_preenchidos = preenchimento.main(json_agrupado=resultado_agrupamento, json_inicial=resultado_refatoracao)
         
@@ -170,7 +182,6 @@ def run_workflow_task(job_id: str):
 
 
 # --- Endpoints da API ---
-# (Sem alterações aqui, iguais à versão anterior)
 @app.post("/jobs/start", response_model=StartJobResponse, tags=["Jobs"])
 def start_new_job(payload: StartJobPayload, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
