@@ -1,20 +1,20 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO 5.1 - STATUS REFINADOS)
+# Arquivo: mcp_server_fastapi.py (VERSÃO 5.3 - JOB STORE MODULARIZADO)
 
 import json
 import uuid
-import os
-import redis
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel
 from typing import Optional, Literal, List, Dict
 from fastapi.middleware.cors import CORSMiddleware
+
+# [ALTERADO] O import agora reflete que job_store.py está dentro da pasta 'tools'
+from tools.job_store import get_job, set_job
 
 # --- Módulos do seu projeto ---
 from agents import agente_revisor
 from tools import preenchimento, commit_multiplas_branchs
 
 # --- Modelos de Dados (Pydantic) ---
-# (Sem alterações nos modelos)
 class StartJobPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["design", "relatorio_teste_unitario"]
@@ -30,36 +30,21 @@ class JobStatusResponse(BaseModel):
     files_read: Optional[List[str]] = None
     analysis_report: Optional[str] = None
     error_details: Optional[str] = None
+    commit_links: Optional[List[Dict[str, str]]] = None
 
 class UpdateJobPayload(BaseModel):
     job_id: str
     action: Literal["approve", "reject"]
     observacoes: Optional[str] = None
 
-
-# --- Configuração do Redis ---
-REDIS_URL = os.getenv("REDIS_URL")
-if not REDIS_URL:
-    raise ValueError("A variável de ambiente REDIS_URL não foi configurada no servidor!")
-
-redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-
-def set_job(job_id: str, job_data: Dict):
-    redis_client.set(job_id, json.dumps(job_data), ex=86400)
-
-def get_job(job_id: str) -> Optional[Dict]:
-    job_json = redis_client.get(job_id)
-    if job_json:
-        return json.loads(job_json)
-    return None
-
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
-    description="Servidor robusto com armazenamento de estado persistente via Redis.",
-    version="5.1.0" 
+    description="Servidor robusto com report de commits em tempo real.",
+    version="5.3.0"
 )
 
+# Configuração do CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -68,8 +53,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# [REMOVIDO] A lógica do Redis foi movida para tools/job_store.py
 
-# [ALTERADO] O WORKFLOW_REGISTRY agora define apenas as ações, não mais os status.
+# Registro de workflows pós-aprovação
 WORKFLOW_REGISTRY = {
     "design": {
         "description": "Analisa o design, refatora o código e agrupa os commits.",
@@ -87,14 +73,12 @@ WORKFLOW_REGISTRY = {
     }
 }
 
-
 # --- Lógica das Tarefas em Background ---
-
-# ... (run_file_reading_task e run_report_generation_task não precisam de alterações) ...
+# (Nenhuma alteração na lógica das tarefas, pois elas já usam get_job e set_job)
 def run_file_reading_task(job_id: str, payload: StartJobPayload):
     try:
         job_info = get_job(job_id)
-        job_info['status'] = 'lendo_repositorio' # Usando seu texto sugerido
+        job_info['status'] = 'lendo_repositorio'
         set_job(job_id, job_info)
         print(f"[{job_id}] Tarefa de leitura de arquivos iniciada...")
         
@@ -122,7 +106,7 @@ def run_file_reading_task(job_id: str, payload: StartJobPayload):
 def run_report_generation_task(job_id: str):
     try:
         job_info = get_job(job_id)
-        job_info['status'] = 'gerando_relatorio_ia' # Status mais descritivo
+        job_info['status'] = 'gerando_relatorio_ia'
         set_job(job_id, job_info)
         print(f"[{job_id}] Tarefa de geração de relatório iniciada...")
 
@@ -148,8 +132,6 @@ def run_report_generation_task(job_id: str):
             set_job(job_id, job_info)
         print(f"ERRO FATAL na geração do relatório [{job_id}]: {e}")
 
-
-# [ALTERADO] Função de workflow agora usa os status que você sugeriu.
 def run_workflow_task(job_id: str):
     try:
         job_info = get_job(job_id)
@@ -159,30 +141,26 @@ def run_workflow_task(job_id: str):
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
-        # --- Etapa de Aplicação das Mudanças ---
         job_info['status'] = 'aplicando_mudancas_do_relatorio'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
         
         refactoring_step = workflow['steps'][0]
         agent_params = refactoring_step['params'].copy()
-        
         relatorio_aprovado = job_info['data']['analysis_report']
         instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
         observacoes_aprovacao = job_info['data'].get('observacoes_aprovacao')
-        
         instrucoes_completas = relatorio_aprovado
         if instrucoes_iniciais:
             instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
         if observacoes_aprovacao:
             instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
-        
         agent_params.update({'codigo': instrucoes_completas})
         agent_response = refactoring_step['agent_function'](**agent_params)
         json_string_refactor = agent_response['resultado']['reposta_final'].replace("```json", '').replace("```", '')
         resultado_refatoracao = json.loads(json_string_refactor)
 
-        # --- Etapa de Agrupamento ---
+        job_info = get_job(job_id)
         job_info['status'] = 'agrupando_mudancas_em_branches'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
@@ -194,7 +172,7 @@ def run_workflow_task(job_id: str):
         json_string_group = agent_response_group['resultado']['reposta_final'].replace("```json", '').replace("```", '')
         resultado_agrupamento = json.loads(json_string_group)
 
-        # --- Etapa de Preenchimento ---
+        job_info = get_job(job_id)
         job_info['status'] = 'preenchendo_dados_para_commit'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
@@ -207,12 +185,18 @@ def run_workflow_task(job_id: str):
         
         if not dados_finais_formatados.get("grupos"): raise ValueError("Dados para commit vazios.")
 
-        # --- Etapa de Commits no GitHub ---
+        job_info = get_job(job_id)
         job_info['status'] = 'realizando_commits_no_github'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
-        commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
         
+        commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
+            nome_repo=job_info['data']['repo_name'],
+            dados_agrupados=dados_finais_formatados,
+            job_id=job_id
+        )
+        
+        job_info = get_job(job_id)
         job_info['status'] = 'completed'
         set_job(job_id, job_info)
         print(f"[{job_id}] Processo concluído com sucesso!")
@@ -227,7 +211,6 @@ def run_workflow_task(job_id: str):
 
 
 # --- Endpoints da API ---
-# ... (sem alterações nos endpoints) ...
 @app.post("/jobs/start", response_model=StartJobResponse, tags=["Jobs"])
 def start_new_job(payload: StartJobPayload, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
@@ -252,12 +235,14 @@ def get_job_status(job_id: str = Path(..., title="O ID do Job a ser verificado")
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    
     return JobStatusResponse(
         job_id=job_id,
         status=job['status'],
         files_read=job['data'].get('files_read'),
         analysis_report=job['data'].get('analysis_report'),
-        error_details=job.get('error')
+        error_details=job.get('error'),
+        commit_links=job['data'].get('commit_links')
     )
 
 @app.post("/update-job-status", tags=["Jobs"])
