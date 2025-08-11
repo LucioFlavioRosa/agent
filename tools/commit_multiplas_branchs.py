@@ -1,30 +1,39 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO API-PURA + JOB_STORE)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL COM RETORNO DE DADOS)
 
 import json
 from github import GithubException
-from . import github_connector
-
-# [NOVO] Importa as funções de comunicação com o Redis
-from .job_store import get_job, set_job
+from tools import github_connector
+from typing import Dict, Any, Optional, List
 
 # ==============================================================================
-# A FUNÇÃO AUXILIAR AGORA RECEBE O job_id PARA REPORTAR O PROGRESSO
+# A FUNÇÃO AUXILIAR FOI ALTERADA PARA RETORNAR UM DICIONÁRIO COM DADOS
 # ==============================================================================
 def _processar_uma_branch(
     repo,
-    job_id: str, # [NOVO] Adicionado job_id como parâmetro
     nome_branch: str,
     branch_de_origem: str,
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
     conjunto_de_mudancas: list
-) -> bool:
+) -> Dict[str, Any]:
+    """
+    Processa uma única branch, realiza os commits e cria um Pull Request.
+    Retorna um dicionário com os detalhes da operação.
+    """
     print(f"\n--- Processando o Lote para a Branch: '{nome_branch}' ---")
+    
+    # Estrutura de resultado para esta branch
+    resultado_branch = {
+        "branch_name": nome_branch,
+        "success": False,
+        "pr_url": None,
+        "message": ""
+    }
+
     commits_realizados = 0
 
     # 1. Criação da Branch
-    print(f"Criando ou reutilizando a branch '{nome_branch}' a partir de '{branch_de_origem}'...")
     try:
         ref_base = repo.get_git_ref(f"heads/{branch_de_origem}")
         repo.create_git_ref(ref=f"refs/heads/{nome_branch}", sha=ref_base.object.sha)
@@ -38,16 +47,21 @@ def _processar_uma_branch(
     # 2. Loop de Commits
     if not conjunto_de_mudancas:
         print("Nenhuma mudança para aplicar nesta branch.")
-        return False
+        resultado_branch["success"] = True
+        resultado_branch["message"] = "Nenhuma mudança fornecida para a branch."
+        return resultado_branch
 
     print("Iniciando a aplicação dos arquivos (um commit por arquivo)...")
     for mudanca in conjunto_de_mudancas:
         caminho = mudanca.get("caminho_do_arquivo")
-        conteudo = mudanca.get("conteudo") # [NOTA] Este 'conteudo' deve corresponder ao 'novo_conteudo' gerado pela IA
+        conteudo = mudanca.get("conteudo")
         justificativa = mudanca.get("justificativa", "")
 
-        if conteudo is None or not caminho:
-            print(f"  [IGNORADO] Pulando mudança incompleta: {mudanca}")
+        if conteudo is None:
+            print(f"  [IGNORADO]   Pulando o arquivo '{caminho}' porque seu conteúdo é nulo (None).")
+            continue
+        if not caminho:
+            print(f"  [IGNORADO]   Pulando uma mudança porque não possui caminho de arquivo.")
             continue
 
         sha_arquivo_existente = None
@@ -69,89 +83,91 @@ def _processar_uma_branch(
             else:
                 repo.create_file(path=caminho, message=commit_message_completo, content=conteudo, branch=nome_branch)
                 print(f"  [CRIADO]     {caminho}")
-            
+
             commits_realizados += 1
         except GithubException as e:
             print(f"ERRO ao commitar o arquivo '{caminho}': {e}")
             
     print("Aplicação de commits concluída para esta branch.")
 
+    # 3. Criação do Pull Request (somente se houver commits)
     if commits_realizados > 0:
-        # 3. Criação do Pull Request
         try:
             print(f"\nCriando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
             pr_body = descricao_pr if descricao_pr else mensagem_pr
             pr = repo.create_pull(title=mensagem_pr, body=pr_body, head=nome_branch, base=branch_alvo_do_pr)
             print(f"Pull Request criado com sucesso! Acesse em: {pr.html_url}")
-
-            # [NOVO] Salva o link do PR no Redis
-            job_info = get_job(job_id)
-            if job_info:
-                link_info = {"branch": nome_branch, "url": pr.html_url}
-                if 'commit_links' not in job_info['data']:
-                    job_info['data']['commit_links'] = []
-                job_info['data']['commit_links'].append(link_info)
-                set_job(job_id, job_info)
-
-            return True
-        except GithubException as e:
-            if e.status == 422:
-                if "A pull request for these commits already exists" in str(e.data.get('message', '')):
-                    print(f"AVISO: Um Pull Request para a branch '{nome_branch}' já existe.")
-                    return True 
-                elif "No commits between" in str(e.data.get('errors', [{}])[0].get('message', '')):
-                    print(f"AVISO: Nenhum commit novo detectado. Pulando PR.")
-                    return True
             
-            print(f"ERRO: Não foi possível criar o Pull Request para '{nome_branch}'. Erro: {e}")
-            raise
+            resultado_branch["success"] = True
+            resultado_branch["pr_url"] = pr.html_url
+            resultado_branch["message"] = f"Pull Request criado com sucesso."
+            
+        except GithubException as e:
+            if e.status == 422 and "A pull request for these commits already exists" in str(e.data.get('message', '')):
+                print(f"AVISO: Um Pull Request para a branch '{nome_branch}' já existe. Buscando link...")
+                prs_existentes = repo.get_pulls(state='open', head=f'{repo.owner.login}:{nome_branch}', base=branch_alvo_do_pr)
+                pr_encontrado = prs_existentes[0] if prs_existentes.totalCount > 0 else None
+                
+                if pr_encontrado:
+                    print(f"Link do PR existente encontrado: {pr_encontrado.html_url}")
+                    resultado_branch["success"] = True
+                    resultado_branch["pr_url"] = pr_encontrado.html_url
+                    resultado_branch["message"] = "Um Pull Request para esta branch já existia."
+                else:
+                    resultado_branch["success"] = True
+                    resultado_branch["message"] = "API indicou que o PR já existe, mas não foi possível encontrar o link."
+            else:
+                print(f"ERRO: Não foi possível criar o Pull Request para '{nome_branch}'. Erro: {e}")
+                raise
     else:
         print(f"\nNenhum commit foi realizado para a branch '{nome_branch}'. Pulando a criação do Pull Request.")
-        return True
+        resultado_branch["success"] = True
+        resultado_branch["message"] = "Nenhum commit realizado, PR não foi necessário."
+
+    return resultado_branch
 
 
 # ==============================================================================
-# A FUNÇÃO ORQUESTRADORA AGORA PASSA O job_id PARA A FUNÇÃO AUXILIAR
+# A FUNÇÃO ORQUESTRADORA FOI AJUSTADA PARA COLETAR E RETORNAR OS RESULTADOS
 # ==============================================================================
 def processar_e_subir_mudancas_agrupadas(
     nome_repo: str,
     dados_agrupados,
-    job_id: str # [ALTERADO] Recebe job_id do backend
-):
+    base_branch: str = "main"
+) -> List[Dict[str, Any]]:
     """
     Função principal que orquestra a criação de múltiplas branches e PRs
-    de forma sequencial e empilhada (stacked), reportando o progresso.
+    e retorna uma lista com os resultados de cada uma.
     """
-    try:
-        # [NOTA] Verifique se os dados da IA estão no formato correto.
-        # A sua versão anterior esperava a chave 'conteudo', enquanto a IA pode gerar 'novo_conteudo'.
-        # Se necessário, adicione uma etapa aqui para padronizar os dados.
-        if isinstance(dados_agrupados, str):
-            dados_agrupados_str = dados_agrupados.replace("'conteudo'", "'novo_conteudo'")
-            dados_agrupados = json.loads(dados_agrupados_str)
+    resultados_finais = []
 
-        print("--- Iniciando o Processo de Pull Requests Empilhados (API-Pura) ---")
+    try:
+        if isinstance(dados_agrupados, str):
+            dados_agrupados = json.loads(dados_agrupados)
+
+        print("--- Iniciando o Processo de Pull Requests Empilhados ---")
         repo = github_connector.connection(repositorio=nome_repo)
-        branch_anterior = repo.default_branch
+
+        branch_anterior = base_branch
+        lista_de_grupos = dados_agrupados.get("grupos", [])
         
-        for grupo_atual in dados_agrupados.get("grupos", []):
+        if not lista_de_grupos:
+            print("Nenhum grupo de mudanças encontrado para processar.")
+            return []
+
+        for grupo_atual in lista_de_grupos:
             nome_da_branch_atual = grupo_atual.get("branch_sugerida")
             resumo_do_pr = grupo_atual.get("titulo_pr", "Refatoração Automática")
             descricao_do_pr = grupo_atual.get("resumo_do_pr", "")
-            
-            # [NOTA] Aqui garantimos a compatibilidade dos nomes das chaves
-            conjunto_de_mudancas = []
-            for mudanca in grupo_atual.get("conjunto_de_mudancas", []):
-                mudanca['conteudo'] = mudanca.get('conteudo', mudanca.get('novo_conteudo'))
-                conjunto_de_mudancas.append(mudanca)
+            conjunto_de_mudancas = grupo_atual.get("conjunto_de_mudancas", [])
 
             if not nome_da_branch_atual:
                 print("AVISO: Um grupo foi ignorado por não ter uma 'branch_sugerida'.")
+                resultados_finais.append({"success": False, "message": "Grupo ignorado por falta de 'branch_sugerida'."})
                 continue
-
-            sucesso_ou_branch_valida = _processar_uma_branch(
+            
+            resultado_da_branch = _processar_uma_branch(
                 repo=repo,
-                job_id=job_id, # [NOVO] Passa o job_id
                 nome_branch=nome_da_branch_atual,
                 branch_de_origem=branch_anterior,
                 branch_alvo_do_pr=branch_anterior,
@@ -159,17 +175,17 @@ def processar_e_subir_mudancas_agrupadas(
                 descricao_pr=descricao_do_pr,
                 conjunto_de_mudancas=conjunto_de_mudancas
             )
+            
+            resultados_finais.append(resultado_da_branch)
 
-            if sucesso_ou_branch_valida:
+            if resultado_da_branch["success"]:
                 branch_anterior = nome_da_branch_atual
             
             print("-" * 60)
+        
+        return resultados_finais
 
     except Exception as e:
         print(f"ERRO FATAL NO ORQUESTRADOR: {e}")
-        job_info = get_job(job_id)
-        if job_info:
-            job_info['error'] = f"Falha durante o commit via API: {e}"
-            job_info['status'] = 'failed'
-            set_job(job_id, job_info)
-        raise
+        resultados_finais.append({"success": False, "message": f"Erro fatal no orquestrador: {e}"})
+        return resultados_finais
