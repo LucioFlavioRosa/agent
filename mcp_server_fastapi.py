@@ -74,7 +74,8 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
         job_info = get_job(job_id)
         if job_info:
             job_info['status'] = 'failed'
-            job_info['error'] = error_message
+            # [ALTERADO] Use a mesma chave que o modelo Pydantic espera.
+            job_info['error_details'] = error_message
             set_job(job_id, job_info)
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
@@ -241,6 +242,8 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado a pedido do usuário."}
 
+# Em mcp_server_fastapi.py
+
 @app.get("/status/{job_id}", response_model=JobStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
@@ -249,10 +252,12 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job = get_job(job_id)
     if not job: raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     
+    # [ALTERADO] Acessa os dados de forma consistente
     return JobStatusResponse(
         job_id=job_id,
-        status=job['status'],
-        analysis_report=job['data'].get('analysis_report'),
-        commit_details=job['data'].get('commit_details'),
-        error_details=job.get('error')
+        status=job.get('status'),
+        analysis_report=job.get('data', {}).get('analysis_report'),
+        commit_details=job.get('data', {}).get('commit_details'),
+        error_details=job.get('error_details') # <-- Lê da chave correta e padronizada.
     )
+
