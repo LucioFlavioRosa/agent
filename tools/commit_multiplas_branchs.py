@@ -1,4 +1,4 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL CORRIGIDA)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO CORRIGIDA E FINAL)
 
 import subprocess
 import tempfile
@@ -25,9 +25,9 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
     """
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
-            # --- 1. [CORREÇÃO] Obtém o objeto do repo E o token em uma única chamada ---
+            # Obtém o objeto do repo E o token da nova função
             print(f"[{job_id}] Conectando ao GitHub e obtendo token...")
-            repo_obj, token = github_connector.connection(repositorio=nome_repo)
+            repo_obj, token = github_connector.get_repo_and_token(repositorio=nome_repo)
             
             repo_url_with_auth = f"https://{token}@github.com/{nome_repo}.git"
             
@@ -48,13 +48,11 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
                 titulo_pr = grupo.get("titulo_pr") or f"Refatoração automática para {branch_sugerida}"
                 corpo_pr = grupo.get("resumo_do_pr") or "Pull request gerado automaticamente pelo MCP Agent."
 
-                # --- 2. Cria a branch a partir da anterior ---
                 print(f"[{job_id}] Criando branch '{branch_sugerida}' a partir de '{branch_anterior}'")
                 run_command(["git", "checkout", branch_anterior], working_dir=temp_dir)
                 run_command(["git", "pull"], working_dir=temp_dir)
                 run_command(["git", "checkout", "-b", branch_sugerida], working_dir=temp_dir)
                 
-                # --- 3. Aplica, commita e faz o push das mudanças ---
                 for mudanca in grupo.get("conjunto_de_mudancas", []):
                     caminho_arquivo = os.path.join(temp_dir, mudanca["caminho_do_arquivo"])
                     novo_conteudo = mudanca.get("novo_conteudo")
@@ -73,7 +71,6 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
                 run_command(["git", "commit", "-m", titulo_pr], working_dir=temp_dir)
                 run_command(["git", "push", "-u", "origin", branch_sugerida], working_dir=temp_dir)
                 
-                # --- 4. Cria o Pull Request ---
                 print(f"[{job_id}] Criando Pull Request para a branch '{branch_sugerida}'...")
                 try:
                     pr = repo_obj.create_pull(
@@ -96,7 +93,6 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
                     else:
                         raise pr_error
                 
-                # --- 5. Prepara para a próxima iteração ---
                 branch_anterior = branch_sugerida
 
             return {"status": "sucesso", "message": "Todos os Pull Requests foram processados."}
