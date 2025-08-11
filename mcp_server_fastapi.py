@@ -1,4 +1,4 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO 5.4 - FLUXO DE DADOS CORRIGIDO)
+# Arquivo: mcp_server_fastapi.py (VERSÃO 5.5 - LÓGICA DE DADOS UNIFICADA E CORRIGIDA)
 
 import json
 import uuid
@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, Literal, List, Dict
 from fastapi.middleware.cors import CORSMiddleware
 
-# Importa as funções do nosso módulo de armazenamento
+# Importa as funções do módulo de armazenamento
 from tools.job_store import get_job, set_job
 
 # --- Módulos do seu projeto ---
@@ -43,10 +43,9 @@ class UpdateJobPayload(BaseModel):
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com fluxo de status deliberado para análise de código.",
-    version="5.4.0"
+    version="5.5.0"
 )
 
-# ... (Configuração do CORS e WORKFLOW_REGISTRY sem alterações) ...
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 WORKFLOW_REGISTRY = {
     "design": {
@@ -64,7 +63,7 @@ WORKFLOW_REGISTRY = {
 
 # --- Lógica das Tarefas em Background ---
 
-# ... (run_file_reading_task e run_report_generation_task não precisam de alterações) ...
+# ... (run_file_reading_task e run_report_generation_task não precisam de alterações, já estavam corretos) ...
 def run_file_reading_task(job_id: str, payload: StartJobPayload):
     try:
         job_info = get_job(job_id)
@@ -72,16 +71,18 @@ def run_file_reading_task(job_id: str, payload: StartJobPayload):
         set_job(job_id, job_info)
         print(f"[{job_id}] Tarefa de leitura de arquivos iniciada...")
         
-        codigo_com_conteudo = agente_revisor.ler_codigo_do_repositorio(
-            repositorio=payload.repo_name,
+        # O agente_revisor.main aqui retorna um dicionário de arquivos com conteúdo
+        codigo_com_conteudo = agente_revisor.main(
             tipo_analise=payload.analysis_type,
+            repositorio=payload.repo_name,
             nome_branch=payload.branch_name
         )
         nomes_dos_arquivos = list(codigo_com_conteudo.keys())
 
         job_info['status'] = 'files_read_awaits_analysis'
         job_info['data']['files_read'] = nomes_dos_arquivos
-        job_info['data']['codigo_com_conteudo'] = codigo_com_conteudo
+        # Salva o código original com conteúdo para ser usado na refatoração
+        job_info['data']['codigo_com_conteudo'] = codigo_com_conteudo 
         job_info['data'].update(payload.dict(exclude_unset=False)) 
         set_job(job_id, job_info)
         print(f"[{job_id}] Leitura concluída. Aguardando comando para iniciar análise.")
@@ -102,18 +103,17 @@ def run_report_generation_task(job_id: str):
 
         codigo_com_conteudo = job_info['data']['codigo_com_conteudo']
         payload_dict = job_info['data']
-
-        resposta_agente = agente_revisor.gerar_relatorio_analise(
+        
+        # A função main retorna um dicionário com a chave 'resultado'
+        resposta_agente = agente_revisor.main(
             tipo_analise=payload_dict['analysis_type'],
-            codigo_para_analise=codigo_com_conteudo,
+            codigo=str(codigo_com_conteudo),
             instrucoes_extras=payload_dict.get('instrucoes_extras')
         )
-        report = resposta_agente['reposta_final']
+        report = resposta_agente['resultado']
         
         job_info['status'] = 'pending_approval'
         job_info['data']['analysis_report'] = report
-        # [NOVO] Salva o resultado da primeira etapa (refatoração com conteúdo) para usar depois
-        job_info['data']['resultado_refatoracao_com_conteudo'] = codigo_com_conteudo 
         set_job(job_id, job_info)
         print(f"[{job_id}] Relatório gerado. Job aguardando aprovação do usuário.")
     except Exception as e:
@@ -124,21 +124,21 @@ def run_report_generation_task(job_id: str):
             set_job(job_id, job_info)
         print(f"ERRO FATAL na geração do relatório [{job_id}]: {e}")
 
+
 # [LÓGICA COMPLETAMENTE REVISADA E CORRIGIDA]
 def run_workflow_task(job_id: str):
     try:
         job_info = get_job(job_id)
         print(f"[{job_id}] Iniciando workflow pós-aprovação...")
         
-        # Etapa 1: Aplicando as mudanças (Refatoração)
+        workflow = WORKFLOW_REGISTRY.get(job_info['data']['analysis_type'])
+        if not workflow: raise ValueError(f"Nenhum workflow definido.")
+
+        # --- Etapa 1: Refatoração ---
         job_info['status'] = 'aplicando_mudancas_do_relatorio'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
 
-        workflow = WORKFLOW_REGISTRY.get(job_info['data']['analysis_type'])
-        if not workflow: raise ValueError(f"Nenhum workflow definido.")
-
-        # Prepara e executa o primeiro passo do agente: refatoração
         refactoring_step = workflow['steps'][0]
         agent_params_refactor = refactoring_step['params'].copy()
         
@@ -149,29 +149,30 @@ def run_workflow_task(job_id: str):
             instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{job_info['data']['observacoes_aprovacao']}"
         
         agent_params_refactor.update({'codigo': instrucoes_completas})
-        
-        # [IMPORTANTE] Usamos o resultado da refatoração COM conteúdo que já tínhamos salvo
-        resultado_refatoracao_com_conteudo = job_info['data']['resultado_refatoracao_com_conteudo']
-        
-        # Etapa 2: Agrupando as mudanças
+
+        # [CORREÇÃO] A chamada ao agente de refatoração é feita aqui
+        agent_response_refactor = refactoring_step['agent_function'](**agent_params_refactor)
+        json_string_refactor = agent_response_refactor['resultado']['reposta_final'].replace("```json", '').replace("```", '')
+        resultado_refatoracao_com_conteudo = json.loads(json_string_refactor)
+
+        # --- Etapa 2: Agrupamento ---
         job_info['status'] = 'agrupando_mudancas_em_branches'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
         
-        # Prepara e executa o segundo passo do agente: agrupamento
         grouping_step = workflow['steps'][1]
         agent_params_group = grouping_step['params'].copy()
-        agent_params_group['codigo'] = str(resultado_refatoracao_com_conteudo) # Passa o código com conteúdo para o agrupamento
+        agent_params_group['codigo'] = str(resultado_refatoracao_com_conteudo) # Passa o resultado da etapa anterior
         agent_response_group = grouping_step['agent_function'](**agent_params_group)
         json_string_group = agent_response_group['resultado']['reposta_final'].replace("```json", '').replace("```", '')
         resultado_agrupamento_sem_conteudo = json.loads(json_string_group)
 
-        # Etapa 3: Preenchendo os dados
+        # --- Etapa 3: Preenchimento ---
         job_info['status'] = 'preenchendo_dados_para_commit'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
         
-        # A função de preenchimento junta o agrupamento (sem conteúdo) com a refatoração (com conteúdo)
+        # [CORREÇÃO] O preenchimento usa os resultados corretos das duas etapas anteriores
         dados_completos_para_commit = preenchimento.main(
             json_agrupado=resultado_agrupamento_sem_conteudo,
             json_inicial=resultado_refatoracao_com_conteudo
@@ -180,7 +181,7 @@ def run_workflow_task(job_id: str):
         if not dados_completos_para_commit.get("grupos"):
             raise ValueError("Dados para commit vazios após o preenchimento.")
 
-        # Etapa 4: Realizando os commits no GitHub
+        # --- Etapa 4: Commits no GitHub ---
         job_info['status'] = 'realizando_commits_no_github'
         set_job(job_id, job_info)
         print(f"[{job_id}] ... {job_info['status']}")
