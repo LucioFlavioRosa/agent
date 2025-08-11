@@ -1,4 +1,4 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO REATORADA PARA REDIS E AZURE)
+# Arquivo: mcp_server_fastapi.py (VERSÃO REATORADA PARA USAR job_store.py)
 
 import json
 import uuid
@@ -7,16 +7,15 @@ from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 
-# [ALTERADO] Importa as funções do nosso módulo de armazenamento Redis.
-from tools.job_store import get_job, set_job
-
-# --- Módulos do seu projeto (sem alterações) ---
+# --- Módulos do seu projeto ---
+# Importa as funções de armazenamento do módulo dedicado
+from tools.job_store import set_job, get_job
 from agents import agente_revisor
 from tools import preenchimento, commit_multiplas_branchs
 
-# --- Modelos de Dados (Pydantic) ---
 
-# [RENOMEADO] Renomeado para refletir a ação inicial de forma mais clara.
+# --- Modelos de Dados Pydantic ---
+
 class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["design", "relatorio_teste_unitario"]
@@ -29,8 +28,6 @@ class StartAnalysisResponse(BaseModel):
 class JobStatusResponse(BaseModel):
     job_id: str
     status: str
-    # [NOVO] Adicionados campos para um feedback mais rico ao cliente.
-    files_read: Optional[List[str]] = Field(None, description="Lista de arquivos lidos do repositório.")
     analysis_report: Optional[str] = Field(None, description="Relatório gerado pela IA para aprovação.")
     commit_details: Optional[Dict[str, Any]] = Field(None, description="Detalhes sobre os commits e PRs criados.")
     error_details: Optional[str] = Field(None, description="Detalhes do erro, se o job falhou.")
@@ -44,14 +41,20 @@ class UpdateJobPayload(BaseModel):
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
-    description="Servidor robusto com Redis e fluxo de status deliberado para análise de código.",
-    version="7.0.0" # Nova versão refatorada
+    description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
+    version="2.1.0" # Versão incrementada para refletir a modularização
 )
 
-# [BOA PRÁTICA] Middleware CORS para permitir requisições de front-ends.
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# [RESTAURADO] O registro de workflows é essencial para a lógica de execução.
+
+# --- WORKFLOW_REGISTRY ---
 WORKFLOW_REGISTRY = {
     "design": {
         "description": "Analisa o design, refatora o código e agrupa os commits.",
@@ -66,10 +69,10 @@ WORKFLOW_REGISTRY = {
 }
 
 
-# --- Lógica das Tarefas em Background ---
+# --- Lógica de Tarefas em Background ---
 
 def handle_task_exception(job_id: str, e: Exception, step: str):
-    """Função centralizada para lidar com exceções nas tarefas de background."""
+    """Função centralizada para lidar com exceções e atualizar o status no Redis."""
     error_message = f"Erro fatal durante a etapa '{step}': {e}"
     print(f"[{job_id}] {error_message}")
     try:
@@ -79,12 +82,41 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
             job_info['error'] = error_message
             set_job(job_id, job_info)
     except Exception as redis_e:
-        print(f"[{job_id}] ERRO CRÍTICO: Falha ao registrar o erro no Redis. Erro: {redis_e}")
+        print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
-# [RESTAURADA E ADAPTADA] A função de workflow principal, agora integrada com Redis.
-def run_workflow_task(job_id: str):
+def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
+    """
+    Tarefa de background que lê o repositório e gera o relatório de análise.
+    Corresponde às etapas 1 e 2 do seu fluxo.
+    """
     try:
-        print(f"[{job_id}] Iniciando workflow completo...")
+        print(f"[{job_id}] Etapa 1 e 2: Lendo repositório e gerando relatório...")
+        job_info = get_job(job_id)
+        if not job_info: raise ValueError("Job não encontrado no início da geração do relatório.")
+
+        resposta_agente = agente_revisor.main(
+            tipo_analise=payload.analysis_type,
+            repositorio=payload.repo_name,
+            nome_branch=payload.branch_name,
+            instrucoes_extras=payload.instrucoes_extras
+        )
+        report = resposta_agente['resultado']['reposta_final']
+        
+        job_info['status'] = 'pending_approval' # Status para a etapa 3
+        job_info['data']['analysis_report'] = report
+        set_job(job_id, job_info)
+        print(f"[{job_id}] Relatório gerado. Job aguardando aprovação do usuário.")
+        
+    except Exception as e:
+        handle_task_exception(job_id, e, "report_generation")
+
+def run_workflow_task(job_id: str):
+    """
+    Tarefa principal que executa o workflow após a aprovação do usuário.
+    Corresponde às etapas 4, 5, 6 e 7 do seu fluxo.
+    """
+    try:
+        print(f"[{job_id}] Iniciando workflow completo após aprovação...")
         job_info = get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado no início do workflow.")
 
@@ -94,8 +126,8 @@ def run_workflow_task(job_id: str):
         
         previous_step_result = None
         for i, step in enumerate(workflow['steps']):
-            job_info['status'] = step['status_update']
-            set_job(job_id, job_info) # Salva o status atual no Redis
+            job_info['status'] = step['status_update'] 
+            set_job(job_id, job_info)
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
             
             agent_params = step['params'].copy()
@@ -122,56 +154,45 @@ def run_workflow_task(job_id: str):
             agent_response = step['agent_function'](**agent_params)
             json_string = agent_response['resultado']['reposta_final'].replace("```json", '').replace("```", '')
             previous_step_result = json.loads(json_string)
+
             if i == 0: job_info['data']['resultado_refatoracao'] = previous_step_result
             else: job_info['data']['resultado_agrupamento'] = previous_step_result
+            set_job(job_id, job_info)
         
         job_info['status'] = 'populating_data'
         set_job(job_id, job_info)
-        print(f"[{job_id}] ... Etapa de preenchimento...")
-        dados_preenchidos = preenchimento.main(
-            json_agrupado=job_info['data']['resultado_agrupamento'],
-            json_inicial=job_info['data']['resultado_refatoracao']
-        )
+        dados_preenchidos = preenchimento.main(json_agrupado=job_info['data']['resultado_agrupamento'], json_inicial=job_info['data']['resultado_refatoracao'])
         
-        print(f"[{job_id}] ... Etapa de transformação de dados para commit...")
         dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
         for nome_grupo, detalhes_pr in dados_preenchidos.items():
             if nome_grupo == "resumo_geral": continue
-            dados_finais_formatados["grupos"].append({
-                "branch_sugerida": nome_grupo,
-                "titulo_pr": detalhes_pr.get("resumo_do_pr", ""),
-                "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""),
-                "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])
-            })
+            dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
         
         if not dados_finais_formatados.get("grupos"): raise ValueError("Dados para commit vazios.")
 
         job_info['status'] = 'committing_to_github'
         set_job(job_id, job_info)
-        print(f"[{job_id}] ... Etapa de commit para o GitHub...")
-        # [ALTERADO] A função de commit agora retorna os links dos PRs para armazenamento.
-        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
-            nome_repo=job_info['data']['repo_name'],
-            dados_agrupados=dados_finais_formatados
-        )
+        print(f"[{job_id}] ... Etapa 6: Commit para o GitHub...")
+        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
         
-        job_info['data']['commit_details'] = commit_results # Salva o resultado
+        job_info['data']['commit_details'] = commit_results
         job_info['status'] = 'completed'
         set_job(job_id, job_info)
-        print(f"[{job_id}] Processo concluído com sucesso!")
+        print(f"[{job_id}] Etapa 7: Processo concluído com sucesso!")
 
     except Exception as e:
-        handle_task_exception(job_id, e, "run_workflow")
+        handle_task_exception(job_id, e, job_info.get('status', 'run_workflow'))
+
 
 # --- Endpoints da API ---
 
-@app.post("/jobs/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
+@app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     """
-    Inicia um novo job de análise, que começa gerando o relatório inicial da IA.
+    Inicia um novo job, começando pela leitura do repo e geração do relatório.
+    Retorna imediatamente com um Job ID para monitoramento.
     """
     job_id = str(uuid.uuid4())
-    # [ALTERADO] Estrutura de dados inicial explícita e limpa.
     initial_job_data = {
         'status': 'generating_report',
         'data': {
@@ -184,42 +205,15 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     }
     set_job(job_id, initial_job_data)
     
-    # [ALTERADO] O processo agora é um único fluxo contínuo.
-    # O agente_revisor.main lê o repo e gera o relatório em uma única chamada.
     background_tasks.add_task(run_report_generation_task, job_id, payload)
     
     return StartAnalysisResponse(job_id=job_id)
 
-def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
-    """
-    Tarefa de background que lê o repositório e gera o relatório de análise.
-    """
-    try:
-        print(f"[{job_id}] Tarefa de geração de relatório iniciada...")
-        resposta_agente = agente_revisor.main(
-            tipo_analise=payload.analysis_type,
-            repositorio=payload.repo_name,
-            nome_branch=payload.branch_name,
-            instrucoes_extras=payload.instrucoes_extras
-        )
-        report = resposta_agente['resultado']['reposta_final']
-        
-        job_info = get_job(job_id)
-        job_info['status'] = 'pending_approval'
-        job_info['data']['analysis_report'] = report
-        # Opcional: Salvar os nomes dos arquivos lidos, se a função `main` os retornar.
-        # job_info['data']['files_read'] = resposta_agente.get('files_read', [])
-        
-        set_job(job_id, job_info)
-        print(f"[{job_id}] Relatório gerado. Job aguardando aprovação.")
-        
-    except Exception as e:
-        handle_task_exception(job_id, e, "report_generation")
-
-@app.post("/jobs/update-status", tags=["Jobs"])
+@app.post("/update-job-status", tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
     """
-    Aprova ou rejeita um job que está aguardando aprovação.
+    Aprova ou rejeita um job que está aguardando aprovação (Etapa 3).
+    A aprovação (total ou parcial com observações) dispara o workflow principal.
     """
     job = get_job(payload.job_id)
     if not job: raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
@@ -233,17 +227,17 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         set_job(payload.job_id, job)
         
         background_tasks.add_task(run_workflow_task, payload.job_id)
-        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Processo de refatoração e commit iniciado em background."}
+        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida. Processo de refatoração e commit iniciado."}
     
     if payload.action == 'reject':
         job['status'] = 'rejected'
         set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado a pedido do usuário."}
 
-@app.get("/jobs/status/{job_id}", response_model=JobStatusResponse, tags=["Jobs"])
-def get_job_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
+@app.get("/status/{job_id}", response_model=JobStatusResponse, tags=["Jobs"])
+def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
-    Verifica o status atual de um job.
+    Verifica o status e os resultados de um job a qualquer momento.
     """
     job = get_job(job_id)
     if not job: raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
@@ -251,7 +245,6 @@ def get_job_status(job_id: str = Path(..., title="O ID do Job a ser verificado")
     return JobStatusResponse(
         job_id=job_id,
         status=job['status'],
-        files_read=job['data'].get('files_read'),
         analysis_report=job['data'].get('analysis_report'),
         commit_details=job['data'].get('commit_details'),
         error_details=job.get('error')
