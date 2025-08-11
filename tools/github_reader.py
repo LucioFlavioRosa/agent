@@ -1,102 +1,99 @@
-# Arquivo: tools/github_reader.py (VERSÃO FINAL E CORRIGIDA)
-
+import re
 import time
+
 from github import GithubException
 from tools import github_connector
-import pathspec # Mantemos a importação para o .gitignore
 
-# Mapeamento de extensões, pode ajustar conforme necessário
+# O mapeamento permanece o mesmo
 MAPEAMENTO_TIPO_EXTENSOES = {
-    "design": [".tf", ".tfvars", ".py"],
-    "relatorio_teste_unitario": [".py"],
-    # Adicione outros tipos de análise que você precisar
+    "terraform": [".tf", ".tfvars"],
+    "python": [".py"],
+    "cloudformation": [".json", ".yaml", ".yml"],
+    "ansible": [".yml", ".yaml"],
+    "docker": ["Dockerfile"], 
 }
 
-def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, spec: pathspec.PathSpec, path: str = "", arquivos_do_repo: dict = None):
+# Mantenha essa função auxiliar como está, mas com o try/except externo removido
+def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = "", arquivos_do_repo: dict = None):
     """
-    Função recursiva que lê arquivos, ignorando os caminhos definidos no .gitignore.
+    Função auxiliar que lê recursivamente os arquivos de um repositório em uma branch específica.
+    IMPORTANTE: Esta função agora DEIXARÁ a exceção GithubException subir para o chamador.
     """
     if arquivos_do_repo is None:
         arquivos_do_repo = {}
-    
-    # A chamada abaixo pode gerar um erro 404, que será capturado pela lógica de retentativa no 'main'
+
+    # O try/except que estava aqui foi REMOVIDO.
+    # A linha abaixo agora vai gerar um erro se a branch não for encontrada,
+    # que será capturado pela lógica de retentativa na função 'main'.
     conteudos = repo.get_contents(path, ref=nome_branch)
 
     for conteudo in conteudos:
-        # Verifica se o caminho do arquivo ou diretório é ignorado pelo .gitignore
-        if spec.match_file(conteudo.path):
-            continue # Pula para o próximo item
-
         if conteudo.type == "dir":
-            _ler_arquivos_recursivamente(repo, extensoes, nome_branch, spec, conteudo.path, arquivos_do_repo)
+            _ler_arquivos_recursivamente(repo, extensoes, nome_branch, conteudo.path, arquivos_do_repo)
         else:
-            if extensoes is None or any(conteudo.path.endswith(ext) for ext in extensoes):
+            ler_o_arquivo = False
+            if extensoes is None:
+                ler_o_arquivo = True
+            else:
+                if any(conteudo.path.endswith(ext) for ext in extensoes) or conteudo.name in extensoes:
+                    ler_o_arquivo = True
+            
+            if ler_o_arquivo:
+                # Este try/except é útil e deve ser mantido, pois trata erros de um único arquivo.
                 try:
                     codigo = conteudo.decoded_content.decode('utf-8')
                     arquivos_do_repo[conteudo.path] = codigo
                 except Exception as e:
-                    print(f"AVISO: ERRO na decodificação de '{conteudo.path}'. Pulando. Erro: {e}")
+                    print(f"AVISO: ERRO na decodificação de '{conteudo.path}' na branch '{nome_branch}'. Pulando arquivo. Erro: {e}")
+
     return arquivos_do_repo
 
+# A função main NÃO PRECISA DE MUDANÇAS. Ela já está correta.
+# Ela foi projetada para lidar com o erro que a função interna estava "escondendo".
 def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
     """
-    Função principal que lê os arquivos de um repositório, respeitando o .gitignore
-    e com lógica de retentativa para encontrar a branch.
+    Função principal que conecta ao repositório e inicia a leitura dos arquivos
+    a partir de uma branch específica, com lógica de retentativa.
     """
     repositorio = github_connector.connection(repositorio=nome_repo)
-    branch_a_ler = nome_branch if nome_branch else repositorio.default_branch
-    
-    print(f"--- Iniciando Leitura do Repositório: {nome_repo} (Branch: '{branch_a_ler}') ---")
 
-    # Lógica para buscar e processar o .gitignore
-    gitignore_conteudo = ""
-    try:
-        gitignore_file = repositorio.get_contents(".gitignore", ref=branch_a_ler)
-        gitignore_conteudo = gitignore_file.decoded_content.decode('utf-8')
-        print("Arquivo .gitignore encontrado e carregado.")
-    except GithubException:
-        print("AVISO: Nenhum arquivo .gitignore encontrado. Lendo todos os arquivos.")
-
-    # [CORREÇÃO] Usando o "sabor" 'gitignore' que não depende do sistema.
-    spec = pathspec.PathSpec.from_lines('gitignore', gitignore_conteudo.splitlines())
+    if nome_branch is None:
+        branch_a_ler = repositorio.default_branch
+        print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
+    else:
+        branch_a_ler = nome_branch
+        print(f"Tentando ler a branch especificada: '{branch_a_ler}'")
 
     extensoes_alvo = MAPEAMENTO_TIPO_EXTENSOES.get(tipo_de_analise.lower())
-    
-    # Lógica de retentativa que você forneceu (excelente!)
+
     max_tentativas = 4
     delay_entre_tentativas = 5
     arquivos_encontrados = None
 
     for tentativa in range(max_tentativas):
         try:
-            print(f"Tentativa {tentativa + 1}/{max_tentativas} para ler a branch '{branch_a_ler}'...")
+            print(f"Tentativa {tentativa + 1} de {max_tentativas}...")
+            # Agora esta chamada vai falhar (lançar exceção) se a branch não for encontrada
             arquivos_encontrados = _ler_arquivos_recursivamente(
                 repositorio,
                 extensoes=extensoes_alvo,
-                nome_branch=branch_a_ler,
-                spec=spec # Passa o spec para a função recursiva
+                nome_branch=branch_a_ler
             )
             print("Leitura da branch bem-sucedida!")
             break 
         except GithubException as e:
-            if e.status == 404:
+            if e.status == 404: # Simplificando para pegar qualquer erro 404 na branch
                 if tentativa < max_tentativas - 1:
-                    print(f"Branch '{branch_a_ler}' não encontrada (erro 404). Aguardando {delay_entre_tentativas}s...")
+                    print(f"Branch ainda não encontrada (erro 404). Aguardando {delay_entre_tentativas}s para a próxima tentativa...")
                     time.sleep(delay_entre_tentativas)
                 else:
-                    print("Número máximo de tentativas atingido. A branch realmente não foi encontrada.")
-                    raise FileNotFoundError(f"A branch '{branch_a_ler}' não foi encontrada no repositório '{nome_repo}' após {max_tentativas} tentativas.") from e
+                    print("Número máximo de tentativas atingido. A branch realmente não foi encontrada ou está inacessível.")
+                    raise e 
             else:
-                print(f"Ocorreu um erro inesperado no GitHub: {e}")
+                print(f"Ocorreu um erro inesperado no GitHub que não é um 404: {e}")
                 raise e
     
-    if arquivos_encontrados is None:
-        # Isso pode acontecer se o loop terminar sem sucesso mas sem lançar erro (improvável, mas seguro)
-        raise FileNotFoundError(f"Não foi possível ler nenhum arquivo da branch '{branch_a_ler}'.")
-
-    if not arquivos_encontrados:
-        # A leitura foi bem-sucedida, mas nenhum arquivo com as extensões foi encontrado
-        raise FileNotFoundError(f"Nenhum arquivo com as extensões para '{tipo_de_analise}' (e não ignorado) foi encontrado na branch '{branch_a_ler}'.")
-        
-    print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos relevantes encontrados.")
+    if arquivos_encontrados is not None:
+        print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
+    
     return arquivos_encontrados
