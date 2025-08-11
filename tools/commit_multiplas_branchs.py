@@ -1,4 +1,4 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO API-PURA ROBUSTA)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO MAIS SEGURA E ROBUSTA)
 
 from tools import github_connector
 from .job_store import get_job, set_job
@@ -7,7 +7,7 @@ from github import GithubException
 def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, job_id: str):
     """
     Processa os dados, cria branches e commita as mudanças usando apenas a API do GitHub (PyGithub).
-    Cria um commit para cada arquivo alterado.
+    Agora lida com dados malformados da IA de forma segura.
     """
     try:
         repo = github_connector.connection(repositorio=nome_repo)
@@ -20,8 +20,12 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
         print(f"[{job_id}] Iniciando processo de commit via API para {len(dados_agrupados.get('grupos', []))} grupo(s).")
 
         for grupo in dados_agrupados.get("grupos", []):
-            branch_sugerida = grupo["branch_sugerida"]
-            titulo_commit_base = grupo["titulo_pr"] or f"Refatoração automática para {branch_sugerida}"
+            branch_sugerida = grupo.get("branch_sugerida")
+            if not branch_sugerida:
+                print(f"[{job_id}] AVISO: Grupo ignorado por não ter 'branch_sugerida'.")
+                continue
+
+            titulo_commit_base = grupo.get("titulo_pr") or f"Refatoração automática para {branch_sugerida}"
             
             # --- 1. Criação da Branch (com verificação) ---
             try:
@@ -39,18 +43,21 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
             # --- 2. Aplicação das Mudanças (arquivo por arquivo) ---
             commit_url_final = ""
             for i, mudanca in enumerate(grupo.get("conjunto_de_mudancas", [])):
-                caminho_arquivo = mudanca["caminho_do_arquivo"]
-                novo_conteudo = mudanca["novo_conteudo"]
                 
-                # Mensagem de commit específica para cada arquivo
+                # [CORREÇÃO] Acessa as chaves de forma segura usando .get()
+                caminho_arquivo = mudanca.get("caminho_do_arquivo")
+                novo_conteudo = mudanca.get("novo_conteudo")
+
+                # [CORREÇÃO] Verifica se os dados essenciais existem antes de prosseguir
+                if not caminho_arquivo or novo_conteudo is None:
+                    print(f"[{job_id}] AVISO: Mudança malformada ignorada. Faltando 'caminho_do_arquivo' ou 'novo_conteudo'. Dados: {mudanca}")
+                    continue # Pula para a próxima mudança no loop
+
                 titulo_commit_arquivo = f"{titulo_commit_base} (parte {i+1})"
 
                 try:
-                    # Tenta obter o arquivo para saber se é uma atualização ou criação
                     arquivo = repo.get_contents(caminho_arquivo, ref=branch_sugerida)
-                    print(f"[{job_id}] Atualizando arquivo '{caminho_arquivo}' na branch '{branch_sugerida}'...")
-                    
-                    # O PyGithub cria um commit para cada atualização
+                    print(f"[{job_id}] Atualizando arquivo '{caminho_arquivo}'...")
                     commit_result = repo.update_file(
                         path=caminho_arquivo,
                         message=titulo_commit_arquivo,
@@ -61,10 +68,8 @@ def processar_e_subir_mudancas_agrupadas(nome_repo: str, dados_agrupados: dict, 
                     commit_url_final = commit_result['commit'].html_url
                     
                 except GithubException as e:
-                    if e.status == 404: # Arquivo não existe, então o criamos
-                        print(f"[{job_id}] Criando novo arquivo '{caminho_arquivo}' na branch '{branch_sugerida}'...")
-                        
-                        # O PyGithub cria um commit para cada criação
+                    if e.status == 404:
+                        print(f"[{job_id}] Criando novo arquivo '{caminho_arquivo}'...")
                         commit_result = repo.create_file(
                             path=caminho_arquivo,
                             message=titulo_commit_arquivo,
