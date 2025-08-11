@@ -242,22 +242,36 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado a pedido do usuário."}
 
-# Em mcp_server_fastapi.py
-
 @app.get("/status/{job_id}", response_model=JobStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
-    Verifica o status e os resultados de um job a qualquer momento.
+    Verifica o status e os resultados de um job a qualquer momento de forma segura.
     """
     job = get_job(job_id)
-    if not job: raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
-    
-    # [ALTERADO] Acessa os dados de forma consistente
-    return JobStatusResponse(
-        job_id=job_id,
-        status=job.get('status'),
-        analysis_report=job.get('data', {}).get('analysis_report'),
-        commit_details=job.get('data', {}).get('commit_details'),
-        error_details=job.get('error_details') # <-- Lê da chave correta e padronizada.
-    )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+
+    # [LÓGICA ALTERADA]
+    # Passo 1: Criar um dicionário plano que corresponda exatamente ao modelo de resposta.
+    # Isso garante que a validação do Pydantic sempre receba a estrutura correta.
+    response_data = {
+        "job_id": job_id,
+        "status": job.get("status"),
+        "error_details": job.get("error_details"),
+        
+        # Acessa de forma segura os dados aninhados da chave 'data'
+        "analysis_report": job.get("data", {}).get("analysis_report"),
+        "commit_details": job.get("data", {}).get("commit_details"),
+    }
+
+    # Passo 2: Deixa o Pydantic validar este dicionário limpo e plano.
+    # O operador ** desempacota o dicionário em argumentos de palavra-chave.
+    try:
+        return JobStatusResponse(**response_data)
+    except Exception as e:
+        # Caso de segurança extremo: se a validação ainda falhar, loga o erro
+        print(f"ERRO CRÍTICO ao validar a resposta para o Job ID {job_id}: {e}")
+        print(f"Dados que causaram o erro: {response_data}")
+        # Retorna um erro 500 genérico para não vazar detalhes
+        raise HTTPException(status_code=500, detail="Erro interno ao processar o status do job.")
 
