@@ -1,4 +1,5 @@
-# Arquivo: tools/github_connector.py
+# Arquivo: tools/github_connector.py (VERSÃO FINAL CORRIGIDA)
+
 import os
 from github import Github
 from github.Auth import Token
@@ -7,7 +8,7 @@ from azure.keyvault.secrets import SecretClient
 
 def connection(repositorio: str):
     """
-    Cria uma conexão autenticada com um repositório específico do GitHub.
+    Cria uma conexão autenticada com o GitHub e retorna o objeto do repositório E o token.
     """
     key_vault_url = os.environ["KEY_VAULT_URL"]
     credential = DefaultAzureCredential()
@@ -16,4 +17,7 @@ def connection(repositorio: str):
 
     auth = Token(github_token)
     g = Github(auth=auth)
-    return g.get_repo(repositorio)
+    repo_obj = g.get_repo(repositorio)
+    
+    # [CORREÇÃO] Retorna tanto o objeto do repositório quanto o token bruto
+    return repo_obj, github_token
