@@ -1,8 +1,8 @@
-# Arquivo: tools/github_reader.py
+# Arquivo: tools/github_reader.py (VERSÃO CORRIGIDA E FINAL)
 
 import time
 from github import GithubException
-from tools import github_connector
+from tools import github_connector # Importa o conector inteiro
 
 MAPEAMENTO_TIPO_EXTENSOES = {
     "design": [".tf", ".tfvars", ".py"],
@@ -34,16 +34,16 @@ def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = 
     return arquivos_do_repo
 
 def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
-    repositorio = github_connector.connection(repositorio=nome_repo)
+    # Chama a nova função que retorna apenas o objeto do repositório
+    repositorio = github_connector.get_authenticated_repo(repositorio=nome_repo)
 
     branch_a_ler = nome_branch if nome_branch else repositorio.default_branch
     print(f"Lendo a branch: '{branch_a_ler}'")
 
     extensoes_alvo = MAPEAMENTO_TIPO_EXTENSOES.get(tipo_de_analise.lower())
     
-    # Lógica de retentativa pode ser adicionada aqui se necessário
     arquivos_encontrados = _ler_arquivos_recursivamente(
-        repositorio,
+        repositorio, # Agora 'repositorio' é o objeto correto, não uma tupla
         extensoes=extensoes_alvo,
         nome_branch=branch_a_ler
     )
