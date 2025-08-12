@@ -1,43 +1,48 @@
+# Arquivo: tools/preenchimento.py (VERSÃO APRIMORADA)
+
 import json
 
 def main(json_agrupado: dict, json_inicial: dict) -> dict:
     """
-    Preenche a chave 'conteudo' no JSON agrupado usando os dados do JSON inicial.
+    Preenche e reconstitui os dados no JSON agrupado usando o JSON inicial como
+    fonte da verdade, garantindo a integridade de todas as chaves de cada mudança.
 
-    A função opera "in-place", ou seja, modifica o dicionário 'json_agrupado' diretamente.
-
-    :param json_agrupado: O dicionário com os grupos de mudanças, mas sem o conteúdo.
-    :param json_inicial: O dicionário original que contém a lista completa de
-                         mudanças com o conteúdo dos arquivos.
-    :return: O dicionário 'json_agrupado' modificado e preenchido.
+    :param json_agrupado: Dicionário com os grupos de mudanças, potencialmente incompletos.
+    :param json_inicial: Dicionário original com a lista completa e correta das mudanças.
+    :return: O dicionário 'json_agrupado' modificado e totalmente preenchido.
     """
-    print("Iniciando o processo de preenchimento de conteúdo...")
+    print("Iniciando o processo de preenchimento e reconstituição de dados...")
 
-    # Passo 1: Criar um mapa de consulta rápida para o conteúdo dos arquivos.
-    # Isso é muito mais eficiente do que pesquisar na lista original repetidamente.
-    mapa_de_conteudo = {
-        mudanca['caminho_do_arquivo']: mudanca['conteudo']
+    # Passo 1: Criar um mapa de consulta para o OBJETO DE MUDANÇA COMPLETO.
+    # A chave é o caminho do arquivo, o valor é o dicionário inteiro da mudança.
+    mapa_de_mudancas_originais = {
+        mudanca['caminho_do_arquivo']: mudanca
         for mudanca in json_inicial.get('conjunto_de_mudancas', [])
     }
-    print(f"Mapa de conteúdo criado com {len(mapa_de_conteudo)} arquivos.")
+    print(f"Mapa de dados originais criado com {len(mapa_de_mudancas_originais)} arquivos.")
 
     # Passo 2: Iterar sobre cada grupo no JSON agrupado.
-    # O loop ignora chaves de nível superior que não são grupos (como 'resumo_geral').
-    for nome_do_conjunto, dados_do_conjunto in json_agrupado.items():
-        if isinstance(dados_do_conjunto, dict) and 'conjunto_de_mudancas' in dados_do_conjunto:
-            print(f"Processando o grupo: '{nome_do_conjunto}'...")
+    for nome_do_grupo, dados_do_grupo in json_agrupado.items():
+        if isinstance(dados_do_grupo, dict) and 'conjunto_de_mudancas' in dados_do_grupo:
+            print(f"Processando e limpando o grupo: '{nome_do_grupo}'...")
             
-            # Passo 3: Iterar sobre cada mudança dentro do grupo.
-            for mudanca_no_grupo in dados_do_conjunto.get('conjunto_de_mudancas', []):
+            conjunto_original_do_grupo = dados_do_grupo.get('conjunto_de_mudancas', [])
+            novo_conjunto_de_mudancas = [] # Uma nova lista para garantir dados limpos
+
+            # Passo 3: Iterar sobre cada mudança listada pelo agente de agrupamento.
+            for mudanca_no_grupo in conjunto_original_do_grupo:
                 caminho_do_arquivo = mudanca_no_grupo.get('caminho_do_arquivo')
                 
-                # Passo 4: Buscar o conteúdo no mapa e preencher a chave 'conteudo'.
-                if caminho_do_arquivo in mapa_de_conteudo:
-                    mudanca_no_grupo['conteudo'] = mapa_de_conteudo[caminho_do_arquivo]
+                # Passo 4: Buscar o objeto de mudança completo no mapa original.
+                if caminho_do_arquivo and caminho_do_arquivo in mapa_de_mudancas_originais:
+                    # Adiciona o objeto original e completo à nova lista.
+                    # Isso garante que 'conteudo', 'justificativa', etc., estejam presentes e corretos.
+                    novo_conjunto_de_mudancas.append(mapa_de_mudancas_originais[caminho_do_arquivo])
                 else:
-                    # Caso de segurança: se um arquivo no grupo não estiver no original.
-                    mudanca_no_grupo['conteudo'] = None
-                    print(f"  AVISO: Conteúdo para '{caminho_do_arquivo}' não encontrado no JSON inicial.")
+                    print(f"  AVISO: Detalhes para '{caminho_do_arquivo}' não encontrados no JSON inicial. A mudança será ignorada.")
+            
+            # Passo 5: Substitui a lista de mudanças potencialmente incompleta pela nova lista reconstituída.
+            dados_do_grupo['conjunto_de_mudancas'] = novo_conjunto_de_mudancas
     
-    print("\nProcesso de preenchimento concluído com sucesso!")
+    print("\nProcesso de preenchimento e reconstituição concluído com sucesso!")
     return json_agrupado
