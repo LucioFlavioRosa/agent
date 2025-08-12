@@ -1,4 +1,4 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO COM VERIFICAÇÃO DE MUDANÇAS)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL E INTELIGENTE)
 
 import json
 from github import GithubException
@@ -46,6 +46,10 @@ def _processar_uma_branch(
     # 2. Loop de Commits
     print("Iniciando a aplicação dos arquivos (um commit por arquivo)...")
     for mudanca in conjunto_de_mudancas:
+        # Pula qualquer item que seja explicitamente marcado como inalterado.
+        if mudanca.get("status") == "INALTERADO":
+            continue
+
         caminho = mudanca.get("caminho_do_arquivo")
         conteudo = mudanca.get("conteudo")
         justificativa = mudanca.get("justificativa", "")
@@ -116,7 +120,7 @@ def _processar_uma_branch(
 
 
 # ==============================================================================
-# A FUNÇÃO ORQUESTRADORA AGORA VERIFICA SE HÁ MUDANÇAS ANTES DE PROCESSAR
+# A FUNÇÃO ORQUESTRADORA AGORA VERIFICA SE HÁ MUDANÇAS REAIS ANTES DE PROCESSAR
 # ==============================================================================
 def processar_e_subir_mudancas_agrupadas(
     nome_repo: str,
@@ -153,13 +157,20 @@ def processar_e_subir_mudancas_agrupadas(
                 print("AVISO: Um grupo foi ignorado por não ter uma 'branch_sugerida'.")
                 continue
             
-            # [NOVO] Verificação para pular grupos que não têm nenhuma mudança.
-            # Isso evita a criação de branches vazias.
-            if not conjunto_de_mudancas:
-                print(f"\nAVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança e será ignorado.")
+            # [MELHORIA] Cria uma lista apenas com as mudanças que são REAIS (não "INALTERADO").
+            mudancas_reais = [
+                mudanca for mudanca in conjunto_de_mudancas 
+                if mudanca.get("status") != "INALTERADO"
+            ]
+            
+            # [MELHORIA] A verificação agora é feita na lista de mudanças reais.
+            # Se a lista estiver vazia, o grupo inteiro é ignorado.
+            if not mudancas_reais:
+                print(f"\nAVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança real e será ignorado.")
                 print("-" * 60)
                 continue
 
+            # A função de processamento recebe apenas as mudanças que precisam ser aplicadas.
             resultado_da_branch = _processar_uma_branch(
                 repo=repo,
                 nome_branch=nome_da_branch_atual,
@@ -167,7 +178,7 @@ def processar_e_subir_mudancas_agrupadas(
                 branch_alvo_do_pr=branch_anterior,
                 mensagem_pr=resumo_do_pr,
                 descricao_pr=descricao_do_pr,
-                conjunto_de_mudancas=conjunto_de_mudancas
+                conjunto_de_mudancas=mudancas_reais # Passa a lista filtrada
             )
             
             resultados_finais.append(resultado_da_branch)
