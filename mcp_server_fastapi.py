@@ -68,13 +68,17 @@ WORKFLOW_REGISTRY = {
 
 def handle_task_exception(job_id: str, e: Exception, step: str):
     """Função centralizada para lidar com exceções e atualizar o status no Redis."""
-    error_message = f"Erro fatal durante a etapa '{step}': {e}"
+    
+    # [ALTERADO] Converte explicitamente o objeto de exceção para uma string.
+    # Isso garante que não haverá problemas de tipo na serialização do JSON.
+    error_text = str(e)
+    error_message = f"Erro fatal durante a etapa '{step}': {error_text}"
+    
     print(f"[{job_id}] {error_message}")
     try:
         job_info = get_job(job_id)
         if job_info:
             job_info['status'] = 'failed'
-            # [ALTERADO] Use a mesma chave que o modelo Pydantic espera.
             job_info['error_details'] = error_message
             set_job(job_id, job_info)
     except Exception as redis_e:
@@ -274,4 +278,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"Dados que causaram o erro: {response_data}")
         # Retorna um erro 500 genérico para não vazar detalhes
         raise HTTPException(status_code=500, detail="Erro interno ao processar o status do job.")
+
 
