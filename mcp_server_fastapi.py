@@ -115,31 +115,24 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
 # Em mcp_server_fastapi.py
 
-def run_workflow_task(job_id: str):
-    """
-    Tarefa principal que executa o workflow completo após a aprovação do usuário.
-    """
-    job_info = None
-    try:
-        job_info = get_job(job_id)
-        if not job_info: raise ValueError("Job não encontrado no início do workflow.")
-        
-        print(f"[{job_id}] Iniciando workflow completo após aprovação...")
+# Em mcp_server_fastapi.py
 
+def run_workflow_task(job_id: str):
+    try:
+        print(f"[{job_id}] Iniciando workflow...")
+        job_info = jobs[job_id]
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
+        resultado_refatoracao, resultado_agrupamento = None, None
         previous_step_result = None
         for i, step in enumerate(workflow['steps']):
-            job_info['status'] = step['status_update'] 
-            set_job(job_id, job_info)
+            job_info['status'] = step['status_update']
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
-            
             agent_params = step['params'].copy()
             
             if i == 0:
-                # O primeiro passo (refatoração) usa o relatório e as instruções.
                 relatorio_gerado = job_info['data']['analysis_report']
                 instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
                 observacoes_aprovacao = job_info['data'].get('observacoes_aprovacao')
@@ -147,6 +140,7 @@ def run_workflow_task(job_id: str):
                 instrucoes_completas = relatorio_gerado
                 if instrucoes_iniciais:
                     instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
+                
                 if observacoes_aprovacao:
                     instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
                 
@@ -156,44 +150,22 @@ def run_workflow_task(job_id: str):
                     'instrucoes_extras': instrucoes_completas
                 })
             else:
-                # [CORREÇÃO FINAL]
-                # Para os passos seguintes, preparamos os dados do passo anterior.
-                # Criamos uma versão "resumida" do resultado, SEM o conteúdo dos arquivos.
-                resultado_sem_conteudo = {
-                    "resumo_geral": previous_step_result.get("resumo_geral"),
-                    "conjunto_de_mudancas": [
-                        # Para cada mudança, pegamos todas as chaves EXCETO 'conteudo'
-                        {key: value for key, value in mudanca.items() if key != 'conteudo'}
-                        for mudanca in previous_step_result.get("conjunto_de_mudancas", [])
-                    ]
-                }
-                
-                # Passamos apenas o resumo para o próximo agente, evitando estouro de tokens.
-                agent_params['codigo'] = json.dumps(resultado_sem_conteudo, indent=2, ensure_ascii=False)
+                # [CORREÇÃO APLICADA AQUI]
+                # Converte o dicionário do passo anterior para uma string JSON bem formatada.
+                # A IA entende este formato universalmente.
+                agent_params['codigo'] = json.dumps(previous_step_result, indent=2, ensure_ascii=False)
             
             agent_response = step['agent_function'](**agent_params)
-            
-            full_llm_response_obj = agent_response['resultado']['reposta_final']
-            json_string_from_llm = full_llm_response_obj['reposta_final']
-            previous_step_result = json.loads(json_string_from_llm)
-
-            if i == 0:
-                # Salva o resultado completo da refatoração (com conteúdo)
-                job_info['data']['resultado_refatoracao'] = previous_step_result
-            else:
-                # Salva o resultado do agrupamento
-                job_info['data']['resultado_agrupamento'] = previous_step_result
-            set_job(job_id, job_info)
+            json_string = agent_response['resultado']['reposta_final'].replace("```json", '').replace("```", '')
+            previous_step_result = json.loads(json_string)
+            if i == 0: resultado_refatoracao = previous_step_result
+            else: resultado_agrupamento = previous_step_result
         
         job_info['status'] = 'populating_data'
-        set_job(job_id, job_info)
+        print(f"[{job_id}] ... Etapa de preenchimento...")
+        dados_preenchidos = preenchimento.main(json_agrupado=resultado_agrupamento, json_inicial=resultado_refatoracao)
         
-        # A função de preenchimento irá adicionar o conteúdo de volta usando o 'resultado_refatoracao'
-        dados_preenchidos = preenchimento.main(
-            json_agrupado=job_info['data']['resultado_agrupamento'],
-            json_inicial=job_info['data']['resultado_refatoracao']
-        )
-        
+        print(f"[{job_id}] ... Etapa de transformação...")
         dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
         for nome_grupo, detalhes_pr in dados_preenchidos.items():
             if nome_grupo == "resumo_geral": continue
@@ -202,18 +174,14 @@ def run_workflow_task(job_id: str):
         if not dados_finais_formatados.get("grupos"): raise ValueError("Dados para commit vazios.")
 
         job_info['status'] = 'committing_to_github'
-        set_job(job_id, job_info)
         print(f"[{job_id}] ... Etapa de commit para o GitHub...")
-        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
-        
-        job_info['data']['commit_details'] = commit_results
+        commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
         job_info['status'] = 'completed'
-        set_job(job_id, job_info)
         print(f"[{job_id}] Processo concluído com sucesso!")
-
     except Exception as e:
-        current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
-        handle_task_exception(job_id, e, current_step)
+        print(f"ERRO FATAL na tarefa [{job_id}]: {e}")
+        jobs[job_id]['status'] = 'failed'
+        jobs[job_id]['error'] = str(e)
 # --- Endpoints da API ---
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
@@ -274,4 +242,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
 
     return job
+
 
