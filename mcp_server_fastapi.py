@@ -68,32 +68,56 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
+# Em mcp_server_fastapi.py, substitua esta função:
+
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
+    """
+    Tarefa de background que lê o repositório e gera o relatório de análise inicial,
+    agora com status mais granulares para melhor experiência do usuário.
+    """
     job_info = None
     try:
         job_info = get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
+        # --- ETAPA 1: LENDO O REPOSITÓRIO ---
         job_info['status'] = 'reading_repository'
         set_job(job_id, job_info)
-        print(f"[{job_id}] Etapa 1: Delegando leitura e análise para o agente...")
+        print(f"[{job_id}] Etapa 1: Lendo repositório...")
         
+        # O orquestrador chama diretamente o leitor de repositório.
+        arquivos_do_repo = github_reader.main(
+            nome_repo=payload.repo_name,
+            tipo_de_analise=payload.analysis_type,
+            nome_branch=payload.branch_name
+        )
+
+        # --- ETAPA 2: GERANDO O RELATÓRIO ---
+        job_info['status'] = 'generating_report'
+        set_job(job_id, job_info)
+        print(f"[{job_id}] Etapa 2: Repositório lido. Enviando para análise da IA...")
+        
+        # O orquestrador chama o agente, mas agora passando o CÓDIGO lido diretamente.
+        # O agente não precisa mais ler o repositório nesta chamada.
         resposta_agente = agente_revisor.main(
             tipo_analise=payload.analysis_type,
-            repositorio=payload.repo_name,
-            nome_branch=payload.branch_name,
+            codigo=arquivos_do_repo, # <--- Passa o código lido
+            repositorio=None,       # <--- Não passa o nome do repo para evitar releitura
+            nome_branch=None,
             instrucoes_extras=payload.instrucoes_extras
         )
         
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
         report_text_only = full_llm_response_obj['reposta_final']
 
+        # --- ETAPA 3: AGUARDANDO APROVAÇÃO ---
         job_info['status'] = 'pending_approval'
         job_info['data']['analysis_report'] = report_text_only
         set_job(job_id, job_info)
-        print(f"[{job_id}] Relatório gerado com sucesso. Job aguardando aprovação.")
+        print(f"[{job_id}] Etapa 3: Relatório gerado com sucesso. Job aguardando aprovação.")
         
     except Exception as e:
+        # O tratamento de erro agora será mais específico sobre a etapa que falhou.
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
 
@@ -238,3 +262,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     return job
+
