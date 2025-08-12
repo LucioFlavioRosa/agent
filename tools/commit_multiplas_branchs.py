@@ -1,4 +1,4 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL COM RETORNO DE DADOS)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO COM VERIFICAÇÃO DE MUDANÇAS)
 
 import json
 from github import GithubException
@@ -6,7 +6,7 @@ from tools import github_connector
 from typing import Dict, Any, Optional, List
 
 # ==============================================================================
-# A FUNÇÃO AUXILIAR FOI ALTERADA PARA RETORNAR UM DICIONÁRIO COM DADOS
+# A FUNÇÃO AUXILIAR _processar_uma_branch NÃO PRECISA DE MUDANÇAS.
 # ==============================================================================
 def _processar_uma_branch(
     repo,
@@ -23,7 +23,6 @@ def _processar_uma_branch(
     """
     print(f"\n--- Processando o Lote para a Branch: '{nome_branch}' ---")
     
-    # Estrutura de resultado para esta branch
     resultado_branch = {
         "branch_name": nome_branch,
         "success": False,
@@ -45,23 +44,13 @@ def _processar_uma_branch(
             raise
 
     # 2. Loop de Commits
-    if not conjunto_de_mudancas:
-        print("Nenhuma mudança para aplicar nesta branch.")
-        resultado_branch["success"] = True
-        resultado_branch["message"] = "Nenhuma mudança fornecida para a branch."
-        return resultado_branch
-
     print("Iniciando a aplicação dos arquivos (um commit por arquivo)...")
     for mudanca in conjunto_de_mudancas:
         caminho = mudanca.get("caminho_do_arquivo")
         conteudo = mudanca.get("conteudo")
         justificativa = mudanca.get("justificativa", "")
 
-        if conteudo is None:
-            print(f"  [IGNORADO]   Pulando o arquivo '{caminho}' porque seu conteúdo é nulo (None).")
-            continue
-        if not caminho:
-            print(f"  [IGNORADO]   Pulando uma mudança porque não possui caminho de arquivo.")
+        if conteudo is None or not caminho:
             continue
 
         sha_arquivo_existente = None
@@ -83,7 +72,7 @@ def _processar_uma_branch(
             else:
                 repo.create_file(path=caminho, message=commit_message_completo, content=conteudo, branch=nome_branch)
                 print(f"  [CRIADO]     {caminho}")
-
+            
             commits_realizados += 1
         except GithubException as e:
             print(f"ERRO ao commitar o arquivo '{caminho}': {e}")
@@ -109,7 +98,6 @@ def _processar_uma_branch(
                 pr_encontrado = prs_existentes[0] if prs_existentes.totalCount > 0 else None
                 
                 if pr_encontrado:
-                    print(f"Link do PR existente encontrado: {pr_encontrado.html_url}")
                     resultado_branch["success"] = True
                     resultado_branch["pr_url"] = pr_encontrado.html_url
                     resultado_branch["message"] = "Um Pull Request para esta branch já existia."
@@ -128,7 +116,7 @@ def _processar_uma_branch(
 
 
 # ==============================================================================
-# A FUNÇÃO ORQUESTRADORA FOI AJUSTADA PARA COLETAR E RETORNAR OS RESULTADOS
+# A FUNÇÃO ORQUESTRADORA AGORA VERIFICA SE HÁ MUDANÇAS ANTES DE PROCESSAR
 # ==============================================================================
 def processar_e_subir_mudancas_agrupadas(
     nome_repo: str,
@@ -163,9 +151,15 @@ def processar_e_subir_mudancas_agrupadas(
 
             if not nome_da_branch_atual:
                 print("AVISO: Um grupo foi ignorado por não ter uma 'branch_sugerida'.")
-                resultados_finais.append({"success": False, "message": "Grupo ignorado por falta de 'branch_sugerida'."})
                 continue
             
+            # [NOVO] Verificação para pular grupos que não têm nenhuma mudança.
+            # Isso evita a criação de branches vazias.
+            if not conjunto_de_mudancas:
+                print(f"\nAVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança e será ignorado.")
+                print("-" * 60)
+                continue
+
             resultado_da_branch = _processar_uma_branch(
                 repo=repo,
                 nome_branch=nome_da_branch_atual,
