@@ -1,4 +1,4 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO DEFINITIVA E CORRIGIDA)
+# Arquivo: mcp_server_fastapi.py (VERSÃO COM CORREÇÃO DEFINITIVA DE WORKFLOW)
 
 import json
 import uuid
@@ -32,7 +32,7 @@ class UpdateJobPayload(BaseModel):
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
-    version="6.1.0" # Versão com correção final de tipo
+    version="7.0.0" # Versão com workflow robusto
 )
 
 app.add_middleware(
@@ -131,26 +131,34 @@ def run_workflow_task(job_id: str):
                     'instrucoes_extras': instrucoes_completas
                 })
             else:
-                resultado_sem_conteudo = {
-                    "resumo_geral": previous_step_result.get("resumo_geral"),
-                    "conjunto_de_mudancas": [
-                        {key: value for key, value in mudanca.items() if key != 'conteudo'}
-                        for mudanca in previous_step_result.get("conjunto_de_mudancas", [])
-                    ]
-                }
-                agent_params['codigo'] = json.dumps(resultado_sem_conteudo, indent=2, ensure_ascii=False)
+                # [SOLUÇÃO DEFINITIVA]
+                # Constrói um resumo em TEXTO PURO para o segundo agente.
+                # Este formato é muito mais simples para a IA interpretar do que um JSON complexo.
+                
+                summary_lines = []
+                summary_lines.append("Resumo Geral da Refatoração Proposta:")
+                summary_lines.append(previous_step_result.get("resumo_geral", "Nenhum resumo fornecido."))
+                summary_lines.append("\nLista de Mudanças a Serem Agrupadas:")
+
+                for mudanca in previous_step_result.get("conjunto_de_mudancas", []):
+                    summary_lines.append("\n---")
+                    summary_lines.append(f"Arquivo: {mudanca.get('caminho_do_arquivo')}")
+                    summary_lines.append(f"Justificativa: {mudanca.get('justificativa')}")
+                
+                text_summary = "\n".join(summary_lines)
+                agent_params['codigo'] = text_summary
             
             agent_response = step['agent_function'](**agent_params)
             
-            # [CORREÇÃO FINAL] Lógica unificada para tratar a resposta do agente.
-            # Remove o .replace() e extrai a string JSON do objeto de resposta.
             full_llm_response_obj = agent_response['resultado']['reposta_final']
             json_string_from_llm = full_llm_response_obj.get('reposta_final', '')
 
             if not json_string_from_llm or not json_string_from_llm.strip():
                 raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
 
-            previous_step_result = json.loads(json_string_from_llm)
+            # Remove os ```json que a IA às vezes adiciona
+            cleaned_json_string = json_string_from_llm.replace("```json", "").replace("```", "").strip()
+            previous_step_result = json.loads(cleaned_json_string)
 
             if i == 0:
                 job_info['data']['resultado_refatoracao'] = previous_step_result
