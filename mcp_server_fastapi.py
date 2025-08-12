@@ -3,7 +3,7 @@
 import json
 import uuid
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -39,7 +39,6 @@ class FinalStatusResponse(BaseModel):
     status: str
     summary: Optional[List[PullRequestSummary]] = Field(None, description="Resumo dos PRs e arquivos modificados.")
     error_details: Optional[str] = Field(None, description="Detalhes do erro, se o job falhou.")
-    # Adicionamos um campo para o relatório inicial, caso o usuário queira vê-lo.
     analysis_report: Optional[str] = Field(None, description="Relatório inicial da IA, se aplicável.")
 
 
@@ -246,12 +245,11 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
 
 
-# [ALTERADO] Endpoint de status agora é mais inteligente e retorna um resumo limpo.
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"]) 
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
-    Verifica o status de um job. Se concluído ou falho, retorna um resumo limpo.
-    Para status intermediários, retorna todos os detalhes para monitoramento.
+    Verifica o status de um job. Retorna uma resposta estruturada e segura
+    com resumos para os estados 'completed' e 'failed'.
     """
     job = get_job(job_id)
     if not job:
@@ -259,51 +257,55 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
 
     status = job.get('status')
     
-    # Caso 1: Job concluído com sucesso
-    if status == 'completed':
-        summary_list = []
-        commit_details = job.get("data", {}).get("commit_details", [])
-        dados_agrupados = job.get("data", {}).get("resultado_agrupamento", {})
+    try:
+        # Caso 1: Job concluído com sucesso. Monta o resumo detalhado.
+        if status == 'completed':
+            summary_list = []
+            commit_details = job.get("data", {}).get("commit_details", [])
+            dados_agrupados = job.get("data", {}).get("resultado_agrupamento", {})
 
-        # Mapeia branch_name para a lista de arquivos daquele grupo
-        mapa_arquivos_por_branch = {}
-        for nome_grupo, detalhes_grupo in dados_agrupados.items():
-            if isinstance(detalhes_grupo, dict) and 'conjunto_de_mudancas' in detalhes_grupo:
-                 # Assumimos que o nome do grupo é o nome da branch
-                arquivos = [m.get("caminho_do_arquivo") for m in detalhes_grupo.get("conjunto_de_mudancas", [])]
-                mapa_arquivos_por_branch[nome_grupo] = arquivos
+            mapa_arquivos_por_branch = {}
+            for nome_grupo, detalhes_grupo in dados_agrupados.items():
+                if isinstance(detalhes_grupo, dict) and 'conjunto_de_mudancas' in detalhes_grupo:
+                    arquivos = [m.get("caminho_do_arquivo") for m in detalhes_grupo.get("conjunto_de_mudancas", []) if m]
+                    mapa_arquivos_por_branch[nome_grupo] = arquivos
 
-        for pr_info in commit_details:
-            branch_name = pr_info.get("branch_name")
-            if pr_info.get("success"):
-                summary_list.append(
-                    PullRequestSummary(
-                        pull_request_url=pr_info.get("pr_url", "N/A"),
-                        branch_name=branch_name,
-                        arquivos_modificados=mapa_arquivos_por_branch.get(branch_name, [])
+            for pr_info in commit_details:
+                branch_name = pr_info.get("branch_name")
+                if pr_info.get("success") and pr_info.get("pr_url"):
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=pr_info.get("pr_url"),
+                            branch_name=branch_name,
+                            arquivos_modificados=mapa_arquivos_por_branch.get(branch_name, [])
+                        )
                     )
-                )
+            
+            return FinalStatusResponse(
+                job_id=job_id,
+                status=status,
+                summary=summary_list
+            )
+
+        # Caso 2: Job falhou. Retorna apenas os detalhes do erro.
+        elif status == 'failed':
+            return FinalStatusResponse(
+                job_id=job_id,
+                status=status,
+                error_details=job.get("error_details", "Nenhum detalhe de erro encontrado.")
+            )
         
-        return FinalStatusResponse(
-            job_id=job_id,
-            status=status,
-            summary=summary_list
-        )
+        # Caso 3: Job em andamento. Retorna o relatório para aprovação ou apenas o status.
+        else:
+            return FinalStatusResponse(
+                job_id=job_id,
+                status=status,
+                analysis_report=job.get("data", {}).get("analysis_report")
+            )
 
-    # Caso 2: Job falhou
-    elif status == 'failed':
-        return FinalStatusResponse(
-            job_id=job_id,
-            status=status,
-            error_details=job.get("error_details", "Nenhum detalhe de erro encontrado.")
-        )
-    
-    # Caso 3: Job em andamento (pending_approval, etc.)
-    # Retornamos o relatório inicial para que o usuário possa decidir sobre a aprovação.
-    else:
-        return FinalStatusResponse(
-            job_id=job_id,
-            status=status,
-            analysis_report=job.get("data", {}).get("analysis_report")
-        )
-
+    except ValidationError as e:
+        # Bloco de segurança final: se a validação do Pydantic falhar,
+        # loga o erro e retorna uma resposta de erro limpa, evitando o erro 500.
+        print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
+        print(f"Dados brutos do job que causaram o erro: {job}")
+        raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
