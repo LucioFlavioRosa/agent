@@ -97,93 +97,101 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
 
+# [MODIFICADO] A função agora usa get_job, set_job e handle_task_exception
 def run_workflow_task(job_id: str):
-    job_info = None
+    job_info = None  # Define job_info fora do try para o bloco except ter acesso
     try:
+        # Passo 1: Buscar o estado inicial do job a partir do Redis
         job_info = get_job(job_id)
-        if not job_info: raise ValueError("Job não encontrado.")
-        
-        print(f"[{job_id}] Iniciando workflow completo...")
+        if not job_info:
+            raise ValueError("Job não encontrado no início do workflow.")
+
+        print(f"[{job_id}] Iniciando workflow completo após aprovação...")
+
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
-        if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
-        
+        if not workflow:
+            raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
+
         previous_step_result = None
         for i, step in enumerate(workflow['steps']):
-            job_info['status'] = step['status_update'] 
+            # Atualiza o status para a etapa atual
+            job_info['status'] = step['status_update']
+            # [ADICIONADO] Salva o status atual no Redis para monitoramento
             set_job(job_id, job_info)
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
             
             agent_params = step['params'].copy()
             
             if i == 0:
-                # Primeiro passo: usa o relatório e as observações
                 relatorio_gerado = job_info['data']['analysis_report']
                 instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
                 observacoes_aprovacao = job_info['data'].get('observacoes_aprovacao')
+
                 instrucoes_completas = relatorio_gerado
                 if instrucoes_iniciais:
                     instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
                 if observacoes_aprovacao:
                     instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
+                
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
                     'instrucoes_extras': instrucoes_completas
                 })
             else:
-                # [CORREÇÃO DEFINITIVA] Passos seguintes: usa o resultado do passo anterior
-                # 1. "Poda" o resultado para remover o conteúdo completo dos arquivos
-                resultado_sem_conteudo = {
-                    "resumo_geral": previous_step_result.get("resumo_geral"),
-                    "conjunto_de_mudancas": [
-                        {key: value for key, value in mudanca.items() if key != 'conteudo'}
-                        for mudanca in previous_step_result.get("conjunto_de_mudancas", [])
-                    ]
-                }
-                # 2. Converte o dicionário "podado" para uma string JSON perfeita
-                agent_params['codigo'] = json.dumps(resultado_sem_conteudo, indent=2, ensure_ascii=False)
+                agent_params['codigo'] = json.dumps(previous_step_result, indent=2, ensure_ascii=False)
             
             agent_response = step['agent_function'](**agent_params)
-            
-            full_llm_response_obj = agent_response['resultado']['reposta_final']
-            json_string_from_llm = full_llm_response_obj.get('reposta_final', '')
+            json_string = agent_response['resultado']['reposta_final'].replace("```json", '').replace("```", '')
+            previous_step_result = json.loads(json_string)
 
-            if not json_string_from_llm or not json_string_from_llm.strip():
-                raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
-
-            previous_step_result = json.loads(json_string_from_llm)
-
+            # [MELHORIA] Salva os resultados intermediários no job_info para maior robustez
             if i == 0:
                 job_info['data']['resultado_refatoracao'] = previous_step_result
             else:
                 job_info['data']['resultado_agrupamento'] = previous_step_result
+            
+            # [ADICIONADO] Salva o job com os resultados intermediários
             set_job(job_id, job_info)
-        
+
+        # Inicia a etapa de preenchimento
         job_info['status'] = 'populating_data'
+        # [ADICIONADO] Salva o status no Redis
         set_job(job_id, job_info)
-        
+        print(f"[{job_id}] ... Etapa de preenchimento...")
         dados_preenchidos = preenchimento.main(
             json_agrupado=job_info['data']['resultado_agrupamento'],
             json_inicial=job_info['data']['resultado_refatoracao']
         )
         
+        print(f"[{job_id}] ... Etapa de transformação...")
         dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
         for nome_grupo, detalhes_pr in dados_preenchidos.items():
             if nome_grupo == "resumo_geral": continue
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
         
-        if not dados_finais_formatados.get("grupos"): raise ValueError("Dados para commit vazios.")
+        if not dados_finais_formatados.get("grupos"):
+            raise ValueError("Dados para commit vazios.")
 
+        # Inicia a etapa de commit
         job_info['status'] = 'committing_to_github'
+        # [ADICIONADO] Salva o status no Redis
         set_job(job_id, job_info)
-        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
+        print(f"[{job_id}] ... Etapa de commit para o GitHub...")
+        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
+            nome_repo=job_info['data']['repo_name'],
+            dados_agrupados=dados_finais_formatados
+        )
         
+        # Salva os detalhes do commit e finaliza
         job_info['data']['commit_details'] = commit_results
         job_info['status'] = 'completed'
+        # [ADICIONADO] Salva o status final no Redis
         set_job(job_id, job_info)
         print(f"[{job_id}] Processo concluído com sucesso!")
 
+    # [MODIFICADO] O tratamento de erro agora usa a função centralizada e robusta
     except Exception as e:
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
@@ -232,3 +240,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     return job
+
