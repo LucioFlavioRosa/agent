@@ -1,10 +1,12 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO DEFINITIVA E CORRIGIDA)
+# Arquivo: mcp_server_fastapi.py (VERSÃO DEFINITIVA CORRIGIDA)
 
 import json
 import uuid
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Dict, Any
+# [CORREÇÃO] Adiciona a importação do CORSMiddleware que estava faltando.
+from fastapi.middleware.cors import CORSMiddleware
 
 # --- Módulos do seu projeto ---
 from tools.job_store import set_job, get_job
@@ -38,7 +40,7 @@ class UpdateJobPayload(BaseModel):
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
-    version="5.1.0" # Versão com tratamento de erro unificado
+    version="5.1.1" # Versão com correção de import
 )
 
 app.add_middleware(
@@ -198,7 +200,6 @@ def run_workflow_task(job_id: str):
         set_job(job_id, job_info)
         print(f"[{job_id}] Processo concluído com sucesso!")
 
-    # [CORRIGIDO] O bloco de tratamento de erro agora usa a função centralizada, eliminando o NameError.
     except Exception as e:
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
