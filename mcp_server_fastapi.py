@@ -1,16 +1,15 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO COMPLETA E FINAL)
+# Arquivo: mcp_server_fastapi.py (VERSÃO DEFINITIVA E CORRIGIDA)
 
 import json
 import uuid
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Dict, Any
-from fastapi.middleware.cors import CORSMiddleware
 
-# --- Módulos do seu projeto (Processos Separados) ---
-from tools.job_store import set_job, get_job             # Gerenciador de estado
-from agents import agente_revisor                       # Agente de análise (orquestra leitura + IA)
-from tools import preenchimento, commit_multiplas_branchs # Ferramentas de pós-processamento
+# --- Módulos do seu projeto ---
+from tools.job_store import set_job, get_job
+from agents import agente_revisor
+from tools import preenchimento, commit_multiplas_branchs
 
 # --- Modelos de Dados Pydantic ---
 
@@ -39,7 +38,7 @@ class UpdateJobPayload(BaseModel):
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
-    version="4.1.0" # Versão com a correção final do workflow
+    version="5.1.0" # Versão com tratamento de erro unificado
 )
 
 app.add_middleware(
@@ -92,7 +91,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
         job_info['status'] = 'reading_repository'
         set_job(job_id, job_info)
-        print(f"[{job_id}] Etapa 1: Delegando leitura do repositório e análise para o agente...")
+        print(f"[{job_id}] Etapa 1: Delegando leitura e análise para o agente...")
         
         resposta_agente = agente_revisor.main(
             tipo_analise=payload.analysis_type,
@@ -113,23 +112,27 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
 
-# Em mcp_server_fastapi.py
-
-# Em mcp_server_fastapi.py
-
 def run_workflow_task(job_id: str):
+    """
+    Tarefa principal que executa o workflow completo após a aprovação do usuário.
+    """
+    job_info = None
     try:
-        print(f"[{job_id}] Iniciando workflow...")
-        job_info = jobs[job_id]
+        job_info = get_job(job_id)
+        if not job_info: raise ValueError("Job não encontrado no início do workflow.")
+        
+        print(f"[{job_id}] Iniciando workflow completo após aprovação...")
+
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
-        resultado_refatoracao, resultado_agrupamento = None, None
         previous_step_result = None
         for i, step in enumerate(workflow['steps']):
-            job_info['status'] = step['status_update']
+            job_info['status'] = step['status_update'] 
+            set_job(job_id, job_info)
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
+            
             agent_params = step['params'].copy()
             
             if i == 0:
@@ -140,7 +143,6 @@ def run_workflow_task(job_id: str):
                 instrucoes_completas = relatorio_gerado
                 if instrucoes_iniciais:
                     instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
-                
                 if observacoes_aprovacao:
                     instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
                 
@@ -150,22 +152,35 @@ def run_workflow_task(job_id: str):
                     'instrucoes_extras': instrucoes_completas
                 })
             else:
-                # [CORREÇÃO APLICADA AQUI]
-                # Converte o dicionário do passo anterior para uma string JSON bem formatada.
-                # A IA entende este formato universalmente.
-                agent_params['codigo'] = json.dumps(previous_step_result, indent=2, ensure_ascii=False)
+                resultado_sem_conteudo = {
+                    "resumo_geral": previous_step_result.get("resumo_geral"),
+                    "conjunto_de_mudancas": [
+                        {key: value for key, value in mudanca.items() if key != 'conteudo'}
+                        for mudanca in previous_step_result.get("conjunto_de_mudancas", [])
+                    ]
+                }
+                agent_params['codigo'] = json.dumps(resultado_sem_conteudo, indent=2, ensure_ascii=False)
             
             agent_response = step['agent_function'](**agent_params)
-            json_string = agent_response['resultado']['reposta_final'].replace("```json", '').replace("```", '')
-            previous_step_result = json.loads(json_string)
-            if i == 0: resultado_refatoracao = previous_step_result
-            else: resultado_agrupamento = previous_step_result
+            
+            full_llm_response_obj = agent_response['resultado']['reposta_final']
+            json_string_from_llm = full_llm_response_obj['reposta_final']
+            previous_step_result = json.loads(json_string_from_llm)
+
+            if i == 0:
+                job_info['data']['resultado_refatoracao'] = previous_step_result
+            else:
+                job_info['data']['resultado_agrupamento'] = previous_step_result
+            set_job(job_id, job_info)
         
         job_info['status'] = 'populating_data'
-        print(f"[{job_id}] ... Etapa de preenchimento...")
-        dados_preenchidos = preenchimento.main(json_agrupado=resultado_agrupamento, json_inicial=resultado_refatoracao)
+        set_job(job_id, job_info)
         
-        print(f"[{job_id}] ... Etapa de transformação...")
+        dados_preenchidos = preenchimento.main(
+            json_agrupado=job_info['data']['resultado_agrupamento'],
+            json_inicial=job_info['data']['resultado_refatoracao']
+        )
+        
         dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
         for nome_grupo, detalhes_pr in dados_preenchidos.items():
             if nome_grupo == "resumo_geral": continue
@@ -174,21 +189,24 @@ def run_workflow_task(job_id: str):
         if not dados_finais_formatados.get("grupos"): raise ValueError("Dados para commit vazios.")
 
         job_info['status'] = 'committing_to_github'
+        set_job(job_id, job_info)
         print(f"[{job_id}] ... Etapa de commit para o GitHub...")
-        commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
+        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
+        
+        job_info['data']['commit_details'] = commit_results
         job_info['status'] = 'completed'
+        set_job(job_id, job_info)
         print(f"[{job_id}] Processo concluído com sucesso!")
+
+    # [CORRIGIDO] O bloco de tratamento de erro agora usa a função centralizada, eliminando o NameError.
     except Exception as e:
-        print(f"ERRO FATAL na tarefa [{job_id}]: {e}")
-        jobs[job_id]['status'] = 'failed'
-        jobs[job_id]['error'] = str(e)
+        current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
+        handle_task_exception(job_id, e, current_step)
+
 # --- Endpoints da API ---
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    """
-    Inicia um novo job de análise de código.
-    """
     job_id = str(uuid.uuid4())
     initial_job_data = {
         'status': 'starting',
@@ -208,9 +226,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
-    """
-    Aprova ou rejeita um job que está aguardando aprovação.
-    """
     job = get_job(payload.job_id)
     if not job: raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     if job['status'] != 'pending_approval': raise HTTPException(status_code=400, detail=f"O job não pode ser modificado. Status atual: {job['status']}")
@@ -223,24 +238,19 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         set_job(payload.job_id, job)
         
         background_tasks.add_task(run_workflow_task, payload.job_id)
-        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida. Processo de refatoração e commit iniciado."}
+        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida."}
     
     if payload.action == 'reject':
         job['status'] = 'rejected'
         set_job(payload.job_id, job)
-        return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado a pedido do usuário."}
+        return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
 
-# Endpoint de status simplificado para máxima compatibilidade durante a depuração.
 @app.get("/status/{job_id}", tags=["Jobs"]) 
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
-    Verifica o status e os resultados de um job a qualquer momento.
-    Retorna o dicionário raw do Redis para evitar ValidationErrors durante o debug.
+    Verifica o status e os resultados de um job. Retorna o dicionário raw do Redis.
     """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
-
     return job
-
-
