@@ -1,11 +1,10 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO COM CORREÇÃO DEFINITIVA DE WORKFLOW)
+# Arquivo: mcp_server_fastapi.py (VERSÃO COM RESPOSTA DE STATUS REFINADA)
 
 import json
 import uuid
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Dict, Any
-from fastapi.middleware.cors import CORSMiddleware
 
 # --- Módulos do projeto ---
 from tools.job_store import set_job, get_job
@@ -28,11 +27,26 @@ class UpdateJobPayload(BaseModel):
     action: Literal["approve", "reject"]
     observacoes: Optional[str] = None
 
+# [NOVO] Modelos para a resposta final resumida, melhorando a experiência do usuário.
+class PullRequestSummary(BaseModel):
+    pull_request_url: str
+    branch_name: str
+    arquivos_modificados: List[str]
+
+class FinalStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    summary: Optional[List[PullRequestSummary]] = Field(None, description="Resumo dos PRs e arquivos modificados.")
+    error_details: Optional[str] = Field(None, description="Detalhes do erro, se o job falhou.")
+    # Adicionamos um campo para o relatório inicial, caso o usuário queira vê-lo.
+    analysis_report: Optional[str] = Field(None, description="Relatório inicial da IA, se aplicável.")
+
+
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
-    version="7.0.0" # Versão com workflow robusto
+    version="8.0.0" # Versão com UX aprimorada
 )
 
 app.add_middleware(
@@ -53,9 +67,11 @@ WORKFLOW_REGISTRY = {
     # ... outros workflows
 }
 
-# --- Lógica de Tarefas em Background ---
+# --- Lógica de Tarefas em Background (sem alterações) ---
 
 def handle_task_exception(job_id: str, e: Exception, step: str):
+    # ... (código inalterado)
+# ... (demais funções de background permanecem inalteradas)
     error_text = str(e)
     error_message = f"Erro fatal durante a etapa '{step}': {error_text}"
     print(f"[{job_id}] {error_message}")
@@ -68,18 +84,13 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
-# Em mcp_server_fastapi.py, substitua esta função:
-
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
-    """
-    Tarefa de background que lê o repositório e gera o relatório de análise inicial.
-    """
     job_info = None
     try:
         job_info = get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
-        job_info['status'] = 'gerando_relatorio'
+        job_info['status'] = 'reading_repository'
         set_job(job_id, job_info)
         print(f"[{job_id}] Etapa 1: Delegando leitura e análise para o agente...")
         
@@ -101,7 +112,6 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
     except Exception as e:
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
-
 
 def run_workflow_task(job_id: str):
     job_info = None
@@ -137,22 +147,17 @@ def run_workflow_task(job_id: str):
                     'instrucoes_extras': instrucoes_completas
                 })
             else:
-                # [SOLUÇÃO DEFINITIVA]
-                # Constrói um resumo em TEXTO PURO para o segundo agente.
-                # Este formato é muito mais simples para a IA interpretar do que um JSON complexo.
-                
-                summary_lines = []
-                summary_lines.append("Resumo Geral da Refatoração Proposta:")
-                summary_lines.append(previous_step_result.get("resumo_geral", "Nenhum resumo fornecido."))
-                summary_lines.append("\nLista de Mudanças a Serem Agrupadas:")
-
-                for mudanca in previous_step_result.get("conjunto_de_mudancas", []):
-                    summary_lines.append("\n---")
-                    summary_lines.append(f"Arquivo: {mudanca.get('caminho_do_arquivo')}")
-                    summary_lines.append(f"Justificativa: {mudanca.get('justificativa')}")
-                
-                text_summary = "\n".join(summary_lines)
-                agent_params['codigo'] = text_summary
+                lightweight_changeset = {
+                    "resumo_geral": previous_step_result.get("resumo_geral"),
+                    "conjunto_de_mudancas": [
+                        {
+                            "caminho_do_arquivo": mudanca.get("caminho_do_arquivo"),
+                            "justificativa": mudanca.get("justificativa")
+                        }
+                        for mudanca in previous_step_result.get("conjunto_de_mudancas", [])
+                    ]
+                }
+                agent_params['codigo'] = json.dumps(lightweight_changeset, indent=2, ensure_ascii=False)
             
             agent_response = step['agent_function'](**agent_params)
             
@@ -162,7 +167,6 @@ def run_workflow_task(job_id: str):
             if not json_string_from_llm or not json_string_from_llm.strip():
                 raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
 
-            # Remove os ```json que a IA às vezes adiciona
             cleaned_json_string = json_string_from_llm.replace("```json", "").replace("```", "").strip()
             previous_step_result = json.loads(cleaned_json_string)
 
@@ -204,6 +208,7 @@ def run_workflow_task(job_id: str):
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    # ... (código inalterado)
     job_id = str(uuid.uuid4())
     initial_job_data = {
         'status': 'starting',
@@ -221,6 +226,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
+    # ... (código inalterado)
     job = get_job(payload.job_id)
     if not job: raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     if job['status'] != 'pending_approval': raise HTTPException(status_code=400, detail=f"O job não pode ser modificado. Status atual: {job['status']}")
@@ -238,13 +244,64 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
 
-@app.get("/status/{job_id}", tags=["Jobs"]) 
+
+# [ALTERADO] Endpoint de status agora é mais inteligente e retorna um resumo limpo.
+@app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"]) 
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
+    """
+    Verifica o status de um job. Se concluído ou falho, retorna um resumo limpo.
+    Para status intermediários, retorna todos os detalhes para monitoramento.
+    """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
-    return job
 
+    status = job.get('status')
+    
+    # Caso 1: Job concluído com sucesso
+    if status == 'completed':
+        summary_list = []
+        commit_details = job.get("data", {}).get("commit_details", [])
+        dados_agrupados = job.get("data", {}).get("resultado_agrupamento", {})
 
+        # Mapeia branch_name para a lista de arquivos daquele grupo
+        mapa_arquivos_por_branch = {}
+        for nome_grupo, detalhes_grupo in dados_agrupados.items():
+            if isinstance(detalhes_grupo, dict) and 'conjunto_de_mudancas' in detalhes_grupo:
+                 # Assumimos que o nome do grupo é o nome da branch
+                arquivos = [m.get("caminho_do_arquivo") for m in detalhes_grupo.get("conjunto_de_mudancas", [])]
+                mapa_arquivos_por_branch[nome_grupo] = arquivos
 
+        for pr_info in commit_details:
+            branch_name = pr_info.get("branch_name")
+            if pr_info.get("success"):
+                summary_list.append(
+                    PullRequestSummary(
+                        pull_request_url=pr_info.get("pr_url", "N/A"),
+                        branch_name=branch_name,
+                        arquivos_modificados=mapa_arquivos_por_branch.get(branch_name, [])
+                    )
+                )
+        
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=status,
+            summary=summary_list
+        )
 
+    # Caso 2: Job falhou
+    elif status == 'failed':
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=status,
+            error_details=job.get("error_details", "Nenhum detalhe de erro encontrado.")
+        )
+    
+    # Caso 3: Job em andamento (pending_approval, etc.)
+    # Retornamos o relatório inicial para que o usuário possa decidir sobre a aprovação.
+    else:
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=status,
+            analysis_report=job.get("data", {}).get("analysis_report")
+        )
