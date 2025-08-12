@@ -5,6 +5,7 @@ import uuid
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Dict, Any
+from fastapi.middleware.cors import CORSMiddleware
 
 # --- Módulos do projeto ---
 from tools.job_store import set_job, get_job
@@ -305,3 +306,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             status=status,
             analysis_report=job.get("data", {}).get("analysis_report")
         )
+
