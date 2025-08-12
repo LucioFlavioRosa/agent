@@ -144,7 +144,6 @@ def run_workflow_task(job_id: str):
             agent_params = step['params'].copy()
             
             if i == 0:
-                # O primeiro passo do workflow usa o relatório da etapa anterior como base.
                 relatorio_gerado = job_info['data']['analysis_report']
                 instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
                 observacoes_aprovacao = job_info['data'].get('observacoes_aprovacao')
@@ -161,13 +160,19 @@ def run_workflow_task(job_id: str):
                     'instrucoes_extras': instrucoes_completas
                 })
             else:
-                # Os passos seguintes recebem o resultado do passo anterior como 'codigo'.
                 agent_params['codigo'] = str(previous_step_result)
             
-            # Delega a execução para o agente com os parâmetros corretos para a etapa.
             agent_response = step['agent_function'](**agent_params)
-            json_string = agent_response['resultado']['reposta_final']
-            previous_step_result = json.loads(json_string)
+            
+            # [CORREÇÃO FINAL APLICADA AQUI]
+            # O agente sempre retorna o objeto completo da IA.
+            full_llm_response_obj = agent_response['resultado']['reposta_final']
+            
+            # Extraímos a string JSON de dentro do objeto antes de fazer o 'loads'.
+            json_string_from_llm = full_llm_response_obj['reposta_final']
+            
+            # Agora 'json.loads' recebe uma string, como esperado.
+            previous_step_result = json.loads(json_string_from_llm)
 
             if i == 0: job_info['data']['resultado_refatoracao'] = previous_step_result
             else: job_info['data']['resultado_agrupamento'] = previous_step_result
@@ -197,7 +202,6 @@ def run_workflow_task(job_id: str):
     except Exception as e:
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
-
 
 # --- Endpoints da API ---
 
@@ -259,3 +263,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
 
     # Retorna o dicionário 'job' como ele está no Redis.
     return job
+
