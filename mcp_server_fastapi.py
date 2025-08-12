@@ -41,6 +41,10 @@ class FinalStatusResponse(BaseModel):
     error_details: Optional[str] = Field(None, description="Detalhes do erro, se o job falhou.")
     analysis_report: Optional[str] = Field(None, description="Relatório inicial da IA, se aplicável.")
 
+class ReportResponse(BaseModel):
+    job_id: str
+    analysis_report: Optional[str]
+
 
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
@@ -244,12 +248,27 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
 
+@app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
+def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
+    """
+    Endpoint dedicado para buscar o conteúdo do relatório de análise.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    
+    if job.get('status') != 'pending_approval':
+        raise HTTPException(status_code=400, detail=f"O relatório só está disponível quando o status é 'pending_approval'. Status atual: {job.get('status')}")
+
+    return ReportResponse(
+        job_id=job_id,
+        analysis_report=job.get("data", {}).get("analysis_report")
+    )
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"]) 
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
-    Verifica o status de um job. Retorna uma resposta estruturada e segura
-    com resumos para os estados 'completed' e 'failed'.
+    Verifica o status de um job. NÃO retorna dados pesados como o relatório.
     """
     job = get_job(job_id)
     if not job:
@@ -258,8 +277,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     status = job.get('status')
     
     try:
-        # Caso 1: Job concluído com sucesso. Monta o resumo detalhado.
         if status == 'completed':
+            # A lógica para o status 'completed' permanece a mesma
             summary_list = []
             commit_details = job.get("data", {}).get("commit_details", [])
             dados_agrupados = job.get("data", {}).get("resultado_agrupamento", {})
@@ -287,7 +306,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 summary=summary_list
             )
 
-        # Caso 2: Job falhou. Retorna apenas os detalhes do erro.
         elif status == 'failed':
             return FinalStatusResponse(
                 job_id=job_id,
@@ -295,17 +313,14 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 error_details=job.get("error_details", "Nenhum detalhe de erro encontrado.")
             )
         
-        # Caso 3: Job em andamento. Retorna o relatório para aprovação ou apenas o status.
         else:
+            # Para todos os outros status, retorna uma resposta leve SEM o relatório.
             return FinalStatusResponse(
                 job_id=job_id,
-                status=status,
-                analysis_report=job.get("data", {}).get("analysis_report")
+                status=status
             )
 
     except ValidationError as e:
-        # Bloco de segurança final: se a validação do Pydantic falhar,
-        # loga o erro e retorna uma resposta de erro limpa, evitando o erro 500.
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
