@@ -79,7 +79,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         job_info = get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
-        job_info['status'] = 'reading_repository'
+        job_info['status'] = 'gerando_relatorio'
         set_job(job_id, job_info)
         print(f"[{job_id}] Etapa 1: Delegando leitura e análise para o agente...")
         
@@ -93,7 +93,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
         report_text_only = full_llm_response_obj['reposta_final']
 
-        job_info['status'] = 'pending_approval'
+        job_info['status'] = 'relatorio_pronto_para_analise'
         job_info['data']['analysis_report'] = report_text_only
         set_job(job_id, job_info)
         print(f"[{job_id}] Relatório gerado com sucesso. Job aguardando aprovação.")
@@ -244,5 +244,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     return job
+
 
 
