@@ -39,7 +39,7 @@ class UpdateJobPayload(BaseModel):
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
-    version="4.0.0"
+    version="4.1.0" # Versão com a correção final do workflow
 )
 
 app.add_middleware(
@@ -94,9 +94,6 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         set_job(job_id, job_info)
         print(f"[{job_id}] Etapa 1: Delegando leitura do repositório e análise para o agente...")
         
-        # O backend delega a responsabilidade de ler o repo e analisar para o agente.
-        # O agente, por sua vez, usa o 'github_reader' para a leitura
-        # e o 'tipo_analise' para escolher o prompt correto.
         resposta_agente = agente_revisor.main(
             tipo_analise=payload.analysis_type,
             repositorio=payload.repo_name,
@@ -104,15 +101,11 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
             instrucoes_extras=payload.instrucoes_extras
         )
         
-        # Extrai o objeto completo da resposta da IA.
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
-        
-        # Extrai APENAS a string de texto do relatório de dentro do objeto.
         report_text_only = full_llm_response_obj['reposta_final']
 
-        # Atualiza o status para indicar que o job aguarda aprovação
         job_info['status'] = 'pending_approval'
-        job_info['data']['analysis_report'] = report_text_only # Salva a string correta
+        job_info['data']['analysis_report'] = report_text_only
         set_job(job_id, job_info)
         print(f"[{job_id}] Relatório gerado com sucesso. Job aguardando aprovação.")
         
@@ -160,18 +153,13 @@ def run_workflow_task(job_id: str):
                     'instrucoes_extras': instrucoes_completas
                 })
             else:
-                agent_params['codigo'] = str(previous_step_result)
+                # [CORREÇÃO] Usa json.dumps para passar uma string JSON bem formatada para o próximo agente.
+                agent_params['codigo'] = json.dumps(previous_step_result, indent=2, ensure_ascii=False)
             
             agent_response = step['agent_function'](**agent_params)
             
-            # [CORREÇÃO FINAL APLICADA AQUI]
-            # O agente sempre retorna o objeto completo da IA.
             full_llm_response_obj = agent_response['resultado']['reposta_final']
-            
-            # Extraímos a string JSON de dentro do objeto antes de fazer o 'loads'.
             json_string_from_llm = full_llm_response_obj['reposta_final']
-            
-            # Agora 'json.loads' recebe uma string, como esperado.
             previous_step_result = json.loads(json_string_from_llm)
 
             if i == 0: job_info['data']['resultado_refatoracao'] = previous_step_result
@@ -202,6 +190,7 @@ def run_workflow_task(job_id: str):
     except Exception as e:
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
+
 
 # --- Endpoints da API ---
 
@@ -251,16 +240,15 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado a pedido do usuário."}
 
+# Endpoint de status simplificado para máxima compatibilidade durante a depuração.
 @app.get("/status/{job_id}", tags=["Jobs"]) 
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
     Verifica o status e os resultados de um job a qualquer momento.
-    VERSÃO DE DEBUG: Retorna o dicionário raw do Redis para evitar ValidationErrors.
+    Retorna o dicionário raw do Redis para evitar ValidationErrors durante o debug.
     """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
 
-    # Retorna o dicionário 'job' como ele está no Redis.
     return job
-
