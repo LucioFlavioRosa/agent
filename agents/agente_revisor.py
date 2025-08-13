@@ -8,7 +8,7 @@ from tools.requisicao_openai import executar_analise_llm
 modelo_llm = 'gpt-4.1'
 max_tokens_saida = 6000
 
-analises_validas = ["design", "pentest", "seguranca", "terraform",
+analises_validas = ["relatorio_padrao_desenvolvimento_codigo", "pentest", "seguranca", "terraform",
                      "refatoracao", "relatorio_teste_unitario", "escrever_testes",
                      "agrupamento_testes", "docstring", "agrupamento_design"]
 
@@ -81,3 +81,4 @@ def main(tipo_analise: str,
             "reposta_final": resultado_da_ia
         }
     }
+
