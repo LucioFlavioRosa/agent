@@ -4,11 +4,11 @@ relatorio_padrao_desenvolvimento_codigo:
     - status_update: "refactoring_code"
       agent_function: "agents.agente_revisor.main"
       params:
-        tipo_analise: "refatoracao"
+        tipo_analise: "aplicacao_melhores_praticas_e_organizar_commits"
     - status_update: "grouping_commits"
       agent_function: "agents.agente_revisor.main"
       params:
-        tipo_analise: "agrupamento_design"
+        tipo_analise: "agrupamento_de_commits_melhores_praticas"
 
 relatorio_teste_unitario:
   description: "Cria testes unitários com base no relatório e os agrupa."
@@ -16,8 +16,8 @@ relatorio_teste_unitario:
     - status_update: "writing_unit_tests"
       agent_function: "agents.agente_revisor.main"
       params:
-        tipo_analise: "escrever_testes"
+        tipo_analise: "escrever_testes_e_organizar_commits"
     - status_update: "grouping_tests"
       agent_function: "agents.agente_revisor.main"
       params:
-        tipo_analise: "agrupamento_testes"
+        tipo_analise: "agrupamento_de_commits_testes"
