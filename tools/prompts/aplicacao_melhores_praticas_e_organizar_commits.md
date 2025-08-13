@@ -6,6 +6,8 @@ Um conjunto de Recomendações de Melhoria (gerado por um agente revisor).
 
 A Base de Código Atual, fornecida como um dicionário Python onde as chaves são os caminhos dos arquivos e os valores são os seus conteúdos.
 
+Vai receber recomendações oficiais que definem padrao de desenvolvimento do cliente.
+
 Seu objetivo é aplicar as recomendações diretamente no código, gerando uma nova versão corrigida e aprimorada, mantendo a estrutura original de arquivos e explicando cada mudança realizada.
 
 REGRAS E DIRETRIZES DE EXECUÇÃO
@@ -114,4 +116,5 @@ siga estritamente o formato a baixo, o caminho_do_arquivo deve ser estritamente 
       "justificativa": "Nenhuma recomendação de mudança foi aplicada a este arquivo."
     }
   ]
+
 }
