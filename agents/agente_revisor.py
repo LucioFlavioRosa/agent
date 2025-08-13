@@ -1,16 +1,10 @@
-# Arquivo: agents/agente_revisor.py (VERSÃO FINAL AJUSTADA PARA DEPLOY)
-
-import json # [NOVO] Importa a biblioteca JSON
+import json
 from typing import Optional, Dict, Any
 from tools import github_reader
 from tools.requisicao_openai import executar_analise_llm 
 
 modelo_llm = 'gpt-4.1'
 max_tokens_saida = 10000
-
-analises_validas = ["agrupamento_de_commits_melhores_praticas", "agrupamento_de_commits_testes", 
-                    "aplicacao_melhores_praticas_e_organizar_commits", "escrever_testes_e_organizar_commits",
-                     "relatorio_padrao_desenvolvimento_codigo", "relatorio_teste_unitario"]
 
 def code_from_repo(repositorio: str,
                    tipo_analise: str,
@@ -24,13 +18,11 @@ def code_from_repo(repositorio: str,
     except Exception as e:
         raise RuntimeError(f"Falha ao ler o repositório: {e}") from e
 
-def validation(tipo_analise: str,
-               repositorio: Optional[str] = None,
+def validation(repositorio: Optional[str] = None,
                nome_branch: Optional[str] = None,
-               codigo: Optional[str] = None) -> Any:
-    if tipo_analise not in analises_validas:
-        raise ValueError(f"Tipo de análise '{tipo_analise}' é inválido. Válidos: {analises_validas}")
-
+               codigo: Optional[str] = None,
+               tipo_analise: Optional[str] = None) -> Any:
+    
     if repositorio is None and codigo is None:
         raise ValueError("Erro: É obrigatório fornecer 'repositorio' ou 'codigo'.")
 
@@ -52,17 +44,17 @@ def main(tipo_analise: str,
          model_name: str = modelo_llm,
          max_token_out: int = max_tokens_saida) -> Dict[str, Any]:
 
-    codigo_para_analise = validation(tipo_analise=tipo_analise,
-                                     repositorio=repositorio,
-                                     nome_branch=nome_branch,
-                                     codigo=codigo)
-                                     
+    # A validação de tipo_analise não é mais necessária aqui.
+    codigo_para_analise = validation(
+        repositorio=repositorio,
+        nome_branch=nome_branch,
+        codigo=codigo,
+        tipo_analise=tipo_analise
+    )
+                                   
     if not codigo_para_analise:
-        # Se não houver código, retorna uma estrutura vazia, mas compatível
-        return {"resultado": {"reposta_final": "{}"}}
+        return {"resultado": {"reposta_final": { "reposta_final": "{}" }}}
     
-    # [AJUSTE 1] Usa json.dumps para serializar o código de forma consistente se for um dicionário.
-    # Se já for uma string, não faz nada.
     if isinstance(codigo_para_analise, dict):
         codigo_str = json.dumps(codigo_para_analise, indent=2)
     else:
@@ -76,8 +68,7 @@ def main(tipo_analise: str,
         model_name=model_name,
         max_token_out=max_token_out
     )
-    
-    # [AJUSTE 2] A estrutura do retorno agora corresponde exatamente ao que o backend espera.
+        
     return {
         "resultado": {
             "reposta_final": resultado_da_ia
