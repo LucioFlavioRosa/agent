@@ -86,6 +86,10 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
+    """
+    Tarefa de background que lê o repositório e gera o relatório de análise inicial,
+    agora com a opção de usar RAG.
+    """
     job_info = None
     try:
         job_info = get_job(job_id)
@@ -93,13 +97,15 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
         job_info['status'] = 'reading_repository'
         set_job(job_id, job_info)
-        print(f"[{job_id}] Etapa 1: Delegando leitura e análise para o agente...")
+        print(f"[{job_id}] Etapa 1: Delegando leitura e análise para o agente (RAG: {payload.usar_rag})...")
         
+        # [ALTERADO] Repassa a variável 'usar_rag' do payload para o agente.
         resposta_agente = agente_revisor.main(
             tipo_analise=payload.analysis_type,
             repositorio=payload.repo_name,
             nome_branch=payload.branch_name,
-            instrucoes_extras=payload.instrucoes_extras
+            instrucoes_extras=payload.instrucoes_extras,
+            usar_rag=payload.usar_rag 
         )
         
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
@@ -107,6 +113,11 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
         job_info['status'] = 'pending_approval'
         job_info['data']['analysis_report'] = report_text_only
+        
+        # [NOVO] Armazena a decisão de usar RAG no estado do job.
+        # Isso é crucial para que a 'run_workflow_task' saiba qual modo usar após a aprovação.
+        job_info['data']['usar_rag'] = payload.usar_rag
+        
         set_job(job_id, job_info)
         print(f"[{job_id}] Relatório gerado com sucesso. Job aguardando aprovação.")
         
@@ -326,6 +337,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
