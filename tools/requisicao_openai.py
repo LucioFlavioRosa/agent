@@ -2,25 +2,16 @@ import os
 from openai import OpenAI
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+from tools.rag_retriever import buscar_politicas_relevantes
 
-# Obtém o URL do Key Vault das variáveis de ambiente.
-# Você deve configurar KEY_VAULT_URL nas configurações do App Service.
+
 key_vault_url = os.environ["KEY_VAULT_URL"]
-
-# Cria um cliente para se conectar ao Key Vault.
-# DefaultAzureCredential usa a identidade gerenciada do App Service automaticamente.
 credential = DefaultAzureCredential()
 client = SecretClient(vault_url=key_vault_url, credential=credential)
-
-# Obtém o segredo (o token da OpenAI) do Key Vault.
-# O nome do segredo deve ser o mesmo que você configurou no Key Vault.
 OPENAI_API_KEY = client.get_secret("openaiapi").value
-
 if not OPENAI_API_KEY:
-    raise ValueError("A chave da API da OpenAI não foi encontrada. Verifique as configurações do Key Vault.")
-
+    raise ValueError("A chave da API da OpenAI não foi encontrada.")
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
-
 
 def carregar_prompt(tipo_analise: str) -> str:
     caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_analise}.md')
@@ -31,6 +22,7 @@ def carregar_prompt(tipo_analise: str) -> str:
         raise ValueError(f"Arquivo de prompt para a análise '{tipo_analise}' não encontrado em: {caminho_prompt}")
 
 
+# [ALTERADO] A função agora integra a busca RAG
 def executar_analise_llm(
         tipo_analise: str,
         codigo: str,
@@ -38,26 +30,45 @@ def executar_analise_llm(
         model_name: str,
         max_token_out: int
 ) -> dict:
-    prompt_sistema = carregar_prompt(tipo_analise)
+    
+    # --- ETAPA 1: BUSCA (Retrieval) ---
+    # Usa o tipo de análise como base para buscar políticas relevantes na base de conhecimento.
+    politicas_relevantes = buscar_politicas_relevantes(query=f"políticas de {tipo_analise} para desenvolvimento de software")
+    
+    # --- ETAPA 2: AUMENTAÇÃO (Augmentation) ---
+    prompt_sistema_base = carregar_prompt(tipo_analise)
+    
+    # Adiciona as políticas recuperadas e a nova instrução ao prompt do sistema
+    prompt_sistema_aumentado = (
+        f"{prompt_sistema_base}\n\n"
+        "--- POLÍTICAS RELEVANTES DA EMPRESA ---\n"
+        "Você DEVE, obrigatoriamente, basear sua análise e sugestões nas políticas da empresa descritas abaixo. "
+        "Para cada sugestão de mudança que você fizer, adicione uma chave 'politica_referenciada' "
+        "indicando a 'Fonte' e 'Seção' da política que justifica a mudança.\n\n"
+        f"{politicas_relevantes}"
+    )
 
     mensagens = [
-        {"role": "system", "content": prompt_sistema},
+        {"role": "system", "content": prompt_sistema_aumentado},
         {'role': 'user', 'content': codigo},
         {'role': 'user',
-         'content': f'Instruções extras do usuário a serem consideradas na análise: {analise_extra}' if analise_extra.strip() else 'Nenhuma instrução extra fornecida pelo usuário.'}
+         'content': f'Instruções extras do usuário: {analise_extra}' if analise_extra.strip() else 'Nenhuma instrução extra.'}
     ]
 
+    # --- ETAPA 3: GERAÇÃO (Generation) ---
     try:
         response = openai_client.chat.completions.create(
             model=model_name,
             messages=mensagens,
-            temperature=0.5,
+            temperature=0.3, # Reduz a temperatura para respostas mais factuais e baseadas nas políticas
             max_tokens=max_token_out
         )
         conteudo_resposta = response.choices[0].message.content.strip()
-        return {'reposta_final': conteudo_resposta,
-                'tokens_entrada': response.usage.prompt_tokens,
-                'tokens_saida': response.usage.completion_tokens}
+        return {
+            'reposta_final': conteudo_resposta,
+            'tokens_entrada': response.usage.prompt_tokens,
+            'tokens_saida': response.usage.completion_tokens
+        }
 
     except Exception as e:
         print(f"ERRO: Falha na chamada à API da OpenAI para análise '{tipo_analise}'. Causa: {e}")
