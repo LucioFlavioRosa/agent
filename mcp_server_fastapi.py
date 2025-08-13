@@ -11,7 +11,7 @@ from agents import agente_revisor
 from tools import preenchimento, commit_multiplas_branchs
 
 # --- Modelos de Dados Pydantic ---
-lass StartAnalysisPayload(BaseModel):
+class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["relatorio_padrao_desenvolvimento_codigo", "relatorio_teste_unitario"]
     branch_name: Optional[str] = None
@@ -62,13 +62,13 @@ app.add_middleware(
 WORKFLOW_REGISTRY = {
     "relatorio_padrao_desenvolvimento_codigo": {
         "description": "Analisa o padrao de desenvolvimento, refatora o código e agrupa os commits.",
-        "steps": [{"status_update": "refactoring_code", "agent_function": agente_revisor.main, "params": {"tipo_analise": "refatoracao"}},
-                  {"status_update": "grouping_commits", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_design"}}]
+        "steps": [{"status_update": "refactoring_code", "agent_function": agente_revisor.main, "params": {"tipo_analise": "aplicacao_melhores_praticas_e_organizar_commits"}},
+                  {"status_update": "grouping_commits", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_de_commits_melhores_praticas"}}]
     },
     "relatorio_teste_unitario": {
         "description": "Cria testes unitários com base no relatório e os agrupa.",
-        "steps": [{"status_update": "writing_unit_tests", "agent_function": agente_revisor.main, "params": {"tipo_analise": "escrever_testes"}},
-                  {"status_update": "grouping_tests", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_testes"}}]
+        "steps": [{"status_update": "writing_unit_tests", "agent_function": agente_revisor.main, "params": {"tipo_analise": "escrever_testes_e_organizar_commits"}},
+                  {"status_update": "grouping_tests", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_de_commits_testes"}}]
     }
 }
 
@@ -326,6 +326,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
