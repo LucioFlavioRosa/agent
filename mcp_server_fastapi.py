@@ -1,5 +1,3 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO COM RESPOSTA DE STATUS REFINADA)
-
 import json
 import uuid
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
@@ -13,10 +11,9 @@ from agents import agente_revisor
 from tools import preenchimento, commit_multiplas_branchs
 
 # --- Modelos de Dados Pydantic ---
-
 class StartAnalysisPayload(BaseModel):
     repo_name: str
-    analysis_type: Literal["design", "relatorio_teste_unitario"]
+    analysis_type: Literal["relatorio_padrao_desenvolvimento_codigo", "relatorio_teste_unitario"]
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
 
@@ -28,7 +25,6 @@ class UpdateJobPayload(BaseModel):
     action: Literal["approve", "reject"]
     observacoes: Optional[str] = None
 
-# [NOVO] Modelos para a resposta final resumida, melhorando a experiência do usuário.
 class PullRequestSummary(BaseModel):
     pull_request_url: str
     branch_name: str
@@ -50,7 +46,7 @@ class ReportResponse(BaseModel):
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
-    version="8.0.0" # Versão com UX aprimorada
+    version="8.0.0" 
 )
 
 app.add_middleware(
@@ -63,8 +59,8 @@ app.add_middleware(
 
 # --- WORKFLOW_REGISTRY ---
 WORKFLOW_REGISTRY = {
-    "design": {
-        "description": "Analisa o design, refatora o código e agrupa os commits.",
+    "relatorio_padrao_desenvolvimento_codigo": {
+        "description": "Analisa o padrao de desenvolvimento, refatora o código e agrupa os commits.",
         "steps": [{"status_update": "refactoring_code", "agent_function": agente_revisor.main, "params": {"tipo_analise": "refatoracao"}},
                   {"status_update": "grouping_commits", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_design"}}]
     },
@@ -75,11 +71,7 @@ WORKFLOW_REGISTRY = {
     }
 }
 
-# --- Lógica de Tarefas em Background (sem alterações) ---
-
 def handle_task_exception(job_id: str, e: Exception, step: str):
-    # ... (código inalterado)
-# ... (demais funções de background permanecem inalteradas)
     error_text = str(e)
     error_message = f"Erro fatal durante a etapa '{step}': {error_text}"
     print(f"[{job_id}] {error_message}")
@@ -328,4 +320,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
