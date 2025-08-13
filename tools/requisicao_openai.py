@@ -21,35 +21,41 @@ def carregar_prompt(tipo_analise: str) -> str:
     except FileNotFoundError:
         raise ValueError(f"Arquivo de prompt para a análise '{tipo_analise}' não encontrado em: {caminho_prompt}")
 
-
-# [ALTERADO] A função agora integra a busca RAG
 def executar_analise_llm(
         tipo_analise: str,
         codigo: str,
         analise_extra: str,
+        # [NOVO] Recebe o parâmetro booleano
+        usar_rag: bool,
         model_name: str,
         max_token_out: int
 ) -> dict:
     
-    # --- ETAPA 1: BUSCA (Retrieval) ---
-    # Usa o tipo de análise como base para buscar políticas relevantes na base de conhecimento.
-    politicas_relevantes = buscar_politicas_relevantes(query=f"políticas de {tipo_analise} para desenvolvimento de software")
-    
-    # --- ETAPA 2: AUMENTAÇÃO (Augmentation) ---
     prompt_sistema_base = carregar_prompt(tipo_analise)
-    
-    # Adiciona as políticas recuperadas e a nova instrução ao prompt do sistema
-    prompt_sistema_aumentado = (
-        f"{prompt_sistema_base}\n\n"
-        "--- POLÍTICAS RELEVANTES DA EMPRESA ---\n"
-        "Você DEVE, obrigatoriamente, basear sua análise e sugestões nas políticas da empresa descritas abaixo. "
-        "Para cada sugestão de mudança que você fizer, adicione uma chave 'politica_referenciada' "
-        "indicando a 'Fonte' e 'Seção' da política que justifica a mudança.\n\n"
-        f"{politicas_relevantes}"
-    )
+    prompt_sistema_final = prompt_sistema_base
+
+    # [LÓGICA CONDICIONAL] A busca RAG só acontece se 'usar_rag' for True
+    if usar_rag:
+        print("[OpenAI Handler] Flag 'usar_rag' é True. Iniciando busca RAG...")
+        # --- ETAPA 1: BUSCA (Retrieval) ---
+        politicas_relevantes = buscar_politicas_relevantes(
+            query=f"políticas de {tipo_analise} para desenvolvimento de software"
+        )
+        
+        # --- ETAPA 2: AUMENTAÇÃO (Augmentation) ---
+        prompt_sistema_final = (
+            f"{prompt_sistema_base}\n\n"
+            "--- POLÍTICAS RELEVANTES DA EMPRESA ---\n"
+            "Você DEVE, obrigatoriamente, basear sua análise e sugestões nas políticas da empresa descritas abaixo. "
+            "Para cada sugestão de mudança que você fizer, adicione uma chave 'politica_referenciada' "
+            "indicando a 'Fonte' e 'Seção' da política que justifica a mudança.\n\n"
+            f"{politicas_relevantes}"
+        )
+    else:
+        print("[OpenAI Handler] Flag 'usar_rag' é False. Análise prosseguirá sem RAG.")
 
     mensagens = [
-        {"role": "system", "content": prompt_sistema_aumentado},
+        {"role": "system", "content": prompt_sistema_final},
         {'role': 'user', 'content': codigo},
         {'role': 'user',
          'content': f'Instruções extras do usuário: {analise_extra}' if analise_extra.strip() else 'Nenhuma instrução extra.'}
@@ -60,7 +66,7 @@ def executar_analise_llm(
         response = openai_client.chat.completions.create(
             model=model_name,
             messages=mensagens,
-            temperature=0.3, # Reduz a temperatura para respostas mais factuais e baseadas nas políticas
+            temperature=0.3,
             max_tokens=max_token_out
         )
         conteudo_resposta = response.choices[0].message.content.strip()
@@ -73,3 +79,4 @@ def executar_analise_llm(
     except Exception as e:
         print(f"ERRO: Falha na chamada à API da OpenAI para análise '{tipo_analise}'. Causa: {e}")
         raise RuntimeError(f"Erro ao comunicar com a OpenAI: {e}") from e
+
