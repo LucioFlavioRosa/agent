@@ -1,5 +1,7 @@
 import json
 import uuid
+import yaml
+import importlib
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
@@ -59,18 +61,33 @@ app.add_middleware(
 )
 
 # --- WORKFLOW_REGISTRY ---
-WORKFLOW_REGISTRY = {
-    "relatorio_padrao_desenvolvimento_codigo": {
-        "description": "Analisa o padrao de desenvolvimento, refatora o código e agrupa os commits.",
-        "steps": [{"status_update": "refactoring_code", "agent_function": agente_revisor.main, "params": {"tipo_analise": "aplicacao_melhores_praticas_e_organizar_commits"}},
-                  {"status_update": "grouping_commits", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_de_commits_melhores_praticas"}}]
-    },
-    "relatorio_teste_unitario": {
-        "description": "Cria testes unitários com base no relatório e os agrupa.",
-        "steps": [{"status_update": "writing_unit_tests", "agent_function": agente_revisor.main, "params": {"tipo_analise": "escrever_testes_e_organizar_commits"}},
-                  {"status_update": "grouping_tests", "agent_function": agente_revisor.main, "params": {"tipo_analise": "agrupamento_de_commits_testes"}}]
-    }
-}
+def load_workflow_registry(filepath: str) -> dict:
+    """
+    Carrega a configuração de workflows de um arquivo YAML e resolve as
+    referências de função em string para objetos de função reais.
+    """
+    print(f"Carregando workflows do arquivo: {filepath}")
+    with open(filepath, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+
+    for workflow_name, workflow_data in config.items():
+        for step in workflow_data.get("steps", []):
+            if "agent_function" in step and isinstance(step["agent_function"], str):
+                module_path, function_name = step["agent_function"].rsplit(".", 1)
+                try:
+                    module = importlib.import_module(module_path)
+                    function_obj = getattr(module, function_name)
+                    step["agent_function"] = function_obj # Substitui a string pela função
+                except (ImportError, AttributeError) as e:
+                    raise ImportError(
+                        f"Não foi possível carregar a função '{step['agent_function']}' "
+                        f"definida no workflow '{workflow_name}'. Verifique o caminho. Erro: {e}"
+                    )
+    print("Workflows carregados e processados com sucesso.")
+    return config
+
+# Carrega a configuração na inicialização do servidor
+WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
 
 def handle_task_exception(job_id: str, e: Exception, step: str):
     error_text = str(e)
@@ -337,6 +354,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
