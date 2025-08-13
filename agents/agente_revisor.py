@@ -6,7 +6,7 @@ from tools import github_reader
 from tools.requisicao_openai import executar_analise_llm 
 
 modelo_llm = 'gpt-4.1'
-max_tokens_saida = 6000
+max_tokens_saida = 10000
 
 analises_validas = ["relatorio_padrao_desenvolvimento_codigo", "pentest", "seguranca", "terraform",
                      "refatoracao", "relatorio_teste_unitario", "escrever_testes",
@@ -81,4 +81,5 @@ def main(tipo_analise: str,
             "reposta_final": resultado_da_ia
         }
     }
+
 
