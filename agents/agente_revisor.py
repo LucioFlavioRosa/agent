@@ -8,9 +8,9 @@ from tools.requisicao_openai import executar_analise_llm
 modelo_llm = 'gpt-4.1'
 max_tokens_saida = 10000
 
-analises_validas = ["relatorio_padrao_desenvolvimento_codigo", "pentest", "seguranca", "terraform",
-                     "refatoracao", "relatorio_teste_unitario", "escrever_testes",
-                     "agrupamento_testes", "docstring", "agrupamento_design"]
+analises_validas = ["agrupamento_de_commits_melhores_praticas", "agrupamento_de_commits_testes", 
+                    "aplicacao_melhores_praticas_e_organizar_commits", "escrever_testes_e_organizar_commits",
+                     "relatorio_padrao_desenvolvimento_codigo", "relatorio_teste_unitario"]
 
 def code_from_repo(repositorio: str,
                    tipo_analise: str,
@@ -48,6 +48,7 @@ def main(tipo_analise: str,
          nome_branch: Optional[str] = None,
          codigo: Optional[str] = None,
          instrucoes_extras: str = "",
+         usar_rag: bool = False,
          model_name: str = modelo_llm,
          max_token_out: int = max_tokens_saida) -> Dict[str, Any]:
 
@@ -71,6 +72,7 @@ def main(tipo_analise: str,
         tipo_analise=tipo_analise,
         codigo=codigo_str,
         analise_extra=instrucoes_extras,
+        usar_rag=usar_rag,
         model_name=model_name,
         max_token_out=max_token_out
     )
@@ -81,5 +83,6 @@ def main(tipo_analise: str,
             "reposta_final": resultado_da_ia
         }
     }
+
 
 
