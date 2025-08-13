@@ -22,7 +22,7 @@ AI_SEARCH_ENDPOINT = os.environ["AI_SEARCH_ENDPOINT"]
 AI_SEARCH_API_KEY = secret_client.get_secret("aisearchapi").value
 AI_SEARCH_INDEX_NAME = os.environ["AI_SEARCH_INDEX_NAME"]
 
-def buscar_politicas_relevantes(query: str, top_k: int = 10) -> str:
+def buscar_politicas_relevantes(query: str, top_k: int = 5) -> str:
     """
     Busca em um índice do Azure AI Search por políticas relevantes para uma consulta,
     usando busca vetorial.
