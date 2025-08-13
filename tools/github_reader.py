@@ -5,24 +5,18 @@ from github import GithubException
 from tools import github_connector
 
 # O mapeamento permanece o mesmo
-# Mapeamento de extensões. Adicione aqui os tipos de análise que leem o repositório.
 MAPEAMENTO_TIPO_EXTENSOES = {
     "relatorio_padrao_desenvolvimento_codigo": [".py", ".md", ".tf", ".json", ".yaml", ".yml", "Dockerfile"],
     "relatorio_teste_unitario": [".py"],
 }
 
-# Mantenha essa função auxiliar como está, mas com o try/except externo removido
 def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = "", arquivos_do_repo: dict = None):
     """
     Função auxiliar que lê recursivamente os arquivos de um repositório em uma branch específica.
-    IMPORTANTE: Esta função agora DEIXARÁ a exceção GithubException subir para o chamador.
     """
     if arquivos_do_repo is None:
         arquivos_do_repo = {}
 
-    # O try/except que estava aqui foi REMOVIDO.
-    # A linha abaixo agora vai gerar um erro se a branch não for encontrada,
-    # que será capturado pela lógica de retentativa na função 'main'.
     conteudos = repo.get_contents(path, ref=nome_branch)
 
     for conteudo in conteudos:
@@ -37,7 +31,6 @@ def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = 
                     ler_o_arquivo = True
             
             if ler_o_arquivo:
-                # Este try/except é útil e deve ser mantido, pois trata erros de um único arquivo.
                 try:
                     codigo = conteudo.decoded_content.decode('utf-8')
                     arquivos_do_repo[conteudo.path] = codigo
@@ -46,9 +39,8 @@ def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = 
 
     return arquivos_do_repo
 
-# A função main NÃO PRECISA DE MUDANÇAS. Ela já está correta.
-# Ela foi projetada para lidar com o erro que a função interna estava "escondendo".
-def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
+# [CORRIGIDO] O nome do parâmetro "tipo_de_analise" foi alterado para "tipo_analise" para ser consistente.
+def main(nome_repo: str, tipo_analise: str, nome_branch: str = None):
     """
     Função principal que conecta ao repositório e inicia a leitura dos arquivos
     a partir de uma branch específica, com lógica de retentativa.
@@ -62,7 +54,8 @@ def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
         branch_a_ler = nome_branch
         print(f"Tentando ler a branch especificada: '{branch_a_ler}'")
 
-    extensoes_alvo = MAPEAMENTO_TIPO_EXTENSOES.get(tipo_de_analise.lower())
+    # [CORRIGIDO] A variável agora usa o nome de parâmetro correto.
+    extensoes_alvo = MAPEAMENTO_TIPO_EXTENSOES.get(tipo_analise.lower())
 
     max_tentativas = 4
     delay_entre_tentativas = 5
@@ -71,7 +64,6 @@ def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
     for tentativa in range(max_tentativas):
         try:
             print(f"Tentativa {tentativa + 1} de {max_tentativas}...")
-            # Agora esta chamada vai falhar (lançar exceção) se a branch não for encontrada
             arquivos_encontrados = _ler_arquivos_recursivamente(
                 repositorio,
                 extensoes=extensoes_alvo,
@@ -80,7 +72,7 @@ def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
             print("Leitura da branch bem-sucedida!")
             break 
         except GithubException as e:
-            if e.status == 404: # Simplificando para pegar qualquer erro 404 na branch
+            if e.status == 404:
                 if tentativa < max_tentativas - 1:
                     print(f"Branch ainda não encontrada (erro 404). Aguardando {delay_entre_tentativas}s para a próxima tentativa...")
                     time.sleep(delay_entre_tentativas)
@@ -95,4 +87,3 @@ def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
         print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
     
     return arquivos_encontrados
-
