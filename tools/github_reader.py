@@ -5,12 +5,10 @@ from github import GithubException
 from tools import github_connector
 
 # O mapeamento permanece o mesmo
+# Mapeamento de extensões. Adicione aqui os tipos de análise que leem o repositório.
 MAPEAMENTO_TIPO_EXTENSOES = {
-    "terraform": [".tf", ".tfvars"],
-    "python": [".py"],
-    "cloudformation": [".json", ".yaml", ".yml"],
-    "ansible": [".yml", ".yaml"],
-    "docker": ["Dockerfile"], 
+    "relatorio_padrao_desenvolvimento_codigo": [".py", ".md", ".tf", ".json", ".yaml", ".yml", "Dockerfile"],
+    "relatorio_teste_unitario": [".py"],
 }
 
 # Mantenha essa função auxiliar como está, mas com o try/except externo removido
@@ -97,3 +95,4 @@ def main(nome_repo: str, tipo_de_analise: str, nome_branch: str = None):
         print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
     
     return arquivos_encontrados
+
