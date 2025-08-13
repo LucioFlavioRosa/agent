@@ -1,0 +1,23 @@
+relatorio_padrao_desenvolvimento_codigo:
+  description: "Analisa o padrao de desenvolvimento, refatora o código e agrupa os commits."
+  steps:
+    - status_update: "refactoring_code"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "refatoracao"
+    - status_update: "grouping_commits"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "agrupamento_design"
+
+relatorio_teste_unitario:
+  description: "Cria testes unitários com base no relatório e os agrupa."
+  steps:
+    - status_update: "writing_unit_tests"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "escrever_testes"
+    - status_update: "grouping_tests"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "agrupamento_testes"
