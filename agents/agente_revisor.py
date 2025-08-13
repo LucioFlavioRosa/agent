@@ -1,66 +1,72 @@
 import json
 from typing import Optional, Dict, Any
 from tools import github_reader
-from tools.requisicao_openai import executar_analise_llm 
+from tools import requisicao_openai 
 
+# Valores padrão
 modelo_llm = 'gpt-4.1'
 max_tokens_saida = 10000
 
-def code_from_repo(repositorio: str,
-                   tipo_analise: str,
-                   nome_branch:  Optional[str] = None) -> Dict[str, str]:
+def _get_code(
+    repositorio: str,
+    nome_branch: Optional[str],
+    tipo_analise: str
+) -> Dict[str, str]:
+    """Função interna e focada apenas em ler o código de um repositório."""
     try:
-        print('Iniciando a leitura do repositório: '+ repositorio)
-        codigo_para_analise = github_reader.main(nome_repo=repositorio,
-                                                 tipo_de_analise=tipo_analise,
-                                                 nome_branch = nome_branch)
+        print(f"Iniciando a leitura do repositório: {repositorio}, branch: {nome_branch}")
+        # [CORREÇÃO] Garante que o nome do parâmetro 'tipo_analise' esteja correto
+        codigo_para_analise = github_reader.main(
+            nome_repo=repositorio,
+            tipo_analise=tipo_analise,
+            nome_branch=nome_branch
+        )
         return codigo_para_analise
     except Exception as e:
+        # Propaga o erro de forma clara
         raise RuntimeError(f"Falha ao ler o repositório: {e}") from e
 
-def validation(repositorio: Optional[str] = None,
-               nome_branch: Optional[str] = None,
-               codigo: Optional[str] = None,
-               tipo_analise: Optional[str] = None) -> Any:
+def main(
+    tipo_analise: str,
+    repositorio: Optional[str] = None,
+    nome_branch: Optional[str] = None,
+    codigo: Optional[Any] = None,
+    instrucoes_extras: str = "",
+    usar_rag: bool = False,
+    model_name: str = modelo_llm,
+    max_token_out: int = max_tokens_saida
+) -> Dict[str, Any]:
+    """
+    Função principal e única do agente. Orquestra a obtenção do código e a chamada para a IA.
+    """
+    codigo_para_analise = None
     
-    if repositorio is None and codigo is None:
-        raise ValueError("Erro: É obrigatório fornecer 'repositorio' ou 'codigo'.")
-
+    # Passo 1: Determinar a fonte do código (repositório ou input direto)
     if codigo is None:
-        codigo_para_analise = code_from_repo(tipo_analise=tipo_analise,
-                                             repositorio=repositorio,
-                                             nome_branch = nome_branch)
+        if repositorio:
+            codigo_para_analise = _get_code(
+                repositorio=repositorio,
+                nome_branch=nome_branch,
+                tipo_analise=tipo_analise
+            )
+        else:
+            raise ValueError("Erro: É obrigatório fornecer 'repositorio' ou 'codigo'.")
     else:
         codigo_para_analise = codigo
-    
-    return codigo_para_analise
-
-def main(tipo_analise: str,
-         repositorio: Optional[str] = None,
-         nome_branch: Optional[str] = None,
-         codigo: Optional[str] = None,
-         instrucoes_extras: str = "",
-         usar_rag: bool = False,
-         model_name: str = modelo_llm,
-         max_token_out: int = max_tokens_saida) -> Dict[str, Any]:
-
-    # A validação de tipo_analise não é mais necessária aqui.
-    codigo_para_analise = validation(
-        repositorio=repositorio,
-        nome_branch=nome_branch,
-        codigo=codigo,
-        tipo_analise=tipo_analise
-    )
                                    
     if not codigo_para_analise:
-        return {"resultado": {"reposta_final": { "reposta_final": "{}" }}}
+        print(f"AVISO: Nenhum código encontrado ou fornecido para a análise '{tipo_analise}'.")
+        # Retorna uma estrutura compatível indicando que não há nada a fazer
+        return {"resultado": {"reposta_final": {"reposta_final": "{}"}}}
     
+    # Passo 2: Serializar o código para a IA
     if isinstance(codigo_para_analise, dict):
-        codigo_str = json.dumps(codigo_para_analise, indent=2)
+        codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
     else:
         codigo_str = str(codigo_para_analise)
 
-    resultado_da_ia = executar_analise_llm(
+    # Passo 3: Chamar a IA com os dados corretos
+    resultado_da_ia = requisicao_openai.executar_analise_llm(
         tipo_analise=tipo_analise,
         codigo=codigo_str,
         analise_extra=instrucoes_extras,
@@ -69,11 +75,9 @@ def main(tipo_analise: str,
         max_token_out=max_token_out
     )
         
+    # Passo 4: Retornar no formato esperado pelo backend
     return {
         "resultado": {
             "reposta_final": resultado_da_ia
         }
     }
-
-
-
