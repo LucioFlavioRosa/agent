@@ -11,11 +11,12 @@ from agents import agente_revisor
 from tools import preenchimento, commit_multiplas_branchs
 
 # --- Modelos de Dados Pydantic ---
-class StartAnalysisPayload(BaseModel):
+lass StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["relatorio_padrao_desenvolvimento_codigo", "relatorio_teste_unitario"]
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
+    usar_rag: bool = Field(False, description="Define se a análise deve usar a base de conhecimento RAG.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -117,9 +118,13 @@ def run_workflow_task(job_id: str):
     job_info = None
     try:
         job_info = get_job(job_id)
-        if not job_info: raise ValueError("Job não encontrado.")
+        if not job_info: raise ValueError("Job não encontrado no início do workflow.")
         
-        print(f"[{job_id}] Iniciando workflow completo...")
+        print(f"[{job_id}] Iniciando workflow completo após aprovação...")
+        
+        usar_rag = job_info.get("data", {}).get("usar_rag", False)
+        print(f"[{job_id}] Executando workflow com RAG: {usar_rag}")
+
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
@@ -131,6 +136,7 @@ def run_workflow_task(job_id: str):
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
             
             agent_params = step['params'].copy()
+            agent_params['usar_rag'] = usar_rag
             
             if i == 0:
                 relatorio_gerado = job_info['data']['analysis_report']
@@ -141,6 +147,7 @@ def run_workflow_task(job_id: str):
                     instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
                 if observacoes_aprovacao:
                     instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
+                
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
@@ -203,7 +210,6 @@ def run_workflow_task(job_id: str):
     except Exception as e:
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
-
 # --- Endpoints da API ---
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
@@ -320,5 +326,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
