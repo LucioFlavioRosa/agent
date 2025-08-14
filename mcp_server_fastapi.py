@@ -165,78 +165,72 @@ def run_workflow_task(job_id: str):
 
         print(f"[{job_id}] Iniciando workflow completo após aprovação...")
         usar_rag = job_info.get("data", {}).get("usar_rag", False)
-        print(f"[{job_id}] Executando workflow com RAG: {usar_rag}")
 
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
-        previous_step_result = None
-        for i, step in enumerate(workflow['steps']):
-            job_info['status'] = step['status_update']
-            job_store.set_job(job_id, job_info)
-            print(f"[{job_id}] ... Executando passo: {job_info['status']}")
-            
-            agent_params = step['params'].copy()
-            agent_params['usar_rag'] = usar_rag
-            
-            if i == 0:
-                relatorio_gerado = job_info['data']['analysis_report']
-                instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
-                observacoes_aprovacao = job_info['data'].get('observacoes_aprovacao')
-                instrucoes_completas = relatorio_gerado
-                if instrucoes_iniciais:
-                    instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
-                if observacoes_aprovacao:
-                    instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
-                
-                agent_params.update({
-                    'repositorio': job_info['data']['repo_name'],
-                    'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': instrucoes_completas
-                })
-            else:
-                lightweight_changeset = {
-                    "resumo_geral": previous_step_result.get("resumo_geral"),
-                    "conjunto_de_mudancas": [
-                        {"caminho_do_arquivo": m.get("caminho_do_arquivo"), "justificativa": m.get("justificativa")}
-                        for m in previous_step_result.get("conjunto_de_mudancas", [])
-                    ]
-                }
-                agent_params['codigo'] = json.dumps(lightweight_changeset, indent=2, ensure_ascii=False)
-            
-            # --- MUDANÇA: LOGS DE DIAGNÓSTICO DE TEMPO ---
-            input_size = len(agent_params.get('codigo', agent_params.get('instrucoes_extras', '')))
-            print(f"[{job_id}] Chamando o agente para a etapa '{step['status_update']}'. Tamanho do input: {input_size} caracteres.")
-            start_time = time.time()
+        # --- LÓGICA DE FLUXO DE DADOS CORRIGIDA ---
 
-            agent_response = agente.main(**agent_params)
-            
-            end_time = time.time()
-            print(f"[{job_id}] Agente respondeu em {end_time - start_time:.2f} segundos. Processando...")
-            # --- FIM DA MUDANÇA ---
-            
-            full_llm_response_obj = agent_response['resultado']['reposta_final']
-            json_string_from_llm = full_llm_response_obj.get('reposta_final', '')
+        # ETAPA 1: Executa o primeiro passo (refatoração)
+        step1 = workflow['steps'][0]
+        job_info['status'] = step1['status_update']
+        job_store.set_job(job_id, job_info)
+        print(f"[{job_id}] ... Executando passo 1: {job_info['status']}")
+        
+        agent_params_1 = step1['params'].copy()
+        agent_params_1['usar_rag'] = usar_rag
+        agent_params_1.update({
+            'repositorio': job_info['data']['repo_name'],
+            'nome_branch': job_info['data']['branch_name'],
+            'instrucoes_extras': job_info['data']['analysis_report']
+        })
+        
+        response_1 = agente.main(**agent_params_1)
+        json_string_1 = response_1['resultado']['reposta_final'].get('reposta_final', '')
+        resultado_refatoracao = json.loads(json_string_1.replace("```json", "").replace("```", "").strip())
+        
+        # Salva o resultado da primeira etapa
+        job_info['data']['resultado_refatoracao'] = resultado_refatoracao
+        job_store.set_job(job_id, job_info)
+        print(f"[{job_id}] Passo 1 (refatoração) concluído. Resultado salvo.")
 
-            if not json_string_from_llm or not json_string_from_llm.strip():
-                raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
+        # ETAPA 2: Executa o segundo passo (agrupamento)
+        step2 = workflow['steps'][1]
+        job_info['status'] = step2['status_update']
+        job_store.set_job(job_id, job_info)
+        print(f"[{job_id}] ... Executando passo 2: {job_info['status']}")
 
-            cleaned_json_string = json_string_from_llm.replace("```json", "").replace("```", "").strip()
-            previous_step_result = json.loads(cleaned_json_string)
+        lightweight_changeset = {
+            "resumo_geral": resultado_refatoracao.get("resumo_geral"),
+            "conjunto_de_mudancas": [
+                {"caminho_do_arquivo": m.get("caminho_do_arquivo"), "justificativa": m.get("justificativa")}
+                for m in resultado_refatoracao.get("conjunto_de_mudancas", [])
+            ]
+        }
+        
+        agent_params_2 = step2['params'].copy()
+        agent_params_2['usar_rag'] = usar_rag
+        agent_params_2['codigo'] = json.dumps(lightweight_changeset, indent=2, ensure_ascii=False)
+        
+        response_2 = agente.main(**agent_params_2)
+        json_string_2 = response_2['resultado']['reposta_final'].get('reposta_final', '')
+        resultado_agrupamento = json.loads(json_string_2.replace("```json", "").replace("```", "").strip())
 
-            if i == 0:
-                job_info['data']['resultado_refatoracao'] = previous_step_result
-            else:
-                job_info['data']['resultado_agrupamento'] = previous_step_result
-            job_store.set_job(job_id, job_info)
-            
+        # Salva o resultado da segunda etapa
+        job_info['data']['resultado_agrupamento'] = resultado_agrupamento
+        job_store.set_job(job_id, job_info)
+        print(f"[{job_id}] Passo 2 (agrupamento) concluído. Resultado salvo.")
+
+        # --- FIM DA LÓGICA CORRIGIDA ---
+
         job_info['status'] = 'populating_data'
         job_store.set_job(job_id, job_info)
         
+        print(f"[{job_id}] Iniciando preenchimento dos dados...")
         dados_preenchidos = changeset_filler.main(
-            json_agrupado=job_info['data']['resultado_agrupamento'],
-            json_inicial=job_info['data']['resultado_refatoracao']
+            json_agrupado=resultado_agrupamento, # Usa a variável correta
+            json_inicial=resultado_refatoracao   # Usa a variável correta
         )
         
         dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
@@ -245,7 +239,7 @@ def run_workflow_task(job_id: str):
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
 
         if not dados_finais_formatados.get("grupos"):
-            print(f"[{job_id}] AVISO: Nenhum grupo de mudança foi formatado para commit.")
+            print(f"[{job_id}] AVISO: Nenhum grupo de mudança foi formatado para commit. O processo será concluído com summary vazio.")
             job_info['data']['commit_details'] = []
         else:
             job_info['status'] = 'committing_to_github'
@@ -258,14 +252,10 @@ def run_workflow_task(job_id: str):
         print(f"[{job_id}] Processo concluído com sucesso!")
 
     except Exception as e:
-        # --- MUDANÇA: LOG DE ERRO MAIS DETALHADO ---
-        print(f"[{job_id}] EXCEÇÃO INESPERADA em 'run_workflow_task':")
+        import traceback
         traceback.print_exc()
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
-
-
-# --- Endpoints da API (inalterados) ---
 # --- Endpoints da API ---
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
@@ -366,4 +356,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
