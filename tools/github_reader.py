@@ -5,42 +5,48 @@ import os
 from github import GithubException
 from tools import github_connector
 
-# O mapeamento permanece o mesmo
-MAPEAMENTO_TIPO_EXTENSOES = {
-    "relatorio_analise_de_design_de_codigo": [".py"],
-    "relatorio_refatoracao_codigo": [".py"],
-    "relatorio_documentacao_codigo": [".py"],
-    "relatorio_avaliacao_terraform": [".tf"],
-}
-
 def _carregar_config_workflows():
-    """Lê o arquivo YAML e extrai apenas o mapeamento de extensões."""
+    """
+    Lê o arquivo YAML e cria um mapeamento expandido, associando as extensões
+    tanto ao nome do workflow principal quanto ao 'tipo_analise' de cada etapa.
+    """
     try:
-        # [NOVO] Constrói um caminho absoluto para o arquivo YAML para garantir que ele seja sempre encontrado.
-        # Pega o diretório do arquivo atual (ex: /path/to/project/tools)
         script_dir = os.path.dirname(__file__)
-        # Sobe um nível para a raiz do projeto (ex: /path/to/project)
         project_root = os.path.abspath(os.path.join(script_dir, '..'))
-        # Monta o caminho completo para o workflows.yaml na raiz
         yaml_path = os.path.join(project_root, 'workflows.yaml')
 
-        # [ALTERADO] Usa o caminho absoluto para abrir o arquivo
         with open(yaml_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
         
-        mapeamento = {
-            workflow_name: data.get('extensions', [])
-            for workflow_name, data in config.items()
-        }
-        print(f"Mapeamento de extensões carregado a partir de: {yaml_path}")
-        return mapeamento
+        # Cria o dicionário de mapeamento expandido
+        mapeamento_expandido = {}
+        for workflow_name, data in config.items():
+            # Pega a lista de extensões definida no nível superior do workflow
+            extensions = data.get('extensions', [])
+            if not extensions:
+                continue
+
+            # 1. Adiciona a chave para o nome do workflow principal (ex: "relatorio_analise_de_design_de_codigo")
+            mapeamento_expandido[workflow_name.lower()] = extensions
+
+            # 2. Itera sobre as etapas e adiciona as chaves para o 'tipo_analise' de cada uma
+            for step in data.get('steps', []):
+                params = step.get('params', {})
+                tipo_analise_step = params.get('tipo_analise')
+                if tipo_analise_step:
+                    mapeamento_expandido[tipo_analise_step.lower()] = extensions
+        
+        print(f"Mapeamento de extensões expandido carregado de: {yaml_path}")
+        return mapeamento_expandido
+
     except FileNotFoundError:
         print("ERRO CRÍTICO: Arquivo 'workflows.yaml' não encontrado na raiz do projeto.")
         return {}
     except Exception as e:
         print(f"ERRO ao ler ou processar 'workflows.yaml': {e}")
         return {}
-        
+
+
 MAPEAMENTO_TIPO_EXTENSOES = _carregar_config_workflows()
 
 def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = "", arquivos_do_repo: dict = None):
@@ -122,5 +128,6 @@ def main(nome_repo: str, tipo_analise: str, nome_branch: str = None):
         print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
     
     return arquivos_encontrados
+
 
 
