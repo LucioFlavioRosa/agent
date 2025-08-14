@@ -1,0 +1,61 @@
+relatorio_analise_de_design_de_codigo:
+  description: "Refatoração de código, aplicação de design patterns e implementação dos princípios SOLID."
+  steps:
+    - status_update: "refactoring_code"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "aplicacao_mudancas_design"
+    - status_update: "grouping_commits"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "agrupamento"
+
+relatorio_refatoracao_codigo:
+  description: "Analise focada em otimização de performance e na filosofia Clean Code."
+  steps:
+    - status_update: "refactoring_code"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "aplicacao_refatoracao"
+    - status_update: "grouping_commits"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "agrupamento"
+
+relatorio_conformidades:
+  description: "Rastreie todas as funções e métodos que foram renomeados ou tiveram sua assinatura alterada (parâmetros adicionados, removidos ou reordenados). Verifique cada local de chamada no código para garantir que a atualização foi aplicada consistentemente"
+  steps:
+    - status_update: "refactoring_code"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "aplicacao_conformidades"
+    - status_update: "grouping_commits"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "agrupamento"
+
+relatorio_documentacao_codigo:
+  description: "Realiza uma revisão técnica aprofundada focada exclusivamente na qualidade e na completude da documentação do código-fonte, o que inclui docstrings, comentários inline e a capacidade do código de ser auto-documentado"
+  steps:
+    - status_update: "gerando_documentacao"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "aplicacao_documentacao"
+    - status_update: "grouping_commits"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "agrupamento"
+
+relatorio_avaliacao_terraform:
+  description: "O objetivo é identificar pontos de melhoria em quatro áreas críticas: manutenibilidade do código, postura de segurança, performance da infraestrutura e otimização de custos"
+  steps:
+    - status_update: "revisando_terraform"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "aplicacao_terraform"
+    - status_update: "grouping_commits"
+      agent_function: "agents.agente_revisor.main"
+      params:
+        tipo_analise: "agrupamento"
+
+
