@@ -1,15 +1,24 @@
+# Arquivo de implementação do OpenAI (VERSÃO REVISADA)
+
 import os
 from openai import OpenAI
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from tools.rag_retriever import buscar_politicas_relevantes
+from typing import Optional
+
+# Importe as interfaces necessárias
 from domain.interfaces.llm_provider_interface import ILLMProvider
+from domain.interfaces.rag_retriever_interface import IRAGRetriever # <-- NOVA IMPORTAÇÃO
 
 class OpenAILLMProvider(ILLMProvider):
     """
-    Implementação concreta de ILLMProvider usando OpenAI.
+    Implementação que agora pode receber um RAG Retriever opcional.
     """
-    def __init__(self):
+    def __init__(self, rag_retriever: Optional[IRAGRetriever] = None):
+        # O RAG Retriever agora é INJETADO!
+        self.rag_retriever = rag_retriever
+
+        # O resto da inicialização continua igual...
         key_vault_url = os.environ["KEY_VAULT_URL"]
         credential = DefaultAzureCredential()
         client = SecretClient(vault_url=key_vault_url, credential=credential)
@@ -19,12 +28,14 @@ class OpenAILLMProvider(ILLMProvider):
         self.openai_client = OpenAI(api_key=self.OPENAI_API_KEY)
 
     def carregar_prompt(self, tipo_analise: str) -> str:
+        # ... (código inalterado) ...
         caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_analise}.md')
         try:
             with open(caminho_prompt, 'r', encoding='utf-8') as f:
                 return f.read()
         except FileNotFoundError:
             raise ValueError(f"Arquivo de prompt para a análise '{tipo_analise}' não encontrado em: {caminho_prompt}")
+
 
     def executar_analise_llm(
         self,
@@ -37,9 +48,11 @@ class OpenAILLMProvider(ILLMProvider):
     ) -> dict:
         prompt_sistema_base = self.carregar_prompt(tipo_analise)
         prompt_sistema_final = prompt_sistema_base
-        if usar_rag:
-            print("[OpenAI Handler] Flag 'usar_rag' é True. Iniciando busca RAG...")
-            politicas_relevantes = buscar_politicas_relevantes(
+
+        # A lógica agora usa o retriever injetado!
+        if usar_rag and self.rag_retriever:
+            print("[OpenAI Handler] Flag 'usar_rag' é True. Usando o RAG retriever injetado...")
+            politicas_relevantes = self.rag_retriever.buscar_politicas(
                 query=f"políticas de {tipo_analise} para desenvolvimento de software"
             )
             prompt_sistema_final = (
@@ -51,7 +64,9 @@ class OpenAILLMProvider(ILLMProvider):
                 f"{politicas_relevantes}"
             )
         else:
-            print("[OpenAI Handler] Flag 'usar_rag' é False. Análise prosseguirá sem RAG.")
+            print("[OpenAI Handler] 'usar_rag' é False ou nenhum retriever foi fornecido. Análise prosseguirá sem RAG.")
+        
+        # ... (o resto da função, com a chamada para a API da OpenAI, continua exatamente igual) ...
         mensagens = [
             {"role": "system", "content": prompt_sistema_final},
             {'role': 'user', 'content': codigo},
