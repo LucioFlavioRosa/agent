@@ -1,23 +1,20 @@
-# Arquivo: tools/github_reader.py (VERSÃO CORRIGIDA)
+# Arquivo: tools/github_reader.py (VERSÃO OTIMIZADA COM GIT TREES API)
 
-import re
 import time
 import yaml
 import os
-from github import GithubException
-# --- MUDANÇA 1: Importar a CLASSE diretamente ---
+from github import GithubException, GitTreeElement
 from tools.github_connector import GitHubConnector 
 from domain.interfaces.repository_reader_interface import IRepositoryReader
+import base64
 
 class GitHubRepositoryReader(IRepositoryReader):
     """
-    Implementação concreta de IRepositoryReader para leitura de repositórios GitHub.
+    Implementação otimizada que usa a API Git Trees para leitura rápida de repositórios.
     """
     def __init__(self):
-        # --- MUDANÇA 2: Simplificamos o __init__. Ele não precisa mais de parâmetros. ---
         self._mapeamento_tipo_extensoes = self._carregar_config_workflows()
 
-    # A função _carregar_config_workflows permanece inalterada...
     def _carregar_config_workflows(self):
         try:
             script_dir = os.path.dirname(__file__)
@@ -36,40 +33,13 @@ class GitHubRepositoryReader(IRepositoryReader):
                     tipo_analise_step = params.get('tipo_analise')
                     if tipo_analise_step:
                         mapeamento_expandido[tipo_analise_step.lower()] = extensions
-            print(f"Mapeamento de extensões expandido carregado de: {yaml_path}")
             return mapeamento_expandido
-        except FileNotFoundError:
-            print("ERRO CRÍTICO: Arquivo 'workflows.yaml' não encontrado na raiz do projeto.")
-            return {}
         except Exception as e:
             print(f"ERRO ao ler ou processar 'workflows.yaml': {e}")
             return {}
 
-    # A função _ler_arquivos_recursivamente permanece inalterada...
-    def _ler_arquivos_recursivamente(self, repo, extensoes, nome_branch: str, path: str = "", arquivos_do_repo: dict = None):
-        if arquivos_do_repo is None:
-            arquivos_do_repo = {}
-        conteudos = repo.get_contents(path, ref=nome_branch)
-        for conteudo in conteudos:
-            if conteudo.type == "dir":
-                self._ler_arquivos_recursivamente(repo, extensoes, nome_branch, conteudo.path, arquivos_do_repo)
-            else:
-                ler_o_arquivo = False
-                if extensoes is None:
-                    ler_o_arquivo = True
-                else:
-                    if any(conteudo.path.endswith(ext) for ext in extensoes) or conteudo.name in extensoes:
-                        ler_o_arquivo = True
-                if ler_o_arquivo:
-                    try:
-                        codigo = conteudo.decoded_content.decode('utf-8')
-                        arquivos_do_repo[conteudo.path] = codigo
-                    except Exception as e:
-                        print(f"AVISO: ERRO na decodificação de '{conteudo.path}' na branch '{nome_branch}'. Pulando arquivo. Erro: {e}")
-        return arquivos_do_repo
-
     def read_repository(self, nome_repo: str, tipo_analise: str, nome_branch: str = None) -> dict:
-        # --- MUDANÇA 3: Chamamos o método diretamente na CLASSE importada ---
+        print(f"Iniciando leitura otimizada do repositório: {nome_repo}")
         repositorio = GitHubConnector.connection(repositorio=nome_repo)
 
         if nome_branch is None:
@@ -77,36 +47,41 @@ class GitHubRepositoryReader(IRepositoryReader):
             print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
         else:
             branch_a_ler = nome_branch
-            print(f"Tentando ler a branch especificada: '{branch_a_ler}'")
         
         extensoes_alvo = self._mapeamento_tipo_extensoes.get(tipo_analise.lower())
         if extensoes_alvo is None:
-            raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou não possui 'extensions' definidas em workflows.yaml")
+            raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado em workflows.yaml")
+
+        arquivos_do_repo = {}
+        try:
+            print(f"Obtendo a árvore de arquivos completa da branch '{branch_a_ler}' em uma única chamada de API...")
+            # Obtém a referência da branch para pegar o SHA do último commit
+            ref = repositorio.get_git_ref(f"heads/{branch_a_ler}")
+            # Obtém a árvore de arquivos completa recursivamente
+            tree = repositorio.get_git_tree(ref.object.sha, recursive=True).tree
+            print(f"Árvore obtida. {len(tree)} itens encontrados. Filtrando e lendo arquivos relevantes...")
+
+            arquivos_para_ler = []
+            for element in tree:
+                # Filtra apenas por arquivos ('blob') que correspondem às extensões
+                if element.type == 'blob' and any(element.path.endswith(ext) for ext in extensoes_alvo):
+                    arquivos_para_ler.append(element)
+            
+            print(f"Encontrados {len(arquivos_para_ler)} arquivos com as extensões {extensoes_alvo}. Lendo o conteúdo...")
+            
+            # Agora, lê o conteúdo apenas dos arquivos filtrados
+            for element in arquivos_para_ler:
+                try:
+                    # O conteúdo do blob é em base64, então precisa ser decodificado
+                    blob_content = repositorio.get_git_blob(element.sha).content
+                    decoded_content = base64.b64decode(blob_content).decode('utf-8')
+                    arquivos_do_repo[element.path] = decoded_content
+                except Exception as e:
+                    print(f"AVISO: Falha ao decodificar o conteúdo do arquivo '{element.path}'. Pulando. Erro: {e}")
+
+        except GithubException as e:
+            print(f"ERRO CRÍTICO ao ler o repositório via API Git Trees: {e}")
+            raise # Re-lança a exceção para que o orchestrator possa lidar com ela
         
-        # O resto da função permanece inalterado...
-        max_tentativas = 4
-        delay_entre_tentativas = 5
-        arquivos_encontrados = None
-        for tentativa in range(max_tentativas):
-            try:
-                print(f"Tentativa {tentativa + 1} de {max_tentativas}...")
-                arquivos_encontrados = self._ler_arquivos_recursivamente(
-                    repositorio,
-                    extensoes=extensoes_alvo,
-                    nome_branch=branch_a_ler
-                )
-                print("Leitura da branch bem-sucedida!")
-                break
-            except GithubException as e:
-                if e.status == 404:
-                    if tentativa < max_tentativas - 1:
-                        print(f"Branch ainda não encontrada (erro 404). Aguardando {delay_entre_tentativas}s...")
-                        time.sleep(delay_entre_tentativas)
-                    else:
-                        raise e
-                else:
-                    raise e
-        
-        if arquivos_encontrados is not None:
-            print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
-        return arquivos_encontrados
+        print(f"\nLeitura otimizada concluída. Total de {len(arquivos_do_repo)} arquivos lidos.")
+        return arquivos_do_repo
