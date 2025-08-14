@@ -1,47 +1,86 @@
-# Arquivo: tools/preenchimento.py (VERSÃO CORRIGIDA E MAIS INTELIGENTE)
+# Arquivo: tools/preenchimento.py (VERSÃO FINAL, ROBUSTA E COM LOGS)
 
 import json
 from domain.interfaces.changeset_filler_interface import IChangesetFiller
 
 class ChangesetFiller(IChangesetFiller):
     """
-    Implementação que preenche os dados e garante a presença da chave 'conteudo'.
+    Implementação robusta para preenchimento de conjuntos de mudanças,
+    com logging detalhado para depuração.
     """
     def main(self, json_agrupado: dict, json_inicial: dict) -> dict:
-        print("Iniciando o processo de preenchimento e reconstituição de dados...")
+        print("\n" + "="*50)
+        print("INICIANDO PROCESSO DE PREENCHIMENTO (ChangesetFiller)")
+        print("="*50)
+
+        # Validação crucial dos inputs
+        if not isinstance(json_inicial, dict) or not json_inicial.get('conjunto_de_mudancas'):
+            print("AVISO CRÍTICO: O JSON inicial (resultado_refatoracao) está vazio ou não contém 'conjunto_de_mudancas'. Não há dados para preencher.")
+            return {}
+
+        if not isinstance(json_agrupado, dict):
+            print(f"AVISO CRÍTICO: O JSON agrupado não é um dicionário válido. Tipo recebido: {type(json_agrupado)}. Nada a processar.")
+            return {}
+
         mapa_de_mudancas_originais = {
             mudanca['caminho_do_arquivo']: mudanca
             for mudanca in json_inicial.get('conjunto_de_mudancas', [])
         }
         print(f"Mapa de dados originais criado com {len(mapa_de_mudancas_originais)} arquivos.")
 
-        for nome_do_grupo, dados_do_grupo in json_agrupado.items():
-            if isinstance(dados_do_grupo, dict) and 'conjunto_de_mudancas' in dados_do_grupo:
-                print(f"Processando e preenchendo o grupo: '{nome_do_grupo}'...")
-                conjunto_original_do_grupo = dados_do_grupo.get('conjunto_de_mudancas', [])
-                novo_conjunto_de_mudancas = []
-                
-                for mudanca_no_grupo in conjunto_original_do_grupo:
-                    caminho_do_arquivo = mudanca_no_grupo.get('caminho_do_arquivo')
-                    if caminho_do_arquivo and caminho_do_arquivo in mapa_de_mudancas_originais:
-                        # Pega o dicionário completo da mudança original
-                        mudanca_completa = mapa_de_mudancas_originais[caminho_do_arquivo]
-                        
-                        # --- MUDANÇA CRÍTICA: Garantir a presença da chave "conteudo" ---
-                        # Se a chave "conteudo" não existir, mas "codigo_novo" existir, renomeie-a.
-                        if "conteudo" not in mudanca_completa and "codigo_novo" in mudanca_completa:
-                            print(f"  [INFO] Renomeando 'codigo_novo' para 'conteudo' no arquivo: {caminho_do_arquivo}")
-                            mudanca_completa["conteudo"] = mudanca_completa["codigo_novo"]
-                        
-                        # Verificação final: só adiciona se o conteúdo realmente existir.
-                        if mudanca_completa.get("conteudo") is not None:
-                            novo_conjunto_de_mudancas.append(mudanca_completa)
-                        else:
-                            print(f"  AVISO: Detalhes para '{caminho_do_arquivo}' encontrados, mas sem a chave de conteúdo ('conteudo' ou 'codigo_novo'). A mudança será ignorada.")
-                    else:
-                        print(f"  AVISO: Detalhes para '{caminho_do_arquivo}' não encontrados no JSON inicial. A mudança será ignorada.")
-                
-                dados_do_grupo['conjunto_de_mudancas'] = novo_conjunto_de_mudancas
+        # Cria uma nova estrutura de resultado para não modificar o input
+        resultado_preenchido = {}
         
-        print("\nProcesso de preenchimento e reconstituição concluído com sucesso!")
-        return json_agrupado
+        # Itera sobre os itens do dicionário de grupos
+        for nome_do_grupo, dados_do_grupo in json_agrupado.items():
+            # Pula chaves que não são de grupos, como 'resumo_geral'
+            if not isinstance(dados_do_grupo, dict) or 'conjunto_de_mudancas' not in dados_do_grupo:
+                print(f"Ignorando a chave de alto nível '{nome_do_grupo}' (não parece ser um grupo de mudanças).")
+                # Copia a chave para o resultado final, se for útil (como o resumo)
+                if nome_do_grupo == "resumo_geral":
+                    resultado_preenchido[nome_do_grupo] = dados_do_grupo
+                continue
+
+            print(f"\n--- Processando grupo: '{nome_do_grupo}' ---")
+            conjunto_do_grupo_leve = dados_do_grupo.get('conjunto_de_mudancas', [])
+            conjunto_preenchido = []
+            
+            print(f"O grupo leve contém {len(conjunto_do_grupo_leve)} arquivos.")
+
+            for mudanca_leve in conjunto_do_grupo_leve:
+                caminho_do_arquivo = mudanca_leve.get('caminho_do_arquivo')
+                
+                if not caminho_do_arquivo:
+                    print("  AVISO: Item de mudança sem 'caminho_do_arquivo' será ignorado.")
+                    continue
+                
+                # Procura a mudança completa no mapa original
+                if caminho_do_arquivo in mapa_de_mudancas_originais:
+                    mudanca_completa = mapa_de_mudancas_originais[caminho_do_arquivo]
+                    
+                    # Garante que a chave "conteudo" exista
+                    if "conteudo" not in mudanca_completa and "codigo_novo" in mudanca_completa:
+                        mudanca_completa["conteudo"] = mudanca_completa["codigo_novo"]
+
+                    if mudanca_completa.get("conteudo") is not None:
+                        print(f"  [SUCESSO] Detalhes de '{caminho_do_arquivo}' encontrados e preenchidos.")
+                        conjunto_preenchido.append(mudanca_completa)
+                    else:
+                        print(f"  [AVISO] Detalhes de '{caminho_do_arquivo}' encontrados, mas sem conteúdo ('conteudo' ou 'codigo_novo'). Ignorando.")
+                else:
+                    print(f"  [ERRO] Detalhes para '{caminho_do_arquivo}' NÃO encontrados no JSON inicial. Ignorando.")
+
+            # Cria a estrutura final para este grupo, apenas se houver mudanças preenchidas
+            if conjunto_preenchido:
+                resultado_preenchido[nome_do_grupo] = {
+                    **dados_do_grupo, # Copia outras chaves como 'titulo_pr', etc.
+                    'conjunto_de_mudancas': conjunto_preenchido
+                }
+                print(f"--- Grupo '{nome_do_grupo}' finalizado com {len(conjunto_preenchido)} mudanças preenchidas. ---")
+            else:
+                print(f"--- Grupo '{nome_do_grupo}' finalizado VAZIO. Nenhuma correspondência encontrada. ---")
+
+        print("\n" + "="*50)
+        print("PROCESSO DE PREENCHIMENTO CONCLUÍDO")
+        print("="*50)
+        return resultado_preenchido
