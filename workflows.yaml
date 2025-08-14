@@ -3,11 +3,9 @@ relatorio_analise_de_design_de_codigo:
   extensions: [".py"]
   steps:
     - status_update: "refactoring_code"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "aplicacao_mudancas_design"
     - status_update: "grouping_commits"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "agrupamento"
 
@@ -16,11 +14,9 @@ relatorio_refatoracao_codigo:
   extensions: [".py"]
   steps:
     - status_update: "refactoring_code"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "aplicacao_refatoracao"
     - status_update: "grouping_commits"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "agrupamento"
 
@@ -29,11 +25,9 @@ relatorio_documentacao_codigo:
   extensions: [".py"]
   steps:
     - status_update: "gerando_documentacao"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "aplicacao_documentacao" 
     - status_update: "grouping_commits"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "agrupamento"
 
@@ -42,10 +36,8 @@ relatorio_avaliacao_terraform:
   extensions: [".tf", ".tfvars"]
   steps:
     - status_update: "revisando_terraform"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "aplicacao_terraform"
     - status_update: "grouping_commits"
-      agent_function: "agents.agente_revisor.main"
       params:
         tipo_analise: "agrupamento"
