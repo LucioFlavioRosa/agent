@@ -120,6 +120,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         print(f"[{job_id}] Delegando leitura e análise para o agente (RAG: {payload.usar_rag})...")
         job_info['status'] = 'comecando_analise_llm'
         job_store.set_job(job_id, job_info)
+
         resposta_agente = agente.main(
             tipo_analise=payload.analysis_type,
             repositorio=payload.repo_name,
@@ -349,5 +350,3 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
