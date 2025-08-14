@@ -6,8 +6,10 @@ from tools import github_connector
 
 # O mapeamento permanece o mesmo
 MAPEAMENTO_TIPO_EXTENSOES = {
-    "relatorio_padrao_desenvolvimento_codigo": [".py", ".md", ".tf", ".json", ".yaml", ".yml", "Dockerfile"],
-    "relatorio_teste_unitario": [".py"],
+    "relatorio_analise_de_design_de_codigo": [".py"],
+    "relatorio_refatoracao_codigo": [".py"],
+    "relatorio_documentacao_codigo": [".py"],
+    "relatorio_avaliacao_terraform": [".tf"],
 }
 
 def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = "", arquivos_do_repo: dict = None):
@@ -87,3 +89,4 @@ def main(nome_repo: str, tipo_analise: str, nome_branch: str = None):
         print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
     
     return arquivos_encontrados
+
