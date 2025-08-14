@@ -23,7 +23,6 @@ from tools.preenchimento import ChangesetFiller
 from tools.github_reader import GitHubRepositoryReader
 
 
-# --- Modelos de Dados Pydantic (inalterados) ---
 class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["relatorio_analise_de_design_de_codigo", "relatorio_refatoracao_codigo",
@@ -57,7 +56,6 @@ class FinalStatusResponse(BaseModel):
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
-
 
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
@@ -368,3 +366,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
