@@ -1,6 +1,7 @@
 import re
 import time
-
+import yaml 
+import os
 from github import GithubException
 from tools import github_connector
 
@@ -11,6 +12,36 @@ MAPEAMENTO_TIPO_EXTENSOES = {
     "relatorio_documentacao_codigo": [".py"],
     "relatorio_avaliacao_terraform": [".tf"],
 }
+
+def _carregar_config_workflows():
+    """Lê o arquivo YAML e extrai apenas o mapeamento de extensões."""
+    try:
+        # [NOVO] Constrói um caminho absoluto para o arquivo YAML para garantir que ele seja sempre encontrado.
+        # Pega o diretório do arquivo atual (ex: /path/to/project/tools)
+        script_dir = os.path.dirname(__file__)
+        # Sobe um nível para a raiz do projeto (ex: /path/to/project)
+        project_root = os.path.abspath(os.path.join(script_dir, '..'))
+        # Monta o caminho completo para o workflows.yaml na raiz
+        yaml_path = os.path.join(project_root, 'workflows.yaml')
+
+        # [ALTERADO] Usa o caminho absoluto para abrir o arquivo
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        mapeamento = {
+            workflow_name: data.get('extensions', [])
+            for workflow_name, data in config.items()
+        }
+        print(f"Mapeamento de extensões carregado a partir de: {yaml_path}")
+        return mapeamento
+    except FileNotFoundError:
+        print("ERRO CRÍTICO: Arquivo 'workflows.yaml' não encontrado na raiz do projeto.")
+        return {}
+    except Exception as e:
+        print(f"ERRO ao ler ou processar 'workflows.yaml': {e}")
+        return {}
+        
+MAPEAMENTO_TIPO_EXTENSOES = _carregar_config_workflows()
 
 def _ler_arquivos_recursivamente(repo, extensoes, nome_branch: str, path: str = "", arquivos_do_repo: dict = None):
     """
@@ -58,6 +89,8 @@ def main(nome_repo: str, tipo_analise: str, nome_branch: str = None):
 
     # [CORRIGIDO] A variável agora usa o nome de parâmetro correto.
     extensoes_alvo = MAPEAMENTO_TIPO_EXTENSOES.get(tipo_analise.lower())
+    if extensoes_alvo is None:
+        raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou não possui 'extensions' definidas em workflows.yaml")
 
     max_tentativas = 4
     delay_entre_tentativas = 5
@@ -89,4 +122,5 @@ def main(nome_repo: str, tipo_analise: str, nome_branch: str = None):
         print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
     
     return arquivos_encontrados
+
 
