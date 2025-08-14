@@ -76,7 +76,12 @@ job_store = RedisJobStore()
 
 
 # --- WORKFLOW_REGISTRY ---
+# --- MUDANÇA: SIMPLIFICANDO O CARREGADOR DE WORKFLOW ---
 def load_workflow_registry(filepath: str) -> dict:
+    """
+    Carrega a configuração de workflows de um arquivo YAML.
+    A função agora apenas lê o arquivo, sem processar chaves dinâmicas.
+    """
     print(f"Carregando workflows do arquivo: {filepath}")
     with open(filepath, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
@@ -345,3 +350,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
