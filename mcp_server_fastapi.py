@@ -26,7 +26,8 @@ from tools.github_reader import GitHubRepositoryReader
 class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["relatorio_analise_de_design_de_codigo", "relatorio_refatoracao_codigo",
-                           "relatorio_documentacao_codigo", "relatorio_avaliacao_terraform"]
+                           "relatorio_documentacao_codigo", "relatorio_avaliacao_terraform",
+                           "relatorio_conformidades"]
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False, description="Define se a análise deve usar a base de conhecimento RAG.")
@@ -350,3 +351,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
