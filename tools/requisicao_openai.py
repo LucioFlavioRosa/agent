@@ -78,7 +78,7 @@ class OpenAILLMProvider(ILLMProvider):
                 model=model_name,
                 messages=mensagens,
                 temperature=0.3,
-                max_tokens=max_token_out
+                max_completion_tokens=max_token_out
             )
             conteudo_resposta = response.choices[0].message.content.strip()
             return {
