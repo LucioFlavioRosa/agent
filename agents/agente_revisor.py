@@ -4,7 +4,7 @@ from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 
 # Valores padrão
-modelo_llm = 'gpt-4.1'
+modelo_llm = 'gpt-5'
 max_tokens_saida = 15000
 
 class AgenteRevisor:
