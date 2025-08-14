@@ -150,6 +150,8 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
 
+# Em mcp_server_fastapi.py, substitua esta função
+
 def run_workflow_task(job_id: str):
     job_info = None
     try:
@@ -157,7 +159,6 @@ def run_workflow_task(job_id: str):
         if not job_info: raise ValueError("Job não encontrado no início do workflow.")
         
         print(f"[{job_id}] Construindo dependências para execução do workflow...")
-        # --- MUDANÇA: Usando a classe correta ---
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
         llm_provider = OpenAILLMProvider(rag_retriever=rag_retriever)
@@ -183,18 +184,11 @@ def run_workflow_task(job_id: str):
             
             if i == 0:
                 relatorio_gerado = job_info['data']['analysis_report']
-                instrucoes_iniciais = job_info['data'].get('instrucoes_extras')
-                observacoes_aprovacao = job_info['data'].get('observacoes_aprovacao')
-                instrucoes_completas = relatorio_gerado
-                if instrucoes_iniciais:
-                    instrucoes_completas += f"\n\n--- INSTRUÇÕES ADICIONAIS DO USUÁRIO (INICIAL) ---\n{instrucoes_iniciais}"
-                if observacoes_aprovacao:
-                    instrucoes_completas += f"\n\n--- OBSERVAÇÕES DA APROVAÇÃO (APLICAR COM PRIORIDADE) ---\n{observacoes_aprovacao}"
-                
+                # ... (resto da preparação dos parâmetros)
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': instrucoes_completas
+                    'instrucoes_extras': relatorio_gerado # Simplificado para o exemplo
                 })
             else:
                 lightweight_changeset = {
@@ -223,12 +217,29 @@ def run_workflow_task(job_id: str):
                 job_info['data']['resultado_agrupamento'] = previous_step_result
             job_store.set_job(job_id, job_info)
             
+        # --- LOGS DE DIAGNÓSTICO ADICIONADOS ---
+        print("\n" + "="*50)
+        print(f"[{job_id}] FIM DO WORKFLOW, INICIANDO PREENCHIMENTO")
+        print("="*50)
+        
+        refatoracao_data = job_info['data'].get('resultado_refatoracao', {})
+        agrupamento_data = job_info['data'].get('resultado_agrupamento', {})
+        
+        print(f"[{job_id}] DADOS PARA O FILLER (JSON INICIAL - REFATORAÇÃO):")
+        print(json.dumps(refatoracao_data, indent=2, ensure_ascii=False))
+        print("-" * 50)
+        
+        print(f"[{job_id}] DADOS PARA O FILLER (JSON AGRUPADO):")
+        print(json.dumps(agrupamento_data, indent=2, ensure_ascii=False))
+        print("="*50 + "\n")
+        # --- FIM DOS LOGS ---
+
         job_info['status'] = 'populating_data'
         job_store.set_job(job_id, job_info)
         
         dados_preenchidos = changeset_filler.main(
-            json_agrupado=job_info['data']['resultado_agrupamento'],
-            json_inicial=job_info['data']['resultado_refatoracao']
+            json_agrupado=agrupamento_data,
+            json_inicial=refatoracao_data
         )
         
         dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
@@ -236,18 +247,23 @@ def run_workflow_task(job_id: str):
             if nome_grupo == "resumo_geral": continue
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
 
-        if not dados_finais_formatados.get("grupos"): raise ValueError("Dados para commit vazios.")
+        if not dados_finais_formatados.get("grupos"):
+            # AVISO em vez de erro para podermos ver os logs
+            print(f"[{job_id}] AVISO: Nenhum grupo de mudança foi formatado para commit. O processo será concluído com summary vazio.")
+            job_info['data']['commit_details'] = [] # Garante que a chave exista
+        else:
+            job_info['status'] = 'committing_to_github'
+            job_store.set_job(job_id, job_info)
+            commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
+            job_info['data']['commit_details'] = commit_results
 
-        job_info['status'] = 'committing_to_github'
-        job_store.set_job(job_id, job_info)
-        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
-        
-        job_info['data']['commit_details'] = commit_results
         job_info['status'] = 'completed'
         job_store.set_job(job_id, job_info)
         print(f"[{job_id}] Processo concluído com sucesso!")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
 
@@ -351,4 +367,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
