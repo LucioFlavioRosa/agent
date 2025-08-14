@@ -77,7 +77,6 @@ class OpenAILLMProvider(ILLMProvider):
             response = self.openai_client.chat.completions.create(
                 model=model_name,
                 messages=mensagens,
-                temperature=0.3,
                 max_completion_tokens=max_token_out
             )
             conteudo_resposta = response.choices[0].message.content.strip()
