@@ -1,19 +1,23 @@
+# Arquivo: tools/github_reader.py (VERSÃO CORRIGIDA)
+
 import re
 import time
 import yaml
 import os
 from github import GithubException
-from tools import github_connector
+# --- MUDANÇA 1: Importar a CLASSE diretamente ---
+from tools.github_connector import GitHubConnector 
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 
 class GitHubRepositoryReader(IRepositoryReader):
     """
     Implementação concreta de IRepositoryReader para leitura de repositórios GitHub.
     """
-    def __init__(self, github_connector_module=github_connector):
-        self.github_connector = github_connector_module
+    def __init__(self):
+        # --- MUDANÇA 2: Simplificamos o __init__. Ele não precisa mais de parâmetros. ---
         self._mapeamento_tipo_extensoes = self._carregar_config_workflows()
 
+    # A função _carregar_config_workflows permanece inalterada...
     def _carregar_config_workflows(self):
         try:
             script_dir = os.path.dirname(__file__)
@@ -41,6 +45,7 @@ class GitHubRepositoryReader(IRepositoryReader):
             print(f"ERRO ao ler ou processar 'workflows.yaml': {e}")
             return {}
 
+    # A função _ler_arquivos_recursivamente permanece inalterada...
     def _ler_arquivos_recursivamente(self, repo, extensoes, nome_branch: str, path: str = "", arquivos_do_repo: dict = None):
         if arquivos_do_repo is None:
             arquivos_do_repo = {}
@@ -64,16 +69,21 @@ class GitHubRepositoryReader(IRepositoryReader):
         return arquivos_do_repo
 
     def read_repository(self, nome_repo: str, tipo_analise: str, nome_branch: str = None) -> dict:
-        repositorio = self.github_connector.connection(repositorio=nome_repo)
+        # --- MUDANÇA 3: Chamamos o método diretamente na CLASSE importada ---
+        repositorio = GitHubConnector.connection(repositorio=nome_repo)
+
         if nome_branch is None:
             branch_a_ler = repositorio.default_branch
             print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
         else:
             branch_a_ler = nome_branch
             print(f"Tentando ler a branch especificada: '{branch_a_ler}'")
+        
         extensoes_alvo = self._mapeamento_tipo_extensoes.get(tipo_analise.lower())
         if extensoes_alvo is None:
             raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou não possui 'extensions' definidas em workflows.yaml")
+        
+        # O resto da função permanece inalterado...
         max_tentativas = 4
         delay_entre_tentativas = 5
         arquivos_encontrados = None
@@ -90,14 +100,13 @@ class GitHubRepositoryReader(IRepositoryReader):
             except GithubException as e:
                 if e.status == 404:
                     if tentativa < max_tentativas - 1:
-                        print(f"Branch ainda não encontrada (erro 404). Aguardando {delay_entre_tentativas}s para a próxima tentativa...")
+                        print(f"Branch ainda não encontrada (erro 404). Aguardando {delay_entre_tentativas}s...")
                         time.sleep(delay_entre_tentativas)
                     else:
-                        print("Número máximo de tentativas atingido. A branch realmente não foi encontrada ou está inacessível.")
                         raise e
                 else:
-                    print(f"Ocorreu um erro inesperado no GitHub que não é um 404: {e}")
                     raise e
+        
         if arquivos_encontrados is not None:
             print(f"\nLeitura concluída. Total de {len(arquivos_encontrados)} arquivos encontrados.")
         return arquivos_encontrados
