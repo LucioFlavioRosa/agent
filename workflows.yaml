@@ -1,5 +1,6 @@
 relatorio_analise_de_design_de_codigo:
   description: "Refatoração de código, aplicação de design patterns e implementação dos princípios SOLID."
+  extensions: [".py"]
   steps:
     - status_update: "refactoring_code"
       agent_function: "agents.agente_revisor.main"
@@ -12,6 +13,7 @@ relatorio_analise_de_design_de_codigo:
 
 relatorio_refatoracao_codigo:
   description: "Analise focada em otimização de performance e na filosofia Clean Code."
+  extensions: [".py"]
   steps:
     - status_update: "refactoring_code"
       agent_function: "agents.agente_revisor.main"
@@ -24,6 +26,7 @@ relatorio_refatoracao_codigo:
 
 relatorio_documentacao_codigo:
   description: "Realiza uma revisão técnica aprofundada focada exclusivamente na qualidade e na completude da documentação do código-fonte, o que inclui docstrings, comentários inline e a capacidade do código de ser auto-documentado"
+  extensions: [".py"]
   steps:
     - status_update: "gerando_documentacao"
       agent_function: "agents.agente_revisor.main"
@@ -36,6 +39,7 @@ relatorio_documentacao_codigo:
 
 relatorio_avaliacao_terraform:
   description: "O objetivo é identificar pontos de melhoria em quatro áreas críticas: manutenibilidade do código, postura de segurança, performance da infraestrutura e otimização de custos"
+  extensions: [".tf", ".tfvars"]
   steps:
     - status_update: "revisando_terraform"
       agent_function: "agents.agente_revisor.main"
