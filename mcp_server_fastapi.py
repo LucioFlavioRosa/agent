@@ -20,6 +20,8 @@ class StartAnalysisPayload(BaseModel):
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False, description="Define se a análise deve usar a base de conhecimento RAG.")
+    gerar_relatorio_apenas: bool = Field(False, description="Se True, executa apenas a geração do relatório inicial e finaliza.")
+
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -104,10 +106,6 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
-    """
-    Tarefa de background que lê o repositório e gera o relatório de análise inicial,
-    agora com a opção de usar RAG.
-    """
     job_info = None
     try:
         job_info = get_job(job_id)
@@ -117,7 +115,6 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         set_job(job_id, job_info)
         print(f"[{job_id}] Etapa 1: Delegando leitura e análise para o agente (RAG: {payload.usar_rag})...")
         
-        # [ALTERADO] Repassa a variável 'usar_rag' do payload para o agente.
         resposta_agente = agente_revisor.main(
             tipo_analise=payload.analysis_type,
             repositorio=payload.repo_name,
@@ -129,15 +126,22 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
         report_text_only = full_llm_response_obj['reposta_final']
 
-        job_info['status'] = 'pending_approval'
-        job_info['data']['analysis_report'] = report_text_only
+        # [ALTERADO] A lógica agora depende da nova flag
+        # Se for apenas para gerar o relatório, o processo já termina aqui.
+        if payload.gerar_relatorio_apenas:
+            job_info['status'] = 'completed'
+            job_info['data']['analysis_report'] = report_text_only
+            print(f"[{job_id}] Relatório gerado com sucesso. Processo finalizado conforme solicitado (gerar_relatorio_apenas=True).")
+        else:
+            job_info['status'] = 'pending_approval'
+            job_info['data']['analysis_report'] = report_text_only
+            print(f"[{job_id}] Relatório gerado com sucesso. Job aguardando aprovação.")
         
-        # [NOVO] Armazena a decisão de usar RAG no estado do job.
-        # Isso é crucial para que a 'run_workflow_task' saiba qual modo usar após a aprovação.
+        # Armazena as decisões para os próximos passos (se houver)
         job_info['data']['usar_rag'] = payload.usar_rag
+        job_info['data']['gerar_relatorio_apenas'] = payload.gerar_relatorio_apenas
         
         set_job(job_id, job_info)
-        print(f"[{job_id}] Relatório gerado com sucesso. Job aguardando aprovação.")
         
     except Exception as e:
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
@@ -261,18 +265,26 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
-    # ... (código inalterado)
     job = get_job(payload.job_id)
     if not job: raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
-    if job['status'] != 'pending_approval': raise HTTPException(status_code=400, detail=f"O job não pode ser modificado. Status atual: {job['status']}")
+    
+    # Esta validação agora é mais flexível, pois um job pode ter sido concluído antes
+    if job['status'] not in ['pending_approval']:
+        # Se já foi concluído (porque era só relatório), retorna uma mensagem amigável
+        if job['status'] == 'completed':
+            return {"job_id": payload.job_id, "status": "completed", "message": "Este job já foi concluído (modo apenas relatório)."}
+        raise HTTPException(status_code=400, detail=f"O job não pode ser modificado. Status atual: {job['status']}")
     
     if payload.action == 'approve':
         if payload.observacoes:
             job['data']['observacoes_aprovacao'] = payload.observacoes
+        
         job['status'] = 'workflow_started'
         set_job(payload.job_id, job)
+        
+        # Inicia o workflow completo em background
         background_tasks.add_task(run_workflow_task, payload.job_id)
-        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida."}
+        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida. Processo de refatoração iniciado."}
     
     if payload.action == 'reject':
         job['status'] = 'rejected'
@@ -355,3 +367,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
