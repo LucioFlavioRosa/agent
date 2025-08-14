@@ -74,9 +74,6 @@ app.add_middleware(
 
 job_store = RedisJobStore()
 
-
-# --- WORKFLOW_REGISTRY ---
-# --- MUDANÇA: SIMPLIFICANDO O CARREGADOR DE WORKFLOW ---
 def load_workflow_registry(filepath: str) -> dict:
     """
     Carrega a configuração de workflows de um arquivo YAML.
@@ -110,7 +107,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
-        job_info['status'] = 'reading_repository'
+        job_info['status'] = 'iniciando_a_analise'
         job_store.set_job(job_id, job_info)
         
         print(f"[{job_id}] Construindo o agente e suas dependências...")
@@ -121,6 +118,8 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
 
         print(f"[{job_id}] Delegando leitura e análise para o agente (RAG: {payload.usar_rag})...")
+        job_info['status'] = 'comecando_analise_llm'
+        job_store.set_job(job_id, job_info)
         resposta_agente = agente.main(
             tipo_analise=payload.analysis_type,
             repositorio=payload.repo_name,
@@ -350,4 +349,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
