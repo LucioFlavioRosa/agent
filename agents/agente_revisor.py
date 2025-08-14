@@ -5,7 +5,7 @@ from domain.interfaces.llm_provider_interface import ILLMProvider
 
 # Valores padrão
 modelo_llm = 'gpt-4.1'
-max_tokens_saida = 10000
+max_tokens_saida = 15000
 
 class AgenteRevisor:
     """
