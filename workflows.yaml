@@ -31,7 +31,7 @@ relatorio_documentacao_codigo:
     - status_update: "gerando_documentacao"
       agent_function: "agents.agente_revisor.main"
       params:
-        tipo_analise: "aplicacao_documentacao"
+        tipo_analise: "aplicacao_documentacao" 
     - status_update: "grouping_commits"
       agent_function: "agents.agente_revisor.main"
       params:
