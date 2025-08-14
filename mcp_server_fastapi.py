@@ -1,11 +1,10 @@
-# Arquivo: mcp_server_fastapi.py (VERSÃO FINAL COM LOGS DE DIAGNÓSTICO)
+# Arquivo: mcp_server_fastapi.py (VERSÃO FINAL E COMPLETA)
 
 import json
 import uuid
 import yaml
-import importlib
-import time # Adicionado para logs de tempo
-import traceback # Adicionado para logs de erro detalhados
+import time
+import traceback
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
@@ -15,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from tools.job_store import RedisJobStore
 from tools import commit_multiplas_branchs
 
-# --- Classes e dependências para montar os agentes e ferramentas ---
+# --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
 from tools.requisicao_openai import OpenAILLMProvider
 from tools.rag_retriever import AzureAISearchRAGRetriever
@@ -23,6 +22,7 @@ from tools.preenchimento import ChangesetFiller
 from tools.github_reader import GitHubRepositoryReader
 
 
+# --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["relatorio_analise_de_design_de_codigo", "relatorio_refatoracao_codigo",
@@ -30,8 +30,8 @@ class StartAnalysisPayload(BaseModel):
                            "relatorio_conformidades"]
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
-    usar_rag: bool = Field(False, description="Define se a análise deve usar a base de conhecimento RAG.")
-    gerar_relatorio_apenas: bool = Field(False, description="Se True, executa apenas a geração do relatório inicial e finaliza.")
+    usar_rag: bool = Field(False)
+    gerar_relatorio_apenas: bool = Field(False)
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -52,18 +52,19 @@ class FinalStatusResponse(BaseModel):
     summary: Optional[List[PullRequestSummary]] = Field(None, description="Resumo dos PRs e arquivos modificados.")
     error_details: Optional[str] = Field(None, description="Detalhes do erro, se o job falhou.")
     analysis_report: Optional[str] = Field(None, description="Relatório inicial da IA, se aplicável.")
+    diagnostic_logs: Optional[Dict[str, Any]] = Field(None, description="Logs de diagnóstico com os JSONs intermediários para depuração.")
 
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
 
+
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
-    description="Servidor robusto com Redis para orquestrar agentes de IA para análise e refatoração de código.",
-    version="8.2.0" 
+    description="Servidor robusto com Redis para orquestrar agentes de IA.",
+    version="8.3.0" 
 )
-
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 job_store = RedisJobStore()
 
@@ -73,15 +74,13 @@ def load_workflow_registry(filepath: str) -> dict:
     print(f"Carregando workflows do arquivo: {filepath}")
     with open(filepath, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
-
 WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
 
 
 # --- Funções de Tarefa (Tasks) ---
 
 def handle_task_exception(job_id: str, e: Exception, step: str):
-    error_text = str(e)
-    error_message = f"Erro fatal durante a etapa '{step}': {error_text}"
+    error_message = f"Erro fatal durante a etapa '{step}': {str(e)}"
     print(f"[{job_id}] {error_message}")
     try:
         job_info = job_store.get_job(job_id)
@@ -101,19 +100,13 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         job_info['status'] = 'iniciando_a_analise'
         job_store.set_job(job_id, job_info)
         
-        print(f"[{job_id}] Construindo o agente e suas dependências...")
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
         llm_provider = OpenAILLMProvider(rag_retriever=rag_retriever)
         agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
 
-        print(f"[{job_id}] Delegando leitura e análise para o agente (RAG: {payload.usar_rag})...")
         job_info['status'] = 'comecando_analise_llm'
         job_store.set_job(job_id, job_info)
-
-        # --- MUDANÇA: LOGS DE DIAGNÓSTICO DE TEMPO ---
-        start_time = time.time()
-        print(f"[{job_id}] Chamada para agente.main iniciada em {time.strftime('%H:%M:%S')}")
 
         resposta_agente = agente.main(
             tipo_analise=payload.analysis_type,
@@ -122,77 +115,55 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
             instrucoes_extras=payload.instrucoes_extras,
             usar_rag=payload.usar_rag
         )
-
-        end_time = time.time()
-        print(f"[{job_id}] Agente respondeu em {end_time - start_time:.2f} segundos.")
-        # --- FIM DA MUDANÇA ---
-
+        
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
         report_text_only = full_llm_response_obj['reposta_final']
-
+        
+        job_info['data']['analysis_report'] = report_text_only
+        
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
-            job_info['data']['analysis_report'] = report_text_only
-            print(f"[{job_id}] Relatório gerado. Processo finalizado conforme solicitado.")
         else:
             job_info['status'] = 'pending_approval'
-            job_info['data']['analysis_report'] = report_text_only
-            print(f"[{job_id}] Relatório gerado. Job aguardando aprovação.")
 
-        job_info['data']['usar_rag'] = payload.usar_rag
-        job_info['data']['gerar_relatorio_apenas'] = payload.gerar_relatorio_apenas
         job_store.set_job(job_id, job_info)
 
     except Exception as e:
-        # --- MUDANÇA: LOG DE ERRO MAIS DETALHADO ---
-        print(f"[{job_id}] EXCEÇÃO INESPERADA em 'run_report_generation_task':")
         traceback.print_exc()
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
 
-# Em mcp_server_fastapi.py, substitua esta função
 def run_workflow_task(job_id: str):
     job_info = None
     try:
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado no início do workflow.")
         
-        print(f"[{job_id}] Construindo dependências para execução do workflow...")
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
         llm_provider = OpenAILLMProvider(rag_retriever=rag_retriever)
         agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
         changeset_filler = ChangesetFiller()
 
-        print(f"[{job_id}] Iniciando workflow completo após aprovação...")
-        usar_rag = job_info.get("data", {}).get("usar_rag", False)
-
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
-        # --- LÓGICA DE LOOP E FLUXO DE DADOS CORRIGIDA ---
-
-        # O resultado do passo anterior é mantido em memória para ser o input do passo seguinte
         previous_step_result = None
-
         for i, step in enumerate(workflow['steps']):
             job_info['status'] = step['status_update']
             job_store.set_job(job_id, job_info)
-            print(f"[{job_id}] ... Executando passo: {job_info['status']}")
             
             agent_params = step['params'].copy()
-            agent_params['usar_rag'] = usar_rag
+            agent_params['usar_rag'] = job_info.get("data", {}).get("usar_rag", False)
             
             if i == 0:
-                # O input do primeiro passo é o relatório
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
                     'instrucoes_extras': job_info['data']['analysis_report']
                 })
             else:
-                # O input dos passos seguintes é o resultado estruturado do passo anterior
                 lightweight_changeset = {
                     "resumo_geral": previous_step_result.get("resumo_geral"),
                     "conjunto_de_mudancas": [
@@ -207,31 +178,26 @@ def run_workflow_task(job_id: str):
             if not json_string.strip():
                 raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
             
-            # O resultado desta etapa se torna o input para a próxima
             previous_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
 
-            # Salva os resultados importantes com nomes específicos
             if i == 0:
                 job_info['data']['resultado_refatoracao'] = previous_step_result
-                print(f"[{job_id}] Resultado da refatoração salvo.")
             else:
-                # Para qualquer passo subsequente, assume-se que é um agrupamento ou similar
                 job_info['data']['resultado_agrupamento'] = previous_step_result
-                print(f"[{job_id}] Resultado do agrupamento salvo.")
         
-        # O loop terminou. Agora, garantimos que salvamos o estado final de job_info
         job_store.set_job(job_id, job_info)
 
-        # Agora, fora do loop, usamos os dados que foram salvos no job_info
         job_info['status'] = 'populating_data'
         job_store.set_job(job_id, job_info)
         
-        print(f"[{job_id}] Iniciando preenchimento dos dados...")
-        
-        # Pega os dados finais salvos no job_info
-        agrupamento_data = job_info['data'].get('resultado_agrupamento', {})
         refatoracao_data = job_info['data'].get('resultado_refatoracao', {})
-
+        agrupamento_data = job_info['data'].get('resultado_agrupamento', {})
+        
+        job_info['data']['diagnostic_logs'] = {
+            "1_json_refatoracao_inicial": refatoracao_data,
+            "2_json_agrupamento_recebido": agrupamento_data
+        }
+        
         dados_preenchidos = changeset_filler.main(
             json_agrupado=agrupamento_data,
             json_inicial=refatoracao_data
@@ -243,7 +209,7 @@ def run_workflow_task(job_id: str):
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
 
         if not dados_finais_formatados.get("grupos"):
-            print(f"[{job_id}] AVISO: Nenhum grupo de mudança foi formatado para commit. O processo será concluído com summary vazio.")
+            print(f"[{job_id}] AVISO: Nenhum grupo de mudança foi formatado para commit.")
             job_info['data']['commit_details'] = []
         else:
             job_info['status'] = 'committing_to_github'
@@ -256,11 +222,11 @@ def run_workflow_task(job_id: str):
         print(f"[{job_id}] Processo concluído com sucesso!")
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         current_step = job_info.get('status', 'run_workflow') if job_info else 'run_workflow'
         handle_task_exception(job_id, e, current_step)
-        
+
+
 # --- Endpoints da API ---
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
@@ -325,6 +291,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
 
     status = job.get('status')
     
+    logs = job.get("data", {}).get("diagnostic_logs")
+
     try:
         if status == 'completed':
             if job.get("data", {}).get("gerar_relatorio_apenas") is True:
@@ -345,22 +313,25 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                                 arquivos_modificados=pr_info.get("arquivos_modificados", [])
                             )
                         )
-                return FinalStatusResponse(job_id=job_id, status=status, summary=summary_list)
+                return FinalStatusResponse(
+                    job_id=job_id, 
+                    status=status, 
+                    summary=summary_list,
+                    diagnostic_logs=logs
+                )
 
         elif status == 'failed':
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
-                error_details=job.get("error_details", "Nenhum detalhe de erro encontrado.")
+                error_details=job.get("error_details", "Nenhum detalhe de erro encontrado."),
+                diagnostic_logs=logs
             )
         
-        else: # Qualquer outro status (starting, reading_repository, etc.)
+        else:
             return FinalStatusResponse(job_id=job_id, status=status)
 
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
-
