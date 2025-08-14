@@ -311,7 +311,8 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"]) 
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """
-    Verifica o status de um job. NÃO retorna dados pesados como o relatório.
+    Verifica o status de um job. Retorna um resumo inteligente dependendo
+    do estado e do tipo de execução do job.
     """
     job = get_job(job_id)
     if not job:
@@ -320,35 +321,47 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     status = job.get('status')
     
     try:
+        # Caso 1: Job concluído com sucesso
         if status == 'completed':
-            # A lógica para o status 'completed' permanece a mesma
-            summary_list = []
-            commit_details = job.get("data", {}).get("commit_details", [])
-            dados_agrupados = job.get("data", {}).get("resultado_agrupamento", {})
+            # [LÓGICA APRIMORADA]
+            # Verifica se o job foi executado no modo "apenas relatório".
+            if job.get("data", {}).get("gerar_relatorio_apenas") is True:
+                # Se sim, o resultado principal é o próprio relatório.
+                return FinalStatusResponse(
+                    job_id=job_id,
+                    status=status,
+                    analysis_report=job.get("data", {}).get("analysis_report")
+                )
+            else:
+                # Se não, foi um workflow completo, então monta o resumo dos PRs.
+                summary_list = []
+                commit_details = job.get("data", {}).get("commit_details", [])
+                dados_agrupados = job.get("data", {}).get("resultado_agrupamento", {})
 
-            mapa_arquivos_por_branch = {}
-            for nome_grupo, detalhes_grupo in dados_agrupados.items():
-                if isinstance(detalhes_grupo, dict) and 'conjunto_de_mudancas' in detalhes_grupo:
-                    arquivos = [m.get("caminho_do_arquivo") for m in detalhes_grupo.get("conjunto_de_mudancas", []) if m]
-                    mapa_arquivos_por_branch[nome_grupo] = arquivos
+                mapa_arquivos_por_branch = {}
+                for nome_grupo, detalhes_grupo in dados_agrupados.items():
+                    if isinstance(detalhes_grupo, dict) and 'conjunto_de_mudancas' in detalhes_grupo:
+                        arquivos = [m.get("caminho_do_arquivo") for m in detalhes_grupo.get("conjunto_de_mudancas", []) if m]
+                        mapa_arquivos_por_branch[nome_grupo] = arquivos
 
-            for pr_info in commit_details:
-                branch_name = pr_info.get("branch_name")
-                if pr_info.get("success") and pr_info.get("pr_url"):
-                    summary_list.append(
-                        PullRequestSummary(
-                            pull_request_url=pr_info.get("pr_url"),
-                            branch_name=branch_name,
-                            arquivos_modificados=mapa_arquivos_por_branch.get(branch_name, [])
+                for pr_info in commit_details:
+                    branch_name = pr_info.get("branch_name")
+                    if pr_info.get("success") and pr_info.get("pr_url"):
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=pr_info.get("pr_url"),
+                                branch_name=branch_name,
+                                arquivos_modificados=mapa_arquivos_por_branch.get(branch_name, [])
+                            )
                         )
-                    )
-            
-            return FinalStatusResponse(
-                job_id=job_id,
-                status=status,
-                summary=summary_list
-            )
+                
+                return FinalStatusResponse(
+                    job_id=job_id,
+                    status=status,
+                    summary=summary_list
+                )
 
+        # Caso 2: Job falhou
         elif status == 'failed':
             return FinalStatusResponse(
                 job_id=job_id,
@@ -356,8 +369,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 error_details=job.get("error_details", "Nenhum detalhe de erro encontrado.")
             )
         
+        # Caso 3: Job em andamento
         else:
-            # Para todos os outros status, retorna uma resposta leve SEM o relatório.
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status
@@ -367,4 +380,3 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
