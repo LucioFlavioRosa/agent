@@ -116,8 +116,18 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
         report_text_only = full_llm_response_obj['reposta_final']
-        
         job_info['data']['analysis_report'] = report_text_only
+
+        recomendacoes_agente = agente.main(
+            tipo_analise='extracao_resumo_mudancas',
+            repositorio=payload.repo_name,
+            nome_branch=payload.branch_name,
+            instrucoes_extras='  ',
+            usar_rag=False
+        )
+        recom_obj = recomendacoes_agente['resultado']['reposta_final']
+        recomendations = recom_obj['reposta_final']
+        job_info['data']['recomendations'] = recomendations
         
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
@@ -170,7 +180,7 @@ def run_workflow_task(job_id: str):
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': job_info['data']['analysis_report']
+                    'instrucoes_extras': job_info['data']['recomendations']
                 })
             else:
                 lightweight_changeset = {
@@ -349,6 +359,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
