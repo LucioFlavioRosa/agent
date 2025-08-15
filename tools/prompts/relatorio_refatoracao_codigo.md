@@ -56,3 +56,18 @@ O código completo do repositório é fornecido abaixo no formato de um dicioná
     "caminho/para/pasta/arquivo3.py": "conteúdo do arquivo 3",
     # ...e assim por diante para todos os arquivos do repositório
 }
+
+## FORMATO DA SAÍDA ESPERADA
+
+Sua resposta final deve ser **um único bloco de código JSON válido**. O JSON deve conter DUAS chaves no nível principal: `relatorio_para_humano` e `plano_de_mudancas_para_maquina`.
+
+-   **`relatorio_para_humano`**: Deve conter o relatório de análise completo, detalhado e bem formatado em Markdown, como você faria para um colega desenvolvedor.
+-   **`plano_de_mudancas_para_maquina`**: Deve conter APENAS o **Plano de Refatoração:** 
+
+**SIGA ESTRITAMENTE O FORMATO ABAIXO.**
+
+```json
+{
+  "relatorio_para_humano": "## Relatório de Refatoração\n\n### Análise do Arquivo `tools/github_reader.py`\n\nO arquivo apresenta uma boa estrutura, porém a função `_conectar_repositorio` pode ser otimizada...\n\n- **Ponto Positivo:** Uso de `get_git_tree` é eficiente.\n- **Ponto a Melhorar:** A gestão de token poderia ser mais robusta...",
+  "plano_de_mudancas_para_maquina": "- Para o arquivo `tools/github_reader.py`, refatore a função `_conectar_repositorio` para centralizar a criação do cliente Github.\n- Para o arquivo `agents/agente_revisor.py`, renomeie a variável `codigo` para `payload_codigo` para evitar ambiguidade."
+}
