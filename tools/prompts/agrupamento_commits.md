@@ -59,7 +59,7 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
   "resumo_geral": "O plano de refatoração foi dividido em 3 Pull Requests temáticos, priorizados e sequenciados para uma implementação incremental e segura.",
   "pr_grupo_1_seguranca_critica": {
     "resumo_do_pr": "Corrige vulnerabilidade crítica de Injeção de SQL no login",
-    "descricao_do_pr": "Este PR foca em mitigar um risco de segurança de alto impacto. A query de autenticação foi parametrizada para prevenir SQL Injection. Dada a criticidade, esta mudança deve ser revisada e integrada com prioridade máxima. prioridade_de_revisao: CRÍTICA, ordem_de_merge_sugerida: 1, revisores_sugeridos": Especialista em Segurança, Desenvolvedor Sênior (Backend),",
+    "descricao_do_pr": "Este PR foca em mitigar um risco de segurança de alto impacto. A query de autenticação foi parametrizada para prevenir SQL Injection. Dada a criticidade, esta mudança deve ser revisada e integrada com prioridade máxima. prioridade_de_revisao: CRÍTICA, ordem_de_merge_sugerida: 1, revisores_sugeridos: Especialista em Segurança, Desenvolvedor Sênior (Backend),",
     "conjunto_de_mudancas": [
       {
         "caminho_do_arquivo": "app/auth.py",
@@ -83,7 +83,7 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
   },
   "pr_grupo_3_limpeza_e_documentacao": {
     "resumo_do_pr": "Docs: Atualiza README e remove código morto",
-    "descricao_do_pr": "Este PR contém melhorias de baixo risco. O README foi atualizado para refletir as novas variáveis de ambiente e uma função legada que não era mais utilizada foi removida. Pode ser revisado por qualquer membro da equipe. prioridade_de_revisao": BAIXA, ordem_de_merge_sugerida : 3, revisores_sugeridos: "Qualquer Membro da Equipe",
+    "descricao_do_pr": "Este PR contém melhorias de baixo risco. O README foi atualizado para refletir as novas variáveis de ambiente e uma função legada que não era mais utilizada foi removida. Pode ser revisado por qualquer membro da equipe. prioridade_de_revisao: BAIXA, ordem_de_merge_sugerida : 3, revisores_sugeridos: "Qualquer Membro da Equipe",
     "conjunto_de_mudancas": [
       {
         "caminho_do_arquivo": "README.md",
