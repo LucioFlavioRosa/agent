@@ -14,13 +14,6 @@ Sua auditoria deve ser completa, cobrindo os seguintes eixos. Use seu conhecimen
     -   [ ] Funções (Tamanho, Responsabilidade Única, Nº de Parâmetros)
     -   [ ] Complexidade (Aninhamento excessivo, Clareza vs. "Código Inteligente")
     -   [ ] Tratamento de Erros (Blocos `except` genéricos, Falta de contexto)
-    -   [ ] Comentários (Explicam o "porquê", não o "o quê")
-
--   **Performance e Eficiência:**
-    -   [ ] Complexidade Algorítmica (Loops O(n²), buscas ineficientes)
-    -   [ ] Estruturas de Dados Ideais (Uso de `list` vs. `set`/`dict` para buscas)
-    -   [ ] Operações de I/O (Chamadas síncronas/bloqueantes em código `async`)
-    -   [ ] Gerenciamento de Memória (Uso de geradores/streaming para dados grandes)
 
 -   **Simplificação e Débito Técnico:**
     -   [ ] Código Morto (Imports, funções ou variáveis não utilizadas)
