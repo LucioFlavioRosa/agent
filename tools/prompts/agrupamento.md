@@ -20,10 +20,6 @@ Sua principal ferramenta é o campo `"justificativa"` em cada item do changeset.
     - **Exemplos de Grupos:**
         - `Correções de Segurança`: Agrupa mudanças que mitigam vulnerabilidades (ex: correção de SQL Injection, ajuste de regras de firewall, remoção de segredos).
         - `Refatoração para Testabilidade`: Agrupa mudanças que visam facilitar os testes (ex: introdução de Injeção de Dependência, separação de responsabilidades).
-        - `Melhoria de Performance`: Agrupa mudanças focadas em otimizar algoritmos, queries de banco de dados ou configurações de infraestrutura.
-        - `Melhoria da Legibilidade (Clean Code)`: Agrupa mudanças de baixo risco que melhoram a clareza do código (ex: renomear variáveis, extrair funções, remover código morto).
-        - `Correção Arquitetural (SOLID/Design Patterns)`: Agrupa mudanças estruturais significativas (ex: aplicação do DIP, introdução de um padrão Strategy).
-        - `Otimização de Custos (FinOps)`: Agrupa mudanças em IaC (Terraform) focadas em reduzir custos (ex: rightsizing, políticas de ciclo de vida).
 
 **2. Por Domínio Afetado (O "Onde"):** Se as mudanças forem muito diversas, agrupe-as pela área do sistema que elas impactam.
     - **Exemplos de Grupos:**
