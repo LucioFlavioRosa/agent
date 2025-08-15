@@ -109,6 +109,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         job_info['status'] = 'comecando_analise_llm'
         job_store.set_job(job_id, job_info)
 
+        # A chamada principal à IA permanece a mesma
         resposta_agente = agente.main(
             tipo_analise=payload.analysis_type,
             repositorio=payload.repo_name,
@@ -118,19 +119,20 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         )
         
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
-        report_text_only = full_llm_response_obj['reposta_final']
-        job_info['data']['analysis_report'] = report_text_only
+        json_string_from_llm = full_llm_response_obj['reposta_final']
 
-        recomendations = self.llm_provider.executar_analise_llm(
-            tipo_analise='extracao_resumo_mudancas',
-            codigo=report_text_only,
-            analise_extra='  ',
-            usar_rag=False,
-            model_name='gpt-5',
-            max_token_out='2000'
-        )
+        # --- MUDANÇA: Analisar o JSON com duas chaves ---
+        print(f"[{job_id}] Resposta da IA recebida. Analisando o JSON de relatório e recomendações.")
         
-        job_info['data']['recomendations'] = str(recomendations)
+        parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
+        
+        report_text_for_human = parsed_response.get("relatorio_para_humano", "Relatório não fornecido pela IA.")
+        recommendations_for_machine = parsed_response.get("plano_de_mudancas_para_maquina", "Plano de mudanças não fornecido pela IA.")
+
+        # Salva cada parte em seu respectivo campo
+        job_info['data']['analysis_report'] = report_text_for_human
+        job_info['data']['recomendations'] = recommendations_for_machine
+        # --- FIM DA MUDANÇA ---
         
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
@@ -180,10 +182,12 @@ def run_workflow_task(job_id: str):
             agent_params['usar_rag'] = job_info.get("data", {}).get("usar_rag", False)
             
             if i == 0:
+                instrucoes_concisas = job_info['data'].get('recomendations', job_info['data']['analysis_report'])
+                
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': job_info['data']['recomendations']
+                    'instrucoes_extras': instrucoes_concisas # <--- MUDANÇA AQUI
                 })
             else:
                 lightweight_changeset = {
@@ -362,6 +366,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
