@@ -133,12 +133,15 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
 
+# Em mcp_server_fastapi.py, substitua esta função
+
 def run_workflow_task(job_id: str):
     job_info = None
     try:
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado no início do workflow.")
         
+        # --- Construção das dependências (correto) ---
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
         llm_provider = OpenAILLMProvider(rag_retriever=rag_retriever)
@@ -149,10 +152,18 @@ def run_workflow_task(job_id: str):
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
+        # --- LÓGICA DE FLUXO DE DADOS FINAL E CORRIGIDA ---
+
+        # Variáveis locais para armazenar os resultados de cada etapa
+        resultado_refatoracao = {}
+        resultado_agrupamento = {}
         previous_step_result = None
+
+        # Executa o workflow passo a passo em memória
         for i, step in enumerate(workflow['steps']):
             job_info['status'] = step['status_update']
             job_store.set_job(job_id, job_info)
+            print(f"[{job_id}] ... Executando passo: {job_info['status']}")
             
             agent_params = step['params'].copy()
             agent_params['usar_rag'] = job_info.get("data", {}).get("usar_rag", False)
@@ -178,29 +189,37 @@ def run_workflow_task(job_id: str):
             if not json_string.strip():
                 raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
             
-            previous_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
 
+            # Armazena o resultado na variável local apropriada
             if i == 0:
-                job_info['data']['resultado_refatoracao'] = previous_step_result
+                resultado_refatoracao = current_step_result
+                print(f"[{job_id}] Resultado da refatoração obtido.")
             else:
-                job_info['data']['resultado_agrupamento'] = previous_step_result
-        
+                resultado_agrupamento = current_step_result
+                print(f"[{job_id}] Resultado do agrupamento obtido.")
+            
+            # O resultado do passo atual se torna o input do próximo
+            previous_step_result = current_step_result
+
+        # O loop do workflow terminou. Agora, salva os resultados no job_info de uma vez.
+        job_info['data']['resultado_refatoracao'] = resultado_refatoracao
+        job_info['data']['resultado_agrupamento'] = resultado_agrupamento
+        job_info['data']['diagnostic_logs'] = {
+            "1_json_refatoracao_inicial": resultado_refatoracao,
+            "2_json_agrupamento_recebido": resultado_agrupamento
+        }
         job_store.set_job(job_id, job_info)
+        print(f"[{job_id}] Resultados finais do workflow salvos no job.")
+
+        # --- FIM DA CORREÇÃO ---
 
         job_info['status'] = 'populating_data'
         job_store.set_job(job_id, job_info)
         
-        refatoracao_data = job_info['data'].get('resultado_refatoracao', {})
-        agrupamento_data = job_info['data'].get('resultado_agrupamento', {})
-        
-        job_info['data']['diagnostic_logs'] = {
-            "1_json_refatoracao_inicial": refatoracao_data,
-            "2_json_agrupamento_recebido": agrupamento_data
-        }
-        
         dados_preenchidos = changeset_filler.main(
-            json_agrupado=agrupamento_data,
-            json_inicial=refatoracao_data
+            json_agrupado=resultado_agrupamento,
+            json_inicial=resultado_refatoracao
         )
         
         dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
@@ -335,3 +354,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
