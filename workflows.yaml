@@ -7,7 +7,7 @@ relatorio_cleancode:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
       params:
-        tipo_analise: "agrupamento"
+        tipo_analise: "agrupamento_commits"
         
 relatorio_performance_eficiencia:
   description: "Refatoração de código, olhando somente pontos de performance."
@@ -18,7 +18,7 @@ relatorio_performance_eficiencia:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
       params:
-        tipo_analise: "agrupamento"
+        tipo_analise: "agrupamento_commits"
 
 relatorio_simplicacao_debito_tecnico:
   description: "Refatoração de código, olhando somente pontos de debito tecnico."
@@ -29,4 +29,4 @@ relatorio_simplicacao_debito_tecnico:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
       params:
-        tipo_analise: "agrupamento"
+        tipo_analise: "agrupamento_commits"
