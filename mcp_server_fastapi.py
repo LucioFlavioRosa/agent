@@ -19,6 +19,9 @@ from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
 from tools.github_reader import GitHubRepositoryReader
 
+from domain.interfaces.llm_provider_interface import ILLMProvider
+from domain.interfaces.llm_provider_interface import ILLMProvider
+
 
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
@@ -118,16 +121,16 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         report_text_only = full_llm_response_obj['reposta_final']
         job_info['data']['analysis_report'] = report_text_only
 
-        recomendacoes_agente = agente.main(
+        recomendations = self.llm_provider.executar_analise_llm(
             tipo_analise='extracao_resumo_mudancas',
-            repositorio=payload.repo_name,
-            nome_branch=payload.branch_name,
-            instrucoes_extras='  ',
-            usar_rag=False
+            codigo=report_text_only,
+            analise_extra='  ',
+            usar_rag=False,
+            model_name='gpt-5',
+            max_token_out='2000'
         )
-        recom_obj = recomendacoes_agente['resultado']['reposta_final']
-        recomendations = recom_obj['reposta_final']
-        job_info['data']['recomendations'] = recomendations
+        
+        job_info['data']['recomendations'] = str(recomendations)
         
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
@@ -359,6 +362,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
