@@ -53,3 +53,14 @@ relatorio_teste_unitario:
     - status_update: "agrupando_commits"
       params:
         tipo_analise: "agrupamento_commits"
+
+relatorio_owasp:
+  description: "Refatoração de código, olhando somente para a segurança segundo OWSASP."
+  extensions: [".py"] 
+  steps:
+    - status_update: "aplicando_as_mudancas_apontadas"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
+      params:
+        tipo_analise: "agrupamento_commits"
