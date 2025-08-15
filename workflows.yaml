@@ -1,56 +1,32 @@
-# Arquivo: workflows.yaml (VERSÃO CORRIGIDA COM A CHAVE 'extensions')
-
-relatorio_analise_de_design_de_codigo:
-  description: "Refatoração de código, aplicação de design patterns e implementação dos princípios SOLID."
-  extensions: [".py"] # <-- ADICIONADO
+relatorio_cleancode:
+  description: "Refatoração de código, olhando somente o clean code."
+  extensions: [".py"] 
   steps:
-    - status_update: "refactoring_code"
+    - status_update: "aplicando_as_mudancas_apontadas"
       params:
-        tipo_analise: "aplicacao_mudancas_design"
-    - status_update: "grouping_commits"
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
+      params:
+        tipo_analise: "agrupamento"
+        
+relatorio_performance_eficiencia:
+  description: "Refatoração de código, olhando somente pontos de performance."
+  extensions: [".py"] 
+  steps:
+    - status_update: "aplicando_as_mudancas_apontadas"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
       params:
         tipo_analise: "agrupamento"
 
-relatorio_refatoracao_codigo:
-  description: "Analise focada em otimização de performance e na filosofia Clean Code."
-  extensions: [".py"] # <-- ADICIONADO
+relatorio_simplicacao_debito_tecnico:
+  description: "Refatoração de código, olhando somente pontos de debito tecnico."
+  extensions: [".py"] 
   steps:
-    - status_update: "refactoring_code"
+    - status_update: "aplicando_as_mudancas_apontadas"
       params:
-        tipo_analise: "aplicacao_refatoracao"
-    - status_update: "grouping_commits"
-      params:
-        tipo_analise: "agrupamento"
-
-relatorio_conformidades:
-  description: "Rastreie todas as funções e métodos que foram renomeados ou tiveram sua assinatura alterada (parâmetros adicionados, removidos ou reordenados). Verifique cada local de chamada no código para garantir que a atualização foi aplicada consistentemente"
-  extensions: [".py", ".txt"] # <-- ADICIONADO
-  steps:
-    - status_update: "refactoring_code"
-      params:
-        tipo_analise: "aplicacao_conformidades"
-    - status_update: "grouping_commits"
-      params:
-        tipo_analise: "agrupamento"
-
-relatorio_documentacao_codigo:
-  description: "Realiza uma revisão técnica aprofundada focada exclusivamente na qualidade..."
-  extensions: [".py"] # <-- ADICIONADO
-  steps:
-    - status_update: "gerando_documentacao"
-      params:
-        tipo_analise: "aplicacao_documentacao"    
-    - status_update: "grouping_commits"
-      params:
-        tipo_analise: "agrupamento"
-
-relatorio_avaliacao_terraform:
-  description: "O objetivo é identificar pontos de melhoria em quatro áreas críticas..."
-  extensions: [".tf", ".tfvars"] # <-- ADICIONADO
-  steps:
-    - status_update: "revisando_terraform"
-      params:
-        tipo_analise: "aplicacao_terraform"
-    - status_update: "grouping_commits"
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
       params:
         tipo_analise: "agrupamento"
