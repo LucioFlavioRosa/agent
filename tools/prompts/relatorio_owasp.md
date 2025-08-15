@@ -23,6 +23,7 @@ Use seu conhecimento profundo para encontrar evidências de vulnerabilidades nos
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 O JSON de saída deve conter exatamente duas chaves no nível principal: `relatorio_para_humano` e `plano_de_mitigacao_para_maquina`.
+o `plano_de_mitigacao_para_maquina`é extamente a tabela com o nome do arquivos que serao modificados a descrição de cada modificação
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
