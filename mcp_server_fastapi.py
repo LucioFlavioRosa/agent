@@ -150,48 +150,45 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
 # Em mcp_server_fastapi.py, substitua esta função
 
+# Em mcp_server_fastapi.py, substitua esta função
+
 def run_workflow_task(job_id: str):
     job_info = None
     try:
-        # Carrega o estado inicial do job
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado no início do workflow.")
         
-        # Constrói as dependências
+        # --- Construção das dependências ---
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
         llm_provider = OpenAILLMProvider(rag_retriever=rag_retriever)
         agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
         changeset_filler = ChangesetFiller()
 
-        # Pega as definições do workflow
+        # --- Execução do Workflow ---
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
         
-        # Variáveis para armazenar os resultados das etapas
         resultado_refatoracao = {}
         resultado_agrupamento = {}
         previous_step_result = None
 
-        # Executa o workflow passo a passo
         for i, step in enumerate(workflow['steps']):
             job_info['status'] = step['status_update']
-            job_store.set_job(job_id, job_info) # Atualiza o status para o cliente
+            job_store.set_job(job_id, job_info)
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
             
             agent_params = step['params'].copy()
             agent_params['usar_rag'] = job_info.get("data", {}).get("usar_rag", False)
             
             if i == 0:
-                # O input do primeiro passo é o relatório de análise
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
                     'instrucoes_extras': job_info['data']['analysis_report']
                 })
             else:
-                # O input dos passos seguintes é o resultado do passo anterior
                 lightweight_changeset = {
                     "resumo_geral": previous_step_result.get("resumo_geral"),
                     "conjunto_de_mudancas": [
@@ -208,7 +205,6 @@ def run_workflow_task(job_id: str):
             
             current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
             
-            # Armazena o resultado na variável local apropriada
             if i == 0:
                 resultado_refatoracao = current_step_result
             else:
@@ -216,7 +212,7 @@ def run_workflow_task(job_id: str):
             
             previous_step_result = current_step_result
 
-        # Fim do workflow, agora vamos processar os resultados
+        # --- Processamento Pós-Workflow ---
         job_info['data']['resultado_refatoracao'] = resultado_refatoracao
         job_info['data']['resultado_agrupamento'] = resultado_agrupamento
         job_info['data']['diagnostic_logs'] = {
@@ -237,26 +233,27 @@ def run_workflow_task(job_id: str):
             if nome_grupo == "resumo_geral": continue
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
 
-        # --- LÓGICA DE VERIFICAÇÃO E COMMIT CORRIGIDA ---
-        if not dados_finais_formatados.get("grupos"):
-            print(f"[{job_id}] AVISO: Nenhum grupo de mudança foi formatado para commit. Finalizando o job.")
-            job_info['data']['commit_details'] = [] # Define como vazio
-        else:
-            print(f"[{job_id}] {len(dados_finais_formatados['grupos'])} grupos prontos para commit.")
-            job_info['status'] = 'committing_to_github'
-            job_store.set_job(job_id, job_info)
-            commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(nome_repo=job_info['data']['repo_name'], dados_agrupados=dados_finais_formatados)
-            job_info['data']['commit_details'] = commit_results
+        # --- LÓGICA DE COMMIT CORRIGIDA E SIMPLIFICADA ---
+        # A decisão de commitar ou não é delegada para a função de commit.
+        
+        print(f"[{job_id}] Preparando para commitar {len(dados_finais_formatados.get('grupos', []))} grupos.")
+        job_info['status'] = 'committing_to_github'
+        job_store.set_job(job_id, job_info)
+        
+        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
+            nome_repo=job_info['data']['repo_name'], 
+            dados_agrupados=dados_finais_formatados
+        )
+        job_info['data']['commit_details'] = commit_results
+        # --- FIM DA CORREÇÃO ---
 
         job_info['status'] = 'completed'
-        job_store.set_job(job_id, job_info) # Salva o estado final completo
+        job_store.set_job(job_id, job_info)
         print(f"[{job_id}] Processo concluído com sucesso!")
 
     except Exception as e:
         traceback.print_exc()
-        # Passa a versão mais atual do job_info para o handler de exceção
         handle_task_exception(job_id, e, job_info.get('status', 'run_workflow') if job_info else 'run_workflow')
-
 
 # --- Endpoints da API ---
 
@@ -366,6 +363,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
