@@ -44,7 +44,6 @@ class OpenAILLMProvider(ILLMProvider):
         # Converte para minúsculas para uma comparação robusta
         model_lower = model_name.lower()
         
-        # --- MUDANÇA: Lógica de decisão ---
         if "gpt-5" in model_lower:
             print(f"[OpenAI Handler] Usando parâmetros para modelo legado: '{model_name}'")
             return {
@@ -53,9 +52,8 @@ class OpenAILLMProvider(ILLMProvider):
             
         else:
             print(f"[OpenAI Handler] Usando parâmetros para modelo moderno: '{model_name}'")
-            # Modelos modernos geralmente não precisam de 'temperature' para tarefas determinísticas
             return {
-                "max_tokens": max_token_out
+                "max_tokens": max_token_out,
                 "temperature": 0.3
             }
 
