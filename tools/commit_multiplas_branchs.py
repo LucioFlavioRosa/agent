@@ -1,13 +1,10 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL E INTELIGENTE)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL E CORRIGIDA)
 
 import json
-from github import GithubException
-from tools import github_connector
-from typing import Dict, Any, Optional, List
+from github import GithubException, UnknownObjectException
+from tools.github_connector import GitHubConnector # Corrigido para importar a classe
+from typing import Dict, Any, List
 
-# ==============================================================================
-# A FUNÇÃO AUXILIAR _processar_uma_branch NÃO PRECISA DE MUDANÇAS.
-# ==============================================================================
 def _processar_uma_branch(
     repo,
     nome_branch: str,
@@ -18,129 +15,119 @@ def _processar_uma_branch(
     conjunto_de_mudancas: list
 ) -> Dict[str, Any]:
     """
-    Processa uma única branch, realiza os commits e cria um Pull Request.
-    Retorna um dicionário com os detalhes da operação.
+    Processa uma única branch, lida com criação, modificação e remoção
+    de arquivos, e cria um Pull Request.
     """
-    print(f"\n--- Processando o Lote para a Branch: '{nome_branch}' ---")
+    print(f"\n--- Processando Lote para a Branch: '{nome_branch}' ---")
     
     resultado_branch = {
         "branch_name": nome_branch,
         "success": False,
         "pr_url": None,
-        "message": ""
+        "message": "",
+        "arquivos_modificados": [] # Adicionado para melhor feedback
     }
-
     commits_realizados = 0
 
-    # 1. Criação da Branch
     try:
         ref_base = repo.get_git_ref(f"heads/{branch_de_origem}")
         repo.create_git_ref(ref=f"refs/heads/{nome_branch}", sha=ref_base.object.sha)
-        print(f"Branch '{nome_branch}' criada com sucesso.")
+        print(f"Branch '{nome_branch}' criada a partir de '{branch_de_origem}'.")
     except GithubException as e:
         if e.status == 422 and "Reference already exists" in str(e.data):
-            print(f"AVISO: A branch '{nome_branch}' já existe. Os commits serão adicionados a ela.")
+            print(f"AVISO: A branch '{nome_branch}' já existe. Commits serão adicionados a ela.")
         else:
             raise
 
-    # 2. Loop de Commits
-    print("Iniciando a aplicação dos arquivos (um commit por arquivo)...")
+    print(f"Iniciando aplicação de {len(conjunto_de_mudancas)} mudanças...")
     for mudanca in conjunto_de_mudancas:
-        # Pula qualquer item que seja explicitamente marcado como inalterado.
-        if mudanca.get("status") == "INALTERADO":
-            continue
-
         caminho = mudanca.get("caminho_do_arquivo")
-        conteudo = mudanca.get("conteudo")
-        justificativa = mudanca.get("justificativa", "")
+        status = mudanca.get("status", "").upper()
+        conteudo = mudanca.get("conteudo") # Pode ser None para REMOVIDO
+        justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}")
 
-        if conteudo is None or not caminho:
+        if not caminho:
+            print("  [AVISO] Mudança ignorada por não ter 'caminho_do_arquivo'.")
             continue
 
-        sha_arquivo_existente = None
         try:
-            arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
-            sha_arquivo_existente = arquivo_existente.sha
-        except GithubException as e:
-            if e.status != 404:
-                print(f"ERRO ao verificar o arquivo '{caminho}': {e}")
-                continue
-        
-        try:
-            assunto_commit = f"feat: {caminho}" if not sha_arquivo_existente else f"refactor: {caminho}"
-            commit_message_completo = f"{assunto_commit}\n\n{justificativa}"
+            # Lógica explícita baseada no STATUS
+            sha_arquivo_existente = None
+            try:
+                arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
+                sha_arquivo_existente = arquivo_existente.sha
+            except UnknownObjectException:
+                pass # Arquivo não existe, o que é esperado para CRIADO/ADICIONADO
 
-            if sha_arquivo_existente:
-                repo.update_file(path=caminho, message=commit_message_completo, content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
+            if status in ("ADICIONADO", "CRIADO"):
+                if sha_arquivo_existente:
+                    print(f"  [AVISO] Arquivo '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
+                    repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
+                else:
+                    repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo, branch=nome_branch)
+                print(f"  [CRIADO/MODIFICADO] {caminho}")
+                commits_realizados += 1
+                resultado_branch["arquivos_modificados"].append(caminho)
+
+            elif status == "MODIFICADO":
+                if not sha_arquivo_existente:
+                    print(f"  [ERRO] Arquivo '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
+                    continue
+                repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [MODIFICADO] {caminho}")
-            else:
-                repo.create_file(path=caminho, message=commit_message_completo, content=conteudo, branch=nome_branch)
-                print(f"  [CRIADO]     {caminho}")
-            
-            commits_realizados += 1
-        except GithubException as e:
-            print(f"ERRO ao commitar o arquivo '{caminho}': {e}")
-            
-    print("Aplicação de commits concluída para esta branch.")
+                commits_realizados += 1
+                resultado_branch["arquivos_modificados"].append(caminho)
 
-    # 3. Criação do Pull Request (somente se houver commits)
+            elif status == "REMOVIDO":
+                if not sha_arquivo_existente:
+                    print(f"  [AVISO] Arquivo '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
+                    continue
+                repo.delete_file(path=caminho, message=f"refactor: remove {caminho}", sha=sha_arquivo_existente, branch=nome_branch)
+                print(f"  [REMOVIDO] {caminho}")
+                commits_realizados += 1
+                resultado_branch["arquivos_modificados"].append(caminho)
+            
+            else:
+                print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo '{caminho}'. Ignorando.")
+
+        except GithubException as e:
+            print(f"ERRO ao processar o arquivo '{caminho}': {e.data.get('message', str(e))}")
+        except Exception as e:
+            print(f"ERRO inesperado ao processar o arquivo '{caminho}': {e}")
+            
     if commits_realizados > 0:
         try:
             print(f"\nCriando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
-            pr_body = descricao_pr if descricao_pr else mensagem_pr
-            pr = repo.create_pull(title=mensagem_pr, body=pr_body, head=nome_branch, base=branch_alvo_do_pr)
-            print(f"Pull Request criado com sucesso! Acesse em: {pr.html_url}")
-            
-            resultado_branch["success"] = True
-            resultado_branch["pr_url"] = pr.html_url
-            resultado_branch["message"] = f"Pull Request criado com sucesso."
-            
+            pr = repo.create_pull(title=mensagem_pr, body=descricao_pr, head=nome_branch, base=branch_alvo_do_pr)
+            print(f"Pull Request criado com sucesso! URL: {pr.html_url}")
+            resultado_branch.update({"success": True, "pr_url": pr.html_url, "message": "PR criado."})
         except GithubException as e:
-            if e.status == 422 and "A pull request for these commits already exists" in str(e.data.get('message', '')):
-                print(f"AVISO: Um Pull Request para a branch '{nome_branch}' já existe. Buscando link...")
-                prs_existentes = repo.get_pulls(state='open', head=f'{repo.owner.login}:{nome_branch}', base=branch_alvo_do_pr)
-                pr_encontrado = prs_existentes[0] if prs_existentes.totalCount > 0 else None
-                
-                if pr_encontrado:
-                    resultado_branch["success"] = True
-                    resultado_branch["pr_url"] = pr_encontrado.html_url
-                    resultado_branch["message"] = "Um Pull Request para esta branch já existia."
-                else:
-                    resultado_branch["success"] = True
-                    resultado_branch["message"] = "API indicou que o PR já existe, mas não foi possível encontrar o link."
+            if e.status == 422 and "A pull request for these commits already exists" in str(e.data):
+                print("AVISO: PR para esta branch já existe.")
+                resultado_branch.update({"success": True, "message": "PR já existente."})
             else:
-                print(f"ERRO: Não foi possível criar o Pull Request para '{nome_branch}'. Erro: {e}")
-                raise
+                print(f"ERRO ao criar PR para '{nome_branch}': {e}")
+                resultado_branch["message"] = f"Erro ao criar PR: {e.data.get('message', str(e))}"
     else:
-        print(f"\nNenhum commit foi realizado para a branch '{nome_branch}'. Pulando a criação do Pull Request.")
-        resultado_branch["success"] = True
-        resultado_branch["message"] = "Nenhum commit realizado, PR não foi necessário."
+        print(f"\nNenhum commit realizado para a branch '{nome_branch}'. Pulando criação do PR.")
+        resultado_branch.update({"success": True, "message": "Nenhuma mudança para commitar."})
 
     return resultado_branch
 
 
-# ==============================================================================
-# A FUNÇÃO ORQUESTRADORA AGORA VERIFICA SE HÁ MUDANÇAS REAIS ANTES DE PROCESSAR
-# ==============================================================================
-# Em tools/commit_multiplas_branchs.py, substitua esta função
-
 def processar_e_subir_mudancas_agrupadas(
     nome_repo: str,
-    dados_agrupados,
+    dados_agrupados: dict,
     base_branch: str = "main"
 ) -> List[Dict[str, Any]]:
     """
-    Função principal que orquestra a criação de múltiplas branches e PRs
-    e retorna uma lista com os resultados de cada uma.
+    Função principal que orquestra a criação de múltiplas branches e PRs.
     """
     resultados_finais = []
-
     try:
-        if isinstance(dados_agrupados, str):
-            dados_agrupados = json.loads(dados_agrupados)
-
         print("--- Iniciando o Processo de Pull Requests Empilhados ---")
-        repo = github_connector.connection(repositorio=nome_repo)
+        # --- MUDANÇA: Usar a classe GitHubConnector ---
+        repo = GitHubConnector.connection(repositorio=nome_repo)
 
         branch_anterior = base_branch
         lista_de_grupos = dados_agrupados.get("grupos", [])
@@ -159,27 +146,9 @@ def processar_e_subir_mudancas_agrupadas(
                 print("AVISO: Um grupo foi ignorado por não ter uma 'branch_sugerida'.")
                 continue
             
-            # --- MUDANÇA CRÍTICA: LÓGICA DE FILTRAGEM E LOGS ---
-            print(f"\nAnalisando grupo para a branch '{nome_da_branch_atual}'. Total de {len(conjunto_de_mudancas)} mudanças recebidas.")
-            
-            mudancas_reais = []
-            status_validos_para_commit = ["MODIFICADO", "ADICIONADO", "CRIADO", "REMOVIDO"]
-
-            for mudanca in conjunto_de_mudancas:
-                status = mudanca.get("status", "N/A").upper() # Pega o status e converte para maiúsculas
-                caminho = mudanca.get("caminho_do_arquivo", "N/A")
-
-                if status in status_validos_para_commit:
-                    print(f"  [ACEITO] Arquivo '{caminho}' com status '{status}' será incluído.")
-                    mudancas_reais.append(mudanca)
-                else:
-                    print(f"  [IGNORADO] Arquivo '{caminho}' com status '{status}' (ou INALTERADO) será filtrado.")
-            
-            if not mudancas_reais:
-                print(f"AVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança aplicável e será ignorado.")
-                print("-" * 60)
+            if not conjunto_de_mudancas:
+                print(f"AVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança e será ignorado.")
                 continue
-            # --- FIM DA MUDANÇA ---
 
             resultado_da_branch = _processar_uma_branch(
                 repo=repo,
@@ -188,12 +157,12 @@ def processar_e_subir_mudancas_agrupadas(
                 branch_alvo_do_pr=branch_anterior,
                 mensagem_pr=resumo_do_pr,
                 descricao_pr=descricao_do_pr,
-                conjunto_de_mudancas=mudancas_reais # Passa a lista filtrada
+                conjunto_de_mudancas=conjunto_de_mudancas
             )
             
             resultados_finais.append(resultado_da_branch)
 
-            if resultado_da_branch["success"]:
+            if resultado_da_branch["success"] and resultado_da_branch.get("pr_url"):
                 branch_anterior = nome_da_branch_atual
             
             print("-" * 60)
@@ -201,12 +170,6 @@ def processar_e_subir_mudancas_agrupadas(
         return resultados_finais
 
     except Exception as e:
-        print(f"ERRO FATAL NO ORQUESTRADOR: {e}")
-        resultados_finais.append({"success": False, "message": f"Erro fatal no orquestrador: {e}"})
-        return resultados_finais
-
-    except Exception as e:
-        print(f"ERRO FATAL NO ORQUESTRADOR: {e}")
-        resultados_finais.append({"success": False, "message": f"Erro fatal no orquestrador: {e}"})
-        return resultados_finais
-
+        print(f"ERRO FATAL NO ORQUESTRADOR DE COMMITS: {e}")
+        traceback.print_exc()
+        return [{"success": False, "message": f"Erro fatal no orquestrador: {e}"}]
