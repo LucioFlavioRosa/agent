@@ -37,7 +37,7 @@ Sua análise será rigorosamente baseada nos três eixos a seguir, utilizando as
 
 # TAREFAS FINAIS
 
-1.  **Análise Direta e Detalhada:** Apresente suas descobertas de forma estruturada, seguindo cada um dos tópicos da metodologia acima.
+1.  **Análise Direta:** Apresente suas descobertas de forma estruturada, seguindo cada um dos tópicos da metodologia acima, apenas relate nao traga códigos.
 2.  **Grau de Severidade:** Para cada categoria de problemas identificados, atribua um grau de severidade, usando a escala:
     - **Leve:** Melhora a legibilidade ou segue uma convenção. Um "code smell" menor.
     - **Moderado:** Afeta negativamente a manutenção ou introduz um gargalo de performance em cenários específicos.
