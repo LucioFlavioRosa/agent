@@ -15,11 +15,6 @@ Sua auditoria deve ser completa, cobrindo os seguintes eixos. Use seu conhecimen
     -   [ ] Complexidade (Aninhamento excessivo, Clareza vs. "Código Inteligente")
     -   [ ] Tratamento de Erros (Blocos `except` genéricos, Falta de contexto)
 
--   **Simplificação e Débito Técnico:**
-    -   [ ] Código Morto (Imports, funções ou variáveis não utilizadas)
-    -   [ ] Redundância (Violações do princípio DRY)
-    -   [ ] Superengenharia (Complexidade desnecessária, violações de YAGNI/KISS)
-
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **Concisão:** Seja direto e evite verbosidade desnecessária. O relatório deve ser acionável.
 2.  **Severidade:** Atribua uma severidade (`Leve`, `Moderado`, `Severo`) para os grupos de problemas identificados no relatório para humanos.
