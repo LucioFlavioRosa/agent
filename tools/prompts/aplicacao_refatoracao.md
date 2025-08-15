@@ -23,28 +23,6 @@ Você deve seguir estas regras rigorosamente para garantir a qualidade, a consis
 5.  **Consistência de Código:** Mantenha o estilo de código (code style), formatação e convenções de nomenclatura existentes nos arquivos.
 6.  **Atomicidade das Mudanças:** Se uma recomendação afeta múltiplos arquivos (ex: renomear uma função pública), aplique a mudança em **todos** os locais relevantes para garantir que o código continue funcional.
 
-## CHECKLIST DE PADRÕES DE CÓDIGO (LINTING)
-
-Ao modificar os arquivos, além das mudanças principais, garanta que o novo código siga este checklist básico de boas práticas (estilo PEP 8):
-
--   **Comprimento da Linha:** Tente manter as linhas com no máximo 79-99 caracteres para melhor legibilidade.
--   **Indentação:** Use 4 espaços por nível de indentação. Sem mistura de tabs e espaços.
--   **Linhas em Branco:**
-    -   Duas linhas em branco antes de definições de classes e funções de alto nível.
-    -   Uma linha em branco antes de definições de métodos dentro de uma classe.
--   **Organização de Imports:** Organize os imports em três grupos, separados por uma linha em branco: 1. Biblioteca padrão, 2. Bibliotecas de terceiros, 3. Módulos da aplicação.
--   **Convenções de Nomenclatura:**
-    -   `snake_case` para variáveis, funções e métodos.
-    -   `PascalCase` para classes.
-    -   `SNAKE_CASE_MAIUSCULO` para constantes.
--   **Espaçamento e Expressões:**
-    -   Use espaços ao redor de operadores: `x = y + 1`.
-    -   Sem espaço antes de parênteses em chamadas: `minha_funcao()`.
-    -   Use `is not None` em vez de `!= None`.
-    -   Use `if ativo:` em vez de `if ativo == True:`.
--   **Docstrings:** Se você criar novas funções ou classes públicas, adicione uma docstring básica explicando seu propósito.
-
----
 
 ## FORMATO DA SAÍDA ESPERADA
 
