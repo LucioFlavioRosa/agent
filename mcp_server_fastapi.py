@@ -22,17 +22,14 @@ from tools.github_reader import GitHubRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from domain.interfaces.llm_provider_interface import ILLMProvider
 
-
-# --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
     repo_name: str
-    analysis_type: Literal["relatorio_cleancode", "relatorio_performance_eficiencia",
-                           "relatorio_simplicacao_debito_tecnico", "relatorio_solid",
-                            "relatorio_teste_unitario", "relatorio_owasp"]
+    analysis_type: Literal[...]
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
-    usar_rag: bool = Field(False)
-    gerar_relatorio_apenas: bool = Field(False)
+    usar_rag: bool = Field(False, ...)
+    gerar_relatorio_apenas: bool = Field(False, ...)
+    model_name: Optional[str] = Field("gpt4.1", description="Nome do modelo de LLM a ser usado (ex: 'gpt-4o', 'gpt-4-turbo'). Se nulo, usa o padrão.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -115,7 +112,8 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
             repositorio=payload.repo_name,
             nome_branch=payload.branch_name,
             instrucoes_extras=payload.instrucoes_extras,
-            usar_rag=payload.usar_rag
+            usar_rag=payload.usar_rag,
+            model_name=payload.model_name
         )
         
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
@@ -145,12 +143,6 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         traceback.print_exc()
         current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
         handle_task_exception(job_id, e, current_step)
-
-# Em mcp_server_fastapi.py, substitua esta função
-
-# Em mcp_server_fastapi.py, substitua esta função
-
-# Em mcp_server_fastapi.py, substitua esta função
 
 def run_workflow_task(job_id: str):
     job_info = None
@@ -363,6 +355,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
