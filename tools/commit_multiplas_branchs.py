@@ -122,6 +122,8 @@ def _processar_uma_branch(
 # ==============================================================================
 # A FUNÇÃO ORQUESTRADORA AGORA VERIFICA SE HÁ MUDANÇAS REAIS ANTES DE PROCESSAR
 # ==============================================================================
+# Em tools/commit_multiplas_branchs.py, substitua esta função
+
 def processar_e_subir_mudancas_agrupadas(
     nome_repo: str,
     dados_agrupados,
@@ -157,20 +159,28 @@ def processar_e_subir_mudancas_agrupadas(
                 print("AVISO: Um grupo foi ignorado por não ter uma 'branch_sugerida'.")
                 continue
             
-            # [MELHORIA] Cria uma lista apenas com as mudanças que são REAIS (não "INALTERADO").
-            mudancas_reais = [
-                mudanca for mudanca in conjunto_de_mudancas 
-                if mudanca.get("status") != "INALTERADO"
-            ]
+            # --- MUDANÇA CRÍTICA: LÓGICA DE FILTRAGEM E LOGS ---
+            print(f"\nAnalisando grupo para a branch '{nome_da_branch_atual}'. Total de {len(conjunto_de_mudancas)} mudanças recebidas.")
             
-            # [MELHORIA] A verificação agora é feita na lista de mudanças reais.
-            # Se a lista estiver vazia, o grupo inteiro é ignorado.
+            mudancas_reais = []
+            status_validos_para_commit = ["MODIFICADO", "ADICIONADO", "CRIADO", "REMOVIDO"]
+
+            for mudanca in conjunto_de_mudancas:
+                status = mudanca.get("status", "N/A").upper() # Pega o status e converte para maiúsculas
+                caminho = mudanca.get("caminho_do_arquivo", "N/A")
+
+                if status in status_validos_para_commit:
+                    print(f"  [ACEITO] Arquivo '{caminho}' com status '{status}' será incluído.")
+                    mudancas_reais.append(mudanca)
+                else:
+                    print(f"  [IGNORADO] Arquivo '{caminho}' com status '{status}' (ou INALTERADO) será filtrado.")
+            
             if not mudancas_reais:
-                print(f"\nAVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança real e será ignorado.")
+                print(f"AVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança aplicável e será ignorado.")
                 print("-" * 60)
                 continue
+            # --- FIM DA MUDANÇA ---
 
-            # A função de processamento recebe apenas as mudanças que precisam ser aplicadas.
             resultado_da_branch = _processar_uma_branch(
                 repo=repo,
                 nome_branch=nome_da_branch_atual,
@@ -194,3 +204,9 @@ def processar_e_subir_mudancas_agrupadas(
         print(f"ERRO FATAL NO ORQUESTRADOR: {e}")
         resultados_finais.append({"success": False, "message": f"Erro fatal no orquestrador: {e}"})
         return resultados_finais
+
+    except Exception as e:
+        print(f"ERRO FATAL NO ORQUESTRADOR: {e}")
+        resultados_finais.append({"success": False, "message": f"Erro fatal no orquestrador: {e}"})
+        return resultados_finais
+
