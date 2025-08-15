@@ -5,10 +5,6 @@ from typing import Optional, Dict, Any
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 
-# <-- REMOVIDO: Valores padrão não são mais a responsabilidade do agente.
-# modelo_llm = 'gpt-5'
-# max_tokens_saida = 15000
-
 class AgenteRevisor:
     """
     Orquestrador de análise de código via IA, agora desacoplado de implementações concretas.
@@ -50,15 +46,15 @@ class AgenteRevisor:
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         # --- MUDANÇAS AQUI ---
-        model_name: Optional[str] = None,   # O padrão agora é None, repassando a responsabilidade
-        max_token_out: int = 15000          # O valor padrão é definido diretamente aqui
+        model_name: Optional[str] = None,   
+        max_token_out: int = 15000         
     ) -> Dict[str, Any]:
         """
         Função principal do agente. Orquestra a obtenção do código e a chamada para a IA.
         """
         codigo_para_analise = None
 
-        # Passo 1: Determinar a fonte do código (lógica inalterada)
+        # Passo 1: Determinar a fonte do código
         if codigo is None:
             if repositorio:
                 codigo_para_analise = self._get_code(
@@ -75,23 +71,23 @@ class AgenteRevisor:
             print(f"AVISO: Nenhum código encontrado ou fornecido para a análise '{tipo_analise}'.")
             return {"resultado": {"reposta_final": {"reposta_final": "{}"}}}
 
-        # Passo 2: Serializar o código (lógica inalterada)
+        # Passo 2: Serializar o código
         if isinstance(codigo_para_analise, dict):
             codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
         else:
             codigo_str = str(codigo_para_analise)
 
-        # Passo 3: Chamar a IA (lógica inalterada, apenas repassa os parâmetros)
+        # Passo 3: Chamar a IA 
         resultado_da_ia = self.llm_provider.executar_analise_llm(
             tipo_analise=tipo_analise,
             codigo=codigo_str,
             analise_extra=instrucoes_extras,
             usar_rag=usar_rag,
-            model_name=model_name, # Repassa o model_name (que pode ser None)
+            model_name=model_name,
             max_token_out=max_token_out
         )
 
-        # Passo 4: Retornar no formato esperado (lógica inalterada)
+        # Passo 4: Retornar no formato esperado
         return {
             "resultado": {
                 "reposta_final": resultado_da_ia
