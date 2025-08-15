@@ -1,31 +1,39 @@
-# Arquivo: tools/preenchimento.py (VERSÃO FINAL COM LÓGICA DE MERGE)
+# Arquivo: tools/preenchimento.py (VERSÃO FINAL E ROBUSTA COM NORMALIZAÇÃO)
 
 import json
 from domain.interfaces.changeset_filler_interface import IChangesetFiller
 
+def _normalize_path(path: str) -> str:
+    """Função auxiliar para limpar e padronizar um caminho de arquivo."""
+    if not isinstance(path, str):
+        return ""
+    # Remove o prefixo './' se existir
+    if path.startswith('./'):
+        path = path[2:]
+    # Remove espaços em branco no início e no fim
+    return path.strip()
+
 class ChangesetFiller(IChangesetFiller):
     """
-    Implementação que preenche os dados mesclando as informações do
-    JSON agrupado com os detalhes completos do JSON inicial.
+    Implementação final que normaliza os caminhos dos arquivos para garantir
+    uma correspondência robusta entre as saídas dos agentes.
     """
     def main(self, json_agrupado: dict, json_inicial: dict) -> dict:
         print("\n" + "="*50)
-        print("INICIANDO PROCESSO DE PREENCHIMENTO (ChangesetFiller)")
+        print("INICIANDO PROCESSO DE PREENCHIMENTO (ChangesetFiller v2.0 - com Normalização)")
         print("="*50)
 
         if not isinstance(json_inicial, dict) or not json_inicial.get('conjunto_de_mudancas'):
-            print("AVISO CRÍTICO: O JSON inicial (resultado_refatoracao) está vazio ou não contém 'conjunto_de_mudancas'.")
+            print("AVISO CRÍTICO: O JSON inicial (resultado_refatoracao) está vazio ou inválido.")
             return {}
 
-        if not isinstance(json_agrupado, dict):
-            print(f"AVISO CRÍTICO: O JSON agrupado não é um dicionário válido. Tipo recebido: {type(json_agrupado)}.")
-            return {}
-
+        # MUDANÇA CRÍTICA: As chaves do mapa agora são os caminhos NORMALIZADOS
         mapa_de_mudancas_originais = {
-            mudanca['caminho_do_arquivo']: mudanca
+            _normalize_path(mudanca.get('caminho_do_arquivo')): mudanca
             for mudanca in json_inicial.get('conjunto_de_mudancas', [])
+            if mudanca.get('caminho_do_arquivo')
         }
-        print(f"Mapa de dados originais criado com {len(mapa_de_mudancas_originais)} arquivos.")
+        print(f"Mapa de dados originais criado com {len(mapa_de_mudancas_originais)} arquivos (caminhos normalizados).")
 
         resultado_preenchido = {}
         
@@ -40,35 +48,30 @@ class ChangesetFiller(IChangesetFiller):
             conjunto_preenchido = []
             
             for mudanca_leve in conjunto_do_grupo_leve:
-                caminho_do_arquivo = mudanca_leve.get('caminho_do_arquivo')
-                if not caminho_do_arquivo:
+                caminho_original = mudanca_leve.get('caminho_do_arquivo')
+                if not caminho_original:
                     continue
                 
-                if caminho_do_arquivo in mapa_de_mudancas_originais:
-                    # 1. Começa com a mudança completa e detalhada do JSON inicial
-                    mudanca_final = mapa_de_mudancas_originais[caminho_do_arquivo].copy()
+                # MUDANÇA CRÍTICA: Busca no mapa usando o caminho NORMALIZADO
+                caminho_normalizado = _normalize_path(caminho_original)
+                
+                if caminho_normalizado in mapa_de_mudancas_originais:
+                    mudanca_completa = mapa_de_mudancas_originais[caminho_normalizado].copy()
                     
-                    # 2. MUDANÇA CRÍTICA: Atualiza/mescla com os dados do JSON agrupado.
-                    #    Isso garante que justificativas ou status do agrupamento sejam mantidos.
-                    mudanca_final.update(mudanca_leve)
+                    if "conteudo" not in mudanca_completa and "codigo_novo" in mudanca_completa:
+                        mudanca_completa["conteudo"] = mudanca_completa.pop("codigo_novo")
 
-                    # 3. Garante que a chave "conteudo" exista (fallback para "codigo_novo")
-                    if "conteudo" not in mudanca_final and "codigo_novo" in mudanca_final:
-                        mudanca_final["conteudo"] = mudanca_final["codigo_novo"]
-
-                    if mudanca_final.get("conteudo") is not None:
-                        print(f"  [SUCESSO] Detalhes de '{caminho_do_arquivo}' mesclados e preenchidos.")
-                        conjunto_preenchido.append(mudanca_final)
+                    if mudanca_completa.get("conteudo") is not None or mudanca_completa.get("status") == "REMOVIDO":
+                        print(f"  [SUCESSO] Match encontrado para '{caminho_original}' (normalizado para '{caminho_normalizado}'). Conteúdo preenchido.")
+                        conjunto_preenchido.append(mudanca_completa)
                     else:
-                        print(f"  [AVISO] Detalhes de '{caminho_do_arquivo}' encontrados, mas sem conteúdo. Ignorando.")
+                        print(f"  [AVISO] Match para '{caminho_original}' encontrado, mas sem conteúdo. Ignorando.")
                 else:
-                    print(f"  [ERRO] Detalhes para '{caminho_do_arquivo}' NÃO encontrados no JSON inicial. Ignorando.")
+                    print(f"  [ERRO] Match para '{caminho_original}' (normalizado para '{caminho_normalizado}') NÃO encontrado no mapa. Ignorando.")
 
             if conjunto_preenchido:
-                resultado_preenchido[nome_do_grupo] = {
-                    **dados_do_grupo,
-                    'conjunto_de_mudancas': conjunto_preenchido
-                }
+                dados_do_grupo['conjunto_de_mudancas'] = conjunto_preenchido
+                resultado_preenchido[nome_do_grupo] = dados_do_grupo
         
         print("\n" + "="*50)
         print("PROCESSO DE PREENCHIMENTO CONCLUÍDO")
