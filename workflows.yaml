@@ -30,3 +30,15 @@ relatorio_simplicacao_debito_tecnico:
     - status_update: "agrupando_commits"
       params:
         tipo_analise: "agrupamento_commits"
+
+
+relatorio_solid:
+  description: "Refatoração de código, olhando somente os principios SOLID."
+  extensions: [".py"] 
+  steps:
+    - status_update: "aplicando_as_mudancas_apontadas"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
+      params:
+        tipo_analise: "agrupamento_commits"
