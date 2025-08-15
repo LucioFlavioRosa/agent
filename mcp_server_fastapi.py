@@ -25,13 +25,13 @@ from domain.interfaces.llm_provider_interface import ILLMProvider
 class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal["relatorio_cleancode", "relatorio_performance_eficiencia",
-    "relatorio_simplicacao_debito_tecnico", "relatorio_solid", "relatorio_teste_unitario",
-    "relatorio_owasp"]
+                           "relatorio_simplicacao_debito_tecnico", "relatorio_solid", "relatorio_teste_unitario",
+                           "relatorio_owasp"]
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
-    usar_rag: bool = Field(False, description="se quiser usa a RAG com os documentos do cliente essa variavel deve ser True)
-    gerar_relatorio_apenas: bool = Field(False, description="se quiser apenas o relatório essa variavel deve ser True)
-    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado (ex: 'gpt-4o', 'gpt-4-turbo'). Se nulo, usa o padrão.")
+    usar_rag: bool = Field(False, description="se quiser usa a RAG com os documentos do cliente essa variavel deve ser True")
+    gerar_relatorio_apenas: bool = Field(False, description="se quiser gerar apenas o relatorio essa variavel deve ser True")
+    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -357,6 +357,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
