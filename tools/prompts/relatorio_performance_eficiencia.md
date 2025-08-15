@@ -23,6 +23,7 @@ Você deve focar somente em casos mais graves. Sua auditoria deve ser completa, 
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 O JSON de saída deve conter exatamente duas chaves no nível principal: `relatorio_para_humano` e `plano_de_mudancas_para_maquina`.
+o `plano_de_mudancas_para_maquina`é extamente a tabela com o nome dos arquivos que serao modificados a descrição de cada modificação
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
