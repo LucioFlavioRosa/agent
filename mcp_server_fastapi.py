@@ -29,7 +29,7 @@ class StartAnalysisPayload(BaseModel):
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False, ...)
     gerar_relatorio_apenas: bool = Field(False, ...)
-    model_name: Optional[str] = Field("gpt4.1", description="Nome do modelo de LLM a ser usado (ex: 'gpt-4o', 'gpt-4-turbo'). Se nulo, usa o padrão.")
+    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado (ex: 'gpt-4o', 'gpt-4-turbo'). Se nulo, usa o padrão.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -355,6 +355,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
