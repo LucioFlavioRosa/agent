@@ -40,8 +40,9 @@ Sua principal ferramenta é o campo `"justificativa"` em cada item do changeset.
 -   **Descreva o PR:** Para cada grupo, crie um `resumo_do_pr` (título claro e direto) e uma `descricao_do_pr` que explique o problema que está sendo resolvido, a solução implementada e o benefício esperado (ex: "melhora a testabilidade", "reduz o risco de X", "simplifica a manutenção").
 
 ---
-
 ## FORMATO DA SAÍDA ESPERADA
+
+**REMOVA VÍRGULAS TRAIÇOEIRAS:** Garanta que **NÃO HAJA** uma vírgula (`,`) após o último item em qualquer lista (`[]`) ou dicionário (`{}`) no JSON. A presença de uma vírgula no final tornará a saída inválida.
 
 Sua resposta final deve ser **um único bloco de código JSON válido**, sem nenhum texto ou explicação fora dele. A estrutura do JSON deve ser a seguinte, com nomes de chaves para os grupos que reflitam seu conteúdo (ex: `pr_grupo_1_seguranca`, `pr_grupo_2_testabilidade`).
 
