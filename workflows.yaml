@@ -43,6 +43,17 @@ relatorio_solid:
       params:
         tipo_analise: "agrupamento_commits"
 
+relatorio_conformidade:
+  description: "Refatoração de código, ogarantindo que a coesão, a consistência e a estabilidade do código sejam mantidas após refatorações complexas."
+  extensions: [".py"] 
+  steps:
+    - status_update: "aplicando_as_mudancas_apontadas"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
+      params:
+        tipo_analise: "agrupamento_commits"
+
 relatorio_teste_unitario:
   description: "Refatoração de código, olhando somente para a cobertura de testes."
   extensions: [".py"] 
