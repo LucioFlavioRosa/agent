@@ -94,6 +94,8 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
+# Em mcp_server_fastapi.py, substitua esta função
+
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
     job_info = None
     try:
@@ -121,7 +123,10 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         )
         
         full_llm_response_obj = resposta_agente['resultado']['reposta_final']
-        json_string_from_llm = full_llm_response_obj['reposta_final']
+        json_string_from_llm = full_llm_response_obj.get('reposta_final', '') # Usar .get para segurança
+
+        if not json_string_from_llm or not json_string_from_llm.strip():
+            raise ValueError("A resposta da IA (LLM) veio vazia. Isso pode ser causado por filtros de conteúdo da OpenAI ou um erro no modelo. O processo não pode continuar.")
         
         parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
         
@@ -140,9 +145,8 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
     except Exception as e:
         traceback.print_exc()
-        current_step = job_info.get('status', 'report_generation') if job_info else 'report_generation'
-        handle_task_exception(job_id, e, current_step)
-
+        # Passa a versão mais atual do job_info para o handler de exceção
+        handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
 def run_workflow_task(job_id: str):
     job_info = None
     try:
@@ -355,5 +359,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
