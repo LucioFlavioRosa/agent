@@ -14,7 +14,7 @@ from tools import commit_multiplas_branchs
 
 # --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
-from agents.agente_processador import AgenteProcessador # <-- NOVO IMPORT
+from agents.agente_processador import AgenteProcessador
 from tools.requisicao_openai import OpenAILLMProvider
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
@@ -26,8 +26,9 @@ class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: Literal[
         "relatorio_cleancode", "relatorio_performance_eficiencia",
-        "relatorio_simplicacao_debito_tecnico", "relatorio_solid", "relatorio_conformidade",
-        "relatorio_teste_unitario", "relatorio_owasp"
+        "relatorio_simplicacao_debito_tecnico", "relatorio_solid", 
+        "relatorio_conformidades", "relatorio_teste_unitario",
+        "relatorio_owasp"
     ]
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
@@ -354,4 +355,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
