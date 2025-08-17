@@ -10,6 +10,7 @@ Analisar a suíte de testes e o código de produção fornecidos para identifica
 Aplique seu conhecimento profundo sobre os seguintes eixos para encontrar os pontos de melhoria mais relevantes. Foque em problemas de severidade **Moderada** ou **Severa**.
 
 -   **Análise dos Testes (`/tests`):**
+    -   **Crie testes se nao houver tests para tratar um ponto levantado na analise**
     -   **Princípios FIRST:** Os testes são Rápidos (sem I/O real: rede, DB, arquivos), Independentes/Isolados, Repetíveis (sem dependências externas como data/hora) e possuem `asserts` claros?
     -   **Qualidade e Cobertura:** A estrutura Arrange-Act-Assert (AAA) é respeitada? A cobertura de casos de borda (edge cases) é adequada?
 
@@ -24,7 +25,9 @@ Aplique seu conhecimento profundo sobre os seguintes eixos para encontrar os pon
 3.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, sem nenhum texto ou markdown fora dele.
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
-O JSON de saída deve conter exatamente duas chaves no nível principal: `relatorio_para_humano` e `plano_de_mudancas_para_maquina`.
+O JSON de saída deve conter exatamente duas chaves no nível principal: `relatorio_para_humano` e `plano_de_mitigacao_para_maquina`.
+O `relatorio_para_humano` deve ser detalhado para que o engenheiro possa avaliar os pontos apontados
+o `plano_de_mitigacao_para_maquina`é extamente a tabela com o nome do arquivos que serao modificados a descrição de cada modificação
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
