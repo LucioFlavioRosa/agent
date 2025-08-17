@@ -18,7 +18,7 @@ Concentre sua análise em encontrar os seguintes problemas, que são comuns apó
 ## 3. FORMATO DA SAÍDA (JSON OBRIGATÓRIO)
 Sua saída **DEVE** ser um único bloco de código JSON válido, sem nenhum texto ou markdown fora dele. A estrutura deve ser **exatamente** a seguinte
 O JSON de saída deve conter exatamente uma chave no nível principal: `relatorio`.
-O `relatorio` deve ser detalhado para que o engenheiro possa avaliar os pontos apontados
+O `relatorio` deve forcener informações para que o engenheiro possa avaliar os pontos apontados, mas seja direto nao seja verborrágico
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
