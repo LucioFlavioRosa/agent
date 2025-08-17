@@ -43,7 +43,7 @@ relatorio_solid:
       params:
         tipo_analise: "agrupamento_commits"
 
-relatorio_conformidade:
+relatorio_conformidades:
   description: "Refatoração de código, ogarantindo que a coesão, a consistência e a estabilidade do código sejam mantidas após refatorações complexas."
   extensions: [".py"] 
   steps:
