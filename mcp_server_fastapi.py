@@ -130,11 +130,9 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         
         parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
         
-        report_text_for_human = parsed_response.get("relatorio_para_humano", "Relatório não fornecido pela IA.")
-        recommendations_for_machine = parsed_response.get("plano_de_mudancas_para_maquina", "Plano de mudanças não fornecido pela IA.")
+        report_text = parsed_response.get("relatorio", "Relatório não fornecido pela IA.")
 
-        job_info['data']['analysis_report'] = report_text_for_human
-        job_info['data']['recomendations'] = recommendations_for_machine
+        job_info['data']['analysis_report'] = report_text
         
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
@@ -185,7 +183,7 @@ def run_workflow_task(job_id: str):
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': job_info['data']['recomendations'] # Usa as recomendações concisas
+                    'instrucoes_extras': job_info['data']['analysis_report']
                 })
                 agent_response = agente_revisor_inicial.main(**agent_params)
             else:
@@ -359,6 +357,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
