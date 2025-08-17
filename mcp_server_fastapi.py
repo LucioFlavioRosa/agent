@@ -226,9 +226,6 @@ def run_workflow_task(job_id: str):
         for nome_grupo, detalhes_pr in dados_preenchidos.items():
             if nome_grupo == "resumo_geral": continue
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
-
-        # --- LÓGICA DE COMMIT CORRIGIDA E SIMPLIFICADA ---
-        # A decisão de commitar ou não é delegada para a função de commit.
         
         print(f"[{job_id}] Preparando para commitar {len(dados_finais_formatados.get('grupos', []))} grupos.")
         job_info['status'] = 'committing_to_github'
@@ -239,7 +236,7 @@ def run_workflow_task(job_id: str):
             dados_agrupados=dados_finais_formatados
         )
         job_info['data']['commit_details'] = commit_results
-        # --- FIM DA CORREÇÃO ---
+   
 
         job_info['status'] = 'completed'
         job_store.set_job(job_id, job_info)
@@ -357,6 +354,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
