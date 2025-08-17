@@ -22,8 +22,9 @@ Você deve focar somente em casos mais graves. Sua auditoria deve ser completa, 
 4.  **Formato JSON Estrito:** A saída **DEVE** ser um único bloco JSON válido, sem nenhum texto ou markdown fora dele.
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
-O JSON de saída deve conter exatamente duas chaves no nível principal: `relatorio_para_humano` e `plano_de_mudancas_para_maquina`.
-o `plano_de_mudancas_para_maquina`é extamente a tabela com o nome dos arquivos que serao modificados a descrição de cada modificação
+O JSON de saída deve conter exatamente duas chaves no nível principal: `relatorio_para_humano` e `plano_de_mitigacao_para_maquina`.
+O `relatorio_para_humano` deve ser detalhado para que o engenheiro possa avaliar os pontos apontados
+o `plano_de_mitigacao_para_maquina`é extamente a tabela com o nome do arquivos que serao modificados a descrição de cada modificação
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
