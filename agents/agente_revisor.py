@@ -1,5 +1,3 @@
-# Arquivo: agents/agente_revisor.py (VERSÃO CORRIGIDA)
-
 import json
 from typing import Optional, Dict, Any
 from domain.interfaces.repository_reader_interface import IRepositoryReader
@@ -7,7 +5,8 @@ from domain.interfaces.llm_provider_interface import ILLMProvider
 
 class AgenteRevisor:
     """
-    Orquestrador de análise de código via IA, agora desacoplado de implementações concretas.
+    Orquestrador de análise de código via IA.
+    Sua única responsabilidade é ler um repositório do GitHub e iniciar uma análise.
     """
     def __init__(
         self,
@@ -40,44 +39,29 @@ class AgenteRevisor:
     def main(
         self,
         tipo_analise: str,
-        repositorio: Optional[str] = None,
+        repositorio: str,
         nome_branch: Optional[str] = None,
-        codigo: Optional[Any] = None,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
-        # --- MUDANÇAS AQUI ---
-        model_name: Optional[str] = None,   
-        max_token_out: int = 15000         
+        model_name: Optional[str] = None,
+        max_token_out: int = 15000
     ) -> Dict[str, Any]:
         """
-        Função principal do agente. Orquestra a obtenção do código e a chamada para a IA.
+        Função principal do agente. Orquestra a obtenção do código de um repositório
+        e a chamada para a IA.
         """
-        codigo_para_analise = None
-
-        # Passo 1: Determinar a fonte do código
-        if codigo is None:
-            if repositorio:
-                codigo_para_analise = self._get_code(
-                    repositorio=repositorio,
-                    nome_branch=nome_branch,
-                    tipo_analise=tipo_analise
-                )
-            else:
-                raise ValueError("Erro: É obrigatório fornecer 'repositorio' ou 'codigo'.")
-        else:
-            codigo_para_analise = codigo
+        codigo_para_analise = self._get_code(
+            repositorio=repositorio,
+            nome_branch=nome_branch,
+            tipo_analise=tipo_analise
+        )
 
         if not codigo_para_analise:
-            print(f"AVISO: Nenhum código encontrado ou fornecido para a análise '{tipo_analise}'.")
-            return {"resultado": {"reposta_final": {"reposta_final": "{}"}}}
+            print(f"AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
+            return {"resultado": {"reposta_final": {}}}
 
-        # Passo 2: Serializar o código
-        if isinstance(codigo_para_analise, dict):
-            codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
-        else:
-            codigo_str = str(codigo_para_analise)
+        codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
 
-        # Passo 3: Chamar a IA 
         resultado_da_ia = self.llm_provider.executar_analise_llm(
             tipo_analise=tipo_analise,
             codigo=codigo_str,
@@ -87,7 +71,6 @@ class AgenteRevisor:
             max_token_out=max_token_out
         )
 
-        # Passo 4: Retornar no formato esperado
         return {
             "resultado": {
                 "reposta_final": resultado_da_ia
