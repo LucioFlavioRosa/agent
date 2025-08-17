@@ -18,6 +18,7 @@ Aplique seu conhecimento profundo sobre os seguintes eixos para encontrar os pon
     -   **Acoplamento Forte:** O código cria suas dependências internamente (ex: `db = conectar()`) em vez de recebê-las via Injeção de Dependência?
     -   **Efeitos Colaterais (Side Effects):** Funções de negócio estão misturadas com I/O, dificultando o teste isolado?
     -   **Responsabilidade Única (SRP):** Classes ou funções acumulam responsabilidades que deveriam ser separadas?
+-   **Sugerir testes para serem criados ou modificados:**: aqui você deve sugerir testes para serem modificados ou criados 
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **FOCO NO IMPACTO:** Concentre-se em problemas de severidade `Severo` ou `Moderado`. Ignore questões puramente estilísticas ou de baixo impacto.
