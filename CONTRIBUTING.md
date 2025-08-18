@@ -1,91 +1,141 @@
 # Guia de Contribuição
 
-Obrigado pelo interesse em contribuir com o MCP Server! Este documento fornece diretrizes e instruções para contribuir efetivamente com o projeto.
+Obrigado pelo interesse em contribuir com o MCP Server! Este documento fornece diretrizes para contribuir com o projeto de forma eficaz.
 
-## Fluxo de Trabalho
+## Fluxo de Contribuição
 
 1. **Fork do Repositório**
-   - Faça um fork do repositório para sua conta GitHub
-   - Clone o fork para sua máquina local
+   - Crie um fork do repositório para sua conta
 
-2. **Configuração do Ambiente de Desenvolvimento**
-   - Siga as instruções no [README.md](README.md) para configurar o ambiente
-   - Copie `.env.example` para `.env` e configure as variáveis necessárias
-   - Copie `workflows.yaml.example` para `workflows.yaml`
+2. **Clone do Fork**
+   bash
+   git clone https://github.com/seu-usuario/mcp-server.git
+   cd mcp-server
+   
 
-3. **Criação de Branch**
-   - Crie uma branch para sua contribuição seguindo a convenção:
-     - `feature/nome-da-feature` para novas funcionalidades
-     - `fix/descricao-do-bug` para correções de bugs
-     - `docs/descricao-da-documentacao` para melhorias na documentação
-     - `refactor/descricao-da-refatoracao` para refatorações de código
+3. **Crie uma Branch**
+   - Use o padrão de nomenclatura adequado (veja abaixo)
+   bash
+   git checkout -b feature/nova-funcionalidade
+   
 
-4. **Desenvolvimento**
-   - Implemente suas mudanças seguindo o estilo de código do projeto
-   - Adicione ou atualize testes conforme necessário
-   - Atualize a documentação relevante
+4. **Desenvolva e Teste**
+   - Implemente suas mudanças
+   - Adicione/atualize testes
+   - Verifique se os testes passam
 
-5. **Verificações Locais**
-   - Execute os linters e formatadores:
-     bash
-     # Formatação com black
-     black .
-     
-     # Verificação de estilo com flake8
-     flake8 .
-     
-     # Verificação de tipos com mypy
-     mypy .
-     
-   - Execute os testes:
-     bash
-     pytest tests/
-     
+5. **Commit das Mudanças**
+   - Use mensagens de commit significativas (veja abaixo)
+   bash
+   git commit -m "feat: adiciona nova funcionalidade X"
+   
 
-6. **Commits**
-   - Siga a convenção [Conventional Commits](https://www.conventionalcommits.org/):
-     - `feat: descrição` para novas funcionalidades
-     - `fix: descrição` para correções de bugs
-     - `docs: descrição` para alterações na documentação
-     - `refactor: descrição` para refatorações de código
-     - `test: descrição` para adição ou modificação de testes
-     - `chore: descrição` para tarefas de manutenção
+6. **Push para o Fork**
+   bash
+   git push origin feature/nova-funcionalidade
+   
 
-7. **Pull Request**
-   - Envie um Pull Request (PR) para a branch `main` do repositório original
-   - Preencha o template do PR com todas as informações necessárias
-   - Vincule o PR a issues relacionadas, se aplicável
-   - Aguarde a revisão e feedback da equipe
+7. **Abra um Pull Request**
+   - Use o template fornecido
+   - Descreva claramente suas mudanças
 
-## Padrões de Código
+## Padrões de Nomenclatura
 
-- **Python**: Siga o [PEP 8](https://www.python.org/dev/peps/pep-0008/) e use type hints
-- **Docstrings**: Use o formato [Google Style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings)
-- **Imports**: Organize os imports em grupos (stdlib, third-party, local) e em ordem alfabética
-- **Testes**: Escreva testes unitários para novas funcionalidades e correções
+### Branches
 
-## Revisão de Código
+- `feature/nome-da-feature`: Para novas funcionalidades
+- `fix/nome-do-bug`: Para correções de bugs
+- `docs/nome-da-documentacao`: Para atualizações de documentação
+- `refactor/nome-da-refatoracao`: Para refatorações de código
+- `test/nome-do-teste`: Para adições ou modificações de testes
 
-- Todos os PRs devem ser revisados por pelo menos um membro da equipe
-- Os revisores verificarão:
-  - Funcionalidade: O código faz o que se propõe a fazer?
-  - Qualidade: O código segue as boas práticas e padrões do projeto?
-  - Testes: Existem testes adequados para as mudanças?
-  - Documentação: A documentação foi atualizada conforme necessário?
+### Mensagens de Commit
 
-## Critérios de Aceitação
+Seguimos o padrão [Conventional Commits](https://www.conventionalcommits.org/):
 
-- O código deve passar em todos os testes automatizados
-- O código deve seguir os padrões de estilo do projeto
-- A documentação deve ser atualizada conforme necessário
-- O PR deve abordar uma única preocupação (feature, bug, refatoração, etc.)
+- `feat:` - Nova funcionalidade
+- `fix:` - Correção de bug
+- `docs:` - Alterações na documentação
+- `style:` - Formatação, ponto-e-vírgula faltando, etc; sem alteração de código
+- `refactor:` - Refatoração de código
+- `test:` - Adição ou correção de testes
+- `chore:` - Atualizações de tarefas de build, configurações, etc; sem alteração de código
 
-## Comunicação
+Exemplo: `feat: adiciona autenticação via OAuth2`
 
-- Use issues do GitHub para discutir bugs, features e melhorias
-- Use discussões do GitHub para perguntas gerais e conversas sobre o projeto
-- Seja respeitoso e construtivo em todas as comunicações
+## Preparação do Ambiente Local
 
-## Licença
+1. **Instale as Dependências**
+   bash
+   pip install -r requirements.txt
+   pip install -r requirements-dev.txt  # Dependências de desenvolvimento
+   
 
-Ao contribuir com o projeto, você concorda que suas contribuições serão licenciadas sob a mesma licença do projeto.
+2. **Configure o Ambiente**
+   - Copie `.env.example` para `.env`
+   - Preencha as variáveis necessárias
+
+3. **Autentique no Azure**
+   bash
+   az login
+   
+   Isso é necessário para que `DefaultAzureCredential` funcione localmente
+
+4. **Verifique a Configuração**
+   - Certifique-se de que `workflows.yaml` está presente na raiz
+   - Verifique se os arquivos de prompt necessários existem em `tools/prompts/`
+
+## Linters e Testes
+
+bash
+# Execute o linter
+flake8 .
+
+# Execute o formatador de código
+black .
+
+# Execute os testes
+pytest
+
+# Execute os testes com cobertura
+pytest --cov=. --cov-report=term-missing
+
+
+## Critérios de Revisão
+
+Seu PR será avaliado com base nos seguintes critérios:
+
+1. **Funcionalidade**: A mudança funciona conforme esperado?
+2. **Qualidade do Código**: O código segue as boas práticas e padrões do projeto?
+3. **Testes**: Existem testes adequados para as mudanças?
+4. **Documentação**: A documentação foi atualizada adequadamente?
+5. **Compatibilidade**: A mudança mantém compatibilidade com versões anteriores (quando aplicável)?
+
+## Checklist do Pull Request
+
+- [ ] O código segue o estilo e diretrizes do projeto
+- [ ] Todos os testes passam
+- [ ] Foram adicionados testes para as novas funcionalidades
+- [ ] A documentação foi atualizada (README, docstrings, etc.)
+- [ ] O `CHANGELOG.md` foi atualizado (para mudanças relevantes)
+- [ ] O código foi revisado localmente antes do envio
+
+## Atualização do CHANGELOG
+
+Para cada mudança relevante, atualize o arquivo `CHANGELOG.md` na seção `[Unreleased]`. Siga o formato:
+
+markdown
+## [Unreleased]
+### Added
+- Nova funcionalidade X
+
+### Changed
+- Comportamento Y modificado
+
+### Fixed
+- Correção do bug Z
+
+
+## Dúvidas?
+
+Se você tiver dúvidas sobre o processo de contribuição, abra uma issue com o label "question".
