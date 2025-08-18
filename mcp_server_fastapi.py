@@ -269,6 +269,7 @@ def run_workflow_task(job_id: str):
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
+    analysis_type_str = payload.analysis_type.value
     initial_job_data = {
         'status': 'starting',
         'data': {
@@ -372,4 +373,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
