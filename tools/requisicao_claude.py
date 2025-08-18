@@ -1,17 +1,22 @@
-import os
 import anthropic
 from typing import Optional, Dict, Any
+
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 
 class AnthropicClaudeProvider(ILLMProvider):
     """
-    Implementação de ILLMProvider para a API do Claude da Anthropic.
+    Implementação de ILLMProvider para a API do Claude da Anthropic,
+    com busca segura de credenciais via Azure Key Vault.
     """
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None):
         self.rag_retriever = rag_retriever
-
+        
+        # --- LÓGICA DE INICIALIZAÇÃO CORRIGIDA E PADRONIZADA ---
+        print("Configurando o cliente da Anthropic (Claude)...")
         try:
             key_vault_url = os.environ["KEY_VAULT_URL"]
             credential = DefaultAzureCredential()
@@ -21,12 +26,20 @@ class AnthropicClaudeProvider(ILLMProvider):
             anthropic_api_key = client.get_secret("ANTHROPICAPIKEY").value
             if not anthropic_api_key:
                 raise ValueError("A chave da API da Anthropic não foi encontrada no segredo 'anthropicapi' do Key Vault.")
-                
+            
             self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
             print("Cliente da Anthropic (Claude) configurado com sucesso via Key Vault.")
 
+        except KeyError:
+            # Captura o erro se a variável de ambiente KEY_VAULT_URL não existir
+            raise EnvironmentError("ERRO: A variável de ambiente KEY_VAULT_URL não foi configurada.")
+        except Exception as e:
+            # Captura outras exceções (ex: segredo não encontrado, permissão negada)
+            print(f"ERRO CRÍTICO ao configurar o cliente da Anthropic: {e}")
+            raise
+
     def carregar_prompt(self, tipo_analise: str) -> str:
-        """Carrega o prompt do arquivo. Esta função é a mesma dos outros provedores."""
+        # (Esta função não muda)
         caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_analise}.md')
         try:
             with open(caminho_prompt, 'r', encoding='utf-8') as f:
