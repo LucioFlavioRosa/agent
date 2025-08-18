@@ -16,6 +16,7 @@ from tools import commit_multiplas_branchs
 from agents.agente_revisor import AgenteRevisor
 from agents.agente_processador import AgenteProcessador
 from tools.requisicao_openai import OpenAILLMProvider
+from tools.requisicao_claude import AnthropicClaudeProvider
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
 from tools.github_reader import GitHubRepositoryReader
@@ -71,6 +72,19 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 job_store = RedisJobStore()
 
+def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchRAGRetriever) -> ILLMProvider:
+    """
+    Analisa o nome do modelo e instancia a classe de provedor de LLM correta.
+    Esta função é o ponto central para adicionar ou alterar provedores.
+    """
+    model_lower = (model_name or "").lower()
+    
+    if "claude" in model_lower:
+        return AnthropicClaudeProvider(rag_retriever=rag_retriever)
+    
+    elser:
+        return OpenAILLMProvider(rag_retriever=rag_retriever)
+
 
 # --- WORKFLOW_REGISTRY ---
 def load_workflow_registry(filepath: str) -> dict:
@@ -94,8 +108,6 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
-# Em mcp_server_fastapi.py, substitua esta função
-
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
     job_info = None
     try:
@@ -107,7 +119,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
-        llm_provider = OpenAILLMProvider(rag_retriever=rag_retriever)
+        llm_provider = create_llm_provider(payload.model_name, rag_retriever)
         agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
 
         job_info['status'] = 'comecando_analise_llm'
@@ -145,49 +157,53 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         traceback.print_exc()
         # Passa a versão mais atual do job_info para o handler de exceção
         handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
+
+
 def run_workflow_task(job_id: str):
     job_info = None
     try:
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado no início do workflow.")
-        
-        # --- MUDANÇA: Construção das dependências e dos DOIS agentes ---
-        print(f"[{job_id}] Construindo dependências e agentes para o workflow...")
+
+        # --- MUDANÇA: Dependências genéricas são criadas aqui ---
+        # As dependências específicas (provedor e agente) serão criadas dentro do loop.
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
-        llm_provider = OpenAILLMProvider(rag_retriever=rag_retriever)
-        
-        agente_revisor_inicial = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
-        agente_processador_sequencial = AgenteProcessador(llm_provider=llm_provider)
-        
         changeset_filler = ChangesetFiller()
 
+        # --- LÓGICA DO WORKFLOW ---
         original_analysis_type = job_info['data']['original_analysis_type']
         workflow = WORKFLOW_REGISTRY.get(original_analysis_type)
         if not workflow: raise ValueError(f"Nenhum workflow definido para: {original_analysis_type}")
-        
+
         previous_step_result = None
 
         for i, step in enumerate(workflow['steps']):
             job_info['status'] = step['status_update']
             job_store.set_job(job_id, job_info)
             print(f"[{job_id}] ... Executando passo: {job_info['status']}")
+
+            model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
             
+            # 2. Usa a fábrica para criar o provedor de LLM correto para a etapa.
+            llm_provider = create_llm_provider(model_para_etapa, rag_retriever)
+            
+            # 3. Prepara os parâmetros comuns do agente.
             agent_params = step['params'].copy()
             agent_params['usar_rag'] = job_info.get("data", {}).get("usar_rag", False)
-            # O model_name pode ser passado para os próximos agentes também, lendo do job_info
-            agent_params['model_name'] = job_info.get('data', {}).get('model_name')
+            agent_params['model_name'] = model_para_etapa # Passa o nome do modelo adiante
             
+            # 4. Seleciona e instancia o tipo de agente correto para a tarefa.
             if i == 0:
-                # A primeira etapa usa o AgenteRevisor, que lê do repositório
+                agente_para_etapa = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': job_info['data']['analysis_report']
+                    'instrucoes_extras': job_info['data'].get('recomendations', job_info['data']['analysis_report'])
                 })
-                agent_response = agente_revisor_inicial.main(**agent_params)
+                agent_response = agente_para_etapa.main(**agent_params)
             else:
-                # As etapas seguintes usam o AgenteProcessador, que recebe 'codigo'
+                agente_para_etapa = AgenteProcessador(llm_provider=llm_provider)
                 lightweight_changeset = {
                     "resumo_geral": previous_step_result.get("resumo_geral"),
                     "conjunto_de_mudancas": [
@@ -196,8 +212,8 @@ def run_workflow_task(job_id: str):
                     ]
                 }
                 agent_params['codigo'] = lightweight_changeset
-                agent_response = agente_processador_sequencial.main(**agent_params)
-            
+                agent_response = agente_para_etapa.main(**agent_params)
+
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip():
                 raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
@@ -357,6 +373,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
