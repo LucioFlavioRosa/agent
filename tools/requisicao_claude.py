@@ -84,7 +84,8 @@ class AnthropicClaudeProvider(ILLMProvider):
                 system=prompt_sistema,  
                 messages=mensagens,
                 max_tokens=max_token_out,
-                temperature=0.3
+                temperature=0.3,
+                timeout=900.0
             )
             
             conteudo_resposta = response.content[0].text
