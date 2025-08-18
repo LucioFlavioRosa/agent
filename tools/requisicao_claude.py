@@ -11,13 +11,19 @@ class AnthropicClaudeProvider(ILLMProvider):
     """
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None):
         self.rag_retriever = rag_retriever
-        
+
         try:
-            anthropic_api_key = os.environ["ANTHROPICAPIKEY"]
+            key_vault_url = os.environ["KEY_VAULT_URL"]
+            credential = DefaultAzureCredential()
+            client = SecretClient(vault_url=key_vault_url, credential=credential)
+            
+            # Busca o segredo específico da Anthropic no Key Vault
+            anthropic_api_key = client.get_secret("ANTHROPICAPIKEY").value
+            if not anthropic_api_key:
+                raise ValueError("A chave da API da Anthropic não foi encontrada no segredo 'anthropicapi' do Key Vault.")
+                
             self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
-            print("Cliente da Anthropic (Claude) configurado com sucesso.")
-        except KeyError:
-            raise EnvironmentError("ERRO: A variável de ambiente ANTHROPIC_API_KEY não foi configurada.")
+            print("Cliente da Anthropic (Claude) configurado com sucesso via Key Vault.")
 
     def carregar_prompt(self, tipo_analise: str) -> str:
         """Carrega o prompt do arquivo. Esta função é a mesma dos outros provedores."""
