@@ -88,3 +88,29 @@ relatorio_owasp:
       model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
+
+relatorio_docstring_comentario:
+  description: "Escrita de docstrings."
+  extensions: [".py"]
+  steps:
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-3-7-sonnet-20250219"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      params:
+        tipo_analise: "agrupamento_commits"
+
+relatorio_documentacao:
+  description: "Escrita de documentação do código."
+  extensions: [".py"]
+  steps:
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-3-7-sonnet-20250219"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      params:
+        tipo_analise: "agrupamento_commits"
