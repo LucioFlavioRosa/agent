@@ -1,6 +1,6 @@
 ---
-name: Bug report
-about: Reporte um problema para nos ajudar a melhorar
+name: Relatório de Bug
+about: Crie um relatório para nos ajudar a melhorar
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -8,33 +8,47 @@ assignees: ''
 ---
 
 ## Descrição do Bug
-Uma descrição clara e concisa do que é o bug.
+
+<!-- Uma descrição clara e concisa do que é o bug -->
 
 ## Passos para Reproduzir
+
+<!-- Passos para reproduzir o comportamento -->
+
 1. Vá para '...'
-2. Clique em '....'
-3. Role até '....'
+2. Clique em '...'
+3. Role até '...'
 4. Veja o erro
 
 ## Comportamento Esperado
-Uma descrição clara e concisa do que você esperava que acontecesse.
+
+<!-- Uma descrição clara e concisa do que você esperava que acontecesse -->
 
 ## Comportamento Atual
-O que aconteceu em vez do comportamento esperado.
 
-## Capturas de Tela
-Se aplicável, adicione capturas de tela para ajudar a explicar seu problema.
+<!-- O que acontece atualmente -->
+
+## Logs e Mensagens de Erro
+
+<!-- Se aplicável, adicione logs ou mensagens de erro para ajudar a explicar seu problema -->
+
+
+Cole aqui os logs ou mensagens de erro
+
 
 ## Ambiente
- - Sistema Operacional: [ex: Ubuntu 22.04, Windows 11]
- - Python: [ex: 3.9.10]
- - Versão do MCP Server: [ex: 9.0.0]
- - Modelo de LLM utilizado: [ex: GPT-4, Claude-3]
 
-## Logs
+<!-- Por favor, complete as seguintes informações -->
 
-Cole aqui quaisquer logs relevantes
-
+- Sistema Operacional: [ex: Windows 10, Ubuntu 22.04]
+- Python Version: [ex: 3.10.5]
+- Versão do MCP Server: [ex: 9.0.0]
+- Ambiente: [ex: Local, Azure App Service]
 
 ## Contexto Adicional
-Adicione qualquer outro contexto sobre o problema aqui.
+
+<!-- Adicione qualquer outro contexto sobre o problema aqui -->
+
+## Possível Solução
+
+<!-- Se você tem uma ideia de como resolver o problema, descreva aqui -->
