@@ -2,127 +2,159 @@
 
 ## Visão Geral
 
-MCP Server é uma plataforma robusta para orquestração de agentes de IA que analisam, refatoram e melhoram código-fonte automaticamente. A plataforma utiliza modelos de linguagem avançados (LLMs) como GPT-4 e Claude, integra-se com GitHub para leitura e escrita de código, e oferece uma API RESTful para interação.
+O MCP Server é uma plataforma robusta para orquestração de agentes de IA que analisam e refatoram código-fonte. A plataforma utiliza uma arquitetura baseada em FastAPI, Redis para armazenamento de jobs, e integração com GitHub, Azure Key Vault e Azure AI Search.
 
 ## Arquitetura
 
-O sistema é composto por:
-
-- **API FastAPI**: Interface principal para iniciar análises e consultar resultados
-- **Agentes de IA**: Componentes especializados que utilizam LLMs para diferentes tarefas
-- **Redis**: Armazenamento de estado dos jobs e resultados intermediários
-- **Azure Key Vault**: Gerenciamento seguro de credenciais e segredos
-- **GitHub Integration**: Leitura de repositórios e criação automática de Pull Requests
+- **FastAPI**: Framework web para exposição de endpoints RESTful
+- **Redis**: Armazenamento de estado dos jobs
+- **GitHub API**: Leitura e escrita de repositórios
+- **Azure Key Vault**: Gerenciamento seguro de segredos
+- **Azure AI Search**: Suporte a RAG (Retrieval-Augmented Generation)
+- **Agentes de IA**: Componentes modulares para análise e processamento de código
 
 ## Pré-requisitos
 
-- Python 3.9+
-- Redis
-- Conta Azure com Key Vault configurado
-- Acesso à API da OpenAI e/ou Anthropic (Claude)
-- Acesso à API do GitHub
-- Azure AI Search (para funcionalidade RAG)
+- Python 3.10 ou superior
+- Acesso a um Azure Key Vault
+- Instância Redis
+- Conta GitHub com token de acesso
+- Acesso à API da OpenAI e/ou Anthropic (opcional)
+- Azure AI Search configurado (opcional, para RAG)
 
 ## Instalação
 
 bash
 # Clone o repositório
-git clone https://github.com/LucioFlavioRosa/agent.git
-cd agent
+git clone https://github.com/seu-usuario/mcp-server.git
+cd mcp-server
 
 # Instale as dependências
 pip install -r requirements.txt
 
-
-## Configuração do Ambiente
-
-1. Copie o arquivo `.env.example` para `.env` e preencha as variáveis necessárias:
-
-bash
+# Configure as variáveis de ambiente (copie de .env.example)
 cp .env.example .env
-# Edite o arquivo .env com seus valores
+# Edite o arquivo .env com suas configurações
 
 
-2. Configure o Azure Key Vault com os seguintes segredos:
-   - `openaiapi`: Chave da API da OpenAI
-   - `ANTHROPICAPIKEY`: Chave da API da Anthropic (Claude)
-   - `aisearchapi`: Chave da API do Azure AI Search
-   - `githubapi`: Token de acesso pessoal do GitHub com permissões para leitura e escrita em repositórios
+## Configuração de Ambiente
 
-3. Copie o arquivo `workflows.yaml.example` para `workflows.yaml`:
+Crie um arquivo `.env` baseado no `.env.example` fornecido. As principais variáveis necessárias são:
+
+- `KEY_VAULT_URL`: URL do seu Azure Key Vault
+- `REDIS_URL`: URL de conexão com o Redis
+- `AI_SEARCH_ENDPOINT`: Endpoint do Azure AI Search (para RAG)
+- `AI_SEARCH_INDEX_NAME`: Nome do índice no Azure AI Search
+- `AZURE_OPENAI_EMBEDDING_MODEL_NAME`: Nome do modelo de embeddings
+
+No Azure Key Vault, você precisa configurar os seguintes segredos:
+
+- `githubapi`: Token de acesso ao GitHub
+- `openaiapi`: Chave da API da OpenAI
+- `aisearchapi`: Chave da API do Azure AI Search
+- `ANTHROPICAPIKEY`: Chave da API da Anthropic (opcional)
+
+## Execução Local
 
 bash
-cp workflows.yaml.example workflows.yaml
-# Personalize o arquivo workflows.yaml conforme necessário
+# Autentique-se no Azure (para DefaultAzureCredential funcionar localmente)
+az login
 
-
-## Execução
-
-bash
-# Inicie o servidor FastAPI com hot-reload para desenvolvimento
-uvicorn mcp_server_fastapi:app --reload
-
-# Para produção
+# Inicie o servidor
 uvicorn mcp_server_fastapi:app --host 0.0.0.0 --port 8000
 
 
-O servidor estará disponível em `http://localhost:8000`. A documentação da API pode ser acessada em `http://localhost:8000/docs`.
-
-## Uso da API
-
-### Iniciar uma Análise
-
-bash
-curl -X POST "http://localhost:8000/start-analysis" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "repo_name": "usuario/repositorio",
-           "analysis_type": "refatoracao_codigo",
-           "branch_name": "main",
-           "instrucoes_extras": "Foque em melhorar a legibilidade",
-           "usar_rag": true,
-           "gerar_relatorio_apenas": false
-         }'
-
-
-### Verificar Status de um Job
-
-bash
-curl -X GET "http://localhost:8000/status/{job_id}"
-
-
-### Aprovar ou Rejeitar um Job
-
-bash
-curl -X POST "http://localhost:8000/update-job-status" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "job_id": "seu-job-id",
-           "action": "approve",
-           "observacoes": "Parece bom, pode prosseguir"
-         }'
-
-
-### Obter Relatório de Análise
-
-bash
-curl -X GET "http://localhost:8000/jobs/{job_id}/report"
-
+Acesse a documentação da API em: http://localhost:8000/docs
 
 ## Testes
 
 bash
-# Execute os testes unitários
-python -m pytest tests/
-
-# Execute os testes com cobertura
-python -m pytest --cov=. tests/
+# Execute os testes
+pytest -q
 
 
-## Contribuição
+## Guia Rápido da API
 
-Veja o arquivo [CONTRIBUTING.md](CONTRIBUTING.md) para instruções detalhadas sobre como contribuir com o projeto.
+### Iniciar uma Análise
 
-## Changelog
+bash
+POST /start-analysis
 
-Veja o arquivo [CHANGELOG.md](CHANGELOG.md) para um histórico de mudanças do projeto.
+
+Payload de exemplo:
+
+{
+  "repo_name": "usuario/repositorio",
+  "analysis_type": "auditoria_documentacao",
+  "branch_name": "main",
+  "instrucoes_extras": "Foque em problemas de segurança",
+  "usar_rag": true,
+  "gerar_relatorio_apenas": false,
+  "model_name": "gpt-4o"
+}
+
+
+### Atualizar Status do Job
+
+bash
+POST /update-job-status
+
+
+Payload de exemplo:
+
+{
+  "job_id": "123e4567-e89b-12d3-a456-426614174000",
+  "action": "approve",
+  "observacoes": "Aprovado para implementação"
+}
+
+
+### Obter Relatório
+
+bash
+GET /jobs/{job_id}/report
+
+
+### Verificar Status
+
+bash
+GET /status/{job_id}
+
+
+## Deploy no Azure App Service
+
+### Configuração do App Service
+
+1. **Habilitar Managed Identity**:
+   - No portal Azure, acesse seu App Service
+   - Vá para "Identity" e habilite "System assigned"
+
+2. **Conceder Acesso ao Key Vault**:
+   - No Key Vault, vá para "Access policies" ou "Access control (IAM)"
+   - Adicione a Managed Identity do App Service com a role "Key Vault Secrets User"
+
+3. **Configurar App Settings**:
+   - `KEY_VAULT_URL`: URL do seu Azure Key Vault
+   - `REDIS_URL`: URL de conexão com o Redis
+   - `AI_SEARCH_ENDPOINT`: Endpoint do Azure AI Search
+   - `AI_SEARCH_INDEX_NAME`: Nome do índice no Azure AI Search
+   - `AZURE_OPENAI_EMBEDDING_MODEL_NAME`: Nome do modelo de embeddings
+
+4. **Configurar Segredos no Key Vault**:
+   - `githubapi`: Token de acesso ao GitHub
+   - `openaiapi`: Chave da API da OpenAI
+   - `aisearchapi`: Chave da API do Azure AI Search
+   - `ANTHROPICAPIKEY`: Chave da API da Anthropic (opcional)
+
+### Implantação
+
+bash
+# Deploy via Azure CLI
+az webapp up --name seu-app-service --resource-group seu-grupo-recursos
+
+
+## Arquivo workflows.yaml
+
+O servidor depende do arquivo `workflows.yaml` na raiz do projeto, que define os tipos de análise disponíveis e suas configurações. Certifique-se de que este arquivo exista e contenha pelo menos uma configuração válida antes de iniciar o servidor.
+
+O parâmetro `analysis_type` no endpoint `/start-analysis` deve corresponder a uma das chaves definidas neste arquivo.
