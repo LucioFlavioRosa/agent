@@ -13,7 +13,7 @@ class AnthropicClaudeProvider(ILLMProvider):
         self.rag_retriever = rag_retriever
         
         try:
-            anthropic_api_key = os.environ["ANTHROPIC_API_KEY"]
+            anthropic_api_key = os.environ["ANTHROPICAPIKEY"]
             self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
             print("Cliente da Anthropic (Claude) configurado com sucesso.")
         except KeyError:
