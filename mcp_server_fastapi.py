@@ -318,33 +318,15 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
-    try:
-        job = job_store.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    
+    report = job.get("data", {}).get("analysis_report")
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
 
-        # Pega o valor do relatório. Pode ser uma string ou um dict.
-        analysis_report_data = job.get("data", {}).get("analysis_report")
-
-        if not analysis_report_data:
-            raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
-            
-        report_as_string: str
-        if isinstance(analysis_report_data, dict):
-            # Se for um dicionário, converte para uma string JSON formatada.
-            print(f"[{job_id}] AVISO: O relatório foi armazenado como um dicionário. Convertendo para string JSON para exibição.")
-            report_as_string = json.dumps(analysis_report_data, indent=2, ensure_ascii=False)
-        elif isinstance(analysis_report_data, str):
-            report_as_string = analysis_report_data
-        else:
-            report_as_string = str(analysis_report_data)
-        
-        return ReportResponse(job_id=job_id, analysis_report=report_as_string)
-
-    except Exception as e:
-        print(f"[{job_id}] ERRO INESPERADO no endpoint /report: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Erro interno ao processar a requisição do relatório.")
+    return ReportResponse(job_id=job_id, analysis_report=report)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
@@ -394,6 +376,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
