@@ -1,0 +1,68 @@
+# Exemplo de configuração de workflows para o MCP Server
+# Copie este arquivo para 'workflows.yaml' antes de iniciar o servidor
+
+# Workflow de refatoração de código
+refatoracao_codigo:
+  # Extensões de arquivo que serão analisadas neste workflow
+  extensions:
+    - ".py"
+    - ".js"
+    - ".ts"
+    - ".java"
+    - ".cs"
+  # Etapas do workflow que serão executadas em sequência
+  steps:
+    # Etapa 1: Análise inicial e geração de refatorações
+    - status_update: "analisando_codigo"
+      model_name: "gpt-4o"
+      params:
+        tipo_analise: "refatoracao_codigo"
+        max_token_out: 15000
+    
+    # Etapa 2: Agrupamento das mudanças em PRs lógicos
+    - status_update: "agrupando_mudancas"
+      model_name: "gpt-4o"
+      params:
+        tipo_analise: "agrupamento_mudancas"
+        max_token_out: 15000
+
+# Workflow de análise de segurança
+analise_seguranca:
+  extensions:
+    - ".py"
+    - ".js"
+    - ".php"
+    - ".java"
+    - ".go"
+  steps:
+    - status_update: "analisando_seguranca"
+      model_name: "claude-3-opus-20240229"
+      params:
+        tipo_analise: "analise_seguranca"
+        max_token_out: 15000
+    
+    - status_update: "agrupando_vulnerabilidades"
+      model_name: "claude-3-opus-20240229"
+      params:
+        tipo_analise: "agrupamento_vulnerabilidades"
+        max_token_out: 15000
+
+# Workflow de documentação de código
+documentacao_codigo:
+  extensions:
+    - ".py"
+    - ".js"
+    - ".ts"
+    - ".java"
+  steps:
+    - status_update: "analisando_documentacao"
+      model_name: "gpt-4o"
+      params:
+        tipo_analise: "documentacao_codigo"
+        max_token_out: 15000
+    
+    - status_update: "agrupando_documentacao"
+      model_name: "gpt-4o"
+      params:
+        tipo_analise: "agrupamento_documentacao"
+        max_token_out: 15000
