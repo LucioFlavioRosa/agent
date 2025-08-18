@@ -82,7 +82,7 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
     if "claude" in model_lower:
         return AnthropicClaudeProvider(rag_retriever=rag_retriever)
     
-    elser:
+    else:
         return OpenAILLMProvider(rag_retriever=rag_retriever)
 
 
@@ -373,6 +373,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
