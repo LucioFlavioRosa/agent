@@ -20,6 +20,7 @@ from tools.requisicao_claude import AnthropicClaudeProvider
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
 from tools.github_reader import GitHubRepositoryReader
+from domain.interfaces.llm_provider_interface import ILLMProvider
 
 
 # --- Modelos de Dados Pydantic ---
@@ -373,6 +374,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
