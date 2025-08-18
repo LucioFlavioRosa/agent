@@ -274,12 +274,13 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         'data': {
             'repo_name': payload.repo_name,
             'branch_name': payload.branch_name,
-            'original_analysis_type': payload.analysis_type,
+            'original_analysis_type': analysis_type_str,
             'instrucoes_extras': payload.instrucoes_extras,
             'model_name': payload.model_name # Salva o modelo escolhido para uso futuro
         },
         'error_details': None
     }
+    
     job_store.set_job(job_id, initial_job_data)
     background_tasks.add_task(run_report_generation_task, job_id, payload)
     return StartAnalysisResponse(job_id=job_id)
@@ -371,3 +372,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
