@@ -3,6 +3,7 @@ import uuid
 import yaml
 import time
 import traceback
+import enum
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
@@ -22,16 +23,19 @@ from tools.preenchimento import ChangesetFiller
 from tools.github_reader import GitHubRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 
+# --- WORKFLOW_REGISTRY ---
+def load_workflow_registry(filepath: str) -> dict:
+    print(f"Carregando workflows do arquivo: {filepath}")
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
+valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
+ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
 
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
     repo_name: str
-    analysis_type: Literal[
-        "relatorio_cleancode", "relatorio_performance_eficiencia",
-        "relatorio_simplicacao_debito_tecnico", "relatorio_solid", 
-        "relatorio_conformidades", "relatorio_teste_unitario",
-        "relatorio_owasp"
-    ]
+    analysis_type: ValidAnalysisTypes
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False)
@@ -87,16 +91,7 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
         return OpenAILLMProvider(rag_retriever=rag_retriever)
 
 
-# --- WORKFLOW_REGISTRY ---
-def load_workflow_registry(filepath: str) -> dict:
-    print(f"Carregando workflows do arquivo: {filepath}")
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
-WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
-
-
 # --- Funções de Tarefa (Tasks) ---
-
 def handle_task_exception(job_id: str, e: Exception, step: str):
     error_message = f"Erro fatal durante a etapa '{step}': {str(e)}"
     print(f"[{job_id}] {error_message}")
@@ -376,12 +371,3 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
-
-
-
-
-
-
-
