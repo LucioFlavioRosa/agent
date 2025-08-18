@@ -72,7 +72,6 @@ class AgenteRevisor:
         )
 
         return {
-            "resultado": {
-                "reposta_final": resultado_da_ia
+            "resultado": resultado_da_ia
             }
-        }
+        
