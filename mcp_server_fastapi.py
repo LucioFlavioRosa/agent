@@ -121,8 +121,10 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         job_info['status'] = 'comecando_analise_llm'
         job_store.set_job(job_id, job_info)
 
+        analysis_type_str = payload.analysis_type.value
+
         resposta_agente = agente.main(
-            tipo_analise=payload.analysis_type,
+            tipo_analise=analysis_type_str,
             repositorio=payload.repo_name,
             nome_branch=payload.branch_name,
             instrucoes_extras=payload.instrucoes_extras,
@@ -161,8 +163,6 @@ def run_workflow_task(job_id: str):
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado no início do workflow.")
 
-        # --- MUDANÇA: Dependências genéricas são criadas aqui ---
-        # As dependências específicas (provedor e agente) serão criadas dentro do loop.
         repo_reader = GitHubRepositoryReader()
         rag_retriever = AzureAISearchRAGRetriever()
         changeset_filler = ChangesetFiller()
@@ -263,9 +263,7 @@ def run_workflow_task(job_id: str):
         traceback.print_exc()
         handle_task_exception(job_id, e, job_info.get('status', 'run_workflow') if job_info else 'run_workflow')
 
-
 # --- Endpoints da API ---
-
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
@@ -373,5 +371,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
