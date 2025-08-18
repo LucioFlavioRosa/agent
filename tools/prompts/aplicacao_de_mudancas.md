@@ -11,7 +11,7 @@ Sua tarefa é executar as instruções do `Plano de Ação` na `Base de Código 
 
 ## INPUTS DO AGENTE
 
-1.  **Plano de Ação:** Um texto conciso (parte de um relatório maior) listando as alterações necessárias por arquivo.
+1.  **Plano de Ação:** Um texto conciso descrevendo as alterações necessárias por arquivo e criação de novos arquivos, quando necessário.
 2.  **Base de Código Original:** Um dicionário Python com o conteúdo atual dos arquivos.
 
 ## REGRAS DE EXECUÇÃO
