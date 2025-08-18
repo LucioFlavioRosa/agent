@@ -1,77 +1,90 @@
 relatorio_cleancode:
   description: "Refatoração de código, olhando somente o clean code."
-  extensions: [".py"] 
+  extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "gpt-5"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
-        
+
 relatorio_performance_eficiencia:
   description: "Refatoração de código, olhando somente pontos de performance."
-  extensions: [".py"] 
+  extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-3-7-sonnet-20250219"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
 
 relatorio_simplicacao_debito_tecnico:
   description: "Refatoração de código, olhando somente pontos de debito tecnico."
-  extensions: [".py"] 
+  extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-opus-4-20250514"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
 
-
 relatorio_solid:
   description: "Refatoração de código, olhando somente os principios SOLID."
-  extensions: [".py"] 
+  extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-opus-4-20250514"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
 
 relatorio_conformidades:
-  description: "Refatoração de código, ogarantindo que a coesão, a consistência e a estabilidade do código sejam mantidas após refatorações complexas."
-  extensions: [".py"] 
+  description: "Refatoração de código, garantindo que a coesão, a consistência e a estabilidade do código sejam mantidas."
+  extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-opus-4-20250514"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
 
 relatorio_teste_unitario:
   description: "Refatoração de código, olhando somente para a cobertura de testes."
-  extensions: [".py"] 
+  extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "gpt-4o"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
 
 relatorio_owasp:
   description: "Refatoração de código, olhando somente para a segurança segundo OWSASP."
-  extensions: [".py"] 
+  extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-3-7-sonnet-20250219"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
       params:
         tipo_analise: "agrupamento_commits"
