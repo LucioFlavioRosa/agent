@@ -27,8 +27,8 @@ O sistema é composto por:
 
 bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/mcp-server.git
-cd mcp-server
+git clone https://github.com/LucioFlavioRosa/agent.git
+cd agent
 
 # Instale as dependências
 pip install -r requirements.txt
