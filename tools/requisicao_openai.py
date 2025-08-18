@@ -86,7 +86,7 @@ class OpenAILLMProvider(ILLMProvider):
                 )
                 
                 # Adapta a resposta para o formato que nosso sistema espera
-                conteudo_resposta = response.text
+                conteudo_resposta = response.output_text
                 tokens_entrada = response.usage.input_tokens
                 tokens_saida = response.usage.output_tokens
 
