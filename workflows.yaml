@@ -29,7 +29,7 @@ relatorio_simplicacao_debito_tecnico:
   extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-opus-4-20250514"
+      model_name: "claude-3-7-sonnet-20250219"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
