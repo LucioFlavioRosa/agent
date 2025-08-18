@@ -1,5 +1,5 @@
 ---
-name: Feature request
+name: Solicitação de Funcionalidade
 about: Sugira uma ideia para este projeto
 title: '[FEATURE] '
 labels: enhancement
@@ -8,27 +8,33 @@ assignees: ''
 ---
 
 ## Problema Relacionado
-Uma descrição clara e concisa do problema que sua feature resolve. Ex: Fico frustrado quando [...]
+
+<!-- Uma descrição clara e concisa do problema. Ex: Fico frustrado quando [...] -->
 
 ## Solução Desejada
-Uma descrição clara e concisa do que você quer que aconteça.
+
+<!-- Uma descrição clara e concisa do que você quer que aconteça -->
 
 ## Alternativas Consideradas
-Uma descrição clara e concisa de quaisquer soluções ou features alternativas que você considerou.
 
-## Impacto Esperado
-Descreva como esta feature beneficiaria os usuários e o projeto.
+<!-- Uma descrição clara e concisa de quaisquer soluções alternativas ou funcionalidades que você considerou -->
 
-## Escopo Proposto
-Indique o escopo da implementação:
-- [ ] Mudança na API
-- [ ] Nova funcionalidade interna
-- [ ] Melhoria de performance
-- [ ] Melhoria de UX
-- [ ] Outro (especifique)
+## Critérios de Aceitação
 
-## Mockups / Exemplos
-Se aplicável, adicione mockups ou exemplos para ajudar a explicar sua ideia.
+<!-- Liste os critérios que devem ser atendidos para que esta funcionalidade seja considerada completa -->
+
+- [ ] Critério 1
+- [ ] Critério 2
+- [ ] Critério 3
+
+## Impacto nos Usuários
+
+<!-- Descreva como esta funcionalidade beneficiará os usuários do sistema -->
+
+## Mockups ou Exemplos
+
+<!-- Se aplicável, adicione mockups, exemplos de código ou referências para ilustrar sua ideia -->
 
 ## Contexto Adicional
-Adicione qualquer outro contexto ou capturas de tela sobre a solicitação de feature aqui.
+
+<!-- Adicione qualquer outro contexto ou screenshots sobre a solicitação de funcionalidade aqui -->
