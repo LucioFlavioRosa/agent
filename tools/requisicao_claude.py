@@ -1,3 +1,4 @@
+import os
 import anthropic
 from typing import Optional, Dict, Any
 
