@@ -3,7 +3,7 @@ relatorio_cleancode:
   extensions: [".py"]
   steps:
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "gpt-5"
+      model_name: "gpt-4.1"
       params:
         tipo_analise: "aplicacao_de_mudancas"
     - status_update: "agrupando_commits"
