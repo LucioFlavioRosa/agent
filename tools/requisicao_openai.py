@@ -28,7 +28,7 @@ class OpenAILLMProvider(ILLMProvider):
             
             self.openai_client = AzureOpenAI(
                 azure_endpoint=self.azure_endpoint,
-                api_version="2024-10-01",
+                api_version="2024-12-01-preview",
                 api_key=api_key,
             )
 
@@ -56,7 +56,7 @@ class OpenAILLMProvider(ILLMProvider):
         max_token_out: int
     ) -> dict:
 
-        modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME", "gpt-4o")
+        modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
         model_lower = modelo_final.lower()
 
         prompt_sistema_base = self.carregar_prompt(tipo_analise)
@@ -81,8 +81,8 @@ class OpenAILLMProvider(ILLMProvider):
                 response = self.openai_client.responses.create(
                     model=modelo_final,
                     input=prompt_combinado,
-                    reasoning={"effort": "high"},
-                    text={"verbosity": "high"}
+                    reasoning={"effort": "medium"},
+                    text={"verbosity": "medium"}
                 )
                 
                 conteudo_resposta = response.output_text
@@ -101,7 +101,7 @@ class OpenAILLMProvider(ILLMProvider):
                     model=modelo_final,
                     messages=mensagens,
                     temperature=0.3,
-                    max_tokens=max_token_out
+                    max_completion_tokens=max_token_out
                 )
 
                 conteudo_resposta = (response.choices[0].message.content or "").strip()
