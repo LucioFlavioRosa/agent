@@ -71,10 +71,10 @@ class AnthropicClaudeProvider(ILLMProvider):
 
         # A API do Claude tem uma estrutura de mensagens ligeiramente diferente
         mensagens = [
-            {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{codigo}"},
+            {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{prompt_principal}"},
         ]
         if analise_extra.strip():
-            mensagens.append({"role": "user", "content": f"--- INSTRUÇÕES EXTRAS ---\n{analise_extra}"})
+            mensagens.append({"role": "user", "content": f"--- INSTRUÇÕES EXTRAS ---\n{instrucoes_extras}"})
 
         try:
             print(f"[Claude Handler] Chamando o modelo: '{modelo_final}'")
