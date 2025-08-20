@@ -174,26 +174,35 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         traceback.print_exc()
         handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
 
+# Em mcp_server_fastapi.py
+
 def run_workflow_task(job_id: str):
     job_info = None
     try:
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
-        # O ChangesetFiller não é mais necessário aqui.
+        # Constrói as dependências genéricas
         rag_retriever = AzureAISearchRAGRetriever()
+        changeset_filler = ChangesetFiller()
         repo_reader = GitHubRepositoryReader()
 
         workflow = WORKFLOW_REGISTRY.get(job_info['data']['original_analysis_type'])
         if not workflow: raise ValueError("Workflow não encontrado.")
 
-        # Variáveis para armazenar os resultados das etapas
-        resultado_refatoracao = {}
-        resultado_agrupamento = {}
-        previous_step_result = job_info['data'].get('step_0_result', {}) 
+        # --- FLUXO DE DADOS CORRIGIDO E FINAL ---
 
-        # Itera sobre os passos restantes, do segundo em diante
-        for step in workflow.get('steps', [])[1:]:
+        # 1. O ponto de partida é o resultado estruturado da tarefa de geração de relatório.
+        previous_step_result = job_info['data'].get('step_0_result', {})
+
+        # Variáveis para armazenar os resultados importantes
+        resultado_refatoracao_etapa = {}
+        resultado_agrupamento_etapa = {}
+
+        # 2. O loop executa os passos restantes do workflow (do segundo em diante).
+        etapas_do_workflow = workflow.get('steps', [])[1:]
+        
+        for i, step in enumerate(etapas_do_workflow):
             job_info['status'] = step['status_update']
             job_store.set_job(job_id, job_info)
             print(f"[{job_id}] ... Executando passo do workflow: {job_info['status']}")
@@ -209,51 +218,57 @@ def run_workflow_task(job_id: str):
             
             if agent_type == "revisor":
                 agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
+                # O input é o relatório/plano da tarefa anterior
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': json.dumps(previous_step_result)
+                    'instrucoes_extras': job_info['data']['recomendations'] or job_info['data']['analysis_report']
                 })
                 agent_response = agente.main(**agent_params)
             else: # processador
                 agente = AgenteProcessador(llm_provider=llm_provider)
+                # O input é o JSON estruturado da etapa anterior
                 agent_params['codigo'] = previous_step_result
                 agent_response = agente.main(**agent_params)
 
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
-            if not json_string.strip():
-                raise ValueError(f"A IA retornou uma resposta vazia para a etapa '{job_info['status']}'.")
+            if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia na etapa '{job_info['status']}'.")
             
-            # O resultado do passo atual se torna o input do próximo
-            previous_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
-        
-        resultado_agrupamento_final = previous_step_result
+            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            
+            # 3. Armazena os resultados corretamente
+            if i == 0:
+                # O resultado da primeira etapa deste workflow é sempre a refatoração.
+                resultado_refatoracao_etapa = current_step_result
+            
+            # O resultado da última etapa é sempre o agrupamento.
+            if i == len(etapas_do_workflow) - 1:
+                 resultado_agrupamento_etapa = current_step_result
 
-        job_info['data']['resultado_refatoracao'] = resultado_refatoracao
-        job_info['data']['resultado_agrupamento'] = resultado_agrupamento
+            previous_step_result = current_step_result
+
+        # --- FIM DA CORREÇÃO ---
+
+        # 4. Processamento final usa as variáveis corretas
+        job_info['data']['resultado_refatoracao'] = resultado_refatoracao_etapa
+        job_info['data']['resultado_agrupamento'] = resultado_agrupamento_etapa
         job_info['data']['diagnostic_logs'] = {
-            "1_json_refatoracao_inicial": job_info['data'].get('step_0_result', {}),
-            "2_json_agrupamento_recebido": resultado_agrupamento
+            "1_json_refatoracao_inicial": resultado_refatoracao_etapa,
+            "2_json_agrupamento_recebido": resultado_agrupamento_etapa
         }
-        job_info['status'] = 'formatting_commit_data' # Novo status para clareza
+        job_info['status'] = 'populating_data'
         job_store.set_job(job_id, job_info)
-
-        dados_agrupados_final = resultado_agrupamento
         
-        print(f"[{job_id}] Dados finais do workflow recebidos. Formatando para commit...")
+        dados_preenchidos = changeset_filler.main(
+            json_agrupado=resultado_agrupamento_etapa,
+            json_inicial=resultado_refatoracao_etapa
+        )
         
-        dados_finais_formatados = {"resumo_geral": dados_agrupados_final.get("resumo_geral", ""), "grupos": []}
-        for nome_grupo, detalhes_pr in dados_agrupados_final.items():
+        dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
+        for nome_grupo, detalhes_pr in dados_preenchidos.items():
             if nome_grupo == "resumo_geral": continue
-            # Assume que 'detalhes_pr' já é o formato correto vindo do agente de agrupamento
-            dados_finais_formatados["grupos"].append({
-                "branch_sugerida": nome_grupo, 
-                "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), 
-                "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), 
-                "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])
-            })
-        
-        # Delegação incondicional para o módulo de commit
+            dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
+
         job_info['status'] = 'committing_to_github'
         job_store.set_job(job_id, job_info)
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
@@ -378,6 +393,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
