@@ -73,7 +73,7 @@ class AnthropicClaudeProvider(ILLMProvider):
         mensagens = [
             {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{prompt_principal}"},
         ]
-        if analise_extra.strip():
+        if instrucoes_extras.strip():
             mensagens.append({"role": "user", "content": f"--- INSTRUÇÕES EXTRAS ---\n{instrucoes_extras}"})
 
         try:
