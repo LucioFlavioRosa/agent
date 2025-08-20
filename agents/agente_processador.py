@@ -14,7 +14,6 @@ class AgenteProcessador:
     def main(
         self,
         tipo_analise: str,
-        # O input principal agora é o 'codigo', que esperamos ser um dicionário
         codigo: Dict[str, Any],
         instrucoes_extras: str = "",
         usar_rag: bool = False,
