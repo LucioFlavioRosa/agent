@@ -39,9 +39,9 @@ class AnthropicClaudeProvider(ILLMProvider):
             print(f"ERRO CRÍTICO ao configurar o cliente da Anthropic: {e}")
             raise
 
-    def carregar_prompt(self, tipo_analise: str) -> str:
+    def carregar_prompt(self, tipo_tarefa: str) -> str:
         # (Esta função não muda)
-        caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_analise}.md')
+        caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_tarefa}.md')
         try:
             with open(caminho_prompt, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -60,7 +60,7 @@ class AnthropicClaudeProvider(ILLMProvider):
         
         modelo_final = model_name or "claude-3-opus-20240229" # Modelo padrão do Claude
         
-        prompt_sistema = self.carregar_prompt(tipo_analise)
+        prompt_sistema = self.carregar_prompt(tipo_tarefa)
 
         if usar_rag and self.rag_retriever:
             print("[Claude Handler] Usando o RAG retriever injetado...")
