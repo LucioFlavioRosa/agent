@@ -151,17 +151,15 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
 
-        json_string = agent_response.get("resultado", {}).get("reposta_final", {}).get('reposta_final', '')
-        if not json_string.strip():
-            raise ValueError("A IA retornou uma resposta vazia na geração do relatório.")
+        full_llm_response_obj = agent_response['resultado']['reposta_final']
+        json_string_from_llm = full_llm_response_obj.get('reposta_final', '')
+
+        if not json_string_from_llm or not json_string_from_llm.strip():
+            raise ValueError("A resposta da IA (LLM) veio vazia. Isso pode ser causado por filtros de conteúdo da OpenAI ou um erro no modelo. O processo não pode continuar.")
         
-        parsed_response = json.loads(json_string.replace("```json", "").replace("```", "").strip())
-        
-        # Salva os dois produtos gerados: o relatório para o humano e as recomendações para a máquina
-        job_info['data']['analysis_report'] = parsed_response.get("relatorio_para_humano", json_string)
-        job_info['data']['recomendations'] = parsed_response.get("plano_de_mudancas_para_maquina", "")
-        # Salva o resultado estruturado completo para ser usado como input no próximo passo
-        job_info['data']['step_0_result'] = parsed_response 
+        parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
+        report_text = parsed_response.get("relatorio", "Relatório não fornecido pela IA.")
+        job_info['data']['analysis_report'] = report_text 
         
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
@@ -263,9 +261,7 @@ def run_workflow_task(job_id: str):
         workflow = WORKFLOW_REGISTRY.get(job_info['data']['original_analysis_type'])
         if not workflow: raise ValueError("Workflow não encontrado.")
 
-        # O ponto de partida é o resultado estruturado da primeira tarefa (geração de relatório)
         previous_step_result = job_info['data'].get('step_0_result', {})
-        # Mantém o resultado da primeira etapa com o nome correto para o ChangesetFiller
         job_info['data']['resultado_refatoracao'] = previous_step_result
 
         # Itera sobre os passos restantes, do segundo em diante
@@ -459,6 +455,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
