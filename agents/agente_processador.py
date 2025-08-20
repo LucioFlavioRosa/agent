@@ -15,6 +15,8 @@ class AgenteProcessador:
         self,
         tipo_analise: str,
         codigo: Dict[str, Any],
+        repositorio: Optional[str] = None, # Será ignorado
+        nome_branch: Optional[str] = None, # Será ignorado
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
