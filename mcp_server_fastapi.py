@@ -132,8 +132,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         agent_params['usar_rag'] = payload.usar_rag
         agent_params['model_name'] = model_para_etapa
         
-        # Decide qual agente usar com base na configuração do YAML
-        agent_type = first_step.get("agent_type", "revisor")
+        agent_type = first_step.get("agent_type")
         
         if agent_type == "revisor":
             repo_reader = GitHubRepositoryReader()
@@ -145,8 +144,13 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
             })
             agent_response = agente.main(**agent_params)
         elif agent_type == "processador":
+            print(f"[{job_id}] Usando AgenteProcessador para a primeira etapa.")
             agente = AgenteProcessador(llm_provider=llm_provider)
-            agent_params['codigo'] = {"instrucoes_iniciais": payload.instrucoes_extras}
+            input_para_ia = {
+                "documento_de_requisitos": payload.instrucoes_extras,
+                "objetivo_da_tarefa": "Com base nos requisitos fornecidos, gere um plano técnico em formato JSON que servirá de base para a criação de código."
+            }
+            agent_params['codigo'] = input_para_ia
             agent_response = agente.main(**agent_params)
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
@@ -173,8 +177,6 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
     except Exception as e:
         traceback.print_exc()
         handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
-
-# Em mcp_server_fastapi.py
 
 def run_workflow_task(job_id: str):
     job_info = None
@@ -393,6 +395,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
