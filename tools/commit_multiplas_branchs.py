@@ -1,8 +1,6 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL E CORRIGIDA)
-
 import json
 from github import GithubException, UnknownObjectException
-from tools.github_connector import GitHubConnector # Corrigido para importar a classe
+from tools.github_connector import GitHubConnector
 from typing import Dict, Any, List
 
 def _processar_uma_branch(
@@ -173,3 +171,4 @@ def processar_e_subir_mudancas_agrupadas(
         print(f"ERRO FATAL NO ORQUESTRADOR DE COMMITS: {e}")
         traceback.print_exc()
         return [{"success": False, "message": f"Erro fatal no orquestrador: {e}"}]
+
