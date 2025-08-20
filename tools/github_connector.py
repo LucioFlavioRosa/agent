@@ -33,13 +33,11 @@ class GitHubConnector:
 
         secret_client = cls._get_secret_client()
         token_secret_name = f"github-token-{org_name}"
-        default_secret_name = "github-token-default"
         
         try:
             github_token = secret_client.get_secret(token_secret_name).value
         except Exception:
             print(f"AVISO: Segredo '{token_secret_name}' não encontrado. Usando token padrão.")
-            github_token = secret_client.get_secret(default_secret_name).value
 
         auth = Auth.Token(github_token)
         new_client = Github(auth=auth)
