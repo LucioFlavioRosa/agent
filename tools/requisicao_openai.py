@@ -46,11 +46,11 @@ class OpenAILLMProvider(ILLMProvider):
         except FileNotFoundError:
             raise ValueError(f"Arquivo de prompt para '{tipo_analise}' não encontrado: {caminho_prompt}")
             
-    def executar_analise_llm(
+    def executar_prompt(
         self,
-        tipo_analise: str,
-        codigo: str,
-        analise_extra: str,
+        tipo_tarefa: str,
+        prompt_principal: str,
+        instrucoes_extras: str,
         usar_rag: bool,
         model_name: Optional[str],
         max_token_out: int
