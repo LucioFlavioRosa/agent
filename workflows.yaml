@@ -182,7 +182,7 @@ geracao_codigo_a_partir_de_reuniao:
   description: "Escrita de documentação do código."
   extensions: [".py"]
   steps:
-    - status_update: "analisando o repositório"
+    - status_update: "analisando o relatório de requisitos"
       model_name: "gpt-4.1"
       agent_type: "processador"
       params:
