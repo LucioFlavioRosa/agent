@@ -67,6 +67,14 @@ class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
 
+class GenerateCodePayload(BaseModel):
+    repo_destino: str = Field(..., description="O repositório onde o código gerado será commitado (ex: 'MinhaOrg/NovoProjeto').")
+    branch_destino: str = Field(..., description="A branch a partir da qual as novas branches de feature serão criadas (ex: 'main').")
+    demanda_negocio: str = Field(..., description="A descrição detalhada da funcionalidade ou do código a ser criado.")
+    diretrizes_codigo: Optional[str] = Field("", description="Diretrizes extras, como estilo de código, bibliotecas a serem usadas, etc.")
+    model_name: Optional[str] = Field(None, description="Modelo de LLM principal a ser usado. Pode ser sobrescrito por etapa no workflow.")
+    usar_rag: bool = Field(False, description="Usar RAG para aplicar políticas da empresa ao código gerado.")
+
 
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
@@ -371,6 +379,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
