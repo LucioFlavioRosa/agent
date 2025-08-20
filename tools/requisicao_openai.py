@@ -76,9 +76,9 @@ class OpenAILLMProvider(ILLMProvider):
         try:
             mensagens = [
                     {"role": "system", "content": prompt_sistema_final},
-                    {'role': 'user', 'content': codigo},
+                    {'role': 'user', 'content': prompt_principal},
                     {'role': 'user',
-                     'content': f'Instruções extras do usuário: {analise_extra}' if analise_extra.strip() else 'Nenhuma instrução extra.'}
+                     'content': f'Instruções extras do usuário: {instrucoes_extras}' if analise_extra.strip() else 'Nenhuma instrução extra.'}
                 ]
                 
             response = self.openai_client.chat.completions.create(
