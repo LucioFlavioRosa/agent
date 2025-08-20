@@ -104,10 +104,6 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
-    """
-    Executa APENAS O PRIMEIRO PASSO de um workflow para gerar um relatório
-    e então para, aguardando a aprovação humana.
-    """
     job_info = None
     try:
         job_info = job_store.get_job(job_id)
@@ -115,43 +111,50 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
         analysis_type_str = payload.analysis_type.value
         workflow = WORKFLOW_REGISTRY.get(analysis_type_str)
-        if not workflow or not workflow.get('steps'):
-            raise ValueError(f"Workflow '{analysis_type_str}' é inválido ou não tem etapas.")
-
-        # Pega a definição apenas do primeiro passo
         first_step = workflow['steps'][0]
+        
         job_info['status'] = first_step.get('status_update', 'gerando_relatorio')
         job_store.set_job(job_id, job_info)
 
-        # Constrói as dependências para a tarefa
         rag_retriever = AzureAISearchRAGRetriever()
         model_para_etapa = first_step.get('model_name', payload.model_name)
         llm_provider = create_llm_provider(model_para_etapa, rag_retriever)
         
-        agent_params = first_step.get('params', {}).copy()
-        agent_params['usar_rag'] = payload.usar_rag
-        agent_params['model_name'] = model_para_etapa
-        
         agent_type = first_step.get("agent_type")
-        
+        params_base = first_step.get('params', {}).copy()
+
         if agent_type == "revisor":
             repo_reader = GitHubRepositoryReader()
             agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
-            agent_params.update({
-                'repositorio': payload.repo_name,
-                'nome_branch': payload.branch_name,
-                'instrucoes_extras': payload.instrucoes_extras
-            })
+            
+            # Parâmetros específicos para o AgenteRevisor
+            agent_params = {
+                **params_base,
+                "repositorio": payload.repo_name,
+                "nome_branch": payload.branch_name,
+                "instrucoes_extras": payload.instrucoes_extras,
+                "usar_rag": payload.usar_rag,
+                "model_name": model_para_etapa
+            }
             agent_response = agente.main(**agent_params)
+            
         elif agent_type == "processador":
-            print(f"[{job_id}] Usando AgenteProcessador para a primeira etapa.")
             agente = AgenteProcessador(llm_provider=llm_provider)
+            
+            # Parâmetros específicos para o AgenteProcessador
             input_para_ia = {
                 "documento_de_requisitos": payload.instrucoes_extras,
-                "objetivo_da_tarefa": "Com base nos requisitos fornecidos, gere um plano técnico em formato JSON que servirá de base para a criação de código."
+                "objetivo_da_tarefa": "Gerar um plano técnico em formato JSON com base nos requisitos."
             }
-            agent_params['codigo'] = input_para_ia
+            agent_params = {
+                **params_base,
+                "codigo": input_para_ia, # O input principal é o 'codigo'
+                "instrucoes_extras": "", # O texto principal já está em 'codigo'
+                "usar_rag": payload.usar_rag,
+                "model_name": model_para_etapa
+            }
             agent_response = agente.main(**agent_params)
+            
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
 
@@ -248,8 +251,6 @@ def run_workflow_task(job_id: str):
                  resultado_agrupamento_etapa = current_step_result
 
             previous_step_result = current_step_result
-
-        # --- FIM DA CORREÇÃO ---
 
         # 4. Processamento final usa as variáveis corretas
         job_info['data']['resultado_refatoracao'] = resultado_refatoracao_etapa
@@ -395,6 +396,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
