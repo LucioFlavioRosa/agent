@@ -177,3 +177,23 @@ relatorio_documentacao:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+
+geracao_codigo_a_partir_de_reuniao:
+  description: "Escrita de documentação do código."
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "processador"
+      params:
+        tipo_analise: "geracao_codigo_a_partir_de_reuniao"
+    - status_update: "escrita_codigo"
+      model_name: "claude-3-7-sonnet-20250219"
+      agent_type: "processador"
+      params:
+        tipo_analise: "criando_codigos"
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
