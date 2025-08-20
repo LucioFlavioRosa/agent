@@ -59,7 +59,7 @@ class OpenAILLMProvider(ILLMProvider):
         modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
         model_lower = modelo_final.lower()
 
-        prompt_sistema_base = self.carregar_prompt(tipo_analise)
+        prompt_sistema_base = self.carregar_prompt(tipo_tarefa)
         prompt_sistema_final = prompt_sistema_base
 
         if usar_rag and self.rag_retriever:
