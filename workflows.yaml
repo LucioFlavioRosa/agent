@@ -188,7 +188,7 @@ geracao_codigo_a_partir_de_reuniao:
       params:
         tipo_analise: "geracao_codigo_a_partir_de_reuniao"
     - status_update: "escrita_codigo"
-      model_name: "claude-3-7-sonnet-20250219"
+      model_name: "gpt-4.1"
       agent_type: "processador"
       params:
         tipo_analise: "criando_codigos"
