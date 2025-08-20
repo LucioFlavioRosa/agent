@@ -74,45 +74,30 @@ class OpenAILLMProvider(ILLMProvider):
             )
         
         try:
-            if "gpt-5" in model_lower:
-                
-                prompt_combinado = f"{prompt_sistema_final}\n\n--- CÓDIGO ---\n{codigo}\n\n--- INSTRUÇÕES EXTRAS ---\n{analise_extra}"
-                
-                response = self.openai_client.responses.create(
-                    model=modelo_final,
-                    input=prompt_combinado,
-                    reasoning={"effort": "medium"},
-                    text={"verbosity": "medium"}
-                )
-                
-                conteudo_resposta = response.output_text
-                tokens_entrada = response.usage.input_tokens
-                tokens_saida = response.usage.output_tokens
-
-            else:
-                mensagens = [
+            mensagens = [
                     {"role": "system", "content": prompt_sistema_final},
                     {'role': 'user', 'content': codigo},
                     {'role': 'user',
                      'content': f'Instruções extras do usuário: {analise_extra}' if analise_extra.strip() else 'Nenhuma instrução extra.'}
                 ]
                 
-                response = self.openai_client.chat.completions.create(
+            response = self.openai_client.chat.completions.create(
                     model=modelo_final,
                     messages=mensagens,
                     temperature=0.3,
                     max_completion_tokens=max_token_out
                 )
 
-                conteudo_resposta = (response.choices[0].message.content or "").strip()
-                tokens_entrada = response.usage.prompt_tokens
-                tokens_saida = response.usage.completion_tokens
+            conteudo_resposta = (response.choices[0].message.content or "").strip()
+            tokens_entrada = response.usage.prompt_tokens
+            tokens_saida = response.usage.completion_tokens
 
             return {
                 'reposta_final': conteudo_resposta,
                 'tokens_entrada': tokens_entrada,
                 'tokens_saida': tokens_saida
             }
+            
         except Exception as e:
             print(f"ERRO: Falha na chamada à API da OpenAI para o modelo '{modelo_final}'. Causa: {e}")
             raise RuntimeError(f"Erro ao comunicar com a OpenAI: {e}") from e
