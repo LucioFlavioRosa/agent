@@ -173,76 +173,6 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         traceback.print_exc()
         handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
 
-def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
-    """
-    Executa APENAS O PRIMEIRO PASSO de um workflow para gerar um relatório
-    e então para, aguardando a aprovação humana.
-    """
-    job_info = None
-    try:
-        job_info = job_store.get_job(job_id)
-        if not job_info: raise ValueError("Job não encontrado.")
-
-        analysis_type_str = payload.analysis_type.value
-        workflow = WORKFLOW_REGISTRY.get(analysis_type_str)
-        if not workflow or not workflow.get('steps'):
-            raise ValueError(f"Workflow '{analysis_type_str}' é inválido ou não tem etapas.")
-
-        # Pega a definição apenas do primeiro passo
-        first_step = workflow['steps'][0]
-        job_info['status'] = first_step.get('status_update', 'gerando_relatorio')
-        job_store.set_job(job_id, job_info)
-
-        # Constrói as dependências para a tarefa
-        rag_retriever = AzureAISearchRAGRetriever()
-        model_para_etapa = first_step.get('model_name', payload.model_name)
-        llm_provider = create_llm_provider(model_para_etapa, rag_retriever)
-        
-        agent_params = first_step.get('params', {}).copy()
-        agent_params['usar_rag'] = payload.usar_rag
-        agent_params['model_name'] = model_para_etapa
-        
-        # Decide qual agente usar com base na configuração do YAML
-        agent_type = first_step.get("agent_type", "revisor")
-        
-        if agent_type == "revisor":
-            repo_reader = GitHubRepositoryReader()
-            agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
-            agent_params.update({
-                'repositorio': payload.repo_name,
-                'nome_branch': payload.branch_name,
-                'instrucoes_extras': payload.instrucoes_extras
-            })
-            agent_response = agente.main(**agent_params)
-        elif agent_type == "processador":
-            agente = AgenteProcessador(llm_provider=llm_provider)
-            agent_params['codigo'] = {"instrucoes_iniciais": payload.instrucoes_extras}
-            agent_response = agente.main(**agent_params)
-        else:
-            raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
-
-        json_string = agent_response.get("resultado", {}).get("reposta_final", {}).get('reposta_final', '')
-        if not json_string.strip():
-            raise ValueError("A IA retornou uma resposta vazia na geração do relatório.")
-        
-        parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
-        report_text = parsed_response.get("relatorio", json_string_from_llm)
-        job_info['data']['analysis_report'] = report_text
-        
-        if payload.gerar_relatorio_apenas:
-            job_info['status'] = 'completed'
-        else:
-            job_info['status'] = 'pending_approval'
-
-        job_store.set_job(job_id, job_info)
-        print(f"[{job_id}] Tarefa de geração de relatório concluída. Status: {job_info['status']}")
-
-    except Exception as e:
-        traceback.print_exc()
-        handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
-
-# Em mcp_server_fastapi.py
-
 def run_workflow_task(job_id: str):
     """
     Executa os PASSOS RESTANTES (do segundo em diante) de um workflow
@@ -455,6 +385,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
