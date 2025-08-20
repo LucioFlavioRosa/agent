@@ -16,8 +16,8 @@ Sua tarefa é traduzir a tabela "Estrutura de Arquivos e Pastas" do relatório e
 ## 4. REGRAS DE GERAÇÃO DE CÓDIGO
 
 1.  **EXECUÇÃO PRECISA DO PLANO:** Para **CADA LINHA** da tabela "Estrutura de Arquivos e Pastas" no relatório, crie um arquivo correspondente. A coluna "Descrição" é a sua especificação técnica.
-2.  **Crie todos os códigos:** PReciso da solução pronta para rodar, mesmo que vamos precisar 
-3.  **QUALIDADE DO CÓDIGO GERADO:** O código gerado **NÃO** deve ser um placeholder vazio. Ele deve ser um **esqueleto funcional e de alta qualidade (`boilerplate`)** que segue as melhores práticas para a tecnologia especificada na descrição.
+2.  **Crie todos os códigos:** PRECISO da solução pronta para rodar, vamos ter que mudar alguns endereços, rotas, acessos a bancos, mas o resto deve estar pronto com a melhor precisão possível.
+3.  **QUALIDADE DO CÓDIGO GERADO:** O código gerado **NÃO** deve ser um placeholder vazio. Ele deve ser uma solução que segue as melhores práticas para a tecnologia especificada na descrição.
     -   **Exemplo para `main.py` de FastAPI:** Inclua a instanciação do `FastAPI()`, um endpoint de health check (`/health`) e a configuração básica de CORS.
     -   **Exemplo para `database.py` com SQLAlchemy:** Inclua a criação da `engine`, da `SessionLocal` e da `Base` declarativa.
     -   **Exemplo para `package.json` de React:** Inclua dependências essenciais como `react`, `react-dom`, `typescript` e scripts como `dev`, `build`, `lint`.
