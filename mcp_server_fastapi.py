@@ -41,6 +41,32 @@ class StartAnalysisPayload(BaseModel):
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    
+    @model_validator(mode='after')
+    def check_repo_name_is_required(self) -> 'StartAnalysisPayload':
+        """
+        Valida que 'repo_name' seja fornecido se a análise começar com um AgenteRevisor.
+        """
+        analysis_type = self.analysis_type
+        repo_name = self.repo_name
+
+        if not analysis_type:
+            return self 
+            
+        workflow = WORKFLOW_REGISTRY.get(analysis_type.value)
+        if not workflow or not workflow.get('steps'):
+            return self
+
+        first_step = workflow['steps'][0]
+        agent_type_for_first_step = first_step.get("agent_type", "revisor")
+
+        if agent_type_for_first_step == "revisor" and not repo_name:
+            raise ValueError(
+                f"O campo 'repo_name' é obrigatório para o tipo de análise '{analysis_type.value}', "
+                "pois ele começa com um agente que lê repositórios."
+            )
+            
+        return self
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -393,6 +419,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
