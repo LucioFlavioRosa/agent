@@ -34,7 +34,7 @@ ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
 
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
-    repo_name: str
+    Optional[str] = None
     analysis_type: ValidAnalysisTypes
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
@@ -393,6 +393,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
