@@ -103,16 +103,25 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
+# Em mcp_server_fastapi.py
+
 def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
+    """
+    Executa APENAS O PRIMEIRO PASSO de um workflow para gerar um relatório
+    e então para, aguardando a aprovação humana.
+    """
     job_info = None
+    json_string_from_llm = ""
     try:
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
         analysis_type_str = payload.analysis_type.value
         workflow = WORKFLOW_REGISTRY.get(analysis_type_str)
+        if not workflow or not workflow.get('steps'):
+            raise ValueError(f"Workflow '{analysis_type_str}' é inválido ou não tem etapas.")
+
         first_step = workflow['steps'][0]
-        
         job_info['status'] = first_step.get('status_update', 'gerando_relatorio')
         job_store.set_job(job_id, job_info)
 
@@ -120,54 +129,48 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         model_para_etapa = first_step.get('model_name', payload.model_name)
         llm_provider = create_llm_provider(model_para_etapa, rag_retriever)
         
-        agent_type = first_step.get("agent_type")
-        params_base = first_step.get('params', {}).copy()
-
+        agent_params = first_step.get('params', {}).copy()
+        agent_params['usar_rag'] = payload.usar_rag
+        agent_params['model_name'] = model_para_etapa
+        
+        agent_type = first_step.get("agent_type", "revisor")
+        
         if agent_type == "revisor":
             repo_reader = GitHubRepositoryReader()
             agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
-            
-            # Parâmetros específicos para o AgenteRevisor
-            agent_params = {
-                **params_base,
-                "repositorio": payload.repo_name,
-                "nome_branch": payload.branch_name,
-                "instrucoes_extras": payload.instrucoes_extras,
-                "usar_rag": payload.usar_rag,
-                "model_name": model_para_etapa
-            }
+            agent_params.update({
+                'repositorio': payload.repo_name,
+                'nome_branch': payload.branch_name,
+                'instrucoes_extras': payload.instrucoes_extras
+            })
             agent_response = agente.main(**agent_params)
-            
         elif agent_type == "processador":
             agente = AgenteProcessador(llm_provider=llm_provider)
-            
-            # Parâmetros específicos para o AgenteProcessador
-            input_para_ia = {
-                "documento_de_requisitos": payload.instrucoes_extras,
-                "objetivo_da_tarefa": "Gerar um plano técnico em formato JSON com base nos requisitos."
-            }
-            agent_params = {
-                **params_base,
-                "codigo": input_para_ia, # O input principal é o 'codigo'
-                "instrucoes_extras": "", # O texto principal já está em 'codigo'
-                "usar_rag": payload.usar_rag,
-                "model_name": model_para_etapa
-            }
+            agent_params['codigo'] = {"instrucoes_iniciais": payload.instrucoes_extras}
             agent_response = agente.main(**agent_params)
-            
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
 
-        full_llm_response_obj = agent_response['resultado']['reposta_final']
-        json_string_from_llm = full_llm_response_obj.get('reposta_final', '')
+        provider_response = agent_response.get("resultado", {})
+        json_string_from_llm = provider_response.get("reposta_final", "")
 
-        if not json_string_from_llm or not json_string_from_llm.strip():
-            raise ValueError("A resposta da IA (LLM) veio vazia. Isso pode ser causado por filtros de conteúdo da OpenAI ou um erro no modelo. O processo não pode continuar.")
+        if not json_string_from_llm.strip():
+            raise ValueError("A resposta da IA veio vazia.")
         
+        # 1. Analisa o JSON que a IA retornou.
         parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
-        report_text = parsed_response.get("relatorio", "Relatório não fornecido pela IA.")
-        job_info['data']['analysis_report'] = report_text 
-        job_info['data']['resultado_etapa_inicial'] = parsed_response
+        
+        # 2. Pega o valor da ÚNICA chave que esperamos: "relatorio".
+        #    Se a chave não existir, usa a resposta bruta como um fallback seguro.
+        report_text = parsed_response.get("relatorio", json_string_from_llm)
+        
+        # 3. Salva o texto do relatório para a visualização do humano e para a próxima etapa.
+        job_info['data']['analysis_report'] = report_text
+        
+        # 4. Salva o objeto JSON original para os logs de diagnóstico.
+        job_info['data']['step_0_result'] = parsed_response
+        
+        # --- FIM DA MUDANÇA ---
         
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
@@ -178,6 +181,12 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         print(f"[{job_id}] Tarefa de geração de relatório concluída. Status: {job_info['status']}")
 
     except Exception as e:
+        if job_info:
+            if 'data' not in job_info: job_info['data'] = {}
+            job_info['data']['diagnostic_logs'] = {
+                "raw_llm_response_report_generation": json_string_from_llm
+            }
+            job_store.set_job(job_id, job_info)
         traceback.print_exc()
         handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
 
@@ -396,6 +405,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
