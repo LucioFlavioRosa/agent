@@ -222,7 +222,7 @@ def run_workflow_task(job_id: str):
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': job_info['data']['recomendations'] or job_info['data']['analysis_report']
+                    'instrucoes_extras': job_info['data']['analysis_report']
                 })
                 agent_response = agente.main(**agent_params)
             else: # processador
@@ -393,6 +393,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
