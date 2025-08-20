@@ -62,10 +62,10 @@ class AgenteRevisor:
 
         codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
 
-        resultado_da_ia = self.llm_provider.executar_analise_llm(
-            tipo_analise=tipo_analise,
-            codigo=codigo_str,
-            analise_extra=instrucoes_extras,
+        resultado_da_ia = self.llm_provider.executar_prompt(
+            tipo_tarefa=tipo_analise,
+            prompt_principal=codigo_str,
+            instrucoes_extras=instrucoes_extras,
             usar_rag=usar_rag,
             model_name=model_name,
             max_token_out=max_token_out
