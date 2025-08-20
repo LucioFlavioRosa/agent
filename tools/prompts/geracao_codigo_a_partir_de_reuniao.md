@@ -39,7 +39,3 @@ O relatório final deve ser um único documento Markdown com exatamente duas se�
 -   Uma tabela com duas colunas:
     -   **`Caminho do Arquivo/Pasta`**: O caminho completo a partir da raiz do repositório.
     -   **`Descrição (Objetivos e Tecnologias)`**: Uma descrição clara do propósito de cada arquivo/pasta, os requisitos que ele atende e as tecnologias que serão usadas nele.
-
----
-## 5. INPUT: DOCUMENTO DE REQUISITOS
-[Cole aqui o Documento de Requisitos do projeto]
