@@ -44,7 +44,7 @@ class OpenAILLMProvider(ILLMProvider):
             with open(caminho_prompt, 'r', encoding='utf-8') as f:
                 return f.read()
         except FileNotFoundError:
-            raise ValueError(f"Arquivo de prompt para '{tipo_analise}' não encontrado: {caminho_prompt}")
+            raise ValueError(f"Arquivo de prompt para '{tipo_tarefa}' não encontrado: {caminho_prompt}")
             
     def executar_prompt(
         self,
@@ -78,7 +78,7 @@ class OpenAILLMProvider(ILLMProvider):
                     {"role": "system", "content": prompt_sistema_final},
                     {'role': 'user', 'content': prompt_principal},
                     {'role': 'user',
-                     'content': f'Instruções extras do usuário: {instrucoes_extras}' if analise_extra.strip() else 'Nenhuma instrução extra.'}
+                     'content': f'Instruções extras do usuário: {instrucoes_extras}' if instrucoes_extras.strip() else 'Nenhuma instrução extra.'}
                 ]
                 
             response = self.openai_client.chat.completions.create(
