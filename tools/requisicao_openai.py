@@ -38,8 +38,8 @@ class OpenAILLMProvider(ILLMProvider):
             print(f"ERRO CRÍTICO ao configurar o cliente do Azure OpenAI: {e}")
             raise
 
-    def carregar_prompt(self, tipo_analise: str) -> str:
-        caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_analise}.md')
+    def carregar_prompt(self, tipo_tarefa: str) -> str:
+        caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_tarefa}.md')
         try:
             with open(caminho_prompt, 'r', encoding='utf-8') as f:
                 return f.read()
