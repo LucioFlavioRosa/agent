@@ -160,7 +160,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
 
-        provider_response = agent_response.get("resultado", {})
+        provider_response = agent_response.get("resultado", {}).get("reposta_final", {})
         json_string_from_llm = provider_response.get("reposta_final", "")
 
         if not json_string_from_llm.strip():
@@ -414,6 +414,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
