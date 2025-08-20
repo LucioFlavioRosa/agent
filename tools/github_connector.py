@@ -1,6 +1,3 @@
-# Arquivo: tools/github_connector.py (VERSÃO OTIMIZADA E ROBUSTA)
-# [ATENÇÃO] Refatoração inicial: encapsulará acesso ao GitHub em interface futura IGitHubRepository.
-
 import os
 from github import Github, Repository
 from github.Auth import Token
