@@ -364,8 +364,10 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+
     status = job.get('status')
     logs = job.get("data", {}).get("diagnostic_logs")
+
     try:
         if status == 'completed':
             if job.get("data", {}).get("gerar_relatorio_apenas") is True:
@@ -378,6 +380,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 summary_list = []
                 commit_details = job.get("data", {}).get("commit_details", [])
                 for pr_info in commit_details:
+                    # Cenário 1: Um Pull Request foi criado com sucesso
                     if pr_info.get("success") and pr_info.get("pr_url"):
                         summary_list.append(
                             PullRequestSummary(
@@ -386,15 +389,16 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                                 arquivos_modificados=pr_info.get("arquivos_modificados", [])
                             )
                         )
-                    # Adiciona mensagem clara para commit direto sem PR
-                    if pr_info.get("success") and not pr_info.get("pr_url") and pr_info.get("message", "").startswith("Commit direto"):
+                    # Cenário 2: Um commit direto foi feito com sucesso (sem PR)
+                    elif pr_info.get("success") and not pr_info.get("pr_url"):
                         summary_list.append(
                             PullRequestSummary(
-                                pull_request_url="(commit direto, sem PR)",
+                                pull_request_url="(Commit direto na branch principal, sem PR)",
                                 branch_name=pr_info.get("branch_name", "main"),
                                 arquivos_modificados=pr_info.get("arquivos_modificados", [])
                             )
                         )
+
                 return FinalStatusResponse(
                     job_id=job_id, 
                     status=status, 
@@ -410,18 +414,10 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             )
         else:
             return FinalStatusResponse(job_id=job_id, status=status)
+
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
-        raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
-
-
-
-
-
-
-
+        raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")osta do status do job.")
 
 
