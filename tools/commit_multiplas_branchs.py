@@ -3,11 +3,9 @@ from github import GithubException, UnknownObjectException, Repository
 from typing import Dict, Any, List
 
 # --- FUNÇÃO AUXILIAR REUTILIZÁVEL ---
-# Esta função contém a lógica central de fazer commits, que é a mesma para ambos os fluxos.
 def _commitar_arquivos_na_branch(repo: Repository.Repository, nome_branch: str, conjunto_de_mudancas: list) -> tuple[int, list[str]]:
     """
-    Aplica uma lista de mudanças (criar, modificar, remover) a uma branch específica.
-    Retorna o número de commits e a lista de arquivos afetados.
+    Aplica uma lista de mudanças a uma branch específica e retorna o resultado.
     """
     commits_realizados = 0
     arquivos_modificados = []
@@ -15,7 +13,7 @@ def _commitar_arquivos_na_branch(repo: Repository.Repository, nome_branch: str, 
     print(f"Iniciando aplicação de {len(conjunto_de_mudancas)} mudanças na branch '{nome_branch}'...")
     for mudanca in conjunto_de_mudancas:
         caminho = mudanca.get("caminho_do_arquivo")
-        status = mudanca.get("status", "").upper()
+        status = mudanca.get("status", "INALTERADO").upper()
         conteudo = mudanca.get("conteudo")
 
         if not caminho:
@@ -27,34 +25,49 @@ def _commitar_arquivos_na_branch(repo: Repository.Repository, nome_branch: str, 
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
             except UnknownObjectException:
-                pass # Arquivo não existe, o que é esperado para CRIADO/ADICIONADO
+                pass 
 
             commit_message = f"feat: Adiciona {caminho}" if status in ("ADICIONADO", "CRIADO") else f"refactor: Atualiza {caminho}"
             if status == "REMOVIDO":
                 commit_message = f"refactor: Remove {caminho}"
             
-            # Lógica de Ação
+            acao_executada = False
             if status in ("ADICIONADO", "CRIADO"):
-                if conteudo is None: continue
-                if sha_arquivo_existente:
-                    repo.update_file(path=caminho, message=commit_message, content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
-                else:
-                    repo.create_file(path=caminho, message=commit_message, content=conteudo, branch=nome_branch)
+                if conteudo is not None:
+                    if sha_arquivo_existente:
+                        repo.update_file(path=caminho, message=commit_message, content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
+                        print(f"  [ATUALIZADO] {caminho}")
+                    else:
+                        repo.create_file(path=caminho, message=commit_message, content=conteudo, branch=nome_branch)
+                        print(f"  [CRIADO] {caminho}")
+                    acao_executada = True
+
             elif status == "MODIFICADO":
-                if conteudo is None or not sha_arquivo_existente: continue
-                repo.update_file(path=caminho, message=commit_message, content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
+                if conteudo is not None and sha_arquivo_existente:
+                    repo.update_file(path=caminho, message=commit_message, content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
+                    print(f"  [MODIFICADO] {caminho}")
+                    acao_executada = True
+                elif not sha_arquivo_existente:
+                    print(f"  [AVISO] Arquivo '{caminho}' para MODIFICAR não foi encontrado. Ignorando.")
+
             elif status == "REMOVIDO":
-                if not sha_arquivo_existente: continue
-                repo.delete_file(path=caminho, message=commit_message, sha=sha_arquivo_existente, branch=nome_branch)
-            else: # Ignora "INALTERADO" e outros status
-                continue
+                if sha_arquivo_existente:
+                    repo.delete_file(path=caminho, message=commit_message, sha=sha_arquivo_existente, branch=nome_branch)
+                    print(f"  [REMOVIDO] {caminho}")
+                    acao_executada = True
+                else:
+                    print(f"  [AVISO] Arquivo '{caminho}' para REMOVER já não existe. Ignorando.")
             
-            print(f"  [{status}] {caminho}")
-            commits_realizados += 1
-            arquivos_modificados.append(caminho)
+            # Se uma ação foi executada com sucesso, incrementa os contadores
+            if acao_executada:
+                commits_realizados += 1
+                arquivos_modificados.append(caminho)
+            else:
+                 print(f"  [IGNORADO] Nenhuma ação aplicável para '{caminho}' com status '{status}'.")
 
         except Exception as e:
-            print(f"ERRO ao processar o arquivo '{caminho}': {e}")
+            print(f"ERRO CRÍTICO ao processar o arquivo '{caminho}': {e}")
+            traceback.print_exc()
             
     return commits_realizados, arquivos_modificados
 
