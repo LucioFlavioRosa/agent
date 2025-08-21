@@ -109,7 +109,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         if not job_info: raise ValueError("Job não encontrado.")
 
         print(f"[{job_id}] Verificando e conectando ao repositório: {payload.repo_name}...")
-        _, foi_criado_agora = GitHubConnector.connection(repositorio=payload.repo_name)
+        _, foi_criado_agora = GitHubConnector.connection_with_info(repositorio=payload.repo_name)
         job_info['data']['repo_foi_criado_agora'] = foi_criado_agora
 
         analysis_type_str = payload.analysis_type.value
@@ -396,6 +396,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
