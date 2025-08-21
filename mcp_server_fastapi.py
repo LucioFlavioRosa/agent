@@ -108,6 +108,10 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
+        print(f"[{job_id}] Verificando e conectando ao repositório: {payload.repo_name}...")
+        _, foi_criado_agora = GitHubConnector.connection(repositorio=payload.repo_name)
+        job_info['data']['repo_foi_criado_agora'] = foi_criado_agora
+
         analysis_type_str = payload.analysis_type.value
         workflow = WORKFLOW_REGISTRY.get(analysis_type_str)
         if not workflow or not workflow.get('steps'):
@@ -269,11 +273,11 @@ def run_workflow_task(job_id: str):
         for nome_grupo, detalhes_pr in dados_preenchidos.items():
             if nome_grupo == "resumo_geral": continue
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
+        
+        repo_foi_criado = job_info['data'].get('repo_foi_criado_agora', False)
         job_info['status'] = 'committing_to_github'
         job_store.set_job(job_id, job_info)
-        # --- FLUXO ALTERADO: Detecta se o repo é novo e comita direto na main ---
-        repo, repo_info = GitHubConnector.connection_with_info(job_info['data']['repo_name'])
-        is_novo_repo = repo_info.get('is_novo_repo', False)
+
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
             nome_repo=job_info['data']['repo_name'], 
             dados_agrupados=dados_finais_formatados,
@@ -392,5 +396,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
