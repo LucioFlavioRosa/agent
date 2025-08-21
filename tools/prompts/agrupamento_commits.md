@@ -46,6 +46,7 @@ Para agilizar o processo, sugira os perfis ideais para revisar cada PR.
 
 -   **Coesão é a Chave:** Cada PR deve contar uma única "história" de melhoria.
 -   **Descreva o PR:** Crie um `resumo_do_pr` (título) e uma `descricao_do_pr` (corpo) claros e informativos.
+-   **Reescreva o conteúdo dos códigos completos**
 
 ---
 ## FORMATO DA SAÍDA ESPERADA
