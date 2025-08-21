@@ -84,8 +84,7 @@ def processar_e_subir_mudancas_agrupadas(
     resultados_finais = []
     try:
         print("--- Iniciando o Processo de Pull Requests Empilhados OU Commit Direto ---")
-        repo, repo_info = GitHubConnector.connection_with_info(repositorio=nome_repo)
-        is_novo_repo = repo_info.get("is_novo_repo", False)
+        repo, is_novo_repo = GitHubConnector.connection_with_info(repositorio=nome_repo)
         branch_anterior = base_branch
         lista_de_grupos = dados_agrupados.get("grupos", [])
         if not lista_de_grupos:
