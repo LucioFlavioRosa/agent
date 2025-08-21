@@ -64,7 +64,7 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
       {
         "caminho_do_arquivo": "app/auth.py",
         "status": "MODIFICADO",
-        "conteudo": "...",
+        "conteudo": conteúdo todo do arquivo,
         "justificativa": "Query SQL parametrizada para mitigar vulnerabilidade de Injeção de SQL."
       }
     ]
@@ -76,7 +76,7 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
       {
         "caminho_do_arquivo": "prod/backend.tf",
         "status": "MODIFICADO",
-        "conteudo": "...",
+        "conteudo": conteúdo todo do arquivo,
         "justificativa": "Configurado backend remoto S3 com travamento via DynamoDB."
       }
     ]
@@ -88,7 +88,7 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
       {
         "caminho_do_arquivo": "README.md",
         "status": "MODIFICADO",
-        "conteudo": "...",
+        "conteudo": conteúdo todo do arquivo,
         "justificativa": "README atualizado com novas instruções de setup."
       },
       {
