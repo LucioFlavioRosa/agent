@@ -273,16 +273,20 @@ def run_workflow_task(job_id: str):
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
 
         # --- LÓGICA DE COMMIT CORRIGIDA E FINAL ---
-        job_info['status'] = 'committing_to_github'
+        job_info['status'] = 'committing_to_github-1'
         job_store.set_job(job_id, job_info)
 
         # 1. Busca as informações necessárias do job_info, onde elas já foram salvas
         nome_do_repo = job_info['data']['repo_name']
         branch_base = job_info['data'].get('branch_name', 'main') # Usa 'main' como fallback
         repo_foi_criado = job_info['data'].get('repo_foi_criado_agora', False)
-        
+
+        job_info['status'] = 'committing_to_github-2'
+        job_store.set_job(job_id, job_info)
         # 2. Conecta-se ao GitHub uma única vez
-        repo_obj, _ = GitHubConnector.connection(repositorio=nome_do_repo)
+        repo_obj = GitHubConnector.connection(repositorio=nome_do_repo)
+        job_info['status'] = 'committing_to_github-3'
+        job_store.set_job(job_id, job_info)
 
         # 3. Chama a função de commit com os parâmetros corretos
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
@@ -407,6 +411,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
