@@ -190,6 +190,8 @@ def run_workflow_task(job_id: str):
         job_info = job_store.get_job(job_id)
         if not job_info: raise ValueError("Job não encontrado.")
 
+        repo_obj, foi_criado_agora = GitHubConnector.connection_with_info(repositorio=payload.repo_name)
+        
         # Constrói as dependências genéricas
         rag_retriever = AzureAISearchRAGRetriever()
         changeset_filler = ChangesetFiller()
@@ -279,10 +281,11 @@ def run_workflow_task(job_id: str):
         job_store.set_job(job_id, job_info)
 
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
-            nome_repo=job_info['data']['repo_name'], 
+            repo=repo_obj,
             dados_agrupados=dados_finais_formatados,
-            base_branch="main" if is_novo_repo else "main"
+            repo_foi_criado_agora=foi_criado_agora
         )
+        
         job_info['data']['commit_details'] = commit_results
         job_info['status'] = 'completed'
         job_store.set_job(job_id, job_info)
@@ -396,6 +399,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
