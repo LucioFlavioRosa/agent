@@ -50,7 +50,7 @@ class GitHubRepositoryReader(IRepositoryReader):
         """
         Utilitário para checar se o repo contém apenas o commit inicial (README).
         """
-        repositorio = GitHubConnector.connection(nome_repo)
+        repositorio, _ = connection_with_info.connection(nome_repo)
         branch_a_ler = nome_branch or repositorio.default_branch
         try:
             branches = list(repositorio.get_branches())
@@ -70,7 +70,7 @@ class GitHubRepositoryReader(IRepositoryReader):
 
     def read_repository(self, nome_repo: str, tipo_analise: str, nome_branch: str = None) -> dict:
         print(f"Iniciando leitura otimizada do repositório: {nome_repo}")
-        repositorio = GitHubConnector.connection(repositorio=nome_repo)
+        repositorio, _ = GitHubConnector.connection_with_info(repositorio=nome_repo)
         if nome_branch is None:
             branch_a_ler = repositorio.default_branch
             print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
