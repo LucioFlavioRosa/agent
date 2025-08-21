@@ -284,14 +284,17 @@ def run_workflow_task(job_id: str):
         repo_obj, foi_criado_agora = GitHubConnector.connection_with_info(repositorio=nome_do_repo)
 
         # 3. Chama a função de commit com os parâmetros corretos, vindos do job_info
-        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
-            repo=repo_obj,
-            dados_agrupados=dados_finais_formatados,
-            repo_foi_criado_agora=foi_criado_agora,
-            base_branch=branch_base
-        )
-        job_info['data']['commit_details'] = commit_results
-        # --- FIM DA CORREÇÃO ---
+        if foi_criado_agora:
+            commit_results = commit_multiplas_branchs.commit_direto_na_main(
+                repo=repo_obj,
+                dados_agrupados=dados_finais_formatados
+            )
+        else:
+            commit_results = commit_multiplas_branchs.criar_pull_requests_empilhados(
+                repo=repo_obj,
+                dados_agrupados=dados_finais_formatados,
+                base_branch=job_info['data'].get('branch_name', 'main')
+            )
 
         job_info['status'] = 'completed'
         job_store.set_job(job_id, job_info)
@@ -407,6 +410,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
