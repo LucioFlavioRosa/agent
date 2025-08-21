@@ -2,8 +2,6 @@ import traceback
 from github import GithubException, UnknownObjectException, Repository
 from typing import Dict, Any, List
 
-# A função de conexão não é mais necessária aqui, pois o objeto do repo será recebido.
-
 def _commitar_arquivos_na_branch(repo: Repository.Repository, nome_branch: str, conjunto_de_mudancas: list) -> tuple[int, list[str]]:
     """
     Função auxiliar genérica que aplica uma lista de mudanças (criar, modificar, remover)
