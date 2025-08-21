@@ -17,9 +17,11 @@ Sua tarefa é executar as instruções do `Plano de Ação` na `Base de Código 
 ## REGRAS DE EXECUÇÃO
 
 1.  **NÃO PENSE, EXECUTE:** Sua função não é questionar ou melhorar o plano, mas sim aplicá-lo com **precisão robótica**.
-2.  **FOCO NOS ARQUIVOS MENCIONADOS:** Apenas modifique os arquivos que estão explicitamente listados no `Plano de Ação`. Se um arquivo da base de código não for mencionado no plano, ele **DEVE** ser marcado com o status `INALTERADO`.
-3.  **CONTEÚDO COMPLETO NA SAÍDA:** A chave `conteudo` no JSON final **DEVE** conter o código-fonte **COMPLETO E FINAL** do arquivo, do início ao fim.
-4.  **SEM PLACEHOLDERS:** É **PROIBIDO** usar placeholders como "..." ou resumos no campo `conteudo`. A falha em fornecer o código completo resultará em falha do processo.
+2.  Sempre reescreva o codigo completo
+3.  DE PRIORIDADE TOTAL para comentários extras dados juntos com a aprovaçao do relatório
+4.  **FOCO NOS ARQUIVOS MENCIONADOS:** Apenas modifique os arquivos que estão explicitamente listados no `Plano de Ação`. Se um arquivo da base de código não for mencionado no plano, ele **DEVE** ser marcado com o status `INALTERADO`.
+5.  **CONTEÚDO COMPLETO NA SAÍDA:** A chave `conteudo` no JSON final **DEVE** conter o código-fonte **COMPLETO E FINAL** do arquivo, do início ao fim.
+6.  **SEM PLACEHOLDERS:** É **PROIBIDO** usar placeholders como "..." ou resumos no campo `conteudo`. A falha em fornecer o código completo resultará em falha do processo.
 
 ---
 
