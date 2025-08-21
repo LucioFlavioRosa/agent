@@ -418,6 +418,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
-        raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")osta do status do job.")
+        raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
