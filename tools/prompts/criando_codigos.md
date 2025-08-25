@@ -29,6 +29,7 @@ Sua tarefa é traduzir a tabela "Estrutura de Arquivos e Pastas" do relatório e
     -   **Exemplo para `README.md`:** Escreva um conteúdo robusto e completo base no resumo e no que foi gerado.
 6.  **STATUS DOS ARQUIVOS:** Como este é o início do projeto, o `status` para todos os arquivos gerados deve ser **"ADICIONADO"**.
 7.  **CONTEÚDO COMPLETO NA SAÍDA:** A chave `conteudo` no JSON final **DEVE** conter o código-fonte **COMPLETO E FINAL** do arquivo, do início ao fim. É **PROIBIDO** usar placeholders como "..." ou resumos.
+8.  **Escreva uma documentação precisa**: preciso que qualquer time possa absorver todo esse código no menor tempo possível
 
 ---
 
