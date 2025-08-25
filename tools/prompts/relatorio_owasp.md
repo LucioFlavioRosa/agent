@@ -24,8 +24,9 @@ Use seu conhecimento profundo para encontrar evidências de vulnerabilidades nos
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **FOCO NO RISCO:** Concentre-se em vulnerabilidades reais com impacto. Ignore questões puramente estilísticas ou de severidade `Baixa`.
-2.  **EVIDÊNCIA CONCRETA:** Cada vulnerabilidade apontada no relatório deve citar o arquivo e, se possível, a linha do código onde ela ocorre.
-3.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, sem nenhum texto ou markdown fora dele.
+2.  **SEJA CLARO NAS explicações** : explique em detalhes as vulnerabilidades encontradas
+3.  **EVIDÊNCIA CONCRETA:** Cada vulnerabilidade apontada no relatório deve citar o arquivo e, se possível, a linha do código onde ela ocorre.
+4.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, sem nenhum texto ou markdown fora dele.
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto ou markdown fora dele. A estrutura deve ser exatamente a seguinte O JSON de saída deve conter exatamente uma chave no nível principal: relatorio. O relatorio deve forcener informações para que o engenheiro possa avaliar os pontos apontados, mas seja direto nao seja verborrágico
