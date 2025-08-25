@@ -38,7 +38,7 @@ Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto ou
 **Seção 2: Estrutura de Arquivos e Pastas**
 -   Uma tabela com duas colunas:
     -   **`Caminho do Arquivo/Pasta`**: O caminho completo a partir da raiz do repositório.
-    -   **`Descrição (Objetivos e Tecnologias)`**: Uma descrição clara do propósito de cada arquivo/pasta, os requisitos que ele atende e as tecnologias que serão usadas nele.
+    -   **`Descrição (Objetivos e Tecnologias)`**: Uma descrição clara do propósito de cada arquivo/pasta, os requisitos que ele atende e as tecnologias que serão usadas nele, reforce o impacto de negocio quando for possível.
 
 **Exemplo de Saída para clean code: siga o exemplo da estrutura**
 {
