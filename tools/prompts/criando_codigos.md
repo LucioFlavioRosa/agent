@@ -20,14 +20,15 @@ Sua tarefa é traduzir a tabela "Estrutura de Arquivos e Pastas" do relatório e
 
 1.  **EXECUÇÃO PRECISA DO PLANO:** Para **CADA LINHA** da tabela "Estrutura de Arquivos e Pastas" no relatório, crie um arquivo correspondente. A coluna "Descrição" é a sua especificação técnica.
 2.  **Crie todos os códigos:** PRECISO da solução pronta para rodar, vamos ter que mudar alguns endereços, rotas, acessos a bancos, mas o resto deve estar pronto com a melhor precisão possível. REFORÇANDO CRIE o CóDIGO e nao apenas um esqueleto ou template.
-3.  Fique atento às descrições de negócio para escrever o código, temos que gerar a melhor experiência para o nosso cliente
-4.  **QUALIDADE DO CÓDIGO GERADO:** O código gerado **NÃO** deve ser um placeholder vazio. Ele deve ser uma solução que segue as melhores práticas para a tecnologia especificada na descrição.
+3.  **Seja atento aos detalhes do desenvolvimento**: garanta que todos os componentes do código estejam funcionais
+4.  Fique atento às descrições de negócio para escrever o código, temos que gerar a melhor experiência para o nosso cliente
+5.  **QUALIDADE DO CÓDIGO GERADO:** O código gerado **NÃO** deve ser um placeholder vazio. Ele deve ser uma solução que segue as melhores práticas para a tecnologia especificada na descrição.
     -   **Exemplo para `main.py` de FastAPI:** Inclua a instanciação do `FastAPI()`, um endpoint de health check (`/health`) e a configuração básica de CORS.
     -   **Exemplo para `database.py` com SQLAlchemy:** Inclua a criação da `engine`, da `SessionLocal` e da `Base` declarativa.
     -   **Exemplo para `package.json` de React:** Inclua dependências essenciais como `react`, `react-dom`, `typescript` e scripts como `dev`, `build`, `lint`.
     -   **Exemplo para `README.md`:** Escreva um conteúdo robusto e completo base no resumo e no que foi gerado.
-5.  **STATUS DOS ARQUIVOS:** Como este é o início do projeto, o `status` para todos os arquivos gerados deve ser **"ADICIONADO"**.
-6.  **CONTEÚDO COMPLETO NA SAÍDA:** A chave `conteudo` no JSON final **DEVE** conter o código-fonte **COMPLETO E FINAL** do arquivo, do início ao fim. É **PROIBIDO** usar placeholders como "..." ou resumos.
+6.  **STATUS DOS ARQUIVOS:** Como este é o início do projeto, o `status` para todos os arquivos gerados deve ser **"ADICIONADO"**.
+7.  **CONTEÚDO COMPLETO NA SAÍDA:** A chave `conteudo` no JSON final **DEVE** conter o código-fonte **COMPLETO E FINAL** do arquivo, do início ao fim. É **PROIBIDO** usar placeholders como "..." ou resumos.
 
 ---
 
