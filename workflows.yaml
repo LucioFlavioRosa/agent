@@ -48,7 +48,7 @@ relatorio_simplicacao_debito_tecnico:
       params:
         tipo_analise: "relatorio_simplicacao_debito_tecnico"
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-3-7-sonnet-20250219"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
@@ -68,7 +68,7 @@ relatorio_solid:
       params:
         tipo_analise: "relatorio_solid"
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-opus-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
@@ -88,7 +88,7 @@ relatorio_conformidades:
       params:
         tipo_analise: "relatorio_conformidades"
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-opus-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
@@ -128,7 +128,7 @@ relatorio_owasp:
       params:
         tipo_analise: "relatorio_owasp"
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-3-7-sonnet-20250219"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
@@ -148,7 +148,7 @@ relatorio_docstring_comentario:
       params:
         tipo_analise: "relatorio_docstring_comentario"
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-3-7-sonnet-20250219"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
@@ -168,7 +168,7 @@ relatorio_documentacao:
       params:
         tipo_analise: "relatorio_documentacao"
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-3-7-sonnet-20250219"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
