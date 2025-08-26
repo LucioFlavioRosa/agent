@@ -76,4 +76,3 @@ class AgenteRevisor:
                 "reposta_final": resultado_da_ia
             }
         }
-        
