@@ -41,6 +41,7 @@ class StartAnalysisPayload(BaseModel):
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    analysis_name: Optional[str] = Field(None, description="Nome único para a análise, para indexação e recuperação futura.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -66,6 +67,12 @@ class FinalStatusResponse(BaseModel):
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
+
+class AnalysisByNameResponse(BaseModel):
+    job_id: str
+    analysis_name: str
+    analysis_report: Optional[str]
+    status: str
 
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
@@ -167,7 +174,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
             raise ValueError("A resposta da IA veio vazia.")
         
         # 1. Analisa o JSON que a IA retornou.
-        parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
+        parsed_response = json.loads(json_string_from_llm.replace("", "").replace("", "").strip())
         
         # 2. Pega o valor da ÚNICA chave que esperamos: "relatorio".
         #    Se a chave não existir, usa a resposta bruta como um fallback seguro.
@@ -186,6 +193,11 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         else:
             job_info['status'] = 'pending_approval'
 
+        # Persistência do nome da análise
+        if payload.analysis_name:
+            job_info['data']['analysis_name'] = payload.analysis_name
+            job_store.index_analysis_name(job_id, payload.analysis_name)
+
         job_store.set_job(job_id, job_info)
         print(f"[{job_id}] Tarefa de geração de relatório concluída. Status: {job_info['status']}")
 
@@ -199,7 +211,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         traceback.print_exc()
         handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
 
-def run_workflow_task(job_id: str):
+def run_workflow_task(job_id: str, analysis_name: Optional[str] = None, use_existing_report: bool = False):
     job_info = None
     try:
         job_info = job_store.get_job(job_id)
@@ -216,7 +228,10 @@ def run_workflow_task(job_id: str):
         # --- FLUXO DE DADOS CORRIGIDO E FINAL ---
 
         # 1. O ponto de partida é o resultado estruturado da tarefa de geração de relatório.
-        previous_step_result = job_info['data'].get('step_0_result', {})
+        if use_existing_report:
+            previous_step_result = job_info['data'].get('step_0_result', {})
+        else:
+            previous_step_result = job_info['data'].get('step_0_result', {})
 
         # Variáveis para armazenar os resultados importantes
         resultado_refatoracao_etapa = {}
@@ -257,7 +272,7 @@ def run_workflow_task(job_id: str):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia na etapa '{job_info['status']}'.")
             
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
             
             # 3. Armazena os resultados corretamente
             if i == 0:
@@ -320,12 +335,15 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'branch_name': payload.branch_name,
             'original_analysis_type': analysis_type_str,
             'instrucoes_extras': payload.instrucoes_extras,
-            'model_name': payload.model_name # Salva o modelo escolhido para uso futuro
+            'model_name': payload.model_name, # Salva o modelo escolhido para uso futuro
+            'analysis_name': payload.analysis_name
         },
         'error_details': None
     }
     
     job_store.set_job(job_id, initial_job_data)
+    if payload.analysis_name:
+        job_store.index_analysis_name(job_id, payload.analysis_name)
     background_tasks.add_task(run_report_generation_task, job_id, payload)
     return StartAnalysisResponse(job_id=job_id)
 
@@ -353,6 +371,37 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         job['status'] = 'rejected'
         job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
+
+# Novo endpoint: Buscar relatório por nome de análise
+@app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Analyses"])
+def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar relatório")):
+    job_id = job_store.get_job_id_by_analysis_name(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail="Nenhuma análise encontrada com esse nome.")
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    report = job.get("data", {}).get("analysis_report")
+    status = job.get("status", "unknown")
+    return AnalysisByNameResponse(job_id=job_id, analysis_name=analysis_name, analysis_report=report, status=status)
+
+# Novo endpoint: Iniciar geração de código a partir de relatório existente
+@app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Analyses"])
+def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
+    job_id = job_store.get_job_id_by_analysis_name(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail="Nenhuma análise encontrada com esse nome.")
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    # Garante que o relatório existe
+    if not job.get("data", {}).get("analysis_report"):
+        raise HTTPException(status_code=404, detail="Relatório não encontrado para este job.")
+    # Inicia o workflow a partir do relatório existente
+    job['status'] = 'workflow_started'
+    job_store.set_job(job_id, job)
+    background_tasks.add_task(run_workflow_task, job_id, analysis_name, True)
+    return StartAnalysisResponse(job_id=job_id)
 
 # Em mcp_server_fastapi.py
 
@@ -416,8 +465,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
 
 
 
