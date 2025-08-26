@@ -22,6 +22,7 @@ Você deve seguir esta ordem de prioridade de forma **obrigatória**:
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 Sua resposta final deve ser **um único bloco de código JSON válido**, sem nenhum texto ou markdown fora dele.
+Nao incluir na resposta final casos com status INALTERADO
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
