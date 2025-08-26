@@ -46,7 +46,7 @@ class AnthropicClaudeProvider(ILLMProvider):
             with open(caminho_prompt, 'r', encoding='utf-8') as f:
                 return f.read()
         except FileNotFoundError:
-            raise ValueError(f"Arquivo de prompt para '{tipo_analise}' não encontrado: {caminho_prompt}")
+            raise ValueError(f"Arquivo de prompt para '{tipo_tarefa}' não encontrado: {caminho_prompt}")
 
     def executar_prompt(
         self,
@@ -65,7 +65,7 @@ class AnthropicClaudeProvider(ILLMProvider):
         if usar_rag and self.rag_retriever:
             print("[Claude Handler] Usando o RAG retriever injetado...")
             politicas_relevantes = self.rag_retriever.buscar_politicas(
-                query=f"políticas de {tipo_analise} para desenvolvimento de software"
+                query=f"políticas de {tipo_tarefa} para desenvolvimento de software"
             )
             prompt_sistema = f"{prompt_sistema}\n\n--- CONTEXTO ADICIONAL ---\n{politicas_relevantes}"
 
@@ -98,5 +98,5 @@ class AnthropicClaudeProvider(ILLMProvider):
             }
             
         except Exception as e:
-            print(f"ERRO: Falha na chamada à API da Anthropic para análise '{tipo_analise}'. Causa: {e}")
+            print(f"ERRO: Falha na chamada à API da Anthropic para análise '{tipo_tarefa}'. Causa: {e}")
             raise RuntimeError(f"Erro ao comunicar com a API da Anthropic: {e}") from e
