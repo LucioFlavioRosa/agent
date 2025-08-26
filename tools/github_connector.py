@@ -37,7 +37,11 @@ class GitHubConnector:
         try:
             github_token = secret_client.get_secret(token_secret_name).value
         except Exception:
-            print(f"AVISO: Segredo '{token_secret_name}' não encontrado. Usando token padrão.")
+            print(f"AVISO: Segredo '{token_secret_name}' não encontrado. Tentando usar token padrão 'github-token'.")
+            try:
+                github_token = secret_client.get_secret("github-token").value
+            except Exception as e:
+                raise ValueError(f"ERRO CRÍTICO: Nenhum token do GitHub encontrado no Key Vault. Verifique se existe '{token_secret_name}' ou 'github-token'. Erro: {e}")
 
         auth = Auth.Token(github_token)
         new_client = Github(auth=auth)
@@ -92,7 +96,7 @@ class GitHubConnector:
                     auto_init=True
                 )
                 print(f"SUCESSO: Repositório '{repositorio}' criado na conta do usuário.")
-            except GithubException as create_error:
+            except Exception as create_error:
                 print(f"ERRO CRÍTICO: Falha ao criar o repositório '{repositorio}'. Verifique as permissões do token. Erro: {create_error}")
                 raise
         
