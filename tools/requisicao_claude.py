@@ -2,45 +2,30 @@ import os
 import anthropic
 from typing import Optional, Dict, Any
 
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
-
-from domain.interfaces.llm_provider_interface import ILLMProvider
+from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
+from domain.interfaces.secret_manager_interface import ISecretManager
+from tools.azure_secret_manager import AzureSecretManager
 
-class AnthropicClaudeProvider(ILLMProvider):
+class AnthropicClaudeProvider(ILLMProviderComplete):
     """
-    Implementação de ILLMProvider para a API do Claude da Anthropic,
-    com busca segura de credenciais via Azure Key Vault.
+    Implementação refatorada para Claude seguindo princípios SOLID,
+    com injeção de dependência para o gerenciador de segredos.
     """
-    def __init__(self, rag_retriever: Optional[IRAGRetriever] = None):
+    def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
         self.rag_retriever = rag_retriever
+        self.secret_manager = secret_manager or AzureSecretManager()
         
-        # --- LÓGICA DE INICIALIZAÇÃO CORRIGIDA E PADRONIZADA ---
         print("Configurando o cliente da Anthropic (Claude)...")
         try:
-            key_vault_url = os.environ["KEY_VAULT_URL"]
-            credential = DefaultAzureCredential()
-            client = SecretClient(vault_url=key_vault_url, credential=credential)
-            
-            # Busca o segredo específico da Anthropic no Key Vault
-            anthropic_api_key = client.get_secret("ANTHROPICAPIKEY").value
-            if not anthropic_api_key:
-                raise ValueError("A chave da API da Anthropic não foi encontrada no segredo 'anthropicapi' do Key Vault.")
-            
+            anthropic_api_key = self.secret_manager.get_secret("ANTHROPICAPIKEY")
             self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
-            print("Cliente da Anthropic (Claude) configurado com sucesso via Key Vault.")
-
-        except KeyError:
-            # Captura o erro se a variável de ambiente KEY_VAULT_URL não existir
-            raise EnvironmentError("ERRO: A variável de ambiente KEY_VAULT_URL não foi configurada.")
+            print("Cliente da Anthropic (Claude) configurado com sucesso.")
         except Exception as e:
-            # Captura outras exceções (ex: segredo não encontrado, permissão negada)
             print(f"ERRO CRÍTICO ao configurar o cliente da Anthropic: {e}")
             raise
 
     def carregar_prompt(self, tipo_tarefa: str) -> str:
-        # (Esta função não muda)
         caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_tarefa}.md')
         try:
             with open(caminho_prompt, 'r', encoding='utf-8') as f:
@@ -52,13 +37,13 @@ class AnthropicClaudeProvider(ILLMProvider):
         self,
         tipo_tarefa: str,
         prompt_principal: str,
-        instrucoes_extras: str,
-        usar_rag: bool,
-        model_name: Optional[str],
-        max_token_out: int
+        instrucoes_extras: str = "",
+        usar_rag: bool = False,
+        model_name: Optional[str] = None,
+        max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        
-        modelo_final = model_name or "claude-3-opus-20240229" # Modelo padrão do Claude
+        """Implementação da interface completa com todas as funcionalidades."""
+        modelo_final = model_name or "claude-3-opus-20240229"
         
         prompt_sistema = self.carregar_prompt(tipo_tarefa)
 
@@ -69,7 +54,6 @@ class AnthropicClaudeProvider(ILLMProvider):
             )
             prompt_sistema = f"{prompt_sistema}\n\n--- CONTEXTO ADICIONAL ---\n{politicas_relevantes}"
 
-        # A API do Claude tem uma estrutura de mensagens ligeiramente diferente
         mensagens = [
             {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{prompt_principal}"},
         ]
@@ -90,7 +74,6 @@ class AnthropicClaudeProvider(ILLMProvider):
             
             conteudo_resposta = response.content[0].text
             
-            # O contrato exige que retornemos um dicionário específico
             return {
                 'reposta_final': conteudo_resposta,
                 'tokens_entrada': response.usage.input_tokens,
@@ -100,3 +83,37 @@ class AnthropicClaudeProvider(ILLMProvider):
         except Exception as e:
             print(f"ERRO: Falha na chamada à API da Anthropic para análise '{tipo_tarefa}'. Causa: {e}")
             raise RuntimeError(f"Erro ao comunicar com a API da Anthropic: {e}") from e
+    
+    def executar_prompt_com_rag(
+        self,
+        tipo_tarefa: str,
+        prompt_principal: str,
+        instrucoes_extras: str = "",
+        usar_rag: bool = False,
+        max_token_out: int = 15000
+    ) -> Dict[str, Any]:
+        """Implementação específica para RAG."""
+        return self.executar_prompt(
+            tipo_tarefa=tipo_tarefa,
+            prompt_principal=prompt_principal,
+            instrucoes_extras=instrucoes_extras,
+            usar_rag=usar_rag,
+            max_token_out=max_token_out
+        )
+    
+    def executar_prompt_com_modelo(
+        self,
+        tipo_tarefa: str,
+        prompt_principal: str,
+        instrucoes_extras: str = "",
+        model_name: Optional[str] = None,
+        max_token_out: int = 15000
+    ) -> Dict[str, Any]:
+        """Implementação específica para seleção de modelo."""
+        return self.executar_prompt(
+            tipo_tarefa=tipo_tarefa,
+            prompt_principal=prompt_principal,
+            instrucoes_extras=instrucoes_extras,
+            model_name=model_name,
+            max_token_out=max_token_out
+        )
