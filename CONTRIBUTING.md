@@ -1,91 +1,204 @@
 # Guia de Contribuição
 
-Obrigado pelo interesse em contribuir com o MCP Server! Este documento fornece diretrizes e instruções para contribuir efetivamente com o projeto.
+## Como Contribuir para o MCP Server - Multi-Agent Code Platform
 
-## Fluxo de Trabalho
+Obrigado por seu interesse em contribuir! Este documento fornece diretrizes para contribuir com o projeto.
 
-1. **Fork do Repositório**
-   - Faça um fork do repositório para sua conta GitHub
-   - Clone o fork para sua máquina local
+## 🚀 Configuração do Ambiente de Desenvolvimento
 
-2. **Configuração do Ambiente de Desenvolvimento**
-   - Siga as instruções no [README.md](README.md) para configurar o ambiente
-   - Copie `.env.example` para `.env` e configure as variáveis necessárias
-   - Copie `workflows.yaml.example` para `workflows.yaml`
+### Pré-requisitos
+- Python 3.8+
+- Redis (para armazenamento de jobs)
+- Azure Key Vault (para gerenciamento de segredos)
+- Conta GitHub com token de acesso
 
-3. **Criação de Branch**
-   - Crie uma branch para sua contribuição seguindo a convenção:
-     - `feature/nome-da-feature` para novas funcionalidades
-     - `fix/descricao-do-bug` para correções de bugs
-     - `docs/descricao-da-documentacao` para melhorias na documentação
-     - `refactor/descricao-da-refatoracao` para refatorações de código
+### Configuração Inicial
 
-4. **Desenvolvimento**
-   - Implemente suas mudanças seguindo o estilo de código do projeto
-   - Adicione ou atualize testes conforme necessário
-   - Atualize a documentação relevante
+1. **Clone o repositório:**
+   bash
+   git clone https://github.com/org/mcp-server.git
+   cd mcp-server
+   
 
-5. **Verificações Locais**
-   - Execute os linters e formatadores:
-     bash
-     # Formatação com black
-     black .
-     
-     # Verificação de estilo com flake8
-     flake8 .
-     
-     # Verificação de tipos com mypy
-     mypy .
-     
-   - Execute os testes:
-     bash
-     pytest tests/
-     
+2. **Crie um ambiente virtual:**
+   bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   # ou
+   venv\Scripts\activate     # Windows
+   
 
-6. **Commits**
-   - Siga a convenção [Conventional Commits](https://www.conventionalcommits.org/):
-     - `feat: descrição` para novas funcionalidades
-     - `fix: descrição` para correções de bugs
-     - `docs: descrição` para alterações na documentação
-     - `refactor: descrição` para refatorações de código
-     - `test: descrição` para adição ou modificação de testes
-     - `chore: descrição` para tarefas de manutenção
+3. **Instale as dependências:**
+   bash
+   pip install -r requirements.txt
+   
 
-7. **Pull Request**
-   - Envie um Pull Request (PR) para a branch `main` do repositório original
-   - Preencha o template do PR com todas as informações necessárias
-   - Vincule o PR a issues relacionadas, se aplicável
-   - Aguarde a revisão e feedback da equipe
+4. **Configure as variáveis de ambiente:**
+   - Copie o arquivo `.env.example` para `.env`
+   - Preencha todas as variáveis necessárias
 
-## Padrões de Código
+5. **Execute os testes para verificar a configuração:**
+   bash
+   pytest -v
+   
 
-- **Python**: Siga o [PEP 8](https://www.python.org/dev/peps/pep-0008/) e use type hints
-- **Docstrings**: Use o formato [Google Style](https://google.github.io/styleguide/pyguide.html#38-comments-and-docstrings)
-- **Imports**: Organize os imports em grupos (stdlib, third-party, local) e em ordem alfabética
-- **Testes**: Escreva testes unitários para novas funcionalidades e correções
+## 📋 Padrões de Código
 
-## Revisão de Código
+### Estrutura do Projeto
+- `agents/`: Implementações dos agentes de IA
+- `domain/interfaces/`: Interfaces e contratos
+- `tools/`: Utilitários e implementações concretas
+- `backend/tests/`: Testes automatizados
 
-- Todos os PRs devem ser revisados por pelo menos um membro da equipe
-- Os revisores verificarão:
-  - Funcionalidade: O código faz o que se propõe a fazer?
-  - Qualidade: O código segue as boas práticas e padrões do projeto?
-  - Testes: Existem testes adequados para as mudanças?
-  - Documentação: A documentação foi atualizada conforme necessário?
+### Princípios SOLID
+O projeto segue rigorosamente os princípios SOLID:
+- **Single Responsibility**: Cada classe tem uma única responsabilidade
+- **Open/Closed**: Extensível via interfaces, fechado para modificação
+- **Liskov Substitution**: Implementações podem ser substituídas
+- **Interface Segregation**: Interfaces específicas e focadas
+- **Dependency Inversion**: Dependências injetadas via interfaces
 
-## Critérios de Aceitação
+### Convenções de Código
+- **Nomenclatura**: Use nomes descritivos em português para classes e métodos
+- **Documentação**: Docstrings obrigatórias para todas as classes e métodos públicos
+- **Type Hints**: Sempre use type hints em Python
+- **Imports**: Organize imports em grupos (stdlib, third-party, local)
 
-- O código deve passar em todos os testes automatizados
-- O código deve seguir os padrões de estilo do projeto
-- A documentação deve ser atualizada conforme necessário
-- O PR deve abordar uma única preocupação (feature, bug, refatoração, etc.)
+### Exemplo de Classe Bem Estruturada
+python
+from abc import ABC, abstractmethod
+from typing import Dict, Optional
 
-## Comunicação
+class MinhaInterface(ABC):
+    """Interface para demonstrar padrões do projeto."""
+    
+    @abstractmethod
+    def processar_dados(self, dados: Dict[str, str]) -> Optional[str]:
+        """Processa dados de entrada e retorna resultado."""
+        pass
 
-- Use issues do GitHub para discutir bugs, features e melhorias
-- Use discussões do GitHub para perguntas gerais e conversas sobre o projeto
-- Seja respeitoso e construtivo em todas as comunicações
+class MinhaImplementacao(MinhaInterface):
+    """Implementação concreta seguindo os padrões do projeto."""
+    
+    def __init__(self, dependencia: MinhaInterface):
+        self.dependencia = dependencia
+    
+    def processar_dados(self, dados: Dict[str, str]) -> Optional[str]:
+        """Implementa o processamento de dados."""
+        if not dados:
+            return None
+        return f"Processado: {dados}"
 
-## Licença
 
-Ao contribuir com o projeto, você concorda que suas contribuições serão licenciadas sob a mesma licença do projeto.
+## 🔄 Fluxo de Trabalho para Pull Requests
+
+### 1. Criação da Branch
+bash
+git checkout -b feature/nome-da-funcionalidade
+# ou
+git checkout -b fix/nome-do-bug
+
+
+### 2. Desenvolvimento
+- Faça commits pequenos e focados
+- Use mensagens de commit descritivas:
+  
+  feat: adiciona nova interface para processamento de dados
+  fix: corrige erro de validação no AgenteRevisor
+  refactor: melhora estrutura do GitHubConnector
+  docs: atualiza documentação da API
+  test: adiciona testes para ChangesetFiller
+  
+
+### 3. Testes
+Antes de abrir o PR, certifique-se de que:
+- [ ] Todos os testes passam: `pytest -v`
+- [ ] Novos testes foram adicionados para novas funcionalidades
+- [ ] Cobertura de código não diminuiu
+
+### 4. Pull Request
+- **Título**: Seja claro e descritivo
+- **Descrição**: Explique o que foi alterado e por quê
+- **Checklist**: Use o template de PR (será criado automaticamente)
+
+### Template de PR
+markdown
+## Descrição
+Descreva brevemente as mudanças realizadas.
+
+## Tipo de Mudança
+- [ ] Bug fix
+- [ ] Nova funcionalidade
+- [ ] Refatoração
+- [ ] Documentação
+- [ ] Testes
+
+## Checklist
+- [ ] Código segue os padrões do projeto
+- [ ] Testes foram adicionados/atualizados
+- [ ] Documentação foi atualizada
+- [ ] Todos os testes passam
+
+
+## 🧪 Executando Testes
+
+### Testes Unitários
+bash
+# Todos os testes
+pytest -v
+
+# Testes específicos
+pytest backend/tests/test_analysis_naming.py -v
+
+# Com cobertura
+pytest --cov=. --cov-report=html
+
+
+### Testes de Integração
+bash
+# Certifique-se de que o Redis está rodando
+pytest backend/tests/ -k "integration" -v
+
+
+## 🏗️ Arquitetura do Sistema
+
+### Agentes
+- **AgenteRevisor**: Lê repositórios e inicia análises
+- **AgenteProcessador**: Processa dados estruturados
+
+### Interfaces Principais
+- `ILLMProvider`: Abstração para provedores de IA
+- `IRepositoryReader`: Leitura de repositórios
+- `ISecretManager`: Gerenciamento de segredos
+
+### Fluxo de Dados
+1. Requisição via API FastAPI
+2. Job armazenado no Redis
+3. Agente processa via LLM
+4. Resultado commitado no GitHub
+
+## 🐛 Reportando Bugs
+
+Ao reportar bugs, inclua:
+- Versão do Python
+- Passos para reproduzir
+- Comportamento esperado vs atual
+- Logs de erro (se aplicável)
+
+## 💡 Sugerindo Funcionalidades
+
+Para novas funcionalidades:
+- Descreva o problema que resolve
+- Proponha uma solução
+- Considere o impacto na arquitetura existente
+
+## 📞 Suporte
+
+Para dúvidas sobre contribuição:
+- Abra uma issue com a tag `question`
+- Consulte a documentação existente
+- Revise PRs anteriores similares
+
+---
+
+**Obrigado por contribuir para tornar este projeto melhor! 🚀**
