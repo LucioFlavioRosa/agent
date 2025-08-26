@@ -1,8 +1,8 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO FINAL E CORRIGIDA)
+# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO REFATORADA SEGUINDO SOLID)
 
 import json
 from github import GithubException, UnknownObjectException
-from tools.github_connector import GitHubConnector # Corrigido para importar a classe
+from tools.github_connector import GitHubConnector
 from typing import Dict, Any, List
 
 def _processar_uma_branch(
@@ -25,7 +25,7 @@ def _processar_uma_branch(
         "success": False,
         "pr_url": None,
         "message": "",
-        "arquivos_modificados": [] # Adicionado para melhor feedback
+        "arquivos_modificados": []
     }
     commits_realizados = 0
 
@@ -43,7 +43,7 @@ def _processar_uma_branch(
     for mudanca in conjunto_de_mudancas:
         caminho = mudanca.get("caminho_do_arquivo")
         status = mudanca.get("status", "").upper()
-        conteudo = mudanca.get("conteudo") # Pode ser None para REMOVIDO
+        conteudo = mudanca.get("conteudo")
         justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}")
 
         if not caminho:
@@ -51,13 +51,12 @@ def _processar_uma_branch(
             continue
 
         try:
-            # Lógica explícita baseada no STATUS
             sha_arquivo_existente = None
             try:
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
             except UnknownObjectException:
-                pass # Arquivo não existe, o que é esperado para CRIADO/ADICIONADO
+                pass
 
             if status in ("ADICIONADO", "CRIADO"):
                 if sha_arquivo_existente:
@@ -118,16 +117,20 @@ def _processar_uma_branch(
 def processar_e_subir_mudancas_agrupadas(
     nome_repo: str,
     dados_agrupados: dict,
-    base_branch: str = "main"
+    base_branch: str = "main",
+    github_connector: GitHubConnector = None
 ) -> List[Dict[str, Any]]:
     """
-    Função principal que orquestra a criação de múltiplas branches e PRs.
+    Função principal refatorada seguindo princípios SOLID.
+    Agora aceita injeção de dependência do GitHubConnector.
     """
     resultados_finais = []
     try:
         print("--- Iniciando o Processo de Pull Requests Empilhados ---")
-        # --- MUDANÇA: Usar a classe GitHubConnector ---
-        repo = GitHubConnector.connection(repositorio=nome_repo)
+        
+        # Usa o conector injetado ou cria um com dependências padrão
+        connector = github_connector or GitHubConnector.create_with_defaults()
+        repo = connector.connection(repositorio=nome_repo)
 
         branch_anterior = base_branch
         lista_de_grupos = dados_agrupados.get("grupos", [])
@@ -171,5 +174,6 @@ def processar_e_subir_mudancas_agrupadas(
 
     except Exception as e:
         print(f"ERRO FATAL NO ORQUESTRADOR DE COMMITS: {e}")
+        import traceback
         traceback.print_exc()
         return [{"success": False, "message": f"Erro fatal no orquestrador: {e}"}]
