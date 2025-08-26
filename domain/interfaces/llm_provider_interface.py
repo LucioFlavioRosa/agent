@@ -12,6 +12,8 @@ class ILLMProvider(ABC):
         tipo_tarefa: str,          
         prompt_principal: str,   
         instrucoes_extras: str = "",
+        usar_rag: bool = False,
+        model_name: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
         """Executa uma tarefa básica no LLM e retorna o resultado."""
