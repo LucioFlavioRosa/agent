@@ -1,105 +1,92 @@
-import os
-from github import Github, Repository, Auth, UnknownObjectException
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+from github import Repository
 from typing import Dict
+from domain.interfaces.secret_manager_interface import ISecretManager
+from domain.interfaces.repository_provider_interface import IRepositoryProvider
+from tools.azure_secret_manager import AzureSecretManager
+from tools.github_repository_provider import GitHubRepositoryProvider
 
 class GitHubConnector:
     """
-    Encapsula a criação e o caching de múltiplos clientes GitHub,
-    selecionando o token correto e com a capacidade de criar repositórios.
+    Conector refatorado seguindo princípios SOLID.
+    Responsabilidade única: orquestrar a conexão com repositórios GitHub usando abstrações.
     """
-    _github_clients: Dict[str, Github] = {}
     _cached_repos: Dict[str, Repository] = {}
-    _secret_client = None
-
-    @classmethod
-    def _get_secret_client(cls) -> SecretClient:
-        # (Esta função auxiliar não muda)
-        if cls._secret_client:
-            return cls._secret_client
+    
+    def __init__(self, secret_manager: ISecretManager = None, repository_provider: IRepositoryProvider = None):
+        """
+        Inicializa o conector com dependências injetadas.
         
-        print("Conectando ao Azure Key Vault pela primeira vez...")
-        key_vault_url = os.environ["KEY_VAULT_URL"]
-        credential = DefaultAzureCredential()
-        cls._secret_client = SecretClient(vault_url=key_vault_url, credential=credential)
-        return cls._secret_client
-
-    @classmethod
-    def _get_client_for_org(cls, org_name: str) -> Github:
-        # (Esta função auxiliar não muda)
-        if org_name in cls._github_clients:
-            return cls._github_clients[org_name]
-
-        secret_client = cls._get_secret_client()
+        Args:
+            secret_manager: Gerenciador de segredos (padrão: AzureSecretManager)
+            repository_provider: Provedor de repositório (padrão: GitHubRepositoryProvider)
+        """
+        self.secret_manager = secret_manager or AzureSecretManager()
+        self.repository_provider = repository_provider or GitHubRepositoryProvider()
+    
+    def _get_token_for_org(self, org_name: str) -> str:
+        """
+        Obtém o token de autenticação para uma organização específica.
+        
+        Args:
+            org_name: Nome da organização
+            
+        Returns:
+            str: Token de autenticação
+        """
         token_secret_name = f"github-token-{org_name}"
         
         try:
-            github_token = secret_client.get_secret(token_secret_name).value
-        except Exception:
+            return self.secret_manager.get_secret(token_secret_name)
+        except ValueError:
             print(f"AVISO: Segredo '{token_secret_name}' não encontrado. Tentando usar token padrão 'github-token'.")
             try:
-                github_token = secret_client.get_secret("github-token").value
-            except Exception as e:
-                raise ValueError(f"ERRO CRÍTICO: Nenhum token do GitHub encontrado no Key Vault. Verifique se existe '{token_secret_name}' ou 'github-token'. Erro: {e}")
-
-        auth = Auth.Token(github_token)
-        new_client = Github(auth=auth)
-        cls._github_clients[org_name] = new_client
-        return new_client
-
-    @classmethod
-    def connection(cls, repositorio: str) -> Repository:
+                return self.secret_manager.get_secret("github-token")
+            except ValueError as e:
+                raise ValueError(f"ERRO CRÍTICO: Nenhum token do GitHub encontrado. Verifique se existe '{token_secret_name}' ou 'github-token' no gerenciador de segredos.") from e
+    
+    def connection(self, repositorio: str) -> Repository:
         """
-        Ponto de entrada principal. Obtém um objeto de repositório.
-        Se o repositório não existir, ele o CRIA.
+        Obtém um objeto de repositório, criando-o se necessário.
+        
+        Args:
+            repositorio: Nome do repositório no formato 'org/repo'
+            
+        Returns:
+            Repository: Objeto do repositório
         """
-        if repositorio in cls._cached_repos:
+        if repositorio in self._cached_repos:
             print(f"Retornando o objeto do repositório '{repositorio}' do cache.")
-            return cls._cached_repos[repositorio]
-
+            return self._cached_repos[repositorio]
+        
         try:
-            org_name, repo_name_only = repositorio.split('/')
+            org_name, _ = repositorio.split('/')
         except ValueError:
             raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio'.")
-
-        github_client = cls._get_client_for_org(org_name)
+        
+        token = self._get_token_for_org(org_name)
         
         try:
-            # --- MUDANÇA: LÓGICA "GET OR CREATE" ---
-            # 1. Tenta obter o repositório.
+            # Tenta obter o repositório existente
             print(f"Tentando acessar o repositório '{repositorio}'...")
-            repo = github_client.get_repo(repositorio)
+            repo = self.repository_provider.get_repository(repositorio, token)
             print(f"Repositório '{repositorio}' encontrado com sucesso.")
-            
-        except UnknownObjectException:
-            # 2. Se falhar com "Não Encontrado" (404), cria o repositório.
+        except ValueError:
+            # Se não encontrar, cria o repositório
             print(f"AVISO: Repositório '{repositorio}' não encontrado. Tentando criá-lo...")
-            try:
-                # Tenta obter a organização para criar o repo dentro dela
-                org = github_client.get_organization(org_name)
-                repo = org.create_repo(
-                    name=repo_name_only,
-                    description="Repositório criado automaticamente pela plataforma de agentes de IA.",
-                    private=True, # Mude para False se quiser repositórios públicos
-                    auto_init=True # Cria o repo com um README inicial, essencial para poder criar branches
-                )
-                print(f"SUCESSO: Repositório '{repositorio}' criado.")
-            except UnknownObjectException:
-                # Se a "organização" for na verdade um usuário
-                print(f"AVISO: Organização '{org_name}' não encontrada. Tentando criar o repositório na conta do usuário autenticado.")
-                user = github_client.get_user()
-                repo = user.create_repo(
-                    name=repo_name_only,
-                    description="Repositório criado automaticamente pela plataforma de agentes de IA.",
-                    private=True,
-                    auto_init=True
-                )
-                print(f"SUCESSO: Repositório '{repositorio}' criado na conta do usuário.")
-            except Exception as create_error:
-                print(f"ERRO CRÍTICO: Falha ao criar o repositório '{repositorio}'. Verifique as permissões do token. Erro: {create_error}")
-                raise
+            repo = self.repository_provider.create_repository(repositorio, token)
+            print(f"SUCESSO: Repositório '{repositorio}' criado.")
         
-        # 3. Cacheia e retorna o objeto do repositório (existente ou recém-criado).
-        cls._cached_repos[repositorio] = repo
+        # Cacheia e retorna o repositório
+        self._cached_repos[repositorio] = repo
         return repo
+    
+    @classmethod
+    def create_with_defaults(cls) -> 'GitHubConnector':
+        """
+        Método de conveniência para criar uma instância com dependências padrão.
+        Mantém compatibilidade com código existente.
+        
+        Returns:
+            GitHubConnector: Instância configurada com dependências padrão
+        """
+        return cls()
