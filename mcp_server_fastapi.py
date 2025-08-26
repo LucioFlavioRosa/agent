@@ -292,9 +292,12 @@ def run_workflow_task(job_id: str):
 
         job_info['status'] = 'committing_to_github'
         job_store.set_job(job_id, job_info)
+        branch_base_para_pr = job_info['data'].get('branch_name', 'main')
+        
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
             nome_repo=job_info['data']['repo_name'], 
-            dados_agrupados=dados_finais_formatados
+            dados_agrupados=dados_finais_formatados,
+            base_branch=branch_base_para_pr
         )
         job_info['data']['commit_details'] = commit_results
 
@@ -414,6 +417,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
