@@ -4,8 +4,9 @@ import yaml
 import time
 import traceback
 import enum
+import re
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, constr
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -33,6 +34,8 @@ valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
 ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
 
 # --- Modelos de Dados Pydantic ---
+ANALYSIS_NAME_REGEX = r'^[a-zA-Z0-9\-_.]{3,64}$'
+
 class StartAnalysisPayload(BaseModel):
     repo_name: str
     analysis_type: ValidAnalysisTypes
@@ -41,9 +44,14 @@ class StartAnalysisPayload(BaseModel):
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    analysis_name: Optional[constr(regex=ANALYSIS_NAME_REGEX)] = Field(
+        None,
+        description="Nome único da análise (opcional, 3-64 caracteres, letras, números, hífen, underline, ponto)."
+    )
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
+    analysis_name: Optional[str] = None
 
 class UpdateJobPayload(BaseModel):
     job_id: str
@@ -58,6 +66,7 @@ class PullRequestSummary(BaseModel):
 class FinalStatusResponse(BaseModel):
     job_id: str
     status: str
+    analysis_name: Optional[str] = None
     summary: Optional[List[PullRequestSummary]] = Field(None)
     error_details: Optional[str] = Field(None)
     analysis_report: Optional[str] = Field(None)
@@ -66,6 +75,7 @@ class FinalStatusResponse(BaseModel):
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
+    analysis_name: Optional[str] = None
 
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
@@ -140,7 +150,8 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
                 nome_branch=payload.branch_name,
                 instrucoes_extras=payload.instrucoes_extras,
                 usar_rag=payload.usar_rag,
-                model_name=model_para_etapa
+                model_name=model_para_etapa,
+                analysis_name=payload.analysis_name
             )
             
         elif agent_type == "processador":
@@ -155,7 +166,8 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
                 codigo=input_estruturado,
                 instrucoes_extras=payload.instrucoes_extras, # Pode ser útil como contexto adicional
                 usar_rag=payload.usar_rag,
-                model_name=model_para_etapa
+                model_name=model_para_etapa,
+                analysis_name=payload.analysis_name
             )
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
@@ -167,7 +179,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
             raise ValueError("A resposta da IA veio vazia.")
         
         # 1. Analisa o JSON que a IA retornou.
-        parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
+        parsed_response = json.loads(json_string_from_llm.replace("", "").replace("", "").strip())
         
         # 2. Pega o valor da ÚNICA chave que esperamos: "relatorio".
         #    Se a chave não existir, usa a resposta bruta como um fallback seguro.
@@ -178,6 +190,11 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         
         # 4. Salva o objeto JSON original para os logs de diagnóstico.
         job_info['data']['step_0_result'] = parsed_response
+        
+        # 5. Salva o analysis_name para rastreabilidade
+        if payload.analysis_name:
+            job_info['data']['analysis_name'] = payload.analysis_name
+            job_store.set_analysis_name_index(job_id, payload.analysis_name)
         
         # --- FIM DA MUDANÇA ---
         
@@ -245,19 +262,21 @@ def run_workflow_task(job_id: str):
                 agent_params.update({
                     'repositorio': job_info['data']['repo_name'],
                     'nome_branch': job_info['data']['branch_name'],
-                    'instrucoes_extras': job_info['data']['analysis_report']
+                    'instrucoes_extras': job_info['data']['analysis_report'],
+                    'analysis_name': job_info['data'].get('analysis_name')
                 })
                 agent_response = agente.main(**agent_params)
             else: # processador
                 agente = AgenteProcessador(llm_provider=llm_provider)
                 # O input é o JSON estruturado da etapa anterior
                 agent_params['codigo'] = previous_step_result
+                agent_params['analysis_name'] = job_info['data'].get('analysis_name')
                 agent_response = agente.main(**agent_params)
 
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia na etapa '{job_info['status']}'.")
             
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
             
             # 3. Armazena os resultados corretamente
             if i == 0:
@@ -309,6 +328,13 @@ def run_workflow_task(job_id: str):
 # --- Endpoints da API ---
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    # Validação de unicidade do analysis_name
+    analysis_name_normalized = None
+    if payload.analysis_name:
+        analysis_name_normalized = payload.analysis_name.lower()
+        if job_store.get_job_by_analysis_name(analysis_name_normalized):
+            raise HTTPException(status_code=409, detail="Já existe uma análise com este nome. Escolha outro nome único.")
+
     job_id = str(uuid.uuid4())
     analysis_type_str = payload.analysis_type.value
     initial_job_data = {
@@ -318,14 +344,17 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'branch_name': payload.branch_name,
             'original_analysis_type': analysis_type_str,
             'instrucoes_extras': payload.instrucoes_extras,
-            'model_name': payload.model_name # Salva o modelo escolhido para uso futuro
+            'model_name': payload.model_name, # Salva o modelo escolhido para uso futuro
+            'analysis_name': analysis_name_normalized if analysis_name_normalized else None
         },
         'error_details': None
     }
     
     job_store.set_job(job_id, initial_job_data)
+    if analysis_name_normalized:
+        job_store.set_analysis_name_index(job_id, analysis_name_normalized)
     background_tasks.add_task(run_report_generation_task, job_id, payload)
-    return StartAnalysisResponse(job_id=job_id)
+    return StartAnalysisResponse(job_id=job_id, analysis_name=analysis_name_normalized)
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
@@ -361,10 +390,22 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     
     report = job.get("data", {}).get("analysis_report")
+    analysis_name = job.get("data", {}).get("analysis_name")
     if not report:
         raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
 
-    return ReportResponse(job_id=job_id, analysis_report=report)
+    return ReportResponse(job_id=job_id, analysis_report=report, analysis_name=analysis_name)
+
+@app.get("/jobs/by-name/{analysis_name}/report", response_model=ReportResponse, tags=["Jobs"])
+def get_job_report_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar o relatório")):
+    normalized_name = analysis_name.lower()
+    job = job_store.get_job_by_analysis_name(normalized_name)
+    if not job:
+        raise HTTPException(status_code=404, detail="Nenhum job encontrado para este nome de análise.")
+    report = job.get("data", {}).get("analysis_report")
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Relatório não encontrado para o nome de análise '{analysis_name}'.")
+    return ReportResponse(job_id=job.get('job_id'), analysis_report=report, analysis_name=normalized_name)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
@@ -374,6 +415,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
 
     status = job.get('status')
     logs = job.get("data", {}).get("diagnostic_logs")
+    analysis_name = job.get("data", {}).get("analysis_name")
 
     try:
         if status == 'completed':
@@ -381,7 +423,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 return FinalStatusResponse(
                     job_id=job_id,
                     status=status,
-                    analysis_report=job.get("data", {}).get("analysis_report")
+                    analysis_report=job.get("data", {}).get("analysis_report"),
+                    analysis_name=analysis_name
                 )
             else:
                 summary_list = []
@@ -399,39 +442,21 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                     job_id=job_id, 
                     status=status, 
                     summary=summary_list,
-                    diagnostic_logs=logs
+                    diagnostic_logs=logs,
+                    analysis_name=analysis_name
                 )
         elif status == 'failed':
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
                 error_details=job.get("error_details", "Nenhum detalhe de erro encontrado."),
-                diagnostic_logs=logs
+                diagnostic_logs=logs,
+                analysis_name=analysis_name
             )
         else:
-            return FinalStatusResponse(job_id=job_id, status=status)
+            return FinalStatusResponse(job_id=job_id, status=status, analysis_name=analysis_name)
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
