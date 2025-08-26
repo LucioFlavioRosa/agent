@@ -12,3 +12,17 @@ class JobStoreInterface(ABC):
     @abstractmethod
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         pass
+
+    @abstractmethod
+    def index_analysis_name(self, job_id: str, analysis_name: str):
+        """
+        Indexa o nome da análise para permitir busca futura por nome.
+        """
+        pass
+
+    @abstractmethod
+    def get_job_id_by_analysis_name(self, analysis_name: str) -> Optional[str]:
+        """
+        Recupera o job_id associado ao nome da análise.
+        """
+        pass
