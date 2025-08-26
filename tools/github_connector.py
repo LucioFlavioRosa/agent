@@ -3,6 +3,7 @@ from github import Github, Repository, Auth, UnknownObjectException
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from typing import Dict
+import importlib
 
 class GitHubConnector:
     """
@@ -92,7 +93,7 @@ class GitHubConnector:
                     auto_init=True
                 )
                 print(f"SUCESSO: Repositório '{repositorio}' criado na conta do usuário.")
-            except GithubException as create_error:
+            except Exception as create_error:
                 print(f"ERRO CRÍTICO: Falha ao criar o repositório '{repositorio}'. Verifique as permissões do token. Erro: {create_error}")
                 raise
         
