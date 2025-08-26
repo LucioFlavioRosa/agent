@@ -7,6 +7,7 @@ class AgenteProcessador:
     """
     Um agente simples focado em processar dados estruturados (JSON)
     que são passados de etapas anteriores em um workflow.
+    Agora aceita relatório existente como entrada principal.
     """
     def __init__(self, llm_provider: ILLMProvider):
         self.llm_provider = llm_provider
@@ -20,12 +21,17 @@ class AgenteProcessador:
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        relatorio_existente: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Função principal do agente. Serializa o JSON de entrada e chama a IA.
+        Se relatorio_existente for fornecido, usa-o como entrada principal.
         """
-        codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
+        if relatorio_existente is not None:
+            codigo_str = json.dumps(relatorio_existente, indent=2, ensure_ascii=False)
+        else:
+            codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
 
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
