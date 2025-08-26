@@ -35,6 +35,7 @@ Além de agrupar, você deve determinar a **ordem de merge** e a **prioridade de
     -   **Regra de Dependência:** PRs que estabelecem uma base (ex: criar uma nova interface ou um módulo) devem vir **antes** dos PRs que os consomem.
     -   **Regra de Risco:** PRs de alto risco ou muito abrangentes podem vir primeiro para "liberar" o caminho, ou por último para minimizar o tempo em que o `main` fica instável. Use seu julgamento de Tech Lead.
     -   **Regra de Independência:** PRs de baixo risco e sem dependências (ex: limpeza de código morto) podem ter qualquer ordem, geralmente por último.
+    -   **Nao incluir casos de codigo com status INALTERADO**
 
 ### 3. Sugestão de Revisores (NOVO)
 
