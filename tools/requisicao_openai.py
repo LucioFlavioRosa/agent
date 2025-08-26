@@ -65,7 +65,7 @@ class OpenAILLMProvider(ILLMProvider):
         if usar_rag and self.rag_retriever:
            
             politicas_relevantes = self.rag_retriever.buscar_politicas(
-                query=f"políticas de {tipo_analise} para desenvolvimento de software"
+                query=f"políticas de {tipo_tarefa} para desenvolvimento de software"
             )
             prompt_sistema_final = ( # Atualiza a variável final com o contexto
                 f"{prompt_sistema_base}\n\n"
