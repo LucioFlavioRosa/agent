@@ -1,74 +1,120 @@
 # MCP Server - Multi-Agent Code Platform
 
-## Visão Geral
+## 🚀 Visão Geral
 
-MCP Server é uma plataforma robusta para orquestração de agentes de IA que analisam, refatoram e melhoram código-fonte automaticamente. A plataforma utiliza modelos de linguagem avançados (LLMs) como GPT-4 e Claude, integra-se com GitHub para leitura e escrita de código, e oferece uma API RESTful para interação.
+O **MCP Server** é uma plataforma robusta para orquestração de agentes de IA especializados em análise e refatoração de código. O sistema utiliza arquitetura baseada em princípios SOLID, com injeção de dependências e interfaces bem definidas.
 
-## Arquitetura
+### Principais Funcionalidades
 
-O sistema é composto por:
+- **Análise Inteligente de Código**: Agentes especializados para diferentes tipos de análise
+- **Refatoração Automatizada**: Geração de Pull Requests com mudanças estruturadas
+- **Integração com GitHub**: Leitura de repositórios e criação automática de PRs
+- **Sistema RAG**: Busca contextual em políticas de desenvolvimento
+- **Arquitetura Modular**: Componentes intercambiáveis via interfaces
 
-- **API FastAPI**: Interface principal para iniciar análises e consultar resultados
-- **Agentes de IA**: Componentes especializados que utilizam LLMs para diferentes tarefas
-- **Redis**: Armazenamento de estado dos jobs e resultados intermediários
-- **Azure Key Vault**: Gerenciamento seguro de credenciais e segredos
-- **GitHub Integration**: Leitura de repositórios e criação automática de Pull Requests
+## 🏗️ Arquitetura
 
-## Pré-requisitos
+### Componentes Principais
 
-- Python 3.9+
-- Redis
-- Conta Azure com Key Vault configurado
-- Acesso à API da OpenAI e/ou Anthropic (Claude)
-- Acesso à API do GitHub
-- Azure AI Search (para funcionalidade RAG)
 
-## Instalação
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   FastAPI       │    │   Redis         │    │   GitHub        │
+│   (API Layer)   │◄──►│   (Job Store)   │    │   (Repository)  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                                              ▲
+         ▼                                              │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Agentes       │    │   LLM Providers │    │   Tools         │
+│   - Revisor     │◄──►│   - OpenAI      │    │   - Connectors  │
+│   - Processador │    │   - Claude      │    │   - Fillers     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
 
+
+### Agentes Disponíveis
+
+- **AgenteRevisor**: Lê repositórios GitHub e inicia análises de código
+- **AgenteProcessador**: Processa dados estruturados e aplica transformações
+
+## 🛠️ Configuração e Instalação
+
+### Pré-requisitos
+
+- Python 3.8+
+- Redis Server
+- Azure Key Vault (para gerenciamento de segredos)
+- Conta GitHub com token de acesso
+
+### Instalação
+
+1. **Clone o repositório:**
+   bash
+   git clone https://github.com/org/mcp-server.git
+   cd mcp-server
+   
+
+2. **Crie um ambiente virtual:**
+   bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   venv\Scripts\activate     # Windows
+   
+
+3. **Instale as dependências:**
+   bash
+   pip install -r requirements.txt
+   
+
+4. **Configure as variáveis de ambiente:**
+   bash
+   cp .env.example .env
+   # Edite o arquivo .env com suas configurações
+   
+
+5. **Inicie o Redis:**
+   bash
+   redis-server
+   
+
+6. **Execute o servidor:**
+   bash
+   uvicorn mcp_server_fastapi:app --reload --port 8000
+   
+
+## 🧪 Como Rodar os Testes
+
+### Executar Todos os Testes
 bash
-# Clone o repositório
-git clone https://github.com/LucioFlavioRosa/agent.git
-cd agent
-
-# Instale as dependências
-pip install -r requirements.txt
+pytest -v
 
 
-## Configuração do Ambiente
-
-1. Copie o arquivo `.env.example` para `.env` e preencha as variáveis necessárias:
-
+### Executar Testes Específicos
 bash
-cp .env.example .env
-# Edite o arquivo .env com seus valores
+# Testes de nomeação de análises
+pytest backend/tests/test_analysis_naming.py -v
+
+# Testes com padrão específico
+pytest -k "test_create_analysis" -v
 
 
-2. Configure o Azure Key Vault com os seguintes segredos:
-   - `openaiapi`: Chave da API da OpenAI
-   - `ANTHROPICAPIKEY`: Chave da API da Anthropic (Claude)
-   - `aisearchapi`: Chave da API do Azure AI Search
-   - `githubapi`: Token de acesso pessoal do GitHub com permissões para leitura e escrita em repositórios
-
-3. Copie o arquivo `workflows.yaml.example` para `workflows.yaml`:
-
+### Executar com Cobertura
 bash
-cp workflows.yaml.example workflows.yaml
-# Personalize o arquivo workflows.yaml conforme necessário
+pytest --cov=. --cov-report=html --cov-report=term
 
 
-## Execução
-
+### Executar Testes de Integração
 bash
-# Inicie o servidor FastAPI com hot-reload para desenvolvimento
-uvicorn mcp_server_fastapi:app --reload
-
-# Para produção
-uvicorn mcp_server_fastapi:app --host 0.0.0.0 --port 8000
+# Certifique-se de que o Redis está rodando
+pytest backend/tests/ -k "integration" -v
 
 
-O servidor estará disponível em `http://localhost:8000`. A documentação da API pode ser acessada em `http://localhost:8000/docs`.
+### Configuração para Testes
 
-## Uso da API
+Para executar os testes, certifique-se de:
+1. Redis está rodando na porta padrão (6379)
+2. Variáveis de ambiente de teste estão configuradas
+3. Azure Key Vault está acessível (ou use mocks para testes unitários)
+
+## 📚 Uso da API
 
 ### Iniciar uma Análise
 
@@ -76,53 +122,99 @@ bash
 curl -X POST "http://localhost:8000/start-analysis" \
      -H "Content-Type: application/json" \
      -d '{
-           "repo_name": "usuario/repositorio",
-           "analysis_type": "refatoracao_codigo",
-           "branch_name": "main",
-           "instrucoes_extras": "Foque em melhorar a legibilidade",
-           "usar_rag": true,
-           "gerar_relatorio_apenas": false
-         }'
+       "repo_name": "org/repositorio",
+       "analysis_type": "refatoracao_completa",
+       "branch_name": "main",
+       "instrucoes_extras": "Foque em melhorias de performance",
+       "usar_rag": true,
+       "gerar_relatorio_apenas": false
+     }'
 
 
-### Verificar Status de um Job
+### Verificar Status
 
 bash
-curl -X GET "http://localhost:8000/status/{job_id}"
+curl "http://localhost:8000/status/{job_id}"
 
 
-### Aprovar ou Rejeitar um Job
+### Aprovar/Rejeitar Análise
 
 bash
 curl -X POST "http://localhost:8000/update-job-status" \
      -H "Content-Type: application/json" \
      -d '{
-           "job_id": "seu-job-id",
-           "action": "approve",
-           "observacoes": "Parece bom, pode prosseguir"
-         }'
+       "job_id": "uuid-do-job",
+       "action": "approve",
+       "observacoes": "Aprovado para produção"
+     }'
 
 
-### Obter Relatório de Análise
+## 🔧 Workflows Disponíveis
 
-bash
-curl -X GET "http://localhost:8000/jobs/{job_id}/report"
+Os workflows são definidos no arquivo `workflows.yaml`:
 
+- **refatoracao_completa**: Análise completa com refatoração e agrupamento
+- **analise_seguranca**: Foco em vulnerabilidades de segurança
+- **otimizacao_performance**: Melhorias de performance
+- **documentacao**: Geração de documentação automática
 
-## Testes
+## 🏛️ Princípios Arquiteturais
 
-bash
-# Execute os testes unitários
-python -m pytest tests/
+### SOLID
+- **Single Responsibility**: Cada classe tem uma única responsabilidade
+- **Open/Closed**: Extensível via interfaces, fechado para modificação
+- **Liskov Substitution**: Implementações podem ser substituídas
+- **Interface Segregation**: Interfaces específicas e focadas
+- **Dependency Inversion**: Dependências injetadas via interfaces
 
-# Execute os testes com cobertura
-python -m pytest --cov=. tests/
+### Padrões Utilizados
+- **Dependency Injection**: Todas as dependências são injetadas
+- **Strategy Pattern**: Diferentes provedores de LLM
+- **Factory Pattern**: Criação de provedores baseada em configuração
+- **Repository Pattern**: Abstração de acesso a dados
 
+## 🔐 Segurança
 
-## Contribuição
+### Gerenciamento de Segredos
+- Todos os segredos são armazenados no Azure Key Vault
+- Autenticação via Azure Default Credential
+- Tokens GitHub com escopo mínimo necessário
 
-Veja o arquivo [CONTRIBUTING.md](CONTRIBUTING.md) para instruções detalhadas sobre como contribuir com o projeto.
+### Segredos Necessários
+- `github-token`: Token de acesso ao GitHub
+- `openaiapi`: Chave da API OpenAI
+- `azure-openai-modelos`: Chave do Azure OpenAI
+- `aisearchapi`: Chave do Azure AI Search
+- `ANTHROPICAPIKEY`: Chave da API Anthropic (opcional)
 
-## Changelog
+## 🤝 Contribuindo
 
-Veja o arquivo [CHANGELOG.md](CHANGELOG.md) para um histórico de mudanças do projeto.
+Por favor, leia o [CONTRIBUTING.md](CONTRIBUTING.md) para detalhes sobre:
+- Configuração do ambiente de desenvolvimento
+- Padrões de código
+- Processo de Pull Request
+- Execução de testes
+
+## 📋 Roadmap
+
+- [ ] Suporte a mais provedores de LLM
+- [ ] Interface web para monitoramento
+- [ ] Métricas e observabilidade
+- [ ] Suporte a GitLab e Bitbucket
+- [ ] Análise de múltiplos repositórios
+- [ ] Integração com CI/CD
+
+## 📄 Licença
+
+Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## 🆘 Suporte
+
+Para suporte e dúvidas:
+- Abra uma issue no GitHub
+- Consulte a documentação em `/docs`
+- Revise os exemplos em `/examples`
+
+---
+
+**Desenvolvido com ❤️ pela equipe de Engenharia de Software**
