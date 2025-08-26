@@ -1,5 +1,26 @@
+relatorio_avaliacao_terraform:
+  description: "Realizar uma auditoria técnica aprofundada no código Terraform fornecido"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_avaliacao_terraform"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+
 relatorio_cleancode:
-  description: "Refatoração de código, olhando somente o clean code."
+  description: "Analisar o código-fonte fornecido e identificar violações claras dos 5 princípios SOLID"
   extensions: [".py"]
   steps:
     - status_update: "analisando o repositório"
@@ -12,66 +33,7 @@ relatorio_cleancode:
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
-    - status_update: "agrupando_commits"
-      model_name: "gpt-4.1-mini"
-      agent_type: "processador"
-      params:
-        tipo_analise: "agrupamento_commits"
-
-relatorio_performance_eficiencia:
-  description: "Refatoração de código, olhando somente pontos de performance."
-  extensions: [".py"]
-  steps:
-    - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "relatorio_performance_eficiencia"
-    - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "aplicacao_de_mudancas"
-    - status_update: "agrupando_commits"
-      model_name: "gpt-4.1-mini"
-      agent_type: "processador"
-      params:
-        tipo_analise: "agrupamento_commits"
-
-relatorio_simplicacao_debito_tecnico:
-  description: "Refatoração de código, olhando somente pontos de debito tecnico."
-  extensions: [".py"]
-  steps:
-    - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "relatorio_simplicacao_debito_tecnico"
-    - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "aplicacao_de_mudancas"
-    - status_update: "agrupando_commits"
-      model_name: "gpt-4.1-mini"
-      agent_type: "processador"
-      params:
-        tipo_analise: "agrupamento_commits"
-
-relatorio_solid:
-  description: "Refatoração de código, olhando somente os principios SOLID."
-  extensions: [".py"]
-  steps:
-    - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "relatorio_solid"
-    - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
     - status_update: "agrupando_commits"
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
@@ -79,7 +41,7 @@ relatorio_solid:
         tipo_analise: "agrupamento_commits"
 
 relatorio_conformidades:
-  description: "Refatoração de código, garantindo que a coesão, a consistência e a estabilidade do código sejam mantidas."
+  description: "Analisar o código-fonte fornecido e identificar apenas inconsistências funcionais"
   extensions: [".py"]
   steps:
     - status_update: "analisando o repositório"
@@ -92,66 +54,28 @@ relatorio_conformidades:
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
     - status_update: "agrupando_commits"
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
 
-relatorio_teste_unitario:
-  description: "Refatoração de código, olhando somente para a cobertura de testes."
+relatorio_docstring:
+  description: "Analisar o código-fonte fornecido, independentemente da linguagem de programação, para identificar a ausência ou a má qualidade de docstrings e comentários"
   extensions: [".py"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
-        tipo_analise: "relatorio_teste_unitario"
+        tipo_analise: "relatorio_docstring"
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
-    - status_update: "agrupando_commits"
-      model_name: "gpt-4.1-mini"
-      agent_type: "processador"
-      params:
-        tipo_analise: "agrupamento_commits"
-
-relatorio_owasp:
-  description: "Refatoração de código, olhando somente para a segurança segundo OWSASP."
-  extensions: [".py"]
-  steps:
-    - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "relatorio_owasp"
-    - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "aplicacao_de_mudancas"
-    - status_update: "agrupando_commits"
-      model_name: "gpt-4.1-mini"
-      agent_type: "processador"
-      params:
-        tipo_analise: "agrupamento_commits"
-
-relatorio_docstring_comentario:
-  description: "Escrita de docstrings."
-  extensions: [".py"]
-  steps:
-    - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "relatorio_docstring_comentario"
-    - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
     - status_update: "agrupando_commits"
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
@@ -159,7 +83,7 @@ relatorio_docstring_comentario:
         tipo_analise: "agrupamento_commits"
 
 relatorio_documentacao:
-  description: "Escrita de documentação do código."
+  description: "nalisar os arquivos de documentação e configuração na raiz do repositório para identificar a ausência de arquivos essenciais e a falta de informações críticas que dificultam a colaboração"
   extensions: [".py"]
   steps:
     - status_update: "analisando o repositório"
@@ -172,12 +96,181 @@ relatorio_documentacao:
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
     - status_update: "agrupando_commits"
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
 
+relatorio_implentacao_feature:
+  description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação técnico, detalhado e sequenciado"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_implentacao_feature"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+
+relatorio_owasp:
+  description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_owasp"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+        
+relatorio_pentest:
+  description: "Analisar o código-fonte fornecido para simular um teste de invasão"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_pentest"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+
+relatorio_performance_eficiencia:
+  description: "Analisar o código-fonte fornecido, independentemente da linguagem, para identificar gargalos de performance e ineficiências computacionais"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_performance_eficiencia"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+
+relatorio_sast:
+  description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido, simulando a mentalidade de um atacante"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_sast"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+
+relatorio_simplicacao:
+  description: "Analisar o código-fonte fornecido com o objetivo exclusivo de identificar violações dos princípios DRY (Don't Repeat Yourself), YAGNI (You Ain't Gonna Need It) e KISS (Keep It Simple, Stupid)"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_simplicacao"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+
+relatorio_teste_integracao:
+  description: "Realizar uma auditoria técnica aprofundada focada exclusivamente na suíte de Testes de Integração"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_teste_integracao"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+
+relatorio_teste_unitario:
+  description: "Analisar o código-fonte e a suíte de testes fornecidos para identificar os pontos mais críticos de cobertura e qualidade"
+  extensions: [".py"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_teste_unitario"
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+        
 geracao_codigo_a_partir_de_reuniao:
   description: "Escrita de documentação do código."
   extensions: [".py"]
