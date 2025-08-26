@@ -44,11 +44,12 @@ class AgenteRevisor:
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        analysis_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Função principal do agente. Orquestra a obtenção do código de um repositório
-        e a chamada para a IA.
+        e a chamada para a IA. Propaga analysis_name no relatório final, se fornecido.
         """
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
@@ -60,7 +61,12 @@ class AgenteRevisor:
             print(f"AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
             return {"resultado": {"reposta_final": {}}}
 
-        codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
+        # Propaga analysis_name no input para rastreabilidade
+        codigo_com_nome = dict(codigo_para_analise)
+        if analysis_name:
+            codigo_com_nome['analysis_name'] = analysis_name
+
+        codigo_str = json.dumps(codigo_com_nome, indent=2, ensure_ascii=False)
 
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
@@ -71,9 +77,10 @@ class AgenteRevisor:
             max_token_out=max_token_out
         )
 
+        # Inclui analysis_name no relatório final para rastreabilidade
         return {
             "resultado": {
-                "reposta_final": resultado_da_ia
+                "reposta_final": resultado_da_ia,
+                "analysis_name": analysis_name
             }
         }
-        
