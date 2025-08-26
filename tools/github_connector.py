@@ -48,35 +48,56 @@ class GitHubConnector:
         """
         Obtém um objeto de repositório, criando-o se necessário.
         
+        Este método implementa um fluxo completo de obtenção/criação de repositório:
+        1. Verifica se o repositório já está em cache
+        2. Extrai o nome da organização do repositório
+        3. Obtém o token de autenticação apropriado
+        4. Tenta acessar o repositório existente
+        5. Se não encontrar, cria um novo repositório
+        6. Cacheia o resultado para uso futuro
+        
         Args:
-            repositorio: Nome do repositório no formato 'org/repo'
-            
+            repositorio (str): Nome do repositório no formato 'org/repo'
+        
         Returns:
-            Repository: Objeto do repositório
+            Repository: Objeto do repositório GitHub pronto para uso
+        
+        Raises:
+            ValueError: Se o formato do repositório for inválido ou tokens não forem encontrados
+            ConnectionError: Se houver problemas de conectividade com GitHub
+            RuntimeError: Se houver falha na criação do repositório
+        
+        Example:
+            >>> connector = GitHubConnector()
+            >>> repo = connector.connection("myorg/myrepo")
+            >>> print(repo.name)  # "myrepo"
         """
+        # Verifica cache primeiro para evitar chamadas desnecessárias à API
         if repositorio in self._cached_repos:
             print(f"Retornando o objeto do repositório '{repositorio}' do cache.")
             return self._cached_repos[repositorio]
         
+        # Extrai nome da organização do formato 'org/repo'
         try:
             org_name, _ = repositorio.split('/')
         except ValueError:
             raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio'.")
         
+        # Obtém token de autenticação específico da organização
         token = self._get_token_for_org(org_name)
         
         try:
-            # Tenta obter o repositório existente
+            # Primeira tentativa: acessar repositório existente
             print(f"Tentando acessar o repositório '{repositorio}'...")
             repo = self.repository_provider.get_repository(repositorio, token)
             print(f"Repositório '{repositorio}' encontrado com sucesso.")
         except ValueError:
-            # Se não encontrar, cria o repositório
+            # Segunda tentativa: criar repositório se não existir
             print(f"AVISO: Repositório '{repositorio}' não encontrado. Tentando criá-lo...")
             repo = self.repository_provider.create_repository(repositorio, token)
             print(f"SUCESSO: Repositório '{repositorio}' criado.")
         
-        # Cacheia e retorna o repositório
+        # Armazena no cache para uso futuro e retorna
         self._cached_repos[repositorio] = repo
         return repo
     
