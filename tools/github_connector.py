@@ -7,34 +7,52 @@ from tools.github_repository_provider import GitHubRepositoryProvider
 
 class GitHubConnector:
     """
-    Conector refatorado seguindo princípios SOLID para integração com GitHub.
+    Conector refatorado seguindo princípios SOLID para integração com repositórios.
     
-    Esta classe orquestra a conexão com repositórios GitHub usando abstrações
-    para gerenciamento de segredos e provedores de repositório. Implementa
-    cache de conexões para otimizar performance e reduzir chamadas à API.
+    Esta classe orquestra a conexão com repositórios usando abstrações para
+    gerenciamento de segredos e provedores de repositório. Implementa cache de
+    conexões para otimizar performance e reduzir chamadas à API.
     
-    Responsabilidade única: gerenciar conexões com repositórios GitHub de forma
-    eficiente e segura, abstraindo a complexidade de autenticação e cache.
+    IMPORTANTE: Esta classe agora é agnóstica ao provedor de repositório específico.
+    Aceita qualquer implementação de IRepositoryProvider (GitHub, GitLab, Bitbucket, etc.)
+    através de injeção de dependência, seguindo o mesmo padrão usado para LLMs.
+    
+    Responsabilidade única: gerenciar conexões com repositórios de forma eficiente
+    e segura, abstraindo a complexidade de autenticação e cache.
     
     Attributes:
         _cached_repos (Dict[str, Repository]): Cache de repositórios conectados
         secret_manager (ISecretManager): Gerenciador de segredos injetado
         repository_provider (IRepositoryProvider): Provedor de repositório injetado
+    
+    Example:
+        >>> # Uso com GitHub (padrão)
+        >>> github_provider = GitHubRepositoryProvider()
+        >>> connector = GitHubConnector(repository_provider=github_provider)
+        >>> 
+        >>> # Uso futuro com GitLab
+        >>> # gitlab_provider = GitLabRepositoryProvider()
+        >>> # connector = GitHubConnector(repository_provider=gitlab_provider)
     """
     _cached_repos: Dict[str, Repository] = {}
     
-    def __init__(self, secret_manager: ISecretManager = None, repository_provider: IRepositoryProvider = None):
+    def __init__(self, repository_provider: IRepositoryProvider, secret_manager: ISecretManager = None):
         """
         Inicializa o conector com dependências injetadas.
         
         Args:
+            repository_provider (IRepositoryProvider): Provedor de repositório a ser usado.
+                Deve implementar IRepositoryProvider (ex: GitHubRepositoryProvider,
+                GitLabRepositoryProvider, BitbucketRepositoryProvider)
             secret_manager (ISecretManager, optional): Gerenciador de segredos.
                 Se None, usa AzureSecretManager como padrão
-            repository_provider (IRepositoryProvider, optional): Provedor de repositório.
-                Se None, usa GitHubRepositoryProvider como padrão
+        
+        Note:
+            O repository_provider é obrigatório para garantir explicitamente qual
+            provedor será usado, evitando dependências implícitas e facilitando testes.
         """
+        self.repository_provider = repository_provider
         self.secret_manager = secret_manager or AzureSecretManager()
-        self.repository_provider = repository_provider or GitHubRepositoryProvider()
     
     def _get_token_for_org(self, org_name: str) -> str:
         """
@@ -44,7 +62,7 @@ class GitHubConnector:
         da organização, garantindo flexibilidade na configuração de tokens.
         
         Args:
-            org_name (str): Nome da organização GitHub
+            org_name (str): Nome da organização
             
         Returns:
             str: Token de autenticação válido para a organização
@@ -52,16 +70,27 @@ class GitHubConnector:
         Raises:
             ValueError: Se nenhum token válido for encontrado (nem específico nem padrão)
         """
-        token_secret_name = f"github-token-{org_name}"
+        # Determina o prefixo do token baseado no tipo de provedor
+        provider_type = type(self.repository_provider).__name__.lower()
+        if 'github' in provider_type:
+            token_prefix = 'github-token'
+        elif 'gitlab' in provider_type:
+            token_prefix = 'gitlab-token'
+        elif 'bitbucket' in provider_type:
+            token_prefix = 'bitbucket-token'
+        else:
+            token_prefix = 'repo-token'  # Fallback genérico
+        
+        token_secret_name = f"{token_prefix}-{org_name}"
         
         try:
             return self.secret_manager.get_secret(token_secret_name)
         except ValueError:
-            print(f"AVISO: Segredo '{token_secret_name}' não encontrado. Tentando usar token padrão 'github-token'.")
+            print(f"AVISO: Segredo '{token_secret_name}' não encontrado. Tentando usar token padrão '{token_prefix}'.")
             try:
-                return self.secret_manager.get_secret("github-token")
+                return self.secret_manager.get_secret(token_prefix)
             except ValueError as e:
-                raise ValueError(f"ERRO CRÍTICO: Nenhum token do GitHub encontrado. Verifique se existe '{token_secret_name}' ou 'github-token' no gerenciador de segredos.") from e
+                raise ValueError(f"ERRO CRÍTICO: Nenhum token encontrado. Verifique se existe '{token_secret_name}' ou '{token_prefix}' no gerenciador de segredos.") from e
     
     def connection(self, repositorio: str) -> Repository:
         """
@@ -74,7 +103,7 @@ class GitHubConnector:
             repositorio (str): Nome do repositório no formato 'org/repo'
             
         Returns:
-            Repository: Objeto do repositório GitHub pronto para uso
+            Repository: Objeto do repositório pronto para uso
             
         Raises:
             ValueError: Se o formato do nome do repositório for inválido
@@ -95,8 +124,8 @@ class GitHubConnector:
         token = self._get_token_for_org(org_name)
         
         try:
-            # Tenta obter o repositório existente
-            print(f"Tentando acessar o repositório '{repositorio}'...")
+            # Tenta obter o repositório existente usando o provedor injetado
+            print(f"Tentando acessar o repositório '{repositorio}' via {type(self.repository_provider).__name__}...")
             repo = self.repository_provider.get_repository(repositorio, token)
             print(f"Repositório '{repositorio}' encontrado com sucesso.")
         except ValueError:
@@ -112,13 +141,17 @@ class GitHubConnector:
     @classmethod
     def create_with_defaults(cls) -> 'GitHubConnector':
         """
-        Método de conveniência para criar uma instância com dependências padrão.
+        Método de conveniência para criar uma instância com dependências padrão GitHub.
         
         Este método factory mantém compatibilidade com código existente que
-        não precisa de injeção de dependência customizada.
+        não precisa de injeção de dependência customizada. Por padrão, usa GitHub.
         
         Returns:
-            GitHubConnector: Instância configurada com dependências padrão
-                (AzureSecretManager e GitHubRepositoryProvider)
+            GitHubConnector: Instância configurada com GitHubRepositoryProvider
+                e AzureSecretManager como dependências padrão
+        
+        Note:
+            Para usar outros provedores, instancie diretamente a classe:
+            GitHubConnector(repository_provider=seu_provedor)
         """
-        return cls()
+        return cls(repository_provider=GitHubRepositoryProvider())

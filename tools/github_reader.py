@@ -6,17 +6,22 @@ import os
 from github import GithubException, GitTreeElement, UnknownObjectException
 from tools.github_connector import GitHubConnector 
 from domain.interfaces.repository_reader_interface import IRepositoryReader
+from domain.interfaces.repository_provider_interface import IRepositoryProvider
+from tools.github_repository_provider import GitHubRepositoryProvider
 import base64
-from typing import Dict
+from typing import Dict, Optional
 
 class GitHubRepositoryReader(IRepositoryReader):
     """
     Implementação otimizada e robusta que usa a API Git Trees para leitura rápida de repositórios.
     
     Esta classe implementa uma estratégia de leitura otimizada que utiliza a API Git Trees
-    do GitHub para obter toda a estrutura de arquivos de uma vez, em vez de fazer
-    múltiplas chamadas individuais. Isso resulta em performance significativamente melhor
-    para repositórios grandes.
+    para obter toda a estrutura de arquivos de uma vez, em vez de fazer múltiplas chamadas
+    individuais. Agora é agnóstica ao provedor de repositório específico.
+    
+    IMPORTANTE: Esta classe agora aceita qualquer provedor de repositório via injeção
+    de dependência, permitindo uso com GitHub, GitLab, Bitbucket ou outros provedores
+    que implementem IRepositoryProvider.
     
     Características principais:
     - Uso da API Git Trees para leitura em lote
@@ -24,32 +29,46 @@ class GitHubRepositoryReader(IRepositoryReader):
     - Tratamento robusto de erros de API e arquivos corrompidos
     - Suporte a diferentes tipos de análise configuráveis
     - Decodificação automática de conteúdo base64
+    - Extensibilidade para múltiplos provedores de repositório
     
     Attributes:
         _mapeamento_tipo_extensoes (Dict[str, List[str]]): Mapeamento de tipos de análise
             para extensões de arquivo relevantes, carregado de workflows.yaml
+        repository_provider (IRepositoryProvider): Provedor de repositório injetado
     
     Example:
-        >>> reader = GitHubRepositoryReader()
+        >>> # Uso com GitHub (padrão)
+        >>> github_provider = GitHubRepositoryProvider()
+        >>> reader = GitHubRepositoryReader(repository_provider=github_provider)
+        >>> 
+        >>> # Uso futuro com GitLab
+        >>> # gitlab_provider = GitLabRepositoryProvider()
+        >>> # reader = GitHubRepositoryReader(repository_provider=gitlab_provider)
+        >>> 
         >>> codigo = reader.read_repository(
         ...     nome_repo="org/projeto",
         ...     tipo_analise="refatoracao",
         ...     nome_branch="main"
         ... )
-        >>> print(f"Lidos {len(codigo)} arquivos")
     """
     
-    def __init__(self):
+    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
         """
         Inicializa o leitor carregando configurações de workflow.
         
-        Carrega o mapeamento de tipos de análise para extensões de arquivo
-        a partir do arquivo workflows.yaml, permitindo filtragem inteligente
-        de arquivos relevantes para cada tipo de análise.
+        Args:
+            repository_provider (Optional[IRepositoryProvider]): Provedor de repositório
+                a ser usado. Se None, usa GitHubRepositoryProvider como padrão para
+                manter compatibilidade com código existente.
         
         Raises:
             Exception: Se houver erro ao carregar configurações de workflow
+        
+        Note:
+            O provedor padrão é GitHub para manter compatibilidade, mas recomenda-se
+            injetar explicitamente o provedor desejado para maior clareza.
         """
+        self.repository_provider = repository_provider or GitHubRepositoryProvider()
         self._mapeamento_tipo_extensoes = self._carregar_config_workflows()
 
     def _carregar_config_workflows(self):
@@ -108,7 +127,7 @@ class GitHubRepositoryReader(IRepositoryReader):
 
     def read_repository(self, nome_repo: str, tipo_analise: str, nome_branch: str = None) -> dict:
         """
-        Lê arquivos de um repositório GitHub usando estratégia otimizada.
+        Lê arquivos de um repositório usando estratégia otimizada.
         
         Este método implementa uma estratégia de leitura em duas fases:
         1. Obtenção da árvore completa de arquivos via Git Trees API
@@ -132,7 +151,7 @@ class GitHubRepositoryReader(IRepositoryReader):
         Raises:
             ValueError: Se tipo_analise não for encontrado em workflows.yaml
                 ou se branch especificada não existir
-            GithubException: Se houver erro de comunicação com API GitHub
+            GithubException: Se houver erro de comunicação com API do provedor
             Exception: Outros erros inesperados durante a leitura
         
         Note:
@@ -140,11 +159,13 @@ class GitHubRepositoryReader(IRepositoryReader):
             - Filtra automaticamente por extensões relevantes
             - Ignora arquivos binários e diretórios
             - Faz log de progresso para repositórios grandes
+            - Funciona com qualquer provedor que implemente IRepositoryProvider
         """
-        print(f"Iniciando leitura otimizada do repositório: {nome_repo}")
+        provider_name = type(self.repository_provider).__name__
+        print(f"Iniciando leitura otimizada do repositório: {nome_repo} via {provider_name}")
 
-        # Estabelece conexão com o repositório via GitHubConnector
-        connector = GitHubConnector()
+        # Estabelece conexão com o repositório via GitHubConnector com provedor injetado
+        connector = GitHubConnector(repository_provider=self.repository_provider)
         repositorio = connector.connection(repositorio=nome_repo)
 
         # Determina a branch a ser lida (padrão ou especificada)
@@ -177,10 +198,10 @@ class GitHubRepositoryReader(IRepositoryReader):
             tree_elements = tree_response.tree
             print(f"Árvore obtida. {len(tree_elements)} itens totais encontrados.")
 
-            # Verificação de truncamento da API GitHub
+            # Verificação de truncamento da API
             # A API pode truncar listas muito grandes (>100k itens)
             if tree_response.truncated:
-                print(f"AVISO: A lista de arquivos do repositório '{nome_repo}' foi truncada pela API do GitHub.")
+                print(f"AVISO: A lista de arquivos do repositório '{nome_repo}' foi truncada pela API.")
 
             # FASE 2: Filtragem inteligente por extensão
             # Seleciona apenas arquivos (type='blob') com extensões relevantes
@@ -213,8 +234,8 @@ class GitHubRepositoryReader(IRepositoryReader):
                     print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{element.path}'. Pulando. Erro: {e}")
 
         except GithubException as e:
-            # Tratamento específico de erros da API GitHub
-            print(f"ERRO CRÍTICO durante a comunicação com a API do GitHub: {e}")
+            # Tratamento específico de erros da API
+            print(f"ERRO CRÍTICO durante a comunicação com a API: {e}")
             raise
         
         print(f"\nLeitura otimizada concluída. Total de {len(arquivos_do_repo)} arquivos lidos e processados.")
