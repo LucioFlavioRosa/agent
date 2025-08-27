@@ -17,6 +17,7 @@ Você deve seguir esta ordem de prioridade de forma **obrigatória**:
 
 ## 4. REGRAS DE EXECUÇÃO ADICIONAIS
 -   **Escopo Restrito:** Execute **apenas** as mudanças listadas no plano e nas observações. **NÃO** introduza novas funcionalidades ou refatorações por sua conta.
+-   **se precisar modificar requirements.txt apenas adicione as novas dependencias nunca remova as dependencias já existentes**
 -   **Conteúdo Completo:** O valor da chave `conteudo` no JSON de saída deve ser o código-fonte **completo e final** do arquivo, do início ao fim. É **PROIBIDO** usar placeholders como "...".
 -   **Agnosticismo de Linguagem:** Adapte seu conhecimento de "boas práticas" à linguagem específica (`.py`, `.java`, `.js`, `.cs`, etc.) do arquivo que está sendo modificado.
 
