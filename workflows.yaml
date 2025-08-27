@@ -1,6 +1,6 @@
 relatorio_avaliacao_terraform:
   description: "Realizar uma auditoria técnica aprofundada no código Terraform fornecido"
-  extensions: [".py"]
+  extensions: [".tf", ".tfvars"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
