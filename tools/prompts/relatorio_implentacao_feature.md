@@ -14,6 +14,7 @@ Analisar a **descrição da nova feature** e a **base de código existente** par
 Seu plano DEVE seguir estes princípios:
 
 -   [ ] **Cirúrgico e de Baixo Impacto:** O plano deve se integrar à arquitetura existente. **NÃO** proponha refatorações estruturais que não sejam estritamente necessárias para a nova feature.
+-   [ ] **Sempre lembre da necessidade de atualizar o arquivo requirements.txt com as novas dependências**
 -   [ ] **Completo (Código, Testes, Config):** O plano deve abranger todas as camadas: modificações no código, criação de **testes unitários/integração**, e atualização de **configurações** (`.env.example`) ou **dependências** (`requirements.txt`), se necessário.
 -   [ ] **Sequencial e Lógico:** **Esta é a regra mais importante.** O plano de ação deve ser apresentado em uma **ordem lógica de implementação**. Ex: 1º criar/alterar modelos de dados, 2º a lógica de serviço/negócio, 3º a camada de API/endpoints, 4º os testes.
 
