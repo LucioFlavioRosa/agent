@@ -3,7 +3,9 @@
 import json
 from github import GithubException, UnknownObjectException
 from tools.github_connector import GitHubConnector
-from typing import Dict, Any, List
+from domain.interfaces.repository_provider_interface import IRepositoryProvider
+from tools.github_repository_provider import GitHubRepositoryProvider
+from typing import Dict, Any, List, Optional
 
 def _processar_uma_branch(
     repo,
@@ -27,7 +29,7 @@ def _processar_uma_branch(
     - Isso permite revisão e merge sequencial das mudanças
     
     Args:
-        repo: Objeto repositório do GitHub (PyGithub Repository)
+        repo: Objeto repositório do provedor (PyGithub Repository, GitLab Project, etc.)
         nome_branch (str): Nome da nova branch a ser criada
         branch_de_origem (str): Branch base para criação da nova branch
         branch_alvo_do_pr (str): Branch de destino do Pull Request
@@ -102,7 +104,7 @@ def _processar_uma_branch(
                 pass
 
             # ETAPA 2.2: Processamento diferenciado por status
-            # Cada tipo de mudança requer operação específica na API GitHub
+            # Cada tipo de mudança requer operação específica na API
             
             if status in ("ADICIONADO", "CRIADO"):
                 # Caso especial: arquivo marcado como ADICIONADO mas já existe
@@ -147,7 +149,7 @@ def _processar_uma_branch(
                 print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo '{caminho}'. Ignorando.")
 
         except GithubException as e:
-            # Tratamento de erros específicos da API GitHub
+            # Tratamento de erros específicos da API
             print(f"ERRO ao processar o arquivo '{caminho}': {e.data.get('message', str(e))}")
         except Exception as e:
             # Tratamento de erros inesperados
@@ -184,15 +186,18 @@ def processar_e_subir_mudancas_agrupadas(
     nome_repo: str,
     dados_agrupados: dict,
     base_branch: str = "main",
-    github_connector: GitHubConnector = None
+    repository_provider: Optional[IRepositoryProvider] = None
 ) -> List[Dict[str, Any]]:
     """
     Orquestrador principal que implementa a estratégia de Pull Requests empilhados.
     
     Esta função implementa o padrão de "Stacked Pull Requests" onde cada PR
     é criado em cima do anterior, permitindo revisão e merge sequencial de
-    mudanças relacionadas. Isso é especialmente útil para refatorações grandes
-    que precisam ser divididas em etapas lógicas.
+    mudanças relacionadas. Agora é agnóstica ao provedor de repositório específico.
+    
+    IMPORTANTE: Esta função agora aceita qualquer provedor de repositório via injeção
+    de dependência, permitindo uso com GitHub, GitLab, Bitbucket ou outros provedores
+    que implementem IRepositoryProvider.
     
     Estratégia de Empilhamento:
     1. Primeira branch criada a partir de base_branch (ex: main)
@@ -212,8 +217,8 @@ def processar_e_subir_mudancas_agrupadas(
             - grupos (List[Dict]): Lista de grupos de mudanças
             - Cada grupo deve ter: branch_sugerida, titulo_pr, resumo_do_pr, conjunto_de_mudancas
         base_branch (str, optional): Branch base para o primeiro PR. Defaults to "main"
-        github_connector (GitHubConnector, optional): Conector GitHub injetado.
-            Se None, cria um com dependências padrão. Defaults to None
+        repository_provider (Optional[IRepositoryProvider], optional): Provedor de repositório
+            a ser usado. Se None, usa GitHubRepositoryProvider como padrão. Defaults to None
     
     Returns:
         List[Dict[str, Any]]: Lista de resultados de cada branch processada.
@@ -228,15 +233,38 @@ def processar_e_subir_mudancas_agrupadas(
         - Se uma branch falhar, as próximas ainda são processadas
         - Usa injeção de dependência para facilitar testes
         - Faz log detalhado para debugging
+        - Funciona com qualquer provedor que implemente IRepositoryProvider
+    
+    Example:
+        >>> # Uso com GitHub (padrão)
+        >>> github_provider = GitHubRepositoryProvider()
+        >>> resultados = processar_e_subir_mudancas_agrupadas(
+        ...     nome_repo="org/repo",
+        ...     dados_agrupados=dados,
+        ...     repository_provider=github_provider
+        ... )
+        >>> 
+        >>> # Uso futuro com GitLab
+        >>> # gitlab_provider = GitLabRepositoryProvider()
+        >>> # resultados = processar_e_subir_mudancas_agrupadas(
+        >>> #     nome_repo="org/repo",
+        >>> #     dados_agrupados=dados,
+        >>> #     repository_provider=gitlab_provider
+        >>> # )
     """
     resultados_finais = []
     
     try:
-        print("--- Iniciando o Processo de Pull Requests Empilhados ---")
+        provider_name = type(repository_provider).__name__ if repository_provider else "GitHubRepositoryProvider (padrão)"
+        print(f"--- Iniciando o Processo de Pull Requests Empilhados via {provider_name} ---")
         
         # ETAPA 1: Inicialização das dependências
-        # Usa o conector injetado ou cria um com dependências padrão
-        connector = github_connector or GitHubConnector.create_with_defaults()
+        # Usa o provedor injetado ou cria um com dependências padrão
+        if repository_provider is None:
+            repository_provider = GitHubRepositoryProvider()
+            print("AVISO: Nenhum provedor especificado. Usando GitHubRepositoryProvider como padrão.")
+        
+        connector = GitHubConnector(repository_provider=repository_provider)
         repo = connector.connection(repositorio=nome_repo)
 
         # ETAPA 2: Configuração da estratégia de empilhamento
