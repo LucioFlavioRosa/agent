@@ -18,6 +18,7 @@ relatorio_avaliacao_terraform:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_cleancode:
   description: "Analisar o código-fonte fornecido e identificar violações claras dos 5 princípios SOLID"
@@ -39,6 +40,7 @@ relatorio_cleancode:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_conformidades:
   description: "Analisar o código-fonte fornecido e identificar apenas inconsistências funcionais"
@@ -60,6 +62,7 @@ relatorio_conformidades:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_docstring:
   description: "Analisar o código-fonte fornecido, independentemente da linguagem de programação, para identificar a ausência ou a má qualidade de docstrings e comentários"
@@ -81,6 +84,7 @@ relatorio_docstring:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_documentacao:
   description: "nalisar os arquivos de documentação e configuração na raiz do repositório para identificar a ausência de arquivos essenciais e a falta de informações críticas que dificultam a colaboração"
@@ -102,6 +106,7 @@ relatorio_documentacao:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_implentacao_feature:
   description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação técnico, detalhado e sequenciado"
@@ -123,6 +128,7 @@ relatorio_implentacao_feature:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_owasp:
   description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido"
@@ -144,6 +150,7 @@ relatorio_owasp:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
         
 relatorio_pentest:
   description: "Analisar o código-fonte fornecido para simular um teste de invasão"
@@ -165,6 +172,7 @@ relatorio_pentest:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_performance_eficiencia:
   description: "Analisar o código-fonte fornecido, independentemente da linguagem, para identificar gargalos de performance e ineficiências computacionais"
@@ -186,6 +194,7 @@ relatorio_performance_eficiencia:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_sast:
   description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido, simulando a mentalidade de um atacante"
@@ -207,6 +216,7 @@ relatorio_sast:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_simplicacao:
   description: "Analisar o código-fonte fornecido com o objetivo exclusivo de identificar violações dos princípios DRY (Don't Repeat Yourself), YAGNI (You Ain't Gonna Need It) e KISS (Keep It Simple, Stupid)"
@@ -228,6 +238,7 @@ relatorio_simplicacao:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_teste_integracao:
   description: "Realizar uma auditoria técnica aprofundada focada exclusivamente na suíte de Testes de Integração"
@@ -249,6 +260,7 @@ relatorio_teste_integracao:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_teste_unitario:
   description: "Analisar o código-fonte e a suíte de testes fornecidos para identificar os pontos mais críticos de cobertura e qualidade"
@@ -270,6 +282,7 @@ relatorio_teste_unitario:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
         
 geracao_codigo_a_partir_de_reuniao:
   description: "Escrita de documentação do código."
@@ -291,6 +304,7 @@ geracao_codigo_a_partir_de_reuniao:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
 
 relatorio_implentacao_feature:
   description: "Refatoração de código, olhando somente o clean code."
@@ -312,4 +326,5 @@ relatorio_implentacao_feature:
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
         
