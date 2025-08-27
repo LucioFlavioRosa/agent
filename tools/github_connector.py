@@ -30,9 +30,14 @@ class GitHubConnector:
         >>> github_provider = GitHubRepositoryProvider()
         >>> connector = GitHubConnector(repository_provider=github_provider)
         >>> 
-        >>> # Uso futuro com GitLab
-        >>> # gitlab_provider = GitLabRepositoryProvider()
-        >>> # connector = GitHubConnector(repository_provider=gitlab_provider)
+        >>> # Uso com GitLab
+        >>> from tools.gitlab_repository_provider import GitLabRepositoryProvider
+        >>> gitlab_provider = GitLabRepositoryProvider()
+        >>> connector = GitHubConnector(repository_provider=gitlab_provider)
+        >>> 
+        >>> # Uso futuro com outros providers
+        >>> # bitbucket_provider = BitbucketRepositoryProvider()
+        >>> # connector = GitHubConnector(repository_provider=bitbucket_provider)
     """
     _cached_repos: Dict[str, Repository] = {}
     
