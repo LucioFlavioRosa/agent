@@ -50,12 +50,14 @@ class GitHubRepositoryReader(IRepositoryReader):
         connector = GitHubConnector()
         repositorio = connector.connection(repositorio=nome_repo)
 
+        # Determinação da branch: usa branch padrão se não especificada
         if nome_branch is None:
             branch_a_ler = repositorio.default_branch
             print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
         else:
             branch_a_ler = nome_branch
         
+        # Filtro por extensões: obtém lista de extensões válidas do workflow config
         extensoes_alvo = self._mapeamento_tipo_extensoes.get(tipo_analise.lower())
         if extensoes_alvo is None:
             raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou não possui 'extensions' definidas em workflows.yaml")
@@ -64,19 +66,26 @@ class GitHubRepositoryReader(IRepositoryReader):
         try:
             print(f"Obtendo a árvore de arquivos completa da branch '{branch_a_ler}'...")
             
+            # Obtenção da árvore Git: usa API Git Trees para performance otimizada
+            # Esta abordagem é mais eficiente que listar arquivos individualmente
             try:
                 ref = repositorio.get_git_ref(f"heads/{branch_a_ler}")
                 tree_sha = ref.object.sha
             except UnknownObjectException:
                 raise ValueError(f"Branch '{branch_a_ler}' não encontrada.")
 
+            # Chamada recursiva: obtém toda a estrutura de arquivos de uma vez
+            # recursive=True garante que subdiretórios sejam incluídos
             tree_response = repositorio.get_git_tree(tree_sha, recursive=True)
             tree_elements = tree_response.tree
             print(f"Árvore obtida. {len(tree_elements)} itens totais encontrados.")
 
+            # Verificação de truncamento: API GitHub pode truncar listas muito grandes
             if tree_response.truncated:
                 print(f"AVISO: A lista de arquivos do repositório '{nome_repo}' foi truncada pela API do GitHub.")
 
+            # Filtragem por extensão: seleciona apenas arquivos com extensões relevantes
+            # Filtra por type='blob' para excluir diretórios e outros objetos Git
             arquivos_para_ler = [
                 element for element in tree_elements
                 if element.type == 'blob' and any(element.path.endswith(ext) for ext in extensoes_alvo)
@@ -84,14 +93,19 @@ class GitHubRepositoryReader(IRepositoryReader):
             
             print(f"Filtragem concluída. {len(arquivos_para_ler)} arquivos com as extensões {extensoes_alvo} serão lidos.")
             
+            # Leitura otimizada: usa Git Blob API para obter conteúdo diretamente
+            # Esta abordagem evita múltiplas chamadas à API para cada arquivo
             for i, element in enumerate(arquivos_para_ler):
                 if (i + 1) % 50 == 0:
                     print(f"  ...lendo arquivo {i + 1} de {len(arquivos_para_ler)} ({element.path})")
                 try:
+                    # Obtenção do blob: usa SHA do arquivo para acesso direto
                     blob_content = repositorio.get_git_blob(element.sha).content
+                    # Decodificação: conteúdo vem em base64, precisa ser decodificado
                     decoded_content = base64.b64decode(blob_content).decode('utf-8')
                     arquivos_do_repo[element.path] = decoded_content
                 except Exception as e:
+                    # Tratamento de erros: arquivos binários ou corrompidos são ignorados
                     print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{element.path}'. Pulando. Erro: {e}")
 
         except GithubException as e:
