@@ -153,7 +153,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
     Executa APENAS O PRIMEIRO PASSO de um workflow para gerar um relatório
     e então para, aguardando a aprovação humana.
     """
-    ob_info = None
+    job_info = None
     json_string_from_llm = ""
     try:
         job_info = job_store.get_job(job_id)
@@ -161,8 +161,10 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
 
         analysis_type_str = payload.analysis_type.value
         workflow = WORKFLOW_REGISTRY.get(analysis_type_str)
+        if not workflow or not workflow.get('steps'):
+            raise ValueError(f"Workflow '{analysis_type_str}' é inválido ou não tem etapas.")
+
         first_step = workflow['steps'][0]
-        
         job_info['status'] = first_step.get('status_update', 'gerando_relatorio')
         job_store.set_job(job_id, job_info)
 
@@ -170,64 +172,43 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
         model_para_etapa = first_step.get('model_name', payload.model_name)
         llm_provider = create_llm_provider(model_para_etapa, rag_retriever)
         
-        # Obtém o provedor de repositório configurado
-        repository_provider = get_repository_provider()
+        agent_params = first_step.get('params', {}).copy()
+        agent_params['usar_rag'] = payload.usar_rag
+        agent_params['model_name'] = model_para_etapa
         
         agent_type = first_step.get("agent_type")
-        params_base = first_step.get('params', {}).copy()
-
-        # --- LÓGICA DE CHAMADA FINAL E CORRIGIDA ---
+        
         if agent_type == "revisor":
-            repo_reader = GitHubRepositoryReader(repository_provider=repository_provider)
+            repo_reader = GitHubRepositoryReader()
             agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
             
-            # Chama o AgenteRevisor com os parâmetros que ele espera
-            agent_response = agente.main(
-                tipo_analise=params_base.get("tipo_analise"),
-                repositorio=payload.repo_name,
-                nome_branch=payload.branch_name,
-                instrucoes_extras=payload.instrucoes_extras,
-                usar_rag=payload.usar_rag,
-                model_name=model_para_etapa
-            )
+            agent_params.update({
+                'repositorio': payload.repo_name,
+                'nome_branch': payload.branch_name,
+                'instrucoes_extras': payload.instrucoes_extras
+            })
+            agent_response = agente.main(**agent_params)
             
         elif agent_type == "processador":
             agente = AgenteProcessador(llm_provider=llm_provider)
-            
-            # O input principal para o processador é a especificação técnica
             input_estruturado = {"instrucoes_iniciais": payload.instrucoes_extras}
+            agent_params['codigo'] = input_estruturado
+            agent_response = agente.main(**agent_params)
             
-            # Chama o AgenteProcessador com os parâmetros que ele espera
-            agent_response = agente.main(
-                tipo_analise=params_base.get("tipo_analise"),
-                codigo=input_estruturado,
-                instrucoes_extras=payload.instrucoes_extras, # Pode ser útil como contexto adicional
-                usar_rag=payload.usar_rag,
-                model_name=model_para_etapa
-            )
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}' no workflow.")
 
-        provider_response = agent_response.get("resultado", {}).get("reposta_final", {})
+        provider_response = agent_response.get("resultado", {})
         json_string_from_llm = provider_response.get("reposta_final", "")
 
         if not json_string_from_llm.strip():
             raise ValueError("A resposta da IA veio vazia.")
         
-        # 1. Analisa o JSON que a IA retornou.
-        parsed_response = json.loads(json_string_from_llm.replace("", "").replace("", "").strip())
+        parsed_response = json.loads(json_string_from_llm.replace("```json", "").replace("```", "").strip())
         
-        # 2. Pega o valor da ÚNICA chave que esperamos: "relatorio".
-        #    Se a chave não existir, usa a resposta bruta como um fallback seguro.
         report_text = parsed_response.get("relatorio", json_string_from_llm)
-        
-        # 3. Salva o texto do relatório para a visualização do humano e para a próxima etapa.
         job_info['data']['analysis_report'] = report_text
-        
-        # 4. Salva o objeto JSON original para os logs de diagnóstico.
-        job_info['data']['step_0_result'] = parsed_response
-        
-        # --- FIM DA MUDANÇA ---
+        job_info['data']['step_0_result'] = parsed_response 
         
         if payload.gerar_relatorio_apenas:
             job_info['status'] = 'completed'
@@ -245,7 +226,7 @@ def run_report_generation_task(job_id: str, payload: StartAnalysisPayload):
             }
             job_store.set_job(job_id, job_info)
         traceback.print_exc()
-        handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation')
+        handle_task_exception(job_id, e, job_info.get('status', 'report_generation') if job_info else 'report_generation', job_info)
 
 def run_workflow_task(job_id: str):
     job_info = None
@@ -566,4 +547,5 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
+
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
