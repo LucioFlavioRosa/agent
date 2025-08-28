@@ -7,7 +7,6 @@ relatorio_avaliacao_terraform:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_avaliacao_terraform"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -30,7 +29,6 @@ relatorio_cleancode:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_cleancode"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -53,7 +51,6 @@ relatorio_conformidades:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_conformidades"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -76,7 +73,6 @@ relatorio_docstring:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_docstring"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -99,7 +95,6 @@ relatorio_documentacao:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_documentacao"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -122,7 +117,6 @@ relatorio_implentacao_feature:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_implentacao_feature"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -145,7 +139,6 @@ relatorio_owasp:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_owasp"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -168,7 +161,6 @@ relatorio_pentest:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_pentest"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -191,7 +183,6 @@ relatorio_performance_eficiencia:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_performance_eficiencia"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -214,7 +205,6 @@ relatorio_sast:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_sast"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -237,7 +227,6 @@ relatorio_simplicacao:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_simplicacao"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -260,7 +249,6 @@ relatorio_teste_integracao:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_teste_integracao"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -283,7 +271,6 @@ relatorio_teste_unitario:
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_teste_unitario"
-      requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "revisor"
@@ -306,7 +293,6 @@ geracao_codigo_a_partir_de_reuniao:
       agent_type: "processador"
       params:
         tipo_analise: "geracao_codigo_a_partir_de_reuniao"
-      requires_approval: true
     - status_update: "escrita_codigo"
       model_name: "claude-sonnet-4-20250514"
       agent_type: "processador"
