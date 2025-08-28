@@ -103,8 +103,6 @@ def handle_task_exception(job_id: str, e: Exception, step: str):
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
-# Em mcp_server_fastapi.py
-
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     """
     Orquestrador de workflow único e genérico.
@@ -221,7 +219,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_store.set_job(job_id, initial_job_data)
     
     # A chamada agora é sempre para a mesma função, começando do passo 0
-    background_tasks.add_task(execute_workflow, job_id, start_from_step=0)
+    background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
     
     return StartAnalysisResponse(job_id=job_id)
     
@@ -312,3 +310,4 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
