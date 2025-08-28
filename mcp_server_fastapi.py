@@ -251,7 +251,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         job_store.set_job(payload.job_id, job)
         
         # A chamada agora continua o workflow a partir do passo seguinte ao da pausa
-        background_tasks.add_task(execute_workflow, payload.job_id, start_from_step=start_from_step)
+        background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
         
         return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida."}
     
@@ -321,5 +321,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
