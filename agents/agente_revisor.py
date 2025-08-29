@@ -2,16 +2,19 @@ import json
 from typing import Optional, Dict, Any
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
+from tools.repository_provider_factory import get_repository_provider
+from tools.github_reader import GitHubRepositoryReader
 
 class AgenteRevisor:
     """
     Orquestrador especializado em análise de código via IA com integração a repositórios.
     
-    Este agente é responsável por coordenar a leitura de repositórios GitHub e
-    iniciar análises de código através de provedores de LLM. Sua responsabilidade
-    única é orquestrar o fluxo: repositório → leitura → análise → resultado.
+    Este agente é responsável por coordenar a leitura de repositórios GitHub, GitLab
+    e Azure DevOps e iniciar análises de código através de provedores de LLM. Sua responsabilidade
+    única é orquestrar o fluxo: repositório → detecção de provider → leitura → análise → resultado.
     
     Características principais:
+    - Detecção automática do tipo de repositório (GitHub, GitLab, Azure DevOps)
     - Integração com repositórios através de interface abstrata
     - Processamento de código via provedores de LLM
     - Tratamento robusto de erros de leitura de repositório
@@ -22,36 +25,46 @@ class AgenteRevisor:
         llm_provider (ILLMProvider): Provedor de LLM para análise do código
     
     Example:
-        >>> from tools.github_reader import GitHubRepositoryReader
         >>> from tools.requisicao_openai import OpenAILLMProvider
-        >>> reader = GitHubRepositoryReader()
         >>> llm = OpenAILLMProvider()
-        >>> agente = AgenteRevisor(reader, llm)
+        >>> agente = AgenteRevisor(llm_provider=llm)
         >>> resultado = agente.main(
         ...     tipo_analise="refatoracao",
-        ...     repositorio="org/projeto",
+        ...     repositorio="org/projeto",  # GitHub detectado automaticamente
+        ...     nome_branch="main"
+        ... )
+        >>> 
+        >>> # Também funciona com GitLab e Azure DevOps
+        >>> resultado = agente.main(
+        ...     tipo_analise="refatoracao",
+        ...     repositorio="gitlab-org/gitlab",  # GitLab detectado automaticamente
         ...     nome_branch="main"
         ... )
     """
     
     def __init__(
         self,
-        repository_reader: IRepositoryReader,
-        llm_provider: ILLMProvider
+        repository_reader: Optional[IRepositoryReader] = None,
+        llm_provider: Optional[ILLMProvider] = None
     ):
         """
         Inicializa o agente com as dependências necessárias.
         
         Args:
-            repository_reader (IRepositoryReader): Implementação de leitor de repositório
-                que será usado para obter o código-fonte
-            llm_provider (ILLMProvider): Implementação de provedor de LLM que será
-                usado para análise do código obtido
+            repository_reader (Optional[IRepositoryReader]): Implementação de leitor de repositório.
+                Se None, usa GitHubRepositoryReader com detecção automática de provider
+            llm_provider (Optional[ILLMProvider]): Implementação de provedor de LLM que será
+                usado para análise do código obtido. Deve ser fornecido para funcionamento
         
         Raises:
             TypeError: Se as dependências não implementarem as interfaces esperadas
+        
+        Note:
+            O repository_reader padrão (GitHubRepositoryReader) agora suporta detecção
+            automática de provedores, funcionando transparentemente com GitHub, GitLab
+            e Azure DevOps baseado no formato do nome do repositório.
         """
-        self.repository_reader = repository_reader
+        self.repository_reader = repository_reader or GitHubRepositoryReader()
         self.llm_provider = llm_provider
 
     def _get_code(
@@ -61,13 +74,17 @@ class AgenteRevisor:
         tipo_analise: str
     ) -> Dict[str, str]:
         """
-        Obtém código-fonte de um repositório usando a interface injetada.
+        Obtém código-fonte de um repositório usando detecção automática de provider.
         
-        Este método privado encapsula a lógica de leitura de repositório,
+        Este método privado encapsula a lógica de leitura de repositório com
+        detecção automática do tipo de provider (GitHub, GitLab, Azure DevOps),
         fornecendo tratamento de erro consistente e logging para debugging.
         
         Args:
-            repositorio (str): Nome do repositório no formato 'org/repo'
+            repositorio (str): Nome do repositório. Formatos suportados:
+                - GitHub: 'org/repo' ou 'user/repo'
+                - GitLab: 'grupo/projeto' (detectado por heurísticas)
+                - Azure DevOps: 'organization/project/repository'
             nome_branch (Optional[str]): Nome da branch a ser lida. Se None,
                 usa a branch padrão do repositório
             tipo_analise (str): Tipo de análise que determina quais arquivos
@@ -80,15 +97,21 @@ class AgenteRevisor:
         Raises:
             RuntimeError: Se houver falha na leitura do repositório, encapsulando
                 a exceção original para contexto adicional
+            ValueError: Se o formato do repositório for inválido ou tipo_analise
+                não for reconhecido
         
         Note:
             - O tipo_analise é usado pelo repository_reader para filtrar arquivos relevantes
             - Logging é feito para facilitar debugging de problemas de conectividade
+            - A detecção de provider é automática baseada no nome do repositório
+            - Suporta GitHub, GitLab e Azure DevOps transparentemente
         """
         try:
             print(f"Iniciando a leitura do repositório: {repositorio}, branch: {nome_branch}")
+            print(f"Detecção automática de provider será aplicada baseada no formato do repositório.")
             
             # Delega a leitura para a implementação injetada
+            # O GitHubRepositoryReader agora detecta automaticamente o provider correto
             codigo_para_analise = self.repository_reader.read_repository(
                 nome_repo=repositorio,
                 tipo_analise=tipo_analise,
@@ -112,19 +135,23 @@ class AgenteRevisor:
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
         """
-        Orquestra a obtenção de código de repositório e análise via IA.
+        Orquestra a obtenção de código de repositório e análise via IA com suporte multi-provedor.
         
         Este é o método principal que coordena todo o fluxo do agente:
-        1. Obtém código do repositório através do repository_reader
-        2. Valida se código foi encontrado
-        3. Serializa código em formato JSON
-        4. Envia para análise via llm_provider
-        5. Retorna resultado estruturado
+        1. Detecta automaticamente o tipo de repositório (GitHub, GitLab, Azure DevOps)
+        2. Obtém código do repositório através do repository_reader
+        3. Valida se código foi encontrado
+        4. Serializa código em formato JSON
+        5. Envia para análise via llm_provider
+        6. Retorna resultado estruturado
         
         Args:
             tipo_analise (str): Tipo de análise a ser executada. Deve corresponder
                 a um prompt disponível no sistema (ex: 'refatoracao', 'revisao')
-            repositorio (str): Nome do repositório no formato 'org/repo' ou 'user/repo'
+            repositorio (str): Nome do repositório. Formatos aceitos:
+                - GitHub: 'org/repo', 'user/repo' (formato padrão)
+                - GitLab: 'grupo/projeto' (detectado por heurísticas como 'gitlab-org/gitlab')
+                - Azure DevOps: 'organization/project/repository' (3 partes)
             nome_branch (Optional[str], optional): Nome da branch a ser analisada.
                 Se None, usa a branch padrão. Defaults to None
             instrucoes_extras (str, optional): Instruções adicionais do usuário
@@ -144,15 +171,19 @@ class AgenteRevisor:
         
         Raises:
             RuntimeError: Se houver falha na leitura do repositório
-            ValueError: Se tipo_analise for inválido ou repositorio mal formatado
+            ValueError: Se tipo_analise for inválido, repositorio mal formatado,
+                ou formato de repositório não suportado
             Exception: Erros de comunicação com o provedor de LLM são propagados
         
         Note:
+            - Detecção automática de provider baseada no formato do repositório
             - Se nenhum código for encontrado, retorna resultado vazio sem erro
             - O código é serializado em JSON com formatação legível
             - Avisos são impressos para facilitar debugging
+            - Suporta GitHub, GitLab e Azure DevOps transparentemente
+            - Funciona com qualquer repository_reader que implemente IRepositoryReader
         """
-        # Etapa 1: Obter código do repositório
+        # Etapa 1: Obter código do repositório com detecção automática de provider
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,
