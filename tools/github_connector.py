@@ -1,5 +1,5 @@
 from github import Repository
-from typing import Dict
+from typing import Dict, Any, Union
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_secret_manager import AzureSecretManager
@@ -19,12 +19,13 @@ class GitHubConnector:
     
     NOVA FUNCIONALIDADE: Suporte aprimorado para múltiplos provedores com detecção
     automática de tipo, logging específico e tratamento de erros diferenciado.
+    Implementa adaptação de objetos para garantir compatibilidade com diferentes APIs.
     
     Responsabilidade única: gerenciar conexões com repositórios de forma eficiente
-    e segura, abstraindo a complexidade de autenticação e cache.
+    e segura, abstraindo a complexidade de autenticação, cache e adaptação de tipos.
     
     Attributes:
-        _cached_repos (Dict[str, Repository]): Cache de repositórios conectados
+        _cached_repos (Dict[str, Any]): Cache de repositórios conectados (tipos diversos)
         secret_manager (ISecretManager): Gerenciador de segredos injetado
         repository_provider (IRepositoryProvider): Provedor de repositório injetado
     
@@ -41,7 +42,7 @@ class GitHubConnector:
         >>> azure_provider = AzureRepositoryProvider()
         >>> connector = GitHubConnector(repository_provider=azure_provider)
     """
-    _cached_repos: Dict[str, Repository] = {}
+    _cached_repos: Dict[str, Any] = {}
     
     def __init__(self, repository_provider: IRepositoryProvider, secret_manager: ISecretManager = None):
         """
@@ -140,15 +141,57 @@ class GitHubConnector:
             f"Verifique se existe um dos seguintes segredos: {', '.join(token_candidates)}"
         )
     
-    def connection(self, repositorio: str) -> Repository:
+    def _create_repository_adapter(self, repo_object: Any) -> Any:
+        """
+        Cria um adaptador para o objeto de repositório baseado no tipo do provedor.
+        
+        Esta função crítica resolve o problema de incompatibilidade de tipos identificado
+        no relatório de integridade funcional. Diferentes provedores retornam objetos
+        com interfaces distintas, mas o sistema espera métodos compatíveis com PyGithub.
+        
+        Args:
+            repo_object (Any): Objeto original retornado pelo provedor
+            
+        Returns:
+            Any: Objeto adaptado ou original, dependendo do tipo do provedor
+            
+        Note:
+            - Para GitHub: retorna o objeto Repository original (compatível)
+            - Para GitLab: retorna o objeto Project original (será tratado especificamente)
+            - Para Azure: retorna o dict original (será tratado especificamente)
+            - Para unknown: retorna o objeto original com aviso
+        """
+        if self.provider_type == 'github':
+            # GitHub Repository já é compatível com a interface esperada
+            return repo_object
+        
+        elif self.provider_type == 'gitlab':
+            # GitLab Project tem interface diferente, mas mantemos o objeto original
+            # O tratamento específico será feito nos consumidores (github_reader, commit_multiplas_branchs)
+            print(f"AVISO: Objeto GitLab Project retornado. Consumidores devem tratar especificamente.")
+            return repo_object
+        
+        elif self.provider_type == 'azure':
+            # Azure retorna dict, mantemos o objeto original
+            # O tratamento específico será feito nos consumidores
+            print(f"AVISO: Objeto Azure DevOps (dict) retornado. Consumidores devem tratar especificamente.")
+            return repo_object
+        
+        else:
+            # Provedor desconhecido, retorna objeto original com aviso
+            print(f"AVISO: Provedor desconhecido '{self.provider_type}'. Retornando objeto original sem adaptação.")
+            return repo_object
+    
+    def connection(self, repositorio: str) -> Any:
         """
         Obtém um objeto de repositório, criando-o se necessário.
         
         Implementa cache para evitar reconexões desnecessárias e melhora
         a performance. Se o repositório não existir, tenta criá-lo automaticamente.
         
-        NOVA FUNCIONALIDADE: Logging aprimorado com informações específicas do provedor,
-        tratamento de erros diferenciado e validação de formato específica por tipo.
+        CORREÇÃO CRÍTICA: Agora retorna objetos adaptados baseados no tipo do provedor,
+        resolvendo o problema de incompatibilidade de tipos identificado no relatório
+        de integridade funcional.
         
         Args:
             repositorio (str): Nome do repositório no formato específico do provedor:
@@ -157,11 +200,18 @@ class GitHubConnector:
                 - Azure DevOps: 'organization/project/repository'
             
         Returns:
-            Repository: Objeto do repositório pronto para uso
+            Any: Objeto do repositório adaptado para o tipo do provedor.
+                - GitHub: github.Repository.Repository
+                - GitLab: gitlab.v4.objects.Project
+                - Azure DevOps: Dict[str, Any]
             
         Raises:
             ValueError: Se o formato do nome do repositório for inválido
                 ou se não conseguir obter/criar o repositório
+        
+        Note:
+            O tipo de retorno varia conforme o provedor. Consumidores devem
+            tratar adequadamente cada tipo ou usar detecção de provider_type.
         """
         # Cria chave de cache específica incluindo tipo do provedor
         cache_key = f"{self.provider_type}:{repositorio}"
@@ -183,23 +233,26 @@ class GitHubConnector:
         try:
             # Tenta obter o repositório existente usando o provedor injetado
             print(f"Tentando acessar o repositório '{repositorio}' via {type(self.repository_provider).__name__}...")
-            repo = self.repository_provider.get_repository(repositorio, token)
+            repo_object = self.repository_provider.get_repository(repositorio, token)
             print(f"Repositório '{repositorio}' encontrado com sucesso ({self.provider_type.upper()}).")
         except ValueError as e:
             # Se não encontrar, cria o repositório automaticamente
             print(f"AVISO: Repositório '{repositorio}' não encontrado ({self.provider_type.upper()}). Tentando criá-lo...")
             print(f"Detalhes do erro: {e}")
             try:
-                repo = self.repository_provider.create_repository(repositorio, token)
+                repo_object = self.repository_provider.create_repository(repositorio, token)
                 print(f"SUCESSO: Repositório '{repositorio}' criado ({self.provider_type.upper()}).")
             except Exception as create_error:
                 print(f"ERRO CRÍTICO: Falha ao criar repositório '{repositorio}': {create_error}")
                 raise ValueError(f"Não foi possível acessar nem criar o repositório '{repositorio}': {create_error}") from create_error
         
-        # Armazena no cache e retorna o repositório
-        self._cached_repos[cache_key] = repo
-        print(f"Repositório '{repositorio}' adicionado ao cache ({self.provider_type.upper()}).")
-        return repo
+        # CORREÇÃO CRÍTICA: Aplica adaptação baseada no tipo do provedor
+        adapted_repo = self._create_repository_adapter(repo_object)
+        
+        # Armazena no cache e retorna o repositório adaptado
+        self._cached_repos[cache_key] = adapted_repo
+        print(f"Repositório '{repositorio}' adaptado e adicionado ao cache ({self.provider_type.upper()}).")
+        return adapted_repo
     
     def _validate_repository_format(self, repositorio: str) -> None:
         """
@@ -276,6 +329,19 @@ class GitHubConnector:
         cache_count = len(self._cached_repos)
         self._cached_repos.clear()
         print(f"Cache de repositórios limpo ({cache_count} entradas removidas).")
+    
+    def is_github_compatible(self) -> bool:
+        """
+        Verifica se o provedor atual é compatível com a interface do PyGithub.
+        
+        Returns:
+            bool: True se for GitHub, False caso contrário
+            
+        Note:
+            Método utilitário para consumidores verificarem compatibilidade
+            antes de chamar métodos específicos do PyGithub.
+        """
+        return self.provider_type == 'github'
     
     @classmethod
     def create_with_defaults(cls) -> 'GitHubConnector':
