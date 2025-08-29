@@ -179,6 +179,9 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             
             if current_step_index == 0:
                 if job_info['data'].get('gerar_relatorio_apenas') is True:
+                    report_text = current_step_result.get("relatorio",
+                                                      json.dumps(current_step_result, indent=2, ensure_ascii=False))
+                    job_info['data']['analysis_report'] = report_text
                     print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo. Finalizando.")
                     job_info['status'] = 'completed'
                     job_store.set_job(job_id, job_info)
@@ -368,6 +371,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
