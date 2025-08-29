@@ -353,6 +353,7 @@ def processar_e_subir_mudancas_agrupadas(
         
         print(f"Tipo de provedor detectado: {provider_type.upper()}")
         
+        # CORREÇÃO: Usar GitHubConnector com provider injetado para garantir consistência
         connector = GitHubConnector(repository_provider=repository_provider)
         repo = connector.connection(repositorio=nome_repo)
 
