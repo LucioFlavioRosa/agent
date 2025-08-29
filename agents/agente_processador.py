@@ -144,8 +144,8 @@ class AgenteProcessador:
             ValueError: Se tipo_analise for inválido ou codigo estiver vazio,
                 ou se o provedor retornar dados inválidos
             RuntimeError: Se houver falha na comunicação com o provedor de LLM
-            json.JSONEncodeError: Se os dados de entrada não forem serializáveis
-            TypeError: Se o retorno do provedor não for do tipo esperado
+            TypeError: Se os dados de entrada não forem serializáveis
+                ou se o retorno do provedor não for do tipo esperado
         
         Note:
             - Os parâmetros repositorio e nome_branch são ignorados intencionalmente
@@ -164,10 +164,8 @@ class AgenteProcessador:
             # Serializa os dados de entrada em formato JSON legível para o LLM
             codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
         except (TypeError, ValueError) as e:
-            raise json.JSONEncodeError(
-                f"Erro ao serializar dados de entrada: {e}", 
-                doc=str(codigo), 
-                pos=0
+            raise TypeError(
+                f"Erro ao serializar dados de entrada: {e}"
             ) from e
 
         try:
