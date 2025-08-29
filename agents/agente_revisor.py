@@ -19,6 +19,7 @@ class AgenteRevisor:
     - Processamento de código via provedores de LLM
     - Tratamento robusto de erros de leitura de repositório
     - Suporte a diferentes tipos de análise configuráveis
+    - Validação robusta de retornos do provedor LLM
     
     Attributes:
         repository_reader (IRepositoryReader): Interface para leitura de repositórios
@@ -65,7 +66,61 @@ class AgenteRevisor:
             e Azure DevOps baseado no formato do nome do repositório.
         """
         self.repository_reader = repository_reader or GitHubRepositoryReader()
+        
+        # Validação do provedor LLM
+        if llm_provider is not None and not hasattr(llm_provider, 'executar_prompt'):
+            raise TypeError("llm_provider deve implementar ILLMProvider com método executar_prompt")
         self.llm_provider = llm_provider
+
+    def _validar_e_extrair_resposta(self, resultado_llm: Any) -> str:
+        """
+        Valida e extrai a resposta final do retorno do provedor LLM.
+        
+        Este método garante compatibilidade com diferentes implementações de ILLMProvider,
+        tratando tanto retornos diretos (string) quanto estruturados (dict).
+        
+        Args:
+            resultado_llm (Any): Retorno do método executar_prompt do provedor
+            
+        Returns:
+            str: Resposta final extraída e validada
+            
+        Raises:
+            ValueError: Se o retorno não contiver dados válidos
+            TypeError: Se o retorno não for do tipo esperado
+        """
+        # Caso 1: Retorno direto como string
+        if isinstance(resultado_llm, str):
+            if not resultado_llm.strip():
+                raise ValueError("Provedor LLM retornou string vazia")
+            return resultado_llm.strip()
+        
+        # Caso 2: Retorno estruturado como dict (conforme interface ILLMProvider)
+        if isinstance(resultado_llm, dict):
+            # Verifica se contém a chave obrigatória 'reposta_final'
+            if 'reposta_final' not in resultado_llm:
+                raise ValueError(
+                    "Retorno do provedor LLM não contém chave obrigatória 'reposta_final'. "
+                    f"Chaves disponíveis: {list(resultado_llm.keys())}"
+                )
+            
+            resposta_final = resultado_llm['reposta_final']
+            
+            # Valida se a resposta final é uma string não vazia
+            if not isinstance(resposta_final, str):
+                raise TypeError(
+                    f"Chave 'reposta_final' deve ser string, recebido: {type(resposta_final).__name__}"
+                )
+            
+            if not resposta_final.strip():
+                raise ValueError("Chave 'reposta_final' contém string vazia")
+            
+            return resposta_final.strip()
+        
+        # Caso 3: Tipo não suportado
+        raise TypeError(
+            f"Retorno do provedor LLM deve ser string ou dict, recebido: {type(resultado_llm).__name__}"
+        )
 
     def _get_code(
         self,
@@ -143,7 +198,8 @@ class AgenteRevisor:
         3. Valida se código foi encontrado
         4. Serializa código em formato JSON
         5. Envia para análise via llm_provider
-        6. Retorna resultado estruturado
+        6. Valida e extrai resposta do provedor
+        7. Retorna resultado estruturado
         
         Args:
             tipo_analise (str): Tipo de análise a ser executada. Deve corresponder
@@ -170,9 +226,10 @@ class AgenteRevisor:
                 - Formato: {"resultado": {"reposta_final": <analise_do_llm>}}
         
         Raises:
-            RuntimeError: Se houver falha na leitura do repositório
+            RuntimeError: Se houver falha na leitura do repositório ou comunicação com LLM
             ValueError: Se tipo_analise for inválido, repositorio mal formatado,
-                ou formato de repositório não suportado
+                formato de repositório não suportado, ou retorno do provedor inválido
+            TypeError: Se o retorno do provedor LLM não for do tipo esperado
             Exception: Erros de comunicação com o provedor de LLM são propagados
         
         Note:
@@ -182,7 +239,18 @@ class AgenteRevisor:
             - Avisos são impressos para facilitar debugging
             - Suporta GitHub, GitLab e Azure DevOps transparentemente
             - Funciona com qualquer repository_reader que implemente IRepositoryReader
+            - Validação robusta do retorno do provedor LLM
         """
+        # Validação de entrada
+        if not tipo_analise or not isinstance(tipo_analise, str):
+            raise ValueError("tipo_analise deve ser uma string não vazia")
+        
+        if not repositorio or not isinstance(repositorio, str):
+            raise ValueError("repositorio deve ser uma string não vazia")
+        
+        if self.llm_provider is None:
+            raise ValueError("llm_provider é obrigatório para análise de código")
+        
         # Etapa 1: Obter código do repositório com detecção automática de provider
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
@@ -196,21 +264,33 @@ class AgenteRevisor:
             return {"resultado": {"reposta_final": {}}}
 
         # Etapa 3: Serializar código em formato JSON legível
-        codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
+        try:
+            codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Erro ao serializar código do repositório: {e}") from e
 
         # Etapa 4: Enviar para análise via provedor de LLM
-        resultado_da_ia = self.llm_provider.executar_prompt(
-            tipo_tarefa=tipo_analise,
-            prompt_principal=codigo_str,
-            instrucoes_extras=instrucoes_extras,
-            usar_rag=usar_rag,
-            model_name=model_name,
-            max_token_out=max_token_out
-        )
+        try:
+            resultado_da_ia = self.llm_provider.executar_prompt(
+                tipo_tarefa=tipo_analise,
+                prompt_principal=codigo_str,
+                instrucoes_extras=instrucoes_extras,
+                usar_rag=usar_rag,
+                model_name=model_name,
+                max_token_out=max_token_out
+            )
+        except Exception as e:
+            raise RuntimeError(f"Falha na comunicação com o provedor de LLM: {e}") from e
 
-        # Etapa 5: Retornar resultado em formato padronizado
+        # Etapa 5: Validar e extrair resposta do provedor
+        try:
+            resposta_final_validada = self._validar_e_extrair_resposta(resultado_da_ia)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Retorno inválido do provedor LLM: {e}") from e
+
+        # Etapa 6: Retornar resultado em formato padronizado
         return {
             "resultado": {
-                "reposta_final": resultado_da_ia
+                "reposta_final": resposta_final_validada
             }
         }
