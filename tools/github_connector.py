@@ -276,22 +276,3 @@ class GitHubConnector:
         cache_count = len(self._cached_repos)
         self._cached_repos.clear()
         print(f"Cache de repositórios limpo ({cache_count} entradas removidas).")
-    
-    @classmethod
-    def create_with_defaults(cls) -> 'GitHubConnector':
-        """
-        Método de conveniência para criar uma instância com dependências padrão GitHub.
-        
-        Este método factory mantém compatibilidade com código existente que
-        não precisa de injeção de dependência customizada. Por padrão, usa GitHub.
-        
-        Returns:
-            GitHubConnector: Instância configurada com GitHubRepositoryProvider
-                e AzureSecretManager como dependências padrão
-        
-        Note:
-            Para usar outros provedores, instancie diretamente a classe:
-            GitHubConnector(repository_provider=seu_provedor)
-        """
-        print("Criando GitHubConnector com dependências padrão (GitHub + Azure Secret Manager)...")
-        return cls(repository_provider=GitHubRepositoryProvider())
