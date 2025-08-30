@@ -1,6 +1,7 @@
 import os
 from openai import AzureOpenAI
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+import concurrent.futures
 
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
@@ -94,6 +95,49 @@ class OpenAILLMProvider(ILLMProviderComplete):
         except Exception as e:
             print(f"ERRO: Falha na chamada à API da OpenAI para o modelo '{modelo_final}'. Causa: {e}")
             raise RuntimeError(f"Erro ao comunicar com a OpenAI: {e}") from e
+    
+    def executar_prompt_batch(
+        self,
+        tipo_tarefa: str,
+        prompts_principais: List[str],
+        instrucoes_extras: str = "",
+        usar_rag: bool = False,
+        model_name: Optional[str] = None,
+        max_token_out: int = 15000
+    ) -> List[Dict[str, Any]]:
+        if not prompts_principais:
+            raise ValueError("Lista de prompts não pode estar vazia")
+        
+        def processar_prompt_individual(prompt: str) -> Dict[str, Any]:
+            return self.executar_prompt(
+                tipo_tarefa=tipo_tarefa,
+                prompt_principal=prompt,
+                instrucoes_extras=instrucoes_extras,
+                usar_rag=usar_rag,
+                model_name=model_name,
+                max_token_out=max_token_out
+            )
+        
+        max_workers = min(len(prompts_principais), 5)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(processar_prompt_individual, prompt) for prompt in prompts_principais]
+            resultados = []
+            
+            for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                try:
+                    resultado = future.result()
+                    resultados.append((futures.index(future), resultado))
+                except Exception as e:
+                    print(f"ERRO no prompt {i}: {e}")
+                    resultados.append((futures.index(future), {
+                        'reposta_final': f"ERRO: {str(e)}",
+                        'tokens_entrada': 0,
+                        'tokens_saida': 0
+                    }))
+            
+            resultados.sort(key=lambda x: x[0])
+            return [resultado for _, resultado in resultados]
     
     def executar_prompt_com_rag(
         self,
