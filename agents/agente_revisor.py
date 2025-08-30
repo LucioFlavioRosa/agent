@@ -6,8 +6,8 @@ from domain.interfaces.llm_provider_interface import ILLMProvider
 from tools.repository_provider_factory import get_repository_provider
 from tools.github_reader import GitHubRepositoryReader
 
-TAMANHO_LOTE = 5
-ATRASO_ENTRE_LOTES_SEGUNDOS = 45
+TAMANHO_LOTE = 10
+ATRASO_ENTRE_LOTES_SEGUNDOS = 60
 
 class AgenteRevisor:
     """
