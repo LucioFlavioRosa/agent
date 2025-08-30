@@ -280,19 +280,8 @@ class AgenteRevisor:
         tokens_entrada_total = 0
         tokens_saida_total = 0
 
-        # Etapa 4: Loop para enviar cada lote para a IA
-        for i, lote in enumerate(lotes):
-            print(f"  Processando lote {i + 1}/{len(lotes)}...")
-            
-            # --- SEU TRATAMENTO DE ERRO REINTEGRADO AQUI ---
-            try:
-                codigo_str_lote = json.dumps(lote, indent=2, ensure_ascii=False)
-            except (TypeError, ValueError) as e:
-                print(f"  AVISO: Erro ao serializar o lote {i + 1}. Pulando este lote. Erro: {e}")
-                continue # Pula para o próximo lote
-            # --- FIM DA REINTEGRAÇÃO ---
-            
-            try:
+        try:
+                # 1. Chama a IA. 'resultado_lote_ia' é o dicionário completo.
                 resultado_lote_ia = self.llm_provider.executar_prompt(
                     tipo_tarefa=tipo_analise,
                     prompt_principal=codigo_str_lote,
@@ -302,21 +291,41 @@ class AgenteRevisor:
                     max_token_out=max_token_out
                 )
                 
-                resposta_validada_lote_str = self._validar_e_extrair_resposta(resultado_lote_ia)
-                resultados_parciais.append(json.loads(resposta_validada_lote_str))
+                # 2. Extrai o texto da resposta.
+                resposta_str = resultado_lote_ia.get('reposta_final', '')
+                if not resposta_str.strip():
+                    print(f"  AVISO: Lote {i + 1} retornou uma resposta de texto vazia. Pulando.")
+                    continue
+
+                # 3. Tenta analisar o JSON.
+                parsed_response = json.loads(resposta_str.replace("```json", "").replace("```", "").strip())
+                resultados_parciais.append(parsed_response)
                 
+                # 4. Se tudo deu certo, acumula os tokens.
                 tokens_entrada_total += resultado_lote_ia.get('tokens_entrada', 0)
                 tokens_saida_total += resultado_lote_ia.get('tokens_saida', 0)
+
+            except json.JSONDecodeError as e:
+                print(f"  AVISO: Lote {i + 1} retornou um JSON inválido. Erro: {e}. Resposta bruta: {resposta_str[:200]}...")
             except Exception as e:
                 print(f"  AVISO: Falha ao processar o lote {i + 1} com a IA. Erro: {e}. Continuando...")
 
             if i < len(lotes) - 1:
                 print(f"  Pausa de {ATRASO_ENTRE_LOTES_SEGUNDOS} segundos...")
                 time.sleep(ATRASO_ENTRE_LOTES_SEGUNDOS)
+        
+        # --- AGREGAÇÃO DE RESULTADOS (SEM MUDANÇAS, MAS AGORA RECEBE DADOS) ---
+        print("Agregando resultados de todos os lotes...")
+        resultado_final_agregado = {
+            "relatorio": "# Relatório Agregado\n\n", 
+            "conjunto_de_mudancas": []
+        }
 
+        
         # Etapa 5: Agregação dos resultados (mantida)
         print("Agregando resultados de todos os lotes...")
         resultado_final_agregado = {"relatorio": "# Relatório Agregado\n\n", "conjunto_de_mudancas": []}
+        
         for parcial in resultados_parciais:
             relatorio_parcial = parcial.get("relatorio", "")
             if "##" in relatorio_parcial:
