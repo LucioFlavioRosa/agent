@@ -5,6 +5,9 @@ from domain.interfaces.llm_provider_interface import ILLMProvider
 from tools.repository_provider_factory import get_repository_provider
 from tools.github_reader import GitHubRepositoryReader
 
+TAMANHO_LOTE = 5
+ATRASO_ENTRE_LOTES_SEGUNDOS = 45
+
 class AgenteRevisor:
     """
     Orquestrador especializado em análise de código via IA com integração a repositórios.
@@ -178,6 +181,16 @@ class AgenteRevisor:
         except Exception as e:
             # Encapsula exceções com contexto adicional para debugging
             raise RuntimeError(f"Falha ao ler o repositório: {e}") from e
+            
+    def _create_batches(self, data: dict, size: int) -> Generator[Dict[str, str], None, None]:
+        """
+        Divide um dicionário grande em geradores de lotes menores.
+        """
+        all_keys = list(data.keys())
+        for i in range(0, len(all_keys), size):
+            batch_keys = all_keys[i:i + size]
+            yield {k: data[k] for k in batch_keys}
+
 
     def main(
         self,
@@ -241,56 +254,77 @@ class AgenteRevisor:
             - Funciona com qualquer repository_reader que implemente IRepositoryReader
             - Validação robusta do retorno do provedor LLM
         """
-        # Validação de entrada
+        # Validação de entrada (mantida)
         if not tipo_analise or not isinstance(tipo_analise, str):
             raise ValueError("tipo_analise deve ser uma string não vazia")
-        
         if not repositorio or not isinstance(repositorio, str):
             raise ValueError("repositorio deve ser uma string não vazia")
-        
         if self.llm_provider is None:
             raise ValueError("llm_provider é obrigatório para análise de código")
         
-        # Etapa 1: Obter código do repositório com detecção automática de provider
+        # Etapa 1: Obter código do repositório (mantida)
         codigo_para_analise = self._get_code(
-            repositorio=repositorio,
-            nome_branch=nome_branch,
-            tipo_analise=tipo_analise
+            repositorio=repositorio, nome_branch=nome_branch, tipo_analise=tipo_analise
         )
 
-        # Etapa 2: Validar se código foi encontrado
         if not codigo_para_analise:
-            print(f"AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
-            return {"resultado": {"reposta_final": {}}}
+            print(f"AVISO: Nenhum código encontrado para a análise '{tipo_analise}'.")
+            return {"resultado": {"reposta_final": {"reposta_final": "{}"}}}
 
-        # Etapa 3: Serializar código em formato JSON legível
-        try:
-            codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
-        except (TypeError, ValueError) as e:
-            raise ValueError(f"Erro ao serializar código do repositório: {e}") from e
+        # Etapa 3: Divide o código em lotes
+        lotes = list(self._create_batches(codigo_para_analise, TAMANHO_LOTE))
+        print(f"Código dividido em {len(lotes)} lotes de até {TAMANHO_LOTE} arquivos cada.")
 
-        # Etapa 4: Enviar para análise via provedor de LLM
-        try:
-            resultado_da_ia = self.llm_provider.executar_prompt(
-                tipo_tarefa=tipo_analise,
-                prompt_principal=codigo_str,
-                instrucoes_extras=instrucoes_extras,
-                usar_rag=usar_rag,
-                model_name=model_name,
-                max_token_out=max_token_out
-            )
-        except Exception as e:
-            raise RuntimeError(f"Falha na comunicação com o provedor de LLM: {e}") from e
+        resultados_parciais: List[Dict] = []
+        tokens_entrada_total = 0
+        tokens_saida_total = 0
 
-        # Etapa 5: Validar e extrair resposta do provedor
-        try:
-            resposta_final_validada = self._validar_e_extrair_resposta(resultado_da_ia)
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Retorno inválido do provedor LLM: {e}") from e
+        # Etapa 4: Loop para enviar cada lote para a IA
+        for i, lote in enumerate(lotes):
+            print(f"  Processando lote {i + 1}/{len(lotes)}...")
+            
+            # --- SEU TRATAMENTO DE ERRO REINTEGRADO AQUI ---
+            try:
+                codigo_str_lote = json.dumps(lote, indent=2, ensure_ascii=False)
+            except (TypeError, ValueError) as e:
+                print(f"  AVISO: Erro ao serializar o lote {i + 1}. Pulando este lote. Erro: {e}")
+                continue # Pula para o próximo lote
+            # --- FIM DA REINTEGRAÇÃO ---
+            
+            try:
+                resultado_lote_ia = self.llm_provider.executar_prompt(
+                    tipo_tarefa=tipo_analise,
+                    prompt_principal=codigo_str_lote,
+                    instrucoes_extras=instrucoes_extras,
+                    usar_rag=usar_rag,
+                    model_name=model_name,
+                    max_token_out=max_token_out
+                )
+                
+                resposta_validada_lote_str = self._validar_e_extrair_resposta(resultado_lote_ia)
+                resultados_parciais.append(json.loads(resposta_validada_lote_str))
+                
+                tokens_entrada_total += resultado_lote_ia.get('tokens_entrada', 0)
+                tokens_saida_total += resultado_lote_ia.get('tokens_saida', 0)
+            except Exception as e:
+                print(f"  AVISO: Falha ao processar o lote {i + 1} com a IA. Erro: {e}. Continuando...")
 
-        # Etapa 6: Retornar resultado em formato padronizado
-        return {
-            "resultado": {
-                "reposta_final": resposta_final_validada
-            }
-        }
+            if i < len(lotes) - 1:
+                print(f"  Pausa de {ATRASO_ENTRE_LOTES_SEGUNDOS} segundos...")
+                time.sleep(ATRASO_ENTRE_LOTES_SEGUNDOS)
+
+        # Etapa 5: Agregação dos resultados (mantida)
+        print("Agregando resultados de todos os lotes...")
+        resultado_final_agregado = {"relatorio": "# Relatório Agregado\n\n", "conjunto_de_mudancas": []}
+        for parcial in resultados_parciais:
+            relatorio_parcial = parcial.get("relatorio", "")
+            if "##" in relatorio_parcial:
+                relatorio_parcial = "\n".join(relatorio_parcial.splitlines()[1:])
+            resultado_final_agregado["relatorio"] += relatorio_parcial + "\n"
+            resultado_final_agregado["conjunto_de_mudancas"].extend(parcial.get("conjunto_de_mudancas", []))
+
+        json_final_agregado_str = json.dumps(resultado_final_agregado, indent=2, ensure_ascii=False)
+        resultado_da_ia_final = {'reposta_final': json_final_agregado_str, 'tokens_entrada': tokens_entrada_total, 'tokens_saida': tokens_saida_total}
+
+        # Etapa 6: Retorno padronizado (mantida)
+        return {"resultado": {"reposta_final": resultado_da_ia_final}}
