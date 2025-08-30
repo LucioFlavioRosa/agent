@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Generator, Any, List
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from tools.repository_provider_factory import get_repository_provider
