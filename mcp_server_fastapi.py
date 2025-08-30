@@ -91,17 +91,19 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
 
 
 # --- Funções de Tarefa (Tasks) ---
-def handle_task_exception(job_id: str, e: Exception, step: str):
+def handle_task_exception(job_id: str, e: Exception, step: str, job_info: Optional[Dict] = None):
     error_message = f"Erro fatal durante a etapa '{step}': {str(e)}"
     print(f"[{job_id}] {error_message}")
     try:
-        job_info = job_store.get_job(job_id)
-        if job_info:
-            job_info['status'] = 'failed'
-            job_info['error_details'] = error_message
-            job_store.set_job(job_id, job_info)
+        # Usa o job_info passado para evitar uma nova leitura do Redis se já o tivermos
+        current_job_info = job_info or job_store.get_job(job_id)
+        if current_job_info:
+            current_job_info['status'] = 'failed'
+            current_job_info['error_details'] = error_message
+            job_store.set_job(job_id, current_job_info)
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
+
 
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     """
@@ -371,6 +373,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
