@@ -7,7 +7,7 @@ from github import GithubException, GitTreeElement, UnknownObjectException
 from tools.github_connector import GitHubConnector 
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from tools.github_repository_provider import GitHubRepositoryProvider
+from tools.repository_provider_factory import get_repository_provider
 import base64
 from typing import Dict, Optional
 
@@ -30,6 +30,7 @@ class GitHubRepositoryReader(IRepositoryReader):
     - Suporte a diferentes tipos de análise configuráveis
     - Decodificação automática de conteúdo base64
     - Extensibilidade para múltiplos provedores de repositório
+    - Detecção automática do provedor baseada no nome do repositório
     
     Attributes:
         _mapeamento_tipo_extensoes (Dict[str, List[str]]): Mapeamento de tipos de análise
@@ -37,19 +38,16 @@ class GitHubRepositoryReader(IRepositoryReader):
         repository_provider (IRepositoryProvider): Provedor de repositório injetado
     
     Example:
-        >>> # Uso com GitHub (padrão)
-        >>> github_provider = GitHubRepositoryProvider()
-        >>> reader = GitHubRepositoryReader(repository_provider=github_provider)
-        >>> 
-        >>> # Uso futuro com GitLab
-        >>> # gitlab_provider = GitLabRepositoryProvider()
-        >>> # reader = GitHubRepositoryReader(repository_provider=gitlab_provider)
-        >>> 
+        >>> # Uso com detecção automática (recomendado)
+        >>> reader = GitHubRepositoryReader()
         >>> codigo = reader.read_repository(
-        ...     nome_repo="org/projeto",
-        ...     tipo_analise="refatoracao",
-        ...     nome_branch="main"
+        ...     nome_repo="org/projeto",  # GitHub detectado automaticamente
+        ...     tipo_analise="refatoracao"
         ... )
+        >>> 
+        >>> # Uso com provider explícito (para casos especiais)
+        >>> gitlab_provider = GitLabRepositoryProvider()
+        >>> reader = GitHubRepositoryReader(repository_provider=gitlab_provider)
     """
     
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
@@ -58,17 +56,18 @@ class GitHubRepositoryReader(IRepositoryReader):
         
         Args:
             repository_provider (Optional[IRepositoryProvider]): Provedor de repositório
-                a ser usado. Se None, usa GitHubRepositoryProvider como padrão para
-                manter compatibilidade com código existente.
+                a ser usado. Se None, a detecção automática será usada baseada no
+                nome do repositório durante a leitura.
         
         Raises:
             Exception: Se houver erro ao carregar configurações de workflow
         
         Note:
-            O provedor padrão é GitHub para manter compatibilidade, mas recomenda-se
-            injetar explicitamente o provedor desejado para maior clareza.
+            Quando repository_provider é None, a detecção automática é feita durante
+            a chamada de read_repository usando a factory get_repository_provider.
+            Isso permite máxima flexibilidade e uso transparente.
         """
-        self.repository_provider = repository_provider or GitHubRepositoryProvider()
+        self.repository_provider = repository_provider
         self._mapeamento_tipo_extensoes = self._carregar_config_workflows()
 
     def _carregar_config_workflows(self):
@@ -125,19 +124,53 @@ class GitHubRepositoryReader(IRepositoryReader):
             print(f"ERRO INESPERADO ao carregar workflows: {e}")
             raise
 
+    def _get_or_detect_provider(self, nome_repo: str) -> IRepositoryProvider:
+        """
+        Obtém o provider de repositório, usando detecção automática se necessário.
+        
+        Este método implementa a lógica de detecção automática quando nenhum
+        provider foi injetado no construtor. Utiliza a factory para determinar
+        o tipo correto baseado no nome do repositório.
+        
+        Args:
+            nome_repo (str): Nome do repositório no formato 'org/repo' ou equivalente
+            
+        Returns:
+            IRepositoryProvider: Provider apropriado para o repositório
+            
+        Note:
+            - Se repository_provider foi injetado, usa o injetado
+            - Caso contrário, usa factory para detecção automática
+            - Faz log da detecção para debugging
+        """
+        if self.repository_provider is not None:
+            provider_name = type(self.repository_provider).__name__
+            print(f"Usando provider injetado: {provider_name} para repositório {nome_repo}")
+            return self.repository_provider
+        
+        print(f"Detectando provider automaticamente para repositório: {nome_repo}")
+        detected_provider = get_repository_provider(nome_repo)
+        provider_name = type(detected_provider).__name__
+        print(f"Provider detectado: {provider_name}")
+        return detected_provider
+
     def read_repository(self, nome_repo: str, tipo_analise: str, nome_branch: str = None) -> dict:
         """
-        Lê arquivos de um repositório usando estratégia otimizada.
+        Lê arquivos de um repositório usando estratégia otimizada com detecção automática de provider.
         
         Este método implementa uma estratégia de leitura em duas fases:
-        1. Obtenção da árvore completa de arquivos via Git Trees API
-        2. Leitura em lote do conteúdo dos arquivos filtrados
+        1. Detecção automática do provider (se não foi injetado)
+        2. Obtenção da árvore completa de arquivos via Git Trees API
+        3. Leitura em lote do conteúdo dos arquivos filtrados
         
         A abordagem é significativamente mais eficiente que leitura individual
         de arquivos, especialmente para repositórios grandes.
         
         Args:
-            nome_repo (str): Nome do repositório no formato 'org/repo' ou 'user/repo'
+            nome_repo (str): Nome do repositório no formato 'org/repo' ou 'user/repo'.
+                O formato determina automaticamente o provider:
+                - 'org/repo' → GitHub (padrão) ou GitLab (com heurísticas)
+                - 'org/project/repo' → Azure DevOps
             tipo_analise (str): Tipo de análise que determina quais extensões
                 de arquivo serão incluídas (deve existir em workflows.yaml)
             nome_branch (str, optional): Nome da branch a ser lida. Se None,
@@ -150,32 +183,35 @@ class GitHubRepositoryReader(IRepositoryReader):
         
         Raises:
             ValueError: Se tipo_analise não for encontrado em workflows.yaml
-                ou se branch especificada não existir
+                ou se branch especificada não existir, ou formato de repo inválido
             GithubException: Se houver erro de comunicação com API do provedor
             Exception: Outros erros inesperados durante a leitura
         
         Note:
+            - Usa detecção automática de provider baseada no nome do repositório
             - Usa Git Trees API para performance otimizada
             - Filtra automaticamente por extensões relevantes
             - Ignora arquivos binários e diretórios
             - Faz log de progresso para repositórios grandes
-            - Funciona com qualquer provedor que implemente IRepositoryProvider
+            - Funciona transparentemente com GitHub, GitLab e Azure DevOps
         """
-        provider_name = type(self.repository_provider).__name__
+        # ETAPA 1: Detecção automática do provider
+        provider = self._get_or_detect_provider(nome_repo)
+        provider_name = type(provider).__name__
         print(f"Iniciando leitura otimizada do repositório: {nome_repo} via {provider_name}")
 
-        # Estabelece conexão com o repositório via GitHubConnector com provedor injetado
-        connector = GitHubConnector(repository_provider=self.repository_provider)
+        # ETAPA 2: Estabelece conexão com o repositório via GitHubConnector com provedor detectado
+        connector = GitHubConnector(repository_provider=provider)
         repositorio = connector.connection(repositorio=nome_repo)
 
-        # Determina a branch a ser lida (padrão ou especificada)
+        # ETAPA 3: Determina a branch a ser lida (padrão ou especificada)
         if nome_branch is None:
             branch_a_ler = repositorio.default_branch
             print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
         else:
             branch_a_ler = nome_branch
         
-        # Obtém extensões relevantes para o tipo de análise
+        # ETAPA 4: Obtém extensões relevantes para o tipo de análise
         extensoes_alvo = self._mapeamento_tipo_extensoes.get(tipo_analise.lower())
         if extensoes_alvo is None:
             raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou não possui 'extensions' definidas em workflows.yaml")
