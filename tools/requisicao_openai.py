@@ -9,10 +9,6 @@ from domain.interfaces.secret_manager_interface import ISecretManager
 from tools.azure_secret_manager import AzureSecretManager
 
 class OpenAILLMProvider(ILLMProviderComplete):
-    """
-    Implementação refatorada que implementa a interface completa de LLM,
-    seguindo o princípio da Inversão de Dependência.
-    """
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
         self.rag_retriever = rag_retriever
         self.secret_manager = secret_manager or AzureSecretManager()
@@ -51,7 +47,6 @@ class OpenAILLMProvider(ILLMProviderComplete):
         model_name: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação da interface completa com todas as funcionalidades."""
         modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
         
         prompt_sistema_base = self.carregar_prompt(tipo_tarefa)
@@ -108,36 +103,42 @@ class OpenAILLMProvider(ILLMProviderComplete):
         if not prompts_principais:
             raise ValueError("Lista de prompts não pode estar vazia")
         
-        def processar_prompt_individual(prompt: str) -> Dict[str, Any]:
-            return self.executar_prompt(
-                tipo_tarefa=tipo_tarefa,
-                prompt_principal=prompt,
-                instrucoes_extras=instrucoes_extras,
-                usar_rag=usar_rag,
-                model_name=model_name,
-                max_token_out=max_token_out
-            )
+        def processar_prompt_individual(prompt_data: tuple) -> tuple:
+            indice, prompt = prompt_data
+            try:
+                resultado = self.executar_prompt(
+                    tipo_tarefa=tipo_tarefa,
+                    prompt_principal=prompt,
+                    instrucoes_extras=instrucoes_extras,
+                    usar_rag=usar_rag,
+                    model_name=model_name,
+                    max_token_out=max_token_out
+                )
+                return (indice, resultado)
+            except Exception as e:
+                print(f"ERRO no prompt {indice}: {e}")
+                return (indice, {
+                    'reposta_final': f"ERRO: {str(e)}",
+                    'tokens_entrada': 0,
+                    'tokens_saida': 0
+                })
         
         max_workers = min(len(prompts_principais), 5)
+        prompts_com_indice = [(i, prompt) for i, prompt in enumerate(prompts_principais)]
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(processar_prompt_individual, prompt) for prompt in prompts_principais]
-            resultados = []
+            futures = [executor.submit(processar_prompt_individual, prompt_data) for prompt_data in prompts_com_indice]
+            resultados_com_indice = []
             
-            for i, future in enumerate(concurrent.futures.as_completed(futures)):
+            for future in concurrent.futures.as_completed(futures):
                 try:
-                    resultado = future.result()
-                    resultados.append((futures.index(future), resultado))
+                    indice, resultado = future.result()
+                    resultados_com_indice.append((indice, resultado))
                 except Exception as e:
-                    print(f"ERRO no prompt {i}: {e}")
-                    resultados.append((futures.index(future), {
-                        'reposta_final': f"ERRO: {str(e)}",
-                        'tokens_entrada': 0,
-                        'tokens_saida': 0
-                    }))
+                    print(f"ERRO crítico no processamento batch: {e}")
             
-            resultados.sort(key=lambda x: x[0])
-            return [resultado for _, resultado in resultados]
+            resultados_com_indice.sort(key=lambda x: x[0])
+            return [resultado for _, resultado in resultados_com_indice]
     
     def executar_prompt_com_rag(
         self,
@@ -147,7 +148,6 @@ class OpenAILLMProvider(ILLMProviderComplete):
         usar_rag: bool = False,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação específica para RAG."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
@@ -164,7 +164,6 @@ class OpenAILLMProvider(ILLMProviderComplete):
         model_name: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação específica para seleção de modelo."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
