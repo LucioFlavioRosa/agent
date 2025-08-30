@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 class ILLMProvider(ABC):
     """
@@ -88,6 +88,36 @@ class ILLMProvider(ABC):
             - Implementações devem fazer log de erros para debugging
             - Context RAG deve ser integrado ao prompt quando usar_rag=True
             - Validação de entrada deve ser feita antes da chamada ao LLM
+        """
+        pass
+    
+    @abstractmethod
+    def executar_prompt_batch(
+        self,
+        tipo_tarefa: str,
+        prompts_principais: List[str],
+        instrucoes_extras: str = "",
+        usar_rag: bool = False,
+        model_name: Optional[str] = None,
+        max_token_out: int = 15000
+    ) -> List[Dict[str, Any]]:
+        """
+        Executa múltiplas tarefas em batch no LLM e retorna lista de resultados.
+        
+        Args:
+            tipo_tarefa (str): Tipo da análise/tarefa a ser executada para todos os prompts
+            prompts_principais (List[str]): Lista de prompts a serem processados
+            instrucoes_extras (str, optional): Instruções extras aplicadas a todos os prompts. Defaults to ""
+            usar_rag (bool, optional): Se deve usar RAG para todos os prompts. Defaults to False
+            model_name (Optional[str], optional): Modelo a usar para todos os prompts. Defaults to None
+            max_token_out (int, optional): Limite de tokens por resposta. Defaults to 15000
+        
+        Returns:
+            List[Dict[str, Any]]: Lista de respostas na mesma ordem dos prompts de entrada
+        
+        Raises:
+            ValueError: Se prompts_principais estiver vazio ou parâmetros inválidos
+            RuntimeError: Se houver falha na comunicação com o LLM
         """
         pass
 
