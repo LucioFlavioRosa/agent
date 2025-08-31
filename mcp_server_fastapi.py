@@ -41,6 +41,8 @@ class StartAnalysisPayload(BaseModel):
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
+    analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -67,6 +69,11 @@ class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
 
+class AnalysisByNameResponse(BaseModel):
+    job_id: str
+    analysis_name: str
+    analysis_report: Optional[str]
+
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
@@ -75,12 +82,9 @@ app = FastAPI(
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 job_store = RedisJobStore()
+analysis_name_to_job_id = {}
 
 def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchRAGRetriever) -> ILLMProvider:
-    """
-    Analisa o nome do modelo e instancia a classe de provedor de LLM correta.
-    Esta função é o ponto central para adicionar ou alterar provedores.
-    """
     model_lower = (model_name or "").lower()
     
     if "claude" in model_lower:
@@ -91,26 +95,21 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
 
 
 # --- Funções de Tarefa (Tasks) ---
-def handle_task_exception(job_id: str, e: Exception, step: str):
+def handle_task_exception(job_id: str, e: Exception, step: str, job_info: Optional[Dict] = None):
     error_message = f"Erro fatal durante a etapa '{step}': {str(e)}"
     print(f"[{job_id}] {error_message}")
+    traceback.print_exc() # Adiciona o traceback completo ao log para depuração
     try:
-        job_info = job_store.get_job(job_id)
-        if job_info:
-            job_info['status'] = 'failed'
-            job_info['error_details'] = error_message
-            job_store.set_job(job_id, job_info)
+        # Usa o job_info passado para evitar uma nova leitura do Redis se já o tivermos
+        current_job_info = job_info or job_store.get_job(job_id)
+        if current_job_info:
+            current_job_info['status'] = 'failed'
+            current_job_info['error_details'] = error_message
+            job_store.set_job(job_id, current_job_info)
     except Exception as redis_e:
         print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
 def run_workflow_task(job_id: str, start_from_step: int = 0):
-    """
-    Orquestrador de workflow único e genérico.
-    - Executa os passos definidos no workflows.yaml.
-    - Pode começar de um passo específico (útil após aprovação).
-    - Pausa a execução se um passo tiver 'requires_approval: true'.
-    - Incorpora o feedback do usuário (observacoes) após uma aprovação.
-    """
     job_info = None
     try:
         job_info = job_store.get_job(job_id)
@@ -159,7 +158,12 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                 agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
                 # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
                 instrucoes = job_info['data']['instrucoes_extras'] if current_step_index == 0 else json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
-                agent_params.update({'repositorio': job_info['data']['repo_name'], 'nome_branch': job_info['data']['branch_name'], 'instrucoes_extras': instrucoes})
+                agent_params.update({
+                    'repositorio': job_info['data']['repo_name'], 
+                    'nome_branch': job_info['data']['branch_name'], 
+                    'instrucoes_extras': instrucoes,
+                    'arquivos_especificos': job_info['data'].get('arquivos_especificos')
+                })
                 agent_response = agente.main(**agent_params)
             elif agent_type == "processador":
                 agente = AgenteProcessador(llm_provider=llm_provider)
@@ -273,11 +277,16 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'instrucoes_extras': payload.instrucoes_extras,
             'model_name': payload.model_name,
             'usar_rag': payload.usar_rag,
-            'gerar_relatorio_apenas': payload.gerar_relatorio_apenas # Mantido para consistência
+            'gerar_relatorio_apenas': payload.gerar_relatorio_apenas,
+            'arquivos_especificos': payload.arquivos_especificos,
+            'analysis_name': payload.analysis_name
         },
         'error_details': None
     }
     job_store.set_job(job_id, initial_job_data)
+    
+    if payload.analysis_name:
+        analysis_name_to_job_id[payload.analysis_name] = job_id
     
     # A chamada agora é sempre para a mesma função, começando do passo 0
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
@@ -322,6 +331,63 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
         raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
 
     return ReportResponse(job_id=job_id, analysis_report=report)
+
+@app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
+def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
+    job_id = analysis_name_to_job_id.get(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
+    
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job associado não encontrado ou expirado")
+    
+    report = job.get("data", {}).get("analysis_report")
+    
+    return AnalysisByNameResponse(
+        job_id=job_id,
+        analysis_name=analysis_name,
+        analysis_report=report
+    )
+
+@app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
+def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
+    job_id = analysis_name_to_job_id.get(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
+    
+    original_job = job_store.get_job(job_id)
+    if not original_job:
+        raise HTTPException(status_code=404, detail="Job original não encontrado ou expirado")
+    
+    report = original_job.get("data", {}).get("analysis_report")
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
+    
+    new_job_id = str(uuid.uuid4())
+    
+    new_job_data = {
+        'status': 'starting',
+        'data': {
+            'repo_name': original_job['data']['repo_name'],
+            'branch_name': original_job['data']['branch_name'],
+            'original_analysis_type': 'implementacao',
+            'instrucoes_extras': f"Gerar código baseado no seguinte relatório:\n\n{report}",
+            'model_name': original_job['data'].get('model_name'),
+            'usar_rag': original_job['data'].get('usar_rag', False),
+            'gerar_relatorio_apenas': False,
+            'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
+            'analysis_name': f"{analysis_name}-implementation"
+        },
+        'error_details': None
+    }
+    
+    job_store.set_job(new_job_id, new_job_data)
+    analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
+    
+    background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
+    
+    return StartAnalysisResponse(job_id=new_job_id)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
@@ -371,6 +437,10 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
+
+
+
 
 
 
