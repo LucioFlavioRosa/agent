@@ -173,10 +173,11 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             else:
                 raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
 
-            provider_response = agent_response.get("resultado", {})
-            json_string = provider_response.get("reposta_final", " ")
-            
-            if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
+            provider_response = agent_response.get("resultado", {}).get("reposta_final", {})
+            json_string = provider_response.get("reposta_final", "")
+
+            if not json_string.strip():
+                raise ValueError("A resposta da IA veio vazia.")
             
             current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
@@ -439,6 +440,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
+
 
 
 
