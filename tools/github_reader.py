@@ -96,7 +96,6 @@ class GitHubRepositoryReader(IRepositoryReader):
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada ativado para {len(arquivos_especificos)} arquivos específicos.")
             return self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
-        
         else:
             print("Modo de leitura completa ativado (filtro por extensão).")
             return self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise)
