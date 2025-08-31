@@ -9,7 +9,7 @@ from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
 import base64
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 class GitHubRepositoryReader(IRepositoryReader):
     """
@@ -26,6 +26,7 @@ class GitHubRepositoryReader(IRepositoryReader):
     Características principais:
     - Uso da API Git Trees para leitura em lote
     - Filtragem inteligente por extensões baseada em workflows
+    - Suporte a leitura filtrada por lista específica de arquivos
     - Tratamento robusto de erros de API e arquivos corrompidos
     - Suporte a diferentes tipos de análise configuráveis
     - Decodificação automática de conteúdo base64
@@ -41,14 +42,19 @@ class GitHubRepositoryReader(IRepositoryReader):
         >>> github_provider = GitHubRepositoryProvider()
         >>> reader = GitHubRepositoryReader(repository_provider=github_provider)
         >>> 
-        >>> # Uso futuro com GitLab
-        >>> # gitlab_provider = GitLabRepositoryProvider()
-        >>> # reader = GitHubRepositoryReader(repository_provider=gitlab_provider)
-        >>> 
+        >>> # Leitura completa (comportamento original)
         >>> codigo = reader.read_repository(
         ...     nome_repo="org/projeto",
         ...     tipo_analise="refatoracao",
         ...     nome_branch="main"
+        ... )
+        >>> 
+        >>> # Leitura filtrada por arquivos específicos
+        >>> codigo_filtrado = reader.read_repository(
+        ...     nome_repo="org/projeto",
+        ...     tipo_analise="refatoracao",
+        ...     nome_branch="main",
+        ...     arquivos_especificos=["src/main.py", "config/settings.py"]
         ... )
     """
     
@@ -125,23 +131,84 @@ class GitHubRepositoryReader(IRepositoryReader):
             print(f"ERRO INESPERADO ao carregar workflows: {e}")
             raise
 
-    def read_repository(self, nome_repo: str, tipo_analise: str, nome_branch: str = None) -> dict:
+    def _ler_arquivos_especificos(
+        self, 
+        repositorio, 
+        branch_a_ler: str, 
+        arquivos_especificos: List[str]
+    ) -> Dict[str, str]:
         """
-        Lê arquivos de um repositório usando estratégia otimizada.
+        Lê apenas os arquivos especificados na lista, ignorando filtros de extensão.
         
-        Este método implementa uma estratégia de leitura em duas fases:
-        1. Obtenção da árvore completa de arquivos via Git Trees API
-        2. Leitura em lote do conteúdo dos arquivos filtrados
+        Este método implementa a lógica de leitura filtrada, buscando apenas
+        os arquivos especificados pelo usuário. É mais eficiente para casos
+        onde se conhece exatamente quais arquivos são necessários.
         
-        A abordagem é significativamente mais eficiente que leitura individual
-        de arquivos, especialmente para repositórios grandes.
+        Args:
+            repositorio: Objeto do repositório conectado
+            branch_a_ler (str): Nome da branch a ser lida
+            arquivos_especificos (List[str]): Lista de caminhos de arquivos para ler
+        
+        Returns:
+            Dict[str, str]: Dicionário com conteúdo dos arquivos encontrados
+        
+        Note:
+            - Arquivos não encontrados geram warning, não erro fatal
+            - Usa get_contents para busca direta por path
+            - Decodifica automaticamente conteúdo base64
+        """
+        arquivos_lidos = {}
+        total_arquivos = len(arquivos_especificos)
+        
+        print(f"Modo de leitura filtrada ativado. Lendo {total_arquivos} arquivos específicos...")
+        
+        for i, caminho_arquivo in enumerate(arquivos_especificos):
+            try:
+                # Log de progresso
+                print(f"  [{i+1}/{total_arquivos}] Lendo: {caminho_arquivo}")
+                
+                # Busca direta do arquivo por path e branch
+                file_content = repositorio.get_contents(caminho_arquivo, ref=branch_a_ler)
+                
+                # Decodifica conteúdo base64
+                decoded_content = base64.b64decode(file_content.content).decode('utf-8')
+                arquivos_lidos[caminho_arquivo] = decoded_content
+                
+            except UnknownObjectException:
+                print(f"  [AVISO] Arquivo '{caminho_arquivo}' não encontrado na branch '{branch_a_ler}'. Ignorando.")
+            except Exception as e:
+                print(f"  [AVISO] Falha ao ler arquivo '{caminho_arquivo}': {e}. Ignorando.")
+        
+        print(f"Leitura filtrada concluída. {len(arquivos_lidos)} de {total_arquivos} arquivos lidos com sucesso.")
+        return arquivos_lidos
+
+    def read_repository(
+        self, 
+        nome_repo: str, 
+        tipo_analise: str, 
+        nome_branch: str = None,
+        arquivos_especificos: Optional[List[str]] = None
+    ) -> Dict[str, str]:
+        """
+        Lê arquivos de um repositório usando estratégia otimizada ou filtrada.
+        
+        Este método implementa duas estratégias de leitura:
+        1. Leitura completa: Usa Git Trees API para obter todos os arquivos filtrados por extensão
+        2. Leitura filtrada: Busca apenas arquivos específicos listados pelo usuário
+        
+        A escolha da estratégia é determinada pelo parâmetro arquivos_especificos:
+        - Se None ou vazio: usa leitura completa (comportamento original)
+        - Se fornecido: usa leitura filtrada, ignorando filtro por extensão
         
         Args:
             nome_repo (str): Nome do repositório no formato 'org/repo' ou 'user/repo'
             tipo_analise (str): Tipo de análise que determina quais extensões
-                de arquivo serão incluídas (deve existir em workflows.yaml)
+                de arquivo serão incluídas (usado apenas na leitura completa)
             nome_branch (str, optional): Nome da branch a ser lida. Se None,
                 usa a branch padrão do repositório. Defaults to None
+            arquivos_especificos (Optional[List[str]], optional): Lista de caminhos
+                específicos de arquivos para ler. Se fornecido, ignora filtro por
+                extensão e lê apenas os arquivos listados. Defaults to None
         
         Returns:
             Dict[str, str]: Dicionário mapeando caminhos de arquivo para conteúdo.
@@ -155,14 +222,29 @@ class GitHubRepositoryReader(IRepositoryReader):
             Exception: Outros erros inesperados durante a leitura
         
         Note:
-            - Usa Git Trees API para performance otimizada
-            - Filtra automaticamente por extensões relevantes
-            - Ignora arquivos binários e diretórios
-            - Faz log de progresso para repositórios grandes
+            - Modo filtrado: busca apenas arquivos listados, ignora extensões
+            - Modo completo: usa Git Trees API para performance otimizada
+            - Arquivos não encontrados no modo filtrado geram warning, não erro
             - Funciona com qualquer provedor que implemente IRepositoryProvider
+        
+        Example:
+            >>> # Leitura completa (comportamento original)
+            >>> codigo = reader.read_repository(
+            ...     nome_repo="org/projeto",
+            ...     tipo_analise="refatoracao",
+            ...     nome_branch="main"
+            ... )
+            >>> 
+            >>> # Leitura filtrada por arquivos específicos
+            >>> codigo_filtrado = reader.read_repository(
+            ...     nome_repo="org/projeto",
+            ...     tipo_analise="refatoracao",
+            ...     nome_branch="main",
+            ...     arquivos_especificos=["src/main.py", "config/settings.py"]
+            ... )
         """
         provider_name = type(self.repository_provider).__name__
-        print(f"Iniciando leitura otimizada do repositório: {nome_repo} via {provider_name}")
+        print(f"Iniciando leitura do repositório: {nome_repo} via {provider_name}")
 
         # Estabelece conexão com o repositório via GitHubConnector com provedor injetado
         connector = GitHubConnector(repository_provider=self.repository_provider)
@@ -175,6 +257,89 @@ class GitHubRepositoryReader(IRepositoryReader):
         else:
             branch_a_ler = nome_branch
         
+        # DECISÃO DE ESTRATÉGIA: Leitura filtrada vs completa
+        if arquivos_especificos and len(arquivos_especificos) > 0:
+            # ESTRATÉGIA 1: Leitura filtrada por lista específica
+            print(f"Modo de leitura filtrada ativado para {len(arquivos_especificos)} arquivos específicos.")
+            return self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
+        
+        else:
+            # ESTRATÉGIA 2: Leitura completa otimizada (comportamento original)
+            print("Modo de leitura completa ativado (filtro por extensão).")
+            return self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise)
+    
+    def _ler_arquivos_especificos(
+        self, 
+        repositorio, 
+        branch_a_ler: str, 
+        arquivos_especificos: List[str]
+    ) -> Dict[str, str]:
+        """
+        Lê apenas os arquivos especificados na lista, ignorando filtros de extensão.
+        
+        Este método implementa a lógica de leitura filtrada, buscando apenas
+        os arquivos especificados pelo usuário. É mais eficiente para casos
+        onde se conhece exatamente quais arquivos são necessários.
+        
+        Args:
+            repositorio: Objeto do repositório conectado
+            branch_a_ler (str): Nome da branch a ser lida
+            arquivos_especificos (List[str]): Lista de caminhos de arquivos para ler
+        
+        Returns:
+            Dict[str, str]: Dicionário com conteúdo dos arquivos encontrados
+        
+        Note:
+            - Arquivos não encontrados geram warning, não erro fatal
+            - Usa get_contents para busca direta por path
+            - Decodifica automaticamente conteúdo base64
+        """
+        arquivos_lidos = {}
+        total_arquivos = len(arquivos_especificos)
+        
+        print(f"Iniciando leitura filtrada de {total_arquivos} arquivos específicos...")
+        
+        for i, caminho_arquivo in enumerate(arquivos_especificos):
+            try:
+                # Log de progresso
+                print(f"  [{i+1}/{total_arquivos}] Lendo: {caminho_arquivo}")
+                
+                # Busca direta do arquivo por path e branch
+                file_content = repositorio.get_contents(caminho_arquivo, ref=branch_a_ler)
+                
+                # Decodifica conteúdo base64
+                decoded_content = base64.b64decode(file_content.content).decode('utf-8')
+                arquivos_lidos[caminho_arquivo] = decoded_content
+                
+            except UnknownObjectException:
+                print(f"  [AVISO] Arquivo '{caminho_arquivo}' não encontrado na branch '{branch_a_ler}'. Ignorando.")
+            except Exception as e:
+                print(f"  [AVISO] Falha ao ler arquivo '{caminho_arquivo}': {e}. Ignorando.")
+        
+        print(f"Leitura filtrada concluída. {len(arquivos_lidos)} de {total_arquivos} arquivos lidos com sucesso.")
+        return arquivos_lidos
+    
+    def _ler_repositorio_completo(self, repositorio, branch_a_ler: str, tipo_analise: str) -> Dict[str, str]:
+        """
+        Implementa a lógica original de leitura completa com filtro por extensão.
+        
+        Este método mantém o comportamento original da classe, usando Git Trees API
+        para leitura otimizada de todos os arquivos que correspondem às extensões
+        configuradas para o tipo de análise.
+        
+        Args:
+            repositorio: Objeto do repositório conectado
+            branch_a_ler (str): Nome da branch a ser lida
+            tipo_analise (str): Tipo de análise para filtro por extensão
+        
+        Returns:
+            Dict[str, str]: Dicionário com conteúdo de todos os arquivos filtrados
+        
+        Note:
+            - Mantém exatamente o comportamento original da classe
+            - Usa Git Trees API para performance otimizada
+            - Filtra por extensões baseadas em workflows.yaml
+        """
         # Obtém extensões relevantes para o tipo de análise
         extensoes_alvo = self._mapeamento_tipo_extensoes.get(tipo_analise.lower())
         if extensoes_alvo is None:
@@ -238,5 +403,5 @@ class GitHubRepositoryReader(IRepositoryReader):
             print(f"ERRO CRÍTICO durante a comunicação com a API: {e}")
             raise
         
-        print(f"\nLeitura otimizada concluída. Total de {len(arquivos_do_repo)} arquivos lidos e processados.")
+        print(f"\nLeitura completa concluída. Total de {len(arquivos_do_repo)} arquivos lidos e processados.")
         return arquivos_do_repo
