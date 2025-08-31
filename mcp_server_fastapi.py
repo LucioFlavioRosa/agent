@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # --- Módulos do projeto ---
 from tools.job_store import RedisJobStore
 from tools import commit_multiplas_branchs
+from tools.repository_provider_factory import get_repository_provider
 
 # --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
@@ -117,7 +118,10 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 
         rag_retriever = AzureAISearchRAGRetriever()
         changeset_filler = ChangesetFiller()
-        repo_reader = GitHubRepositoryReader()
+        
+        repo_name = job_info['data']['repo_name']
+        repository_provider = get_repository_provider(repo_name)
+        repo_reader = GitHubRepositoryReader(repository_provider=repository_provider)
         
         workflow = WORKFLOW_REGISTRY.get(job_info['data']['original_analysis_type'])
         if not workflow: raise ValueError("Workflow não encontrado.")
@@ -176,7 +180,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
             
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -250,7 +254,8 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
             nome_repo=job_info['data']['repo_name'], 
             dados_agrupados=dados_finais_formatados,
-            base_branch=branch_base_para_pr
+            base_branch=branch_base_para_pr,
+            repository_provider=repository_provider
         )
         job_info['data']['commit_details'] = commit_results
 
