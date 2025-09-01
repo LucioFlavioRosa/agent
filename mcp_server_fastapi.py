@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # --- Módulos do projeto ---
 from tools.job_store import RedisJobStore
 from tools import commit_multiplas_branchs
-from tools.repository_provider_factory import get_repository_provider
+from tools.repository_provider_factory import get_repository_provider, get_repository_provider_explicit
 
 # --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
@@ -44,6 +44,7 @@ class StartAnalysisPayload(BaseModel):
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
+    repository_type: Optional[str] = Field(None, description="Tipo do repositório: 'github', 'gitlab', 'azure'. Se não informado, usa detecção automática.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -120,7 +121,15 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
         changeset_filler = ChangesetFiller()
         
         repo_name = job_info['data']['repo_name']
-        repository_provider = get_repository_provider(repo_name)
+        repository_type = job_info['data'].get('repository_type')
+        
+        if repository_type:
+            print(f"[{job_id}] Usando tipo de repositório explícito: {repository_type}")
+            repository_provider = get_repository_provider_explicit(repository_type)
+        else:
+            print(f"[{job_id}] Usando detecção automática de repositório para: {repo_name}")
+            repository_provider = get_repository_provider(repo_name)
+        
         repo_reader = GitHubRepositoryReader(repository_provider=repository_provider)
         
         workflow = WORKFLOW_REGISTRY.get(job_info['data']['original_analysis_type'])
@@ -284,7 +293,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'usar_rag': payload.usar_rag,
             'gerar_relatorio_apenas': payload.gerar_relatorio_apenas,
             'arquivos_especificos': payload.arquivos_especificos,
-            'analysis_name': payload.analysis_name
+            'analysis_name': payload.analysis_name,
+            'repository_type': payload.repository_type
         },
         'error_details': None
     }
@@ -382,7 +392,8 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
             'usar_rag': original_job['data'].get('usar_rag', False),
             'gerar_relatorio_apenas': False,
             'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
-            'analysis_name': f"{analysis_name}-implementation"
+            'analysis_name': f"{analysis_name}-implementation",
+            'repository_type': original_job['data'].get('repository_type')
         },
         'error_details': None
     }
