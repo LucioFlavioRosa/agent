@@ -112,17 +112,18 @@ class GitLabRepositoryProvider(IRepositoryProvider):
             
             print(f"[GitLab Provider] Tentando criar em namespace/grupo: {namespace}")
             try:
-                group = gl.groups.get(namespace, lazy=True)
-                group_info = group.name
+                group = gl.groups.get(namespace)
+                group_name = group.attributes.get('name', namespace)
                 project_data['namespace_id'] = group.id
-                print(f"[GitLab Provider] Grupo encontrado: {group_info}, ID: {group.id}")
+                print(f"[GitLab Provider] Grupo encontrado: {group_name}, ID: {group.id}")
                 project = gl.projects.create(project_data)
                 
             except gitlab.exceptions.GitlabGetError as group_error:
-                print(f"[GitLab Provider] Grupo não encontrado ({group_error.response_code}), criando como projeto pessoal")
+                print(f"[GitLab Provider] Grupo '{namespace}' não encontrado ou sem permissão ({group_error.response_code}), criando como projeto pessoal")
                 if 'namespace_id' in project_data:
                     del project_data['namespace_id']
                 project = gl.projects.create(project_data)
+                print(f"[GitLab Provider] Projeto criado como pessoal devido à falta de acesso ao grupo '{namespace}'")
             
             if not hasattr(project, 'default_branch'):
                 project.default_branch = 'main'
