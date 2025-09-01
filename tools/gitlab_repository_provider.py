@@ -42,7 +42,7 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                 project = gl.projects.get(int(repository_name))
                 print(f"[GitLab Provider] Projeto encontrado por ID: '{project.name_with_namespace}' (ID: {project.id}).")
             else:
-                print(f"[GitLab Provider] Detectado nome de projeto: {repository_name}")
+                print(f"[GitLab Provider] Detectado path completo: {repository_name}")
                 project = gl.projects.get(repository_name)
                 print(f"[GitLab Provider] Projeto '{project.name_with_namespace}' encontrado com sucesso (ID: {project.id}).")
             
@@ -71,7 +71,11 @@ class GitLabRepositoryProvider(IRepositoryProvider):
         print(f"[GitLab Provider] Tentando criar repositório: {repository_name}")
         
         if self._is_project_id(repository_name):
-            raise ValueError(f"Não é possível criar repositório usando project ID '{repository_name}'. Use o formato 'namespace/projeto'.")
+            raise ValueError(
+                f"ERRO: Não é possível criar repositório usando Project ID '{repository_name}'. "
+                "Para criar um projeto GitLab, use o formato 'namespace/projeto'. "
+                "Project IDs são apenas para acessar projetos existentes."
+            )
         
         try:
             namespace, project_name = self._parse_repository_name(repository_name)
@@ -82,6 +86,7 @@ class GitLabRepositoryProvider(IRepositoryProvider):
         
         try:
             gl = gitlab.Gitlab(url="https://gitlab.com", private_token=token)
+            gl.auth()
             
             project_data = {
                 'name': project_name,
