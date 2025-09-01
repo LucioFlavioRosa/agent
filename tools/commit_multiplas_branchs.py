@@ -1,5 +1,3 @@
-# Arquivo: tools/commit_multiplas_branchs.py (VERSÃO REFATORADA SEGUINDO SOLID)
-
 import json
 from github import GithubException, UnknownObjectException
 from tools.github_connector import GitHubConnector
