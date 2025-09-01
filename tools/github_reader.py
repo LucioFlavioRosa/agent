@@ -47,22 +47,40 @@ class GitHubRepositoryReader(IRepositoryReader):
     def _is_gitlab_project(self, repositorio) -> bool:
         return hasattr(repositorio, 'web_url') or 'gitlab' in str(type(repositorio)).lower()
 
+    def _is_gitlab_project_id_format(self, repo_name: str) -> bool:
+        try:
+            int(repo_name)
+            return True
+        except ValueError:
+            return False
+
     def _ler_arquivos_especificos_gitlab(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         arquivos_lidos = {}
         total_arquivos = len(arquivos_especificos)
         
-        print(f"Modo de leitura filtrada GitLab ativado. Lendo {total_arquivos} arquivos específicos...")
+        print(f"Modo de leitura filtrada GitLab ativado. Lendo {total_arquivos} arquivos específicos na branch '{branch_a_ler}'...")
+        
+        # Validar se a branch existe (importante para Project ID)
+        try:
+            if hasattr(repositorio, 'get_branch_safe'):
+                branch_obj = repositorio.get_branch_safe(branch_a_ler)
+                if branch_obj is None:
+                    print(f"AVISO: Branch '{branch_a_ler}' não encontrada no projeto GitLab. Tentando branch padrão.")
+                    branch_a_ler = repositorio.default_branch
+        except Exception as e:
+            print(f"AVISO: Erro ao validar branch '{branch_a_ler}': {e}. Usando branch padrão.")
+            branch_a_ler = repositorio.default_branch
         
         for i, caminho_arquivo in enumerate(arquivos_especificos):
             try:
-                print(f"  [{i+1}/{total_arquivos}] Lendo: {caminho_arquivo}")
+                print(f"  [{i+1}/{total_arquivos}] Lendo: {caminho_arquivo} (branch: {branch_a_ler})")
                 
                 file_content = repositorio.files.get(file_path=caminho_arquivo, ref=branch_a_ler)
                 decoded_content = base64.b64decode(file_content.content).decode('utf-8')
                 arquivos_lidos[caminho_arquivo] = decoded_content
                 
             except Exception as e:
-                print(f"  [AVISO] Falha ao ler arquivo '{caminho_arquivo}': {e}. Ignorando.")
+                print(f"  [AVISO] Falha ao ler arquivo '{caminho_arquivo}' na branch '{branch_a_ler}': {e}. Ignorando.")
         
         print(f"Leitura filtrada GitLab concluída. {len(arquivos_lidos)} de {total_arquivos} arquivos lidos com sucesso.")
         return arquivos_lidos
@@ -74,7 +92,7 @@ class GitHubRepositoryReader(IRepositoryReader):
         arquivos_lidos = {}
         total_arquivos = len(arquivos_especificos)
         
-        print(f"Modo de leitura filtrada ativado. Lendo {total_arquivos} arquivos específicos...")
+        print(f"Modo de leitura filtrada ativado. Lendo {total_arquivos} arquivos específicos na branch '{branch_a_ler}'...")
         
         for i, caminho_arquivo in enumerate(arquivos_especificos):
             try:
@@ -101,6 +119,10 @@ class GitHubRepositoryReader(IRepositoryReader):
     ) -> Dict[str, str]:
         provider_name = type(self.repository_provider).__name__
         print(f"Iniciando leitura do repositório: {nome_repo} via {provider_name}")
+        
+        # Log especial para Project ID do GitLab
+        if self._is_gitlab_project_id_format(nome_repo) and 'gitlab' in provider_name.lower():
+            print(f"Detectado GitLab Project ID: {nome_repo} - garantindo suporte a múltiplas branches")
 
         connector = GitHubConnector(repository_provider=self.repository_provider)
         repositorio = connector.connection(repositorio=nome_repo)
@@ -113,6 +135,7 @@ class GitHubRepositoryReader(IRepositoryReader):
             print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
         else:
             branch_a_ler = nome_branch
+            print(f"Branch especificada: '{branch_a_ler}'")
         
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada ativado para {len(arquivos_especificos)} arquivos específicos.")
@@ -127,8 +150,19 @@ class GitHubRepositoryReader(IRepositoryReader):
         try:
             print(f"Obtendo árvore de arquivos GitLab da branch '{branch_a_ler}'...")
             
+            # Validar se a branch existe (crítico para Project ID)
+            try:
+                if hasattr(repositorio, 'get_branch_safe'):
+                    branch_obj = repositorio.get_branch_safe(branch_a_ler)
+                    if branch_obj is None:
+                        print(f"AVISO: Branch '{branch_a_ler}' não encontrada no projeto GitLab. Usando branch padrão '{repositorio.default_branch}'.")
+                        branch_a_ler = repositorio.default_branch
+            except Exception as e:
+                print(f"AVISO: Erro ao validar branch '{branch_a_ler}': {e}. Usando branch padrão.")
+                branch_a_ler = repositorio.default_branch
+            
             tree_items = repositorio.repository_tree(ref=branch_a_ler, recursive=True, all=True)
-            print(f"Árvore GitLab obtida. {len(tree_items)} itens totais encontrados.")
+            print(f"Árvore GitLab obtida da branch '{branch_a_ler}'. {len(tree_items)} itens totais encontrados.")
             
             arquivos_para_ler = [
                 item for item in tree_items
@@ -147,7 +181,7 @@ class GitHubRepositoryReader(IRepositoryReader):
                     arquivos_do_repo[item['path']] = decoded_content
                     
                 except Exception as e:
-                    print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{item['path']}'. Pulando. Erro: {e}")
+                    print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{item['path']}' na branch '{branch_a_ler}'. Pulando. Erro: {e}")
 
         except Exception as e:
             print(f"ERRO CRÍTICO durante a comunicação com a API GitLab: {e}")
@@ -175,7 +209,7 @@ class GitHubRepositoryReader(IRepositoryReader):
 
             tree_response = repositorio.get_git_tree(tree_sha, recursive=True)
             tree_elements = tree_response.tree
-            print(f"Árvore obtida. {len(tree_elements)} itens totais encontrados.")
+            print(f"Árvore obtida da branch '{branch_a_ler}'. {len(tree_elements)} itens totais encontrados.")
 
             if tree_response.truncated:
                 print(f"AVISO: A lista de arquivos do repositório foi truncada pela API.")
@@ -203,5 +237,5 @@ class GitHubRepositoryReader(IRepositoryReader):
             print(f"ERRO CRÍTICO durante a comunicação com a API: {e}")
             raise
         
-        print(f"\nLeitura completa concluída. Total de {len(arquivos_do_repo)} arquivos lidos e processados.")
+        print(f"\nLeitura completa concluída da branch '{branch_a_ler}'. Total de {len(arquivos_do_repo)} arquivos lidos e processados.")
         return arquivos_do_repo
