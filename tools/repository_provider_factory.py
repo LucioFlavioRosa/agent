@@ -45,13 +45,19 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
         return AzureRepositoryProvider()
 
 def get_repository_provider_explicit(provider_type: str) -> IRepositoryProvider:
+    if not provider_type or not isinstance(provider_type, str):
+        raise ValueError("Tipo de provedor deve ser uma string não vazia.")
+    
     provider_type = provider_type.lower().strip()
     
     if provider_type == 'github':
+        print(f"Criando provedor GitHub explícito")
         return GitHubRepositoryProvider()
     elif provider_type == 'gitlab':
+        print(f"Criando provedor GitLab explícito")
         return GitLabRepositoryProvider()
     elif provider_type in ['azure', 'azure_devops']:
+        print(f"Criando provedor Azure DevOps explícito")
         return AzureRepositoryProvider()
     else:
         raise ValueError(
