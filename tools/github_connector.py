@@ -1,5 +1,5 @@
 from github import Repository
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_secret_manager import AzureSecretManager
@@ -42,13 +42,16 @@ class GitHubConnector:
                 print(f"[GitHub Connector] ERRO CRÍTICO: Nenhum token encontrado para provider {provider_type}")
                 raise ValueError(f"ERRO CRÍTICO: Nenhum token encontrado. Verifique se existe '{token_secret_name}' ou '{token_prefix}' no gerenciador de segredos.") from e
     
-    def connection(self, repositorio: str) -> Union[Repository, object]:
+    def connection(self, repositorio: str, project_id: Optional[str] = None) -> Union[Repository, object]:
         print(f"[GitHub Connector] Iniciando conexão para repositório: {repositorio}")
         print(f"[GitHub Connector] Provider utilizado: {type(self.repository_provider).__name__}")
+        if project_id:
+            print(f"[GitHub Connector] Project ID fornecido: {project_id}")
         
-        if repositorio in self._cached_repos:
-            print(f"[GitHub Connector] Retornando repositório '{repositorio}' do cache.")
-            return self._cached_repos[repositorio]
+        cache_key = f"{repositorio}:{project_id}" if project_id else repositorio
+        if cache_key in self._cached_repos:
+            print(f"[GitHub Connector] Retornando repositório '{cache_key}' do cache.")
+            return self._cached_repos[cache_key]
         
         try:
             org_name = repositorio.split('/')[0]
@@ -62,7 +65,7 @@ class GitHubConnector:
         
         try:
             print(f"[GitHub Connector] Tentando acessar repositório '{repositorio}' via {type(self.repository_provider).__name__}...")
-            repo = self.repository_provider.get_repository(repositorio, token)
+            repo = self.repository_provider.get_repository(repositorio, token, project_id)
             print(f"[GitHub Connector] Repositório '{repositorio}' encontrado com sucesso.")
             
         except ValueError as get_error:
@@ -76,7 +79,7 @@ class GitHubConnector:
             
             print(f"[GitHub Connector] Tentando criar repositório '{repositorio}'...")
             try:
-                repo = self.repository_provider.create_repository(repositorio, token)
+                repo = self.repository_provider.create_repository(repositorio, token, project_id=project_id)
                 print(f"[GitHub Connector] SUCESSO: Repositório '{repositorio}' criado.")
             except Exception as create_error:
                 print(f"[GitHub Connector] ERRO: Falha ao criar repositório '{repositorio}': {create_error}")
@@ -86,8 +89,8 @@ class GitHubConnector:
             print(f"[GitHub Connector] ERRO INESPERADO ao acessar '{repositorio}': {type(unexpected_error).__name__}: {unexpected_error}")
             raise
         
-        print(f"[GitHub Connector] Adicionando repositório '{repositorio}' ao cache.")
-        self._cached_repos[repositorio] = repo
+        print(f"[GitHub Connector] Adicionando repositório '{cache_key}' ao cache.")
+        self._cached_repos[cache_key] = repo
         return repo
     
     @classmethod
