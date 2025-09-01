@@ -17,70 +17,50 @@ class GitLabRepositoryProvider(IRepositoryProvider):
             project = parts[-1]
             return namespace, project
     
-    def get_repository(self, repository_name: str, token: str) -> Project:
-        print(f"[GitLab Provider] Tentando acessar repositório: {repository_name}")
-        print(f"[GitLab Provider] Token fornecido: {'***' + token[-4:] if len(token) > 4 else '***'}")
-        
-        try:
-            namespace, project_name = self._parse_repository_name(repository_name)
-            print(f"[GitLab Provider] Namespace: {namespace}, Projeto: {project_name}")
-            
-            gl = gitlab.Gitlab(url="https://gitlab.com", private_token=token)
-            
-            print(f"[GitLab Provider] Testando autenticação...")
-            try:
-                user = gl.auth()
-                print(f"[GitLab Provider] Autenticação bem-sucedida para usuário: {user.get('username', 'N/A')}")
-            except Exception as auth_error:
-                print(f"[GitLab Provider] AVISO: Falha na validação de autenticação: {auth_error}")
-            
-            print(f"[GitLab Provider] Buscando projeto por path: {repository_name}")
-            project = gl.projects.get(repository_name, lazy=True)
-            
-            print(f"[GitLab Provider] Validando existência do projeto...")
-            try:
-                project_info = project.name
-                print(f"[GitLab Provider] Projeto encontrado: {project_info}")
-            except gitlab.exceptions.GitlabGetError as get_error:
-                if get_error.response_code == 404:
-                    print(f"[GitLab Provider] Projeto '{repository_name}' não encontrado (404)")
-                    raise ValueError(f"Projeto '{repository_name}' não encontrado no GitLab.")
-                elif get_error.response_code == 403:
-                    print(f"[GitLab Provider] Acesso negado ao projeto '{repository_name}' (403)")
-                    raise ValueError(f"Acesso negado ao projeto '{repository_name}'. Verifique as permissões do token.")
-                else:
-                    print(f"[GitLab Provider] Erro HTTP {get_error.response_code} ao acessar projeto")
-                    raise ValueError(f"Erro ao acessar projeto '{repository_name}': {get_error}")
-            
-            if not hasattr(project, 'default_branch'):
-                try:
-                    project.default_branch = project.default_branch or 'main'
-                    print(f"[GitLab Provider] Branch padrão definida: {project.default_branch}")
-                except:
-                    project.default_branch = 'main'
-                    print(f"[GitLab Provider] Branch padrão definida como fallback: main")
-            
-            print(f"[GitLab Provider] Projeto configurado com sucesso")
-            return project
-            
-        except gitlab.exceptions.GitlabGetError as e:
-            print(f"[GitLab Provider] Erro GitlabGetError: {e.response_code} - {e}")
-            if e.response_code == 404:
-                raise ValueError(f"Projeto '{repository_name}' não encontrado no GitLab.")
-            elif e.response_code == 403:
-                raise ValueError(f"Acesso negado ao projeto '{repository_name}'. Verifique as permissões do token.")
-            else:
-                raise ValueError(f"Erro ao acessar projeto '{repository_name}': {e}")
-        except gitlab.exceptions.GitlabAuthenticationError as e:
-            print(f"[GitLab Provider] Erro de autenticação: {e}")
-            raise ValueError(f"Token de autenticação inválido para acessar '{repository_name}'.")
-        except ValueError as e:
-            print(f"[GitLab Provider] Erro de validação: {e}")
-            raise
-        except Exception as e:
-            print(f"[GitLab Provider] Erro inesperado: {type(e).__name__}: {e}")
-            raise ValueError(f"Erro inesperado ao acessar projeto '{repository_name}': {e}") from e
+    # Em tools/gitlab_repository_provider.py
+
+def get_repository(self, repository_name: str, token: str) -> any: # 'any' pode ser 'gitlab.v4.objects.Project'
+    """
+    Obtém um objeto de projeto do GitLab de forma direta e robusta.
+    """
+    print(f"[GitLab Provider] Tentando acessar o projeto: '{repository_name}'")
     
+    # 1. Inicializa o cliente GitLab
+    try:
+        gl = gitlab.Gitlab(url="https://gitlab.com", private_token=token)
+        # Valida a autenticação para dar um erro claro se o token for inválido
+        gl.auth()
+    except gitlab.exceptions.GitlabAuthenticationError as e:
+        print(f"[GitLab Provider] ERRO: Token de autenticação inválido.")
+        raise ValueError("Token de autenticação do GitLab é inválido.") from e
+    except Exception as e:
+        raise RuntimeError(f"Erro inesperado ao inicializar cliente GitLab: {e}")
+
+    # 2. Tenta obter o projeto diretamente, sem lazy loading
+    try:
+        # A biblioteca lida com o 'namespace/projeto' automaticamente.
+        # A chamada agora é direta e o erro será capturado aqui.
+        project = gl.projects.get(repository_name)
+        print(f"[GitLab Provider] Projeto '{project.name_with_namespace}' encontrado com sucesso (ID: {project.id}).")
+        
+        # 3. Adiciona atributos de compatibilidade (opcional, mas boa prática)
+        if not hasattr(project, 'default_branch'):
+            project.default_branch = project.attributes.get('default_branch', 'main')
+        
+        return project
+        
+    except gitlab.exceptions.GitlabGetError as e:
+        if e.response_code == 404:
+            print(f"[GitLab Provider] ERRO: Projeto '{repository_name}' não encontrado (404).")
+            raise ValueError(f"Repositório GitLab '{repository_name}' não encontrado. Verifique o nome e se o token tem acesso a ele.")
+        elif e.response_code == 403:
+            print(f"[GitLab Provider] ERRO: Acesso negado ao projeto '{repository_name}' (403).")
+            raise ValueError(f"Acesso negado ao repositório '{repository_name}'. Verifique as permissões do token.")
+        else:
+            raise RuntimeError(f"Erro da API do GitLab ao buscar repositório ({e.response_code}): {e}")
+    except Exception as e:
+        raise RuntimeError(f"Erro inesperado ao buscar o projeto GitLab '{repository_name}': {e}") from e
+        
     def create_repository(self, repository_name: str, token: str, description: str = "", private: bool = True) -> Project:
         print(f"[GitLab Provider] Tentando criar repositório: {repository_name}")
         
