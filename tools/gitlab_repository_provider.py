@@ -46,8 +46,18 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                 project = gl.projects.get(repository_name)
                 print(f"[GitLab Provider] Projeto '{project.name_with_namespace}' encontrado com sucesso (ID: {project.id}).")
             
+            # Garantir compatibilidade com múltiplas branches
             if not hasattr(project, 'default_branch'):
                 project.default_branch = project.attributes.get('default_branch', 'main')
+            
+            # Adicionar método auxiliar para acesso a branches
+            def get_branch_safe(branch_name):
+                try:
+                    return project.branches.get(branch_name)
+                except gitlab.exceptions.GitlabGetError:
+                    return None
+            
+            project.get_branch_safe = get_branch_safe
             
             return project
             
@@ -70,11 +80,12 @@ class GitLabRepositoryProvider(IRepositoryProvider):
     def create_repository(self, repository_name: str, token: str, description: str = "", private: bool = True) -> Project:
         print(f"[GitLab Provider] Tentando criar repositório: {repository_name}")
         
+        # NUNCA tentar criar por Project ID - apenas lançar erro claro
         if self._is_project_id(repository_name):
             raise ValueError(
-                f"ERRO: Não é possível criar repositório usando Project ID '{repository_name}'. "
-                "Para criar um projeto GitLab, use o formato 'namespace/projeto'. "
-                "Project IDs são apenas para acessar projetos existentes."
+                f"ERRO CRÍTICO: Não é possível criar repositório usando Project ID '{repository_name}'. "
+                "Project IDs são apenas para acessar projetos existentes. "
+                "Para criar um projeto GitLab, use o formato 'namespace/projeto' ou 'grupo/subgrupo/projeto'."
             )
         
         try:
@@ -111,8 +122,18 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                     del project_data['namespace_id']
                 project = gl.projects.create(project_data)
             
+            # Garantir compatibilidade com múltiplas branches
             if not hasattr(project, 'default_branch'):
                 project.default_branch = 'main'
+            
+            # Adicionar método auxiliar para acesso a branches
+            def get_branch_safe(branch_name):
+                try:
+                    return project.branches.get(branch_name)
+                except gitlab.exceptions.GitlabGetError:
+                    return None
+            
+            project.get_branch_safe = get_branch_safe
             
             print(f"[GitLab Provider] Projeto criado com sucesso: {project.web_url}")
             return project
