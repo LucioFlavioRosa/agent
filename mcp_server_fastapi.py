@@ -33,6 +33,15 @@ WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
 valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
 ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
 
+def _validate_gitlab_repo_name(repo_name: str) -> None:
+    try:
+        int(repo_name)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Para repositórios GitLab, é obrigatório usar o Project ID numérico. Recebido: '{repo_name}'. Exemplo correto: '123456'"
+        )
+
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
     repo_name: str
@@ -185,7 +194,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
             
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -276,6 +285,10 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 # --- Endpoints da API ---
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    if payload.repository_type == 'gitlab':
+        _validate_gitlab_repo_name(payload.repo_name)
+        print(f"Validação GitLab OK: Project ID '{payload.repo_name}' é válido.")
+    
     job_id = str(uuid.uuid4())
     analysis_type_str = payload.analysis_type.value
     initial_job_data = {
@@ -375,12 +388,19 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     if not report:
         raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
     
+    original_repo_name = original_job['data']['repo_name']
+    original_repository_type = original_job['data']['repository_type']
+    
+    if original_repository_type == 'gitlab':
+        _validate_gitlab_repo_name(original_repo_name)
+        print(f"Validação GitLab OK para job derivado: Project ID '{original_repo_name}' é válido.")
+    
     new_job_id = str(uuid.uuid4())
     
     new_job_data = {
         'status': 'starting',
         'data': {
-            'repo_name': original_job['data']['repo_name'],
+            'repo_name': original_repo_name,
             'branch_name': original_job['data']['branch_name'],
             'original_analysis_type': 'implementacao',
             'instrucoes_extras': f"Gerar código baseado no seguinte relatório:\n\n{report}",
@@ -389,7 +409,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
             'gerar_relatorio_apenas': False,
             'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
             'analysis_name': f"{analysis_name}-implementation",
-            'repository_type': original_job['data']['repository_type']
+            'repository_type': original_repository_type
         },
         'error_details': None
     }
