@@ -46,20 +46,30 @@ class GitHubConnector:
         provider_type = type(self.repository_provider).__name__.lower()
         
         if 'gitlab' in provider_type:
+            # Para GitLab Project ID, usar 'gitlab' como org_name para token
             try:
                 project_id = int(repositorio)
                 print(f"[GitHub Connector] GitLab project ID detectado: {project_id}. Usando 'gitlab' como org_name para token.")
                 return 'gitlab'
             except ValueError:
-                print(f"[GitHub Connector] AVISO: Para GitLab, esperado project ID numérico, mas recebido: '{repositorio}'. Tentando extrair org_name.")
+                print(f"[GitHub Connector] GitLab path detectado: {repositorio}. Extraindo namespace.")
+                # Para path GitLab, extrair o namespace (primeira parte)
+                try:
+                    namespace = repositorio.split('/')[0]
+                    print(f"[GitHub Connector] Namespace GitLab extraído: {namespace}")
+                    return namespace
+                except (ValueError, IndexError):
+                    print(f"[GitHub Connector] Erro ao extrair namespace do path GitLab. Usando 'gitlab' como fallback.")
+                    return 'gitlab'
         
+        # Para outros providers (GitHub, Azure), extrair org_name normalmente
         try:
             org_name = repositorio.split('/')[0]
             print(f"[GitHub Connector] Organização/namespace extraído: {org_name}")
             return org_name
         except (ValueError, IndexError):
             print(f"[GitHub Connector] ERRO: Formato inválido do repositório: {repositorio}")
-            raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio' ou 'org/proj/repo'.")
+            raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio', 'org/proj/repo' ou Project ID numérico para GitLab.")
     
     def connection(self, repositorio: str) -> Union[Repository, object]:
         print(f"[GitHub Connector] Iniciando conexão para repositório: {repositorio}")
@@ -83,17 +93,30 @@ class GitHubConnector:
             
             provider_name = type(self.repository_provider).__name__
             if 'gitlab' in provider_name.lower():
-                print(f"[GitHub Connector] AVISO: Para repositórios GitLab, verifique se o project ID está correto e se o token possui permissões adequadas.")
-                print(f"[GitHub Connector] AVISO: Não tentando criar repositório GitLab automaticamente.")
-                raise ValueError(f"Repositório GitLab '{repositorio}' não encontrado ou inacessível. Verifique o project ID e permissões.") from get_error
-            
-            print(f"[GitHub Connector] Tentando criar repositório '{repositorio}'...")
-            try:
-                repo = self.repository_provider.create_repository(repositorio, token)
-                print(f"[GitHub Connector] SUCESSO: Repositório '{repositorio}' criado.")
-            except Exception as create_error:
-                print(f"[GitHub Connector] ERRO: Falha ao criar repositório '{repositorio}': {create_error}")
-                raise ValueError(f"Não foi possível acessar nem criar o repositório '{repositorio}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
+                # Para GitLab, verificar se é Project ID antes de tentar criar
+                try:
+                    project_id = int(repositorio)
+                    print(f"[GitHub Connector] AVISO: Project ID GitLab '{project_id}' não encontrado ou inacessível.")
+                    print(f"[GitHub Connector] AVISO: Não é possível criar projeto usando Project ID. Use o formato 'namespace/projeto' para criação.")
+                    raise ValueError(f"Projeto GitLab com ID '{project_id}' não encontrado ou inacessível. Verifique o ID e permissões do token.") from get_error
+                except ValueError:
+                    # É um path, pode tentar criar
+                    print(f"[GitHub Connector] Tentando criar projeto GitLab '{repositorio}'...")
+                    try:
+                        repo = self.repository_provider.create_repository(repositorio, token)
+                        print(f"[GitHub Connector] SUCESSO: Projeto GitLab '{repositorio}' criado.")
+                    except Exception as create_error:
+                        print(f"[GitHub Connector] ERRO: Falha ao criar projeto GitLab '{repositorio}': {create_error}")
+                        raise ValueError(f"Não foi possível acessar nem criar o projeto GitLab '{repositorio}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
+            else:
+                # Para outros providers (GitHub, Azure), tentar criar normalmente
+                print(f"[GitHub Connector] Tentando criar repositório '{repositorio}'...")
+                try:
+                    repo = self.repository_provider.create_repository(repositorio, token)
+                    print(f"[GitHub Connector] SUCESSO: Repositório '{repositorio}' criado.")
+                except Exception as create_error:
+                    print(f"[GitHub Connector] ERRO: Falha ao criar repositório '{repositorio}': {create_error}")
+                    raise ValueError(f"Não foi possível acessar nem criar o repositório '{repositorio}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
         
         except Exception as unexpected_error:
             print(f"[GitHub Connector] ERRO INESPERADO ao acessar '{repositorio}': {type(unexpected_error).__name__}: {unexpected_error}")
