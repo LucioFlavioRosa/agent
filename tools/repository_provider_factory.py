@@ -10,7 +10,7 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
     
     repo_name = repo_name.strip()
     
-    # Detecção prioritária: Project ID numérico do GitLab
+    # PRIORIDADE MÁXIMA: Project ID numérico do GitLab
     try:
         project_id = int(repo_name)
         print(f"Detectado GitLab Project ID numérico: {project_id}")
@@ -26,34 +26,44 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
             "Esperado pelo menos 'org/repo' (2 partes) ou Project ID numérico para GitLab."
         )
     
-    # Azure DevOps: 3 partes
+    # Azure DevOps: exatamente 3 partes
     if len(parts) == 3:
         print(f"Detectado repositório Azure DevOps: {repo_name}")
         return AzureRepositoryProvider()
     
-    # 2 partes: GitHub ou GitLab por path
+    # 2 partes: GitHub ou GitLab por path - detecção criteriosa
     elif len(parts) == 2:
         org_name, repo_name_only = parts
         
-        # Indicadores específicos de GitLab
+        # Indicadores específicos e robustos de GitLab
         gitlab_indicators = [
             'gitlab' in org_name.lower(),
             'gitlab' in repo_name_only.lower(),
-            '-' in org_name and len(org_name) > 10,
             org_name.endswith('-org'),
             org_name.endswith('-group'),
             org_name.endswith('-team'),
-            org_name.count('-') >= 2  # Padrão comum em namespaces GitLab
+            org_name.count('-') >= 3,  # Namespaces GitLab tendem a ter múltiplos hífens
+            len(org_name) > 15 and '-' in org_name  # Namespaces longos com hífen são comuns no GitLab
         ]
         
-        if sum(gitlab_indicators) >= 1:
+        # Detecção mais criteriosa: pelo menos 2 indicadores ou 1 forte
+        strong_gitlab_indicators = [
+            'gitlab' in org_name.lower(),
+            'gitlab' in repo_name_only.lower(),
+            org_name.endswith('-org'),
+            org_name.endswith('-group')
+        ]
+        
+        if any(strong_gitlab_indicators) or sum(gitlab_indicators) >= 2:
             print(f"Detectado repositório GitLab por path: {repo_name}")
             return GitLabRepositoryProvider()
         
+        # Padrão: GitHub para formato org/repo simples
         print(f"Detectado repositório GitHub: {repo_name}")
         return GitHubRepositoryProvider()
     
     else:
+        # Mais de 3 partes: assume Azure DevOps com path complexo
         print(f"Detectado repositório Azure DevOps (path complexo): {repo_name}")
         return AzureRepositoryProvider()
 
