@@ -33,14 +33,27 @@ WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
 valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
 ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
 
-def _validate_gitlab_repo_name(repo_name: str) -> None:
+def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
+    repo_name = repo_name.strip()
+    
+    # Verifica se é Project ID (numérico)
     try:
-        int(repo_name)
+        project_id = int(repo_name)
+        print(f"GitLab Project ID detectado: {project_id}. Usando para máxima robustez.")
+        return str(project_id)  # Retorna como string numérica
     except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Para repositórios GitLab, é obrigatório usar o Project ID numérico. Recebido: '{repo_name}'. Exemplo correto: '123456'"
-        )
+        pass
+    
+    # Verifica se é path completo (contém '/')
+    if '/' in repo_name:
+        print(f"GitLab path completo detectado: {repo_name}. Recomenda-se usar Project ID para máxima robustez.")
+        return repo_name
+    
+    # Formato inválido
+    raise HTTPException(
+        status_code=400,
+        detail=f"Para repositórios GitLab, use o Project ID numérico (recomendado para máxima robustez) ou o path completo 'namespace/projeto'. Recebido: '{repo_name}'. Exemplo Project ID: '123456', Exemplo path: 'meugrupo/meuprojeto'"
+    )
 
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
@@ -132,6 +145,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
         repo_name = job_info['data']['repo_name']
         repository_type = job_info['data']['repository_type']
         
+        print(f"[{job_id}] Usando repositório: '{repo_name}' (tipo: {repository_type})")
         print(f"[{job_id}] Usando tipo de repositório explícito: {repository_type}")
         repository_provider = get_repository_provider_explicit(repository_type)
         
@@ -182,6 +196,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     'instrucoes_extras': instrucoes,
                     'arquivos_especificos': job_info['data'].get('arquivos_especificos')
                 })
+                print(f"[{job_id}] Agente Revisor: repositorio='{agent_params['repositorio']}', branch='{agent_params['nome_branch']}'")
                 agent_response = agente.main(**agent_params)
             elif agent_type == "processador":
                 agente = AgenteProcessador(llm_provider=llm_provider)
@@ -194,7 +209,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
             
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -265,6 +280,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
         
         branch_base_para_pr = job_info['data'].get('branch_name', 'main')
         
+        print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
             nome_repo=job_info['data']['repo_name'], 
             dados_agrupados=dados_finais_formatados,
@@ -285,16 +301,19 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 # --- Endpoints da API ---
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    # Validação e normalização específica para GitLab
+    normalized_repo_name = payload.repo_name
     if payload.repository_type == 'gitlab':
-        _validate_gitlab_repo_name(payload.repo_name)
-        print(f"Validação GitLab OK: Project ID '{payload.repo_name}' é válido.")
+        normalized_repo_name = _validate_and_normalize_gitlab_repo_name(payload.repo_name)
+        print(f"GitLab - Repo original: '{payload.repo_name}', normalizado: '{normalized_repo_name}'")
     
     job_id = str(uuid.uuid4())
     analysis_type_str = payload.analysis_type.value
     initial_job_data = {
         'status': 'starting',
         'data': {
-            'repo_name': payload.repo_name,
+            'repo_name': normalized_repo_name,  # Usa o valor normalizado
+            'original_repo_name': payload.repo_name,  # Preserva o valor original para rastreabilidade
             'branch_name': payload.branch_name,
             'original_analysis_type': analysis_type_str,
             'instrucoes_extras': payload.instrucoes_extras,
@@ -311,6 +330,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     
     if payload.analysis_name:
         analysis_name_to_job_id[payload.analysis_name] = job_id
+    
+    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type})")
     
     # A chamada agora é sempre para a mesma função, começando do passo 0
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
@@ -391,16 +412,19 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     original_repo_name = original_job['data']['repo_name']
     original_repository_type = original_job['data']['repository_type']
     
+    # Validação específica para GitLab se necessário
+    normalized_repo_name = original_repo_name
     if original_repository_type == 'gitlab':
-        _validate_gitlab_repo_name(original_repo_name)
-        print(f"Validação GitLab OK para job derivado: Project ID '{original_repo_name}' é válido.")
+        normalized_repo_name = _validate_and_normalize_gitlab_repo_name(original_repo_name)
+        print(f"GitLab derivado - Repo original: '{original_repo_name}', normalizado: '{normalized_repo_name}'")
     
     new_job_id = str(uuid.uuid4())
     
     new_job_data = {
         'status': 'starting',
         'data': {
-            'repo_name': original_repo_name,
+            'repo_name': normalized_repo_name,
+            'original_repo_name': original_repo_name,
             'branch_name': original_job['data']['branch_name'],
             'original_analysis_type': 'implementacao',
             'instrucoes_extras': f"Gerar código baseado no seguinte relatório:\n\n{report}",
@@ -416,6 +440,8 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     
     job_store.set_job(new_job_id, new_job_data)
     analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
+    
+    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type})")
     
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     
@@ -469,15 +495,3 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
-
-
-
-
-
-
-
-
-
-
