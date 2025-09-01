@@ -9,6 +9,14 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
         raise ValueError("Nome do repositório deve ser uma string não vazia.")
     
     repo_name = repo_name.strip()
+    
+    try:
+        int(repo_name)
+        print(f"Detectado project ID numérico GitLab: {repo_name}")
+        return GitLabRepositoryProvider()
+    except ValueError:
+        pass
+    
     parts = repo_name.split('/')
     
     if len(parts) < 2:

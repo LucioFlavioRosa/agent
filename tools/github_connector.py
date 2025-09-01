@@ -42,6 +42,25 @@ class GitHubConnector:
                 print(f"[GitHub Connector] ERRO CRÍTICO: Nenhum token encontrado para provider {provider_type}")
                 raise ValueError(f"ERRO CRÍTICO: Nenhum token encontrado. Verifique se existe '{token_secret_name}' ou '{token_prefix}' no gerenciador de segredos.") from e
     
+    def _extract_org_name(self, repositorio: str) -> str:
+        provider_type = type(self.repository_provider).__name__.lower()
+        
+        if 'gitlab' in provider_type:
+            try:
+                int(repositorio)
+                print(f"[GitHub Connector] GitLab project ID detectado: {repositorio}. Usando 'gitlab' como org_name para token.")
+                return 'gitlab'
+            except ValueError:
+                pass
+        
+        try:
+            org_name = repositorio.split('/')[0]
+            print(f"[GitHub Connector] Organização/namespace extraído: {org_name}")
+            return org_name
+        except (ValueError, IndexError):
+            print(f"[GitHub Connector] ERRO: Formato inválido do repositório: {repositorio}")
+            raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio' ou 'org/proj/repo'.")
+    
     def connection(self, repositorio: str) -> Union[Repository, object]:
         print(f"[GitHub Connector] Iniciando conexão para repositório: {repositorio}")
         print(f"[GitHub Connector] Provider utilizado: {type(self.repository_provider).__name__}")
@@ -50,13 +69,7 @@ class GitHubConnector:
             print(f"[GitHub Connector] Retornando repositório '{repositorio}' do cache.")
             return self._cached_repos[repositorio]
         
-        try:
-            org_name = repositorio.split('/')[0]
-            print(f"[GitHub Connector] Organização/namespace extraído: {org_name}")
-        except (ValueError, IndexError):
-            print(f"[GitHub Connector] ERRO: Formato inválido do repositório: {repositorio}")
-            raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio' ou 'org/proj/repo'.")
-        
+        org_name = self._extract_org_name(repositorio)
         token = self._get_token_for_org(org_name)
         print(f"[GitHub Connector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
         
