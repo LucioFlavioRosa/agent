@@ -59,7 +59,7 @@ class GitHubConnector:
             else:
                 print(f"[GitHub Connector] GitLab path detectado: {repositorio}. Extraindo namespace para busca de token.")
                 try:
-                    parts = repositorio.split('/')
+                    parts = repositorio.strip().split('/')
                     if len(parts) >= 2:
                         namespace = parts[0]
                         print(f"[GitHub Connector] Namespace GitLab extraído: {namespace}")
@@ -72,62 +72,79 @@ class GitHubConnector:
                     return 'gitlab'
         
         try:
-            org_name = repositorio.split('/')[0]
+            org_name = repositorio.strip().split('/')[0]
             print(f"[GitHub Connector] Organização/namespace extraído: {org_name}")
             return org_name
         except (ValueError, IndexError):
             print(f"[GitHub Connector] ERRO: Formato inválido do repositório: {repositorio}")
             raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio', 'org/proj/repo' ou Project ID numérico para GitLab.")
     
+    def _normalize_repository_identifier(self, repositorio: str) -> str:
+        provider_type = type(self.repository_provider).__name__.lower()
+        
+        if 'gitlab' in provider_type:
+            if self._is_gitlab_project_id(repositorio):
+                normalized = str(repositorio).strip()
+                print(f"[GitHub Connector] GitLab Project ID normalizado: {normalized}")
+                return normalized
+            else:
+                normalized = repositorio.strip()
+                print(f"[GitHub Connector] GitLab path normalizado: {normalized}")
+                return normalized
+        
+        return repositorio.strip()
+    
     def connection(self, repositorio: str) -> Union[Repository, object]:
         print(f"[GitHub Connector] Iniciando conexão para repositório: {repositorio}")
         print(f"[GitHub Connector] Provider utilizado: {type(self.repository_provider).__name__}")
         
-        if repositorio in self._cached_repos:
-            print(f"[GitHub Connector] Retornando repositório '{repositorio}' do cache.")
-            return self._cached_repos[repositorio]
+        normalized_repo = self._normalize_repository_identifier(repositorio)
         
-        org_name = self._extract_org_name(repositorio)
+        if normalized_repo in self._cached_repos:
+            print(f"[GitHub Connector] Retornando repositório '{normalized_repo}' do cache.")
+            return self._cached_repos[normalized_repo]
+        
+        org_name = self._extract_org_name(normalized_repo)
         token = self._get_token_for_org(org_name)
         print(f"[GitHub Connector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
         
         try:
-            print(f"[GitHub Connector] Tentando acessar repositório '{repositorio}' via {type(self.repository_provider).__name__}...")
-            repo = self.repository_provider.get_repository(repositorio, token)
-            print(f"[GitHub Connector] Repositório '{repositorio}' encontrado com sucesso.")
+            print(f"[GitHub Connector] Tentando acessar repositório '{normalized_repo}' via {type(self.repository_provider).__name__}...")
+            repo = self.repository_provider.get_repository(normalized_repo, token)
+            print(f"[GitHub Connector] Repositório '{normalized_repo}' encontrado com sucesso.")
             
         except ValueError as get_error:
-            print(f"[GitHub Connector] Repositório '{repositorio}' não encontrado. Erro: {get_error}")
+            print(f"[GitHub Connector] Repositório '{normalized_repo}' não encontrado. Erro: {get_error}")
             
             provider_name = type(self.repository_provider).__name__
             if 'gitlab' in provider_name.lower():
-                if self._is_gitlab_project_id(repositorio):
-                    print(f"[GitHub Connector] AVISO: Project ID GitLab '{repositorio}' não encontrado ou inacessível.")
+                if self._is_gitlab_project_id(normalized_repo):
+                    print(f"[GitHub Connector] AVISO: Project ID GitLab '{normalized_repo}' não encontrado ou inacessível.")
                     print(f"[GitHub Connector] AVISO: Não é possível criar projeto usando Project ID. Use o formato 'namespace/projeto' para criação.")
-                    raise ValueError(f"Projeto GitLab com ID '{repositorio}' não encontrado ou inacessível. Verifique o ID e permissões do token. Para criar novos projetos, use o formato 'namespace/projeto'.") from get_error
+                    raise ValueError(f"Projeto GitLab com ID '{normalized_repo}' não encontrado ou inacessível. Verifique o ID e permissões do token. Para criar novos projetos, use o formato 'namespace/projeto'.") from get_error
                 else:
-                    print(f"[GitHub Connector] Tentando criar projeto GitLab '{repositorio}'...")
+                    print(f"[GitHub Connector] Tentando criar projeto GitLab '{normalized_repo}'...")
                     try:
-                        repo = self.repository_provider.create_repository(repositorio, token)
-                        print(f"[GitHub Connector] SUCESSO: Projeto GitLab '{repositorio}' criado.")
+                        repo = self.repository_provider.create_repository(normalized_repo, token)
+                        print(f"[GitHub Connector] SUCESSO: Projeto GitLab '{normalized_repo}' criado.")
                     except Exception as create_error:
-                        print(f"[GitHub Connector] ERRO: Falha ao criar projeto GitLab '{repositorio}': {create_error}")
-                        raise ValueError(f"Não foi possível acessar nem criar o projeto GitLab '{repositorio}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
+                        print(f"[GitHub Connector] ERRO: Falha ao criar projeto GitLab '{normalized_repo}': {create_error}")
+                        raise ValueError(f"Não foi possível acessar nem criar o projeto GitLab '{normalized_repo}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
             else:
-                print(f"[GitHub Connector] Tentando criar repositório '{repositorio}'...")
+                print(f"[GitHub Connector] Tentando criar repositório '{normalized_repo}'...")
                 try:
-                    repo = self.repository_provider.create_repository(repositorio, token)
-                    print(f"[GitHub Connector] SUCESSO: Repositório '{repositorio}' criado.")
+                    repo = self.repository_provider.create_repository(normalized_repo, token)
+                    print(f"[GitHub Connector] SUCESSO: Repositório '{normalized_repo}' criado.")
                 except Exception as create_error:
-                    print(f"[GitHub Connector] ERRO: Falha ao criar repositório '{repositorio}': {create_error}")
-                    raise ValueError(f"Não foi possível acessar nem criar o repositório '{repositorio}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
+                    print(f"[GitHub Connector] ERRO: Falha ao criar repositório '{normalized_repo}': {create_error}")
+                    raise ValueError(f"Não foi possível acessar nem criar o repositório '{normalized_repo}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
         
         except Exception as unexpected_error:
-            print(f"[GitHub Connector] ERRO INESPERADO ao acessar '{repositorio}': {type(unexpected_error).__name__}: {unexpected_error}")
+            print(f"[GitHub Connector] ERRO INESPERADO ao acessar '{normalized_repo}': {type(unexpected_error).__name__}: {unexpected_error}")
             raise
         
-        print(f"[GitHub Connector] Adicionando repositório '{repositorio}' ao cache.")
-        self._cached_repos[repositorio] = repo
+        print(f"[GitHub Connector] Adicionando repositório '{normalized_repo}' ao cache.")
+        self._cached_repos[normalized_repo] = repo
         return repo
     
     @classmethod
