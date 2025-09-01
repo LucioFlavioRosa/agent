@@ -10,9 +10,10 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
     
     repo_name = repo_name.strip()
     
+    # Detecção prioritária: Project ID numérico do GitLab
     try:
-        int(repo_name)
-        print(f"Detectado project ID numérico GitLab: {repo_name}")
+        project_id = int(repo_name)
+        print(f"Detectado GitLab Project ID numérico: {project_id}")
         return GitLabRepositoryProvider()
     except ValueError:
         pass
@@ -22,27 +23,31 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
     if len(parts) < 2:
         raise ValueError(
             f"Nome do repositório '{repo_name}' tem formato inválido. "
-            "Esperado pelo menos 'org/repo' (2 partes)."
+            "Esperado pelo menos 'org/repo' (2 partes) ou Project ID numérico para GitLab."
         )
     
+    # Azure DevOps: 3 partes
     if len(parts) == 3:
         print(f"Detectado repositório Azure DevOps: {repo_name}")
         return AzureRepositoryProvider()
     
+    # 2 partes: GitHub ou GitLab por path
     elif len(parts) == 2:
         org_name, repo_name_only = parts
         
+        # Indicadores específicos de GitLab
         gitlab_indicators = [
             'gitlab' in org_name.lower(),
             'gitlab' in repo_name_only.lower(),
             '-' in org_name and len(org_name) > 10,
             org_name.endswith('-org'),
             org_name.endswith('-group'),
-            org_name.endswith('-team')
+            org_name.endswith('-team'),
+            org_name.count('-') >= 2  # Padrão comum em namespaces GitLab
         ]
         
         if sum(gitlab_indicators) >= 1:
-            print(f"Detectado repositório GitLab: {repo_name}")
+            print(f"Detectado repositório GitLab por path: {repo_name}")
             return GitLabRepositoryProvider()
         
         print(f"Detectado repositório GitHub: {repo_name}")
@@ -84,3 +89,10 @@ def detect_repository_type(repo_name: str) -> str:
         return 'azure'
     else:
         return 'unknown'
+
+def is_gitlab_project_id(repo_name: str) -> bool:
+    try:
+        int(repo_name)
+        return True
+    except ValueError:
+        return False
