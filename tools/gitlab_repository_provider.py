@@ -30,6 +30,7 @@ class GitLabRepositoryProvider(IRepositoryProvider):
         try:
             gl = gitlab.Gitlab(url="https://gitlab.com", private_token=token)
             gl.auth()
+            print(f"[GitLab Provider] Autenticação GitLab bem-sucedida.")
         except gitlab.exceptions.GitlabAuthenticationError as e:
             print(f"[GitLab Provider] ERRO: Token de autenticação inválido.")
             raise ValueError("Token de autenticação do GitLab é inválido.") from e
@@ -38,8 +39,9 @@ class GitLabRepositoryProvider(IRepositoryProvider):
     
         try:
             if self._is_project_id(repository_name):
-                print(f"[GitLab Provider] Detectado project ID numérico: {repository_name}")
-                project = gl.projects.get(int(repository_name))
+                project_id = int(repository_name)
+                print(f"[GitLab Provider] Detectado Project ID numérico: {project_id} (formato mais robusto)")
+                project = gl.projects.get(project_id)
                 print(f"[GitLab Provider] Projeto encontrado por ID: '{project.name_with_namespace}' (ID: {project.id}).")
             else:
                 print(f"[GitLab Provider] Detectado path completo: {repository_name}")
@@ -47,7 +49,9 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                 print(f"[GitLab Provider] Projeto '{project.name_with_namespace}' encontrado com sucesso (ID: {project.id}).")
             
             if not hasattr(project, 'default_branch'):
-                project.default_branch = project.attributes.get('default_branch', 'main')
+                default_branch = project.attributes.get('default_branch', 'main')
+                project.default_branch = default_branch
+                print(f"[GitLab Provider] Branch padrão definida: {default_branch}")
             
             return project
             
@@ -87,6 +91,7 @@ class GitLabRepositoryProvider(IRepositoryProvider):
         try:
             gl = gitlab.Gitlab(url="https://gitlab.com", private_token=token)
             gl.auth()
+            print(f"[GitLab Provider] Autenticação para criação bem-sucedida.")
             
             project_data = {
                 'name': project_name,
@@ -114,7 +119,7 @@ class GitLabRepositoryProvider(IRepositoryProvider):
             if not hasattr(project, 'default_branch'):
                 project.default_branch = 'main'
             
-            print(f"[GitLab Provider] Projeto criado com sucesso: {project.web_url}")
+            print(f"[GitLab Provider] Projeto criado com sucesso: {project.web_url} (ID: {project.id})")
             return project
             
         except gitlab.exceptions.GitlabCreateError as e:
