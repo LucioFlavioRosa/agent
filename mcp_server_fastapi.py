@@ -216,7 +216,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
             
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -282,18 +282,21 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             if nome_grupo == "resumo_geral": continue
             dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
 
+        print(f"[{job_id}] Atualizando status para 'committing_to_github' antes de iniciar commits...")
         job_info['status'] = 'committing_to_github'
         job_store.set_job(job_id, job_info)
         
         branch_base_para_pr = job_info['data'].get('branch_name', 'main')
         
         print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
+        print(f"[{job_id}] Chamando commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas...")
         commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
             nome_repo=job_info['data']['repo_name'], 
             dados_agrupados=dados_finais_formatados,
             base_branch=branch_base_para_pr,
             repository_provider=repository_provider
         )
+        print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
         job_info['data']['commit_details'] = commit_results
 
         job_info['status'] = 'completed'
