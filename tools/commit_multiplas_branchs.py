@@ -7,6 +7,150 @@ from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
 from typing import Dict, Any, List, Optional
 
+def _is_gitlab_project(repo) -> bool:
+    return hasattr(repo, 'web_url') or 'gitlab' in str(type(repo)).lower()
+
+def _processar_uma_branch_gitlab(
+    repo,
+    nome_branch: str,
+    branch_de_origem: str,
+    branch_alvo_do_pr: str,
+    mensagem_pr: str,
+    descricao_pr: str,
+    conjunto_de_mudancas: list
+) -> Dict[str, Any]:
+    print(f"\n--- Processando Lote GitLab para a Branch: '{nome_branch}' ---")
+    
+    resultado_branch = {
+        "branch_name": nome_branch,
+        "success": False,
+        "pr_url": None,
+        "message": "",
+        "arquivos_modificados": []
+    }
+    commits_realizados = 0
+
+    try:
+        # ETAPA 1: Criação da branch no GitLab
+        try:
+            repo.branches.create({'branch': nome_branch, 'ref': branch_de_origem})
+            print(f"Branch GitLab '{nome_branch}' criada a partir de '{branch_de_origem}'.")
+        except Exception as e:
+            if "already exists" in str(e).lower():
+                print(f"AVISO: A branch GitLab '{nome_branch}' já existe. Commits serão adicionados a ela.")
+            else:
+                raise
+
+        # ETAPA 2: Aplicação das mudanças no GitLab
+        print(f"Iniciando aplicação de {len(conjunto_de_mudancas)} mudanças no GitLab...")
+        
+        for mudanca in conjunto_de_mudancas:
+            caminho = mudanca.get("caminho_do_arquivo")
+            status = mudanca.get("status", "").upper()
+            conteudo = mudanca.get("conteudo")
+            justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}")
+
+            if not caminho:
+                print("  [AVISO] Mudança ignorada por não ter 'caminho_do_arquivo'.")
+                continue
+
+            try:
+                # Verificação de existência do arquivo no GitLab
+                arquivo_existe = False
+                try:
+                    repo.files.get(file_path=caminho, ref=nome_branch)
+                    arquivo_existe = True
+                except Exception:
+                    arquivo_existe = False
+
+                # Processamento por status no GitLab
+                if status in ("ADICIONADO", "CRIADO"):
+                    if arquivo_existe:
+                        print(f"  [AVISO] Arquivo GitLab '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
+                        repo.files.update({
+                            'file_path': caminho,
+                            'branch': nome_branch,
+                            'content': conteudo,
+                            'commit_message': f"refactor: {caminho}"
+                        })
+                    else:
+                        repo.files.create({
+                            'file_path': caminho,
+                            'branch': nome_branch,
+                            'content': conteudo,
+                            'commit_message': f"feat: {caminho}"
+                        })
+                    
+                    print(f"  [CRIADO/MODIFICADO] GitLab {caminho}")
+                    commits_realizados += 1
+                    resultado_branch["arquivos_modificados"].append(caminho)
+
+                elif status == "MODIFICADO":
+                    if not arquivo_existe:
+                        print(f"  [ERRO] Arquivo GitLab '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
+                        continue
+                    
+                    repo.files.update({
+                        'file_path': caminho,
+                        'branch': nome_branch,
+                        'content': conteudo,
+                        'commit_message': f"refactor: {caminho}"
+                    })
+                    print(f"  [MODIFICADO] GitLab {caminho}")
+                    commits_realizados += 1
+                    resultado_branch["arquivos_modificados"].append(caminho)
+
+                elif status == "REMOVIDO":
+                    if not arquivo_existe:
+                        print(f"  [AVISO] Arquivo GitLab '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
+                        continue
+                    
+                    repo.files.delete({
+                        'file_path': caminho,
+                        'branch': nome_branch,
+                        'commit_message': f"refactor: remove {caminho}"
+                    })
+                    print(f"  [REMOVIDO] GitLab {caminho}")
+                    commits_realizados += 1
+                    resultado_branch["arquivos_modificados"].append(caminho)
+                
+                else:
+                    print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo GitLab '{caminho}'. Ignorando.")
+
+            except Exception as e:
+                print(f"ERRO ao processar o arquivo GitLab '{caminho}': {e}")
+            
+        # ETAPA 3: Criação do Merge Request no GitLab
+        if commits_realizados > 0:
+            try:
+                print(f"\nCriando Merge Request GitLab de '{nome_branch}' para '{branch_alvo_do_pr}'...")
+                
+                mr = repo.mergerequests.create({
+                    'source_branch': nome_branch,
+                    'target_branch': branch_alvo_do_pr,
+                    'title': mensagem_pr,
+                    'description': descricao_pr
+                })
+                print(f"Merge Request GitLab criado com sucesso! URL: {mr.web_url}")
+                resultado_branch.update({"success": True, "pr_url": mr.web_url, "message": "MR criado."})
+                
+            except Exception as e:
+                if "already exists" in str(e).lower():
+                    print("AVISO: MR para esta branch GitLab já existe.")
+                    resultado_branch.update({"success": True, "message": "MR já existente."})
+                else:
+                    print(f"ERRO ao criar MR GitLab para '{nome_branch}': {e}")
+                    resultado_branch["message"] = f"Erro ao criar MR: {e}"
+        else:
+            print(f"\nNenhum commit realizado para a branch GitLab '{nome_branch}'. Pulando criação do MR.")
+            resultado_branch.update({"success": True, "message": "Nenhuma mudança para commitar."})
+
+    except Exception as e:
+        print(f"ERRO FATAL ao processar branch GitLab '{nome_branch}': {e}")
+        resultado_branch["message"] = f"Erro fatal: {e}"
+
+    return resultado_branch
+
 def _processar_uma_branch(
     repo,
     nome_branch: str,
@@ -16,44 +160,16 @@ def _processar_uma_branch(
     descricao_pr: str,
     conjunto_de_mudancas: list
 ) -> Dict[str, Any]:
-    """
-    Processa uma única branch implementando o padrão de Pull Requests empilhados.
+    # Detecção do tipo de repositório e delegação para fluxo específico
+    if _is_gitlab_project(repo):
+        return _processar_uma_branch_gitlab(
+            repo, nome_branch, branch_de_origem, branch_alvo_do_pr,
+            mensagem_pr, descricao_pr, conjunto_de_mudancas
+        )
     
-    Esta função implementa a lógica central de processamento de uma branch individual,
-    incluindo criação da branch, aplicação de mudanças (criação, modificação, remoção)
-    e criação do Pull Request correspondente.
-    
-    Estratégia de Empilhamento:
-    - Cada branch é criada a partir da branch anterior (empilhamento)
-    - PRs são direcionados para a branch anterior, não para main
-    - Isso permite revisão e merge sequencial das mudanças
-    
-    Args:
-        repo: Objeto repositório do provedor (PyGithub Repository, GitLab Project, etc.)
-        nome_branch (str): Nome da nova branch a ser criada
-        branch_de_origem (str): Branch base para criação da nova branch
-        branch_alvo_do_pr (str): Branch de destino do Pull Request
-        mensagem_pr (str): Título do Pull Request
-        descricao_pr (str): Descrição detalhada do Pull Request
-        conjunto_de_mudancas (list): Lista de mudanças a serem aplicadas
-    
-    Returns:
-        Dict[str, Any]: Resultado do processamento contendo:
-            - branch_name (str): Nome da branch processada
-            - success (bool): Se o processamento foi bem-sucedido
-            - pr_url (str): URL do Pull Request criado (se aplicável)
-            - message (str): Mensagem descritiva do resultado
-            - arquivos_modificados (List[str]): Lista de arquivos alterados
-    
-    Note:
-        - Trata graciosamente branches já existentes
-        - Ignora mudanças sem caminho de arquivo válido
-        - Aplica lógica diferenciada por status (ADICIONADO, MODIFICADO, REMOVIDO)
-        - Cria PR apenas se houver commits realizados
-    """
+    # Fluxo original do GitHub (mantido inalterado)
     print(f"\n--- Processando Lote para a Branch: '{nome_branch}' ---")
     
-    # Inicializa estrutura de resultado para tracking do processamento
     resultado_branch = {
         "branch_name": nome_branch,
         "success": False,
@@ -188,70 +304,6 @@ def processar_e_subir_mudancas_agrupadas(
     base_branch: str = "main",
     repository_provider: Optional[IRepositoryProvider] = None
 ) -> List[Dict[str, Any]]:
-    """
-    Orquestrador principal que implementa a estratégia de Pull Requests empilhados.
-    
-    Esta função implementa o padrão de "Stacked Pull Requests" onde cada PR
-    é criado em cima do anterior, permitindo revisão e merge sequencial de
-    mudanças relacionadas. Agora é agnóstica ao provedor de repositório específico.
-    
-    IMPORTANTE: Esta função agora aceita qualquer provedor de repositório via injeção
-    de dependência, permitindo uso com GitHub, GitLab, Bitbucket ou outros provedores
-    que implementem IRepositoryProvider.
-    
-    Estratégia de Empilhamento:
-    1. Primeira branch criada a partir de base_branch (ex: main)
-    2. Segunda branch criada a partir da primeira
-    3. Terceira branch criada a partir da segunda
-    4. E assim por diante...
-    
-    Vantagens:
-    - Permite revisão incremental de mudanças complexas
-    - Facilita rollback de etapas específicas
-    - Mantém histórico linear e organizado
-    - Reduz conflitos de merge
-    
-    Args:
-        nome_repo (str): Nome do repositório no formato 'org/repo'
-        dados_agrupados (dict): Estrutura de dados contendo:
-            - grupos (List[Dict]): Lista de grupos de mudanças
-            - Cada grupo deve ter: branch_sugerida, titulo_pr, resumo_do_pr, conjunto_de_mudancas
-        base_branch (str, optional): Branch base para o primeiro PR. Defaults to "main"
-        repository_provider (Optional[IRepositoryProvider], optional): Provedor de repositório
-            a ser usado. Se None, usa GitHubRepositoryProvider como padrão. Defaults to None
-    
-    Returns:
-        List[Dict[str, Any]]: Lista de resultados de cada branch processada.
-            Cada item contém success, pr_url, message, arquivos_modificados
-    
-    Raises:
-        Exception: Erros críticos no orquestrador são capturados e retornados
-            como resultado de falha
-    
-    Note:
-        - Processa grupos sequencialmente para manter ordem de empilhamento
-        - Se uma branch falhar, as próximas ainda são processadas
-        - Usa injeção de dependência para facilitar testes
-        - Faz log detalhado para debugging
-        - Funciona com qualquer provedor que implemente IRepositoryProvider
-    
-    Example:
-        >>> # Uso com GitHub (padrão)
-        >>> github_provider = GitHubRepositoryProvider()
-        >>> resultados = processar_e_subir_mudancas_agrupadas(
-        ...     nome_repo="org/repo",
-        ...     dados_agrupados=dados,
-        ...     repository_provider=github_provider
-        ... )
-        >>> 
-        >>> # Uso futuro com GitLab
-        >>> # gitlab_provider = GitLabRepositoryProvider()
-        >>> # resultados = processar_e_subir_mudancas_agrupadas(
-        >>> #     nome_repo="org/repo",
-        >>> #     dados_agrupados=dados,
-        >>> #     repository_provider=gitlab_provider
-        >>> # )
-    """
     resultados_finais = []
     
     try:
@@ -266,6 +318,10 @@ def processar_e_subir_mudancas_agrupadas(
         
         connector = GitHubConnector(repository_provider=repository_provider)
         repo = connector.connection(repositorio=nome_repo)
+        
+        # Detecção do tipo de repositório para logging
+        repo_type = "GitLab" if _is_gitlab_project(repo) else "GitHub"
+        print(f"Tipo de repositório detectado: {repo_type}")
 
         # ETAPA 2: Configuração da estratégia de empilhamento
         # A primeira branch é criada a partir da base_branch
