@@ -13,14 +13,14 @@ class GitHubConnector:
         self.secret_manager = secret_manager or AzureSecretManager()
     
     def _get_token_for_org(self, org_name: str) -> str:
-        provider_type = type(self.repository_provider).__name__.lower()
-        print(f"[GitHub Connector] Detectado provider: {provider_type}")
+        provider_type_name = type(self.repository_provider).__name__.lower()
+        print(f"[GitHub Connector] Detectado provider: {provider_type_name}")
         
-        if 'github' in provider_type:
+        if 'github' in provider_type_name:
             token_prefix = 'github-token'
-        elif 'gitlab' in provider_type:
+        elif 'gitlab' in provider_type_name:
             token_prefix = 'gitlab-token'
-        elif 'azure' in provider_type:
+        elif 'azure' in provider_type_name:
             token_prefix = 'azure-token'
         else:
             token_prefix = 'repo-token'
@@ -39,7 +39,7 @@ class GitHubConnector:
                 print(f"[GitHub Connector] Token padrão '{token_prefix}' encontrado")
                 return token
             except ValueError as e:
-                print(f"[GitHub Connector] ERRO CRÍTICO: Nenhum token encontrado para provider {provider_type}")
+                print(f"[GitHub Connector] ERRO CRÍTICO: Nenhum token encontrado para provider {provider_type_name}")
                 raise ValueError(f"ERRO CRÍTICO: Nenhum token encontrado. Verifique se existe '{token_secret_name}' ou '{token_prefix}' no gerenciador de segredos.") from e
     
     def _is_gitlab_project_id(self, repositorio: str) -> bool:
@@ -50,9 +50,9 @@ class GitHubConnector:
             return False
     
     def _extract_org_name(self, repositorio: str) -> str:
-        provider_type = type(self.repository_provider).__name__.lower()
+        provider_type_name = type(self.repository_provider).__name__.lower()
         
-        if 'gitlab' in provider_type:
+        if 'gitlab' in provider_type_name:
             if self._is_gitlab_project_id(repositorio):
                 print(f"[GitHub Connector] GitLab Project ID detectado: {repositorio}. Usando 'gitlab' como org_name para busca de token.")
                 return 'gitlab'
@@ -80,9 +80,9 @@ class GitHubConnector:
             raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio', 'org/proj/repo' ou Project ID numérico para GitLab.")
     
     def _normalize_repository_identifier(self, repositorio: str) -> str:
-        provider_type = type(self.repository_provider).__name__.lower()
+        provider_type_name = type(self.repository_provider).__name__.lower()
         
-        if 'gitlab' in provider_type:
+        if 'gitlab' in provider_type_name:
             if self._is_gitlab_project_id(repositorio):
                 normalized = str(repositorio).strip()
                 print(f"[GitHub Connector] GitLab Project ID normalizado: {normalized}")
