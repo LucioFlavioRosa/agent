@@ -47,11 +47,11 @@ class GitHubConnector:
         
         if 'gitlab' in provider_type:
             try:
-                int(repositorio)
-                print(f"[GitHub Connector] GitLab project ID detectado: {repositorio}. Usando 'gitlab' como org_name para token.")
+                project_id = int(repositorio)
+                print(f"[GitHub Connector] GitLab project ID detectado: {project_id}. Usando 'gitlab' como org_name para token.")
                 return 'gitlab'
             except ValueError:
-                pass
+                print(f"[GitHub Connector] AVISO: Para GitLab, esperado project ID numérico, mas recebido: '{repositorio}'. Tentando extrair org_name.")
         
         try:
             org_name = repositorio.split('/')[0]
@@ -83,9 +83,9 @@ class GitHubConnector:
             
             provider_name = type(self.repository_provider).__name__
             if 'gitlab' in provider_name.lower():
-                print(f"[GitHub Connector] AVISO: Para repositórios GitLab, verifique se o nome está correto e se o token possui permissões adequadas.")
+                print(f"[GitHub Connector] AVISO: Para repositórios GitLab, verifique se o project ID está correto e se o token possui permissões adequadas.")
                 print(f"[GitHub Connector] AVISO: Não tentando criar repositório GitLab automaticamente.")
-                raise ValueError(f"Repositório GitLab '{repositorio}' não encontrado ou inacessível. Verifique o nome e permissões.") from get_error
+                raise ValueError(f"Repositório GitLab '{repositorio}' não encontrado ou inacessível. Verifique o project ID e permissões.") from get_error
             
             print(f"[GitHub Connector] Tentando criar repositório '{repositorio}'...")
             try:
