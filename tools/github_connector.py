@@ -42,18 +42,22 @@ class GitHubConnector:
                 print(f"[GitHub Connector] ERRO CRÍTICO: Nenhum token encontrado para provider {provider_type}")
                 raise ValueError(f"ERRO CRÍTICO: Nenhum token encontrado. Verifique se existe '{token_secret_name}' ou '{token_prefix}' no gerenciador de segredos.") from e
     
+    def _is_gitlab_project_id(self, repositorio: str) -> bool:
+        try:
+            int(repositorio)
+            return True
+        except ValueError:
+            return False
+    
     def _extract_org_name(self, repositorio: str) -> str:
         provider_type = type(self.repository_provider).__name__.lower()
         
         if 'gitlab' in provider_type:
-            # Para GitLab Project ID, usar 'gitlab' como org_name para token
-            try:
-                project_id = int(repositorio)
-                print(f"[GitHub Connector] GitLab project ID detectado: {project_id}. Usando 'gitlab' como org_name para token.")
+            if self._is_gitlab_project_id(repositorio):
+                print(f"[GitHub Connector] GitLab Project ID detectado: {repositorio}. Usando 'gitlab' como org_name para token.")
                 return 'gitlab'
-            except ValueError:
+            else:
                 print(f"[GitHub Connector] GitLab path detectado: {repositorio}. Extraindo namespace.")
-                # Para path GitLab, extrair o namespace (primeira parte)
                 try:
                     namespace = repositorio.split('/')[0]
                     print(f"[GitHub Connector] Namespace GitLab extraído: {namespace}")
@@ -62,7 +66,6 @@ class GitHubConnector:
                     print(f"[GitHub Connector] Erro ao extrair namespace do path GitLab. Usando 'gitlab' como fallback.")
                     return 'gitlab'
         
-        # Para outros providers (GitHub, Azure), extrair org_name normalmente
         try:
             org_name = repositorio.split('/')[0]
             print(f"[GitHub Connector] Organização/namespace extraído: {org_name}")
@@ -93,14 +96,11 @@ class GitHubConnector:
             
             provider_name = type(self.repository_provider).__name__
             if 'gitlab' in provider_name.lower():
-                # Para GitLab, verificar se é Project ID antes de tentar criar
-                try:
-                    project_id = int(repositorio)
-                    print(f"[GitHub Connector] AVISO: Project ID GitLab '{project_id}' não encontrado ou inacessível.")
+                if self._is_gitlab_project_id(repositorio):
+                    print(f"[GitHub Connector] AVISO: Project ID GitLab '{repositorio}' não encontrado ou inacessível.")
                     print(f"[GitHub Connector] AVISO: Não é possível criar projeto usando Project ID. Use o formato 'namespace/projeto' para criação.")
-                    raise ValueError(f"Projeto GitLab com ID '{project_id}' não encontrado ou inacessível. Verifique o ID e permissões do token.") from get_error
-                except ValueError:
-                    # É um path, pode tentar criar
+                    raise ValueError(f"Projeto GitLab com ID '{repositorio}' não encontrado ou inacessível. Verifique o ID e permissões do token. Para criar novos projetos, use o formato 'namespace/projeto'.") from get_error
+                else:
                     print(f"[GitHub Connector] Tentando criar projeto GitLab '{repositorio}'...")
                     try:
                         repo = self.repository_provider.create_repository(repositorio, token)
@@ -109,7 +109,6 @@ class GitHubConnector:
                         print(f"[GitHub Connector] ERRO: Falha ao criar projeto GitLab '{repositorio}': {create_error}")
                         raise ValueError(f"Não foi possível acessar nem criar o projeto GitLab '{repositorio}'. Erro original: {get_error}. Erro de criação: {create_error}") from create_error
             else:
-                # Para outros providers (GitHub, Azure), tentar criar normalmente
                 print(f"[GitHub Connector] Tentando criar repositório '{repositorio}'...")
                 try:
                     repo = self.repository_provider.create_repository(repositorio, token)
