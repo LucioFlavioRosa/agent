@@ -54,14 +54,19 @@ class GitHubConnector:
         
         if 'gitlab' in provider_type:
             if self._is_gitlab_project_id(repositorio):
-                print(f"[GitHub Connector] GitLab Project ID detectado: {repositorio}. Usando 'gitlab' como org_name para token.")
+                print(f"[GitHub Connector] GitLab Project ID detectado: {repositorio}. Usando 'gitlab' como org_name para busca de token.")
                 return 'gitlab'
             else:
-                print(f"[GitHub Connector] GitLab path detectado: {repositorio}. Extraindo namespace.")
+                print(f"[GitHub Connector] GitLab path detectado: {repositorio}. Extraindo namespace para busca de token.")
                 try:
-                    namespace = repositorio.split('/')[0]
-                    print(f"[GitHub Connector] Namespace GitLab extraído: {namespace}")
-                    return namespace
+                    parts = repositorio.split('/')
+                    if len(parts) >= 2:
+                        namespace = parts[0]
+                        print(f"[GitHub Connector] Namespace GitLab extraído: {namespace}")
+                        return namespace
+                    else:
+                        print(f"[GitHub Connector] Path GitLab inválido. Usando 'gitlab' como fallback.")
+                        return 'gitlab'
                 except (ValueError, IndexError):
                     print(f"[GitHub Connector] Erro ao extrair namespace do path GitLab. Usando 'gitlab' como fallback.")
                     return 'gitlab'

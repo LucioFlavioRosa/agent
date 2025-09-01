@@ -36,23 +36,30 @@ ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
 def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     repo_name = repo_name.strip()
     
-    # Verifica se é Project ID (numérico)
+    # Prioridade 1: Project ID numérico (formato mais robusto)
     try:
         project_id = int(repo_name)
-        print(f"GitLab Project ID detectado: {project_id}. Usando para máxima robustez.")
-        return str(project_id)  # Retorna como string numérica
+        print(f"GitLab Project ID detectado: {project_id}. Usando formato numérico para máxima robustez.")
+        return str(project_id)
     except ValueError:
         pass
     
-    # Verifica se é path completo (contém '/')
+    # Prioridade 2: Path completo (namespace/projeto ou grupo/subgrupo/projeto)
     if '/' in repo_name:
-        print(f"GitLab path completo detectado: {repo_name}. Recomenda-se usar Project ID para máxima robustez.")
-        return repo_name
+        parts = repo_name.split('/')
+        if len(parts) >= 2:
+            print(f"GitLab path completo detectado: {repo_name}. RECOMENDAÇÃO: Use o Project ID numérico para máxima robustez contra renomeações.")
+            return repo_name
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Path GitLab inválido: '{repo_name}'. Esperado pelo menos 'namespace/projeto'. Exemplo: 'meugrupo/meuprojeto' ou use o Project ID numérico (recomendado)."
+            )
     
     # Formato inválido
     raise HTTPException(
         status_code=400,
-        detail=f"Para repositórios GitLab, use o Project ID numérico (recomendado para máxima robustez) ou o path completo 'namespace/projeto'. Recebido: '{repo_name}'. Exemplo Project ID: '123456', Exemplo path: 'meugrupo/meuprojeto'"
+        detail=f"Formato de repositório GitLab inválido: '{repo_name}'. Use o Project ID numérico (RECOMENDADO para máxima robustez) ou o path completo 'namespace/projeto'. Exemplos: Project ID: '123456', Path: 'meugrupo/meuprojeto'"
     )
 
 # --- Modelos de Dados Pydantic ---
