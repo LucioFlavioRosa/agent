@@ -45,7 +45,7 @@ class GitHubRepositoryReader(IRepositoryReader):
             raise
 
     def _is_gitlab_project(self, repositorio) -> bool:
-        return hasattr(repositorio, 'web_url') and 'gitlab' in str(type(repositorio)).lower()
+        return hasattr(repositorio, 'web_url') or 'gitlab' in str(type(repositorio)).lower()
 
     def _ler_arquivos_especificos_gitlab(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         arquivos_lidos = {}
@@ -106,7 +106,10 @@ class GitHubRepositoryReader(IRepositoryReader):
         repositorio = connector.connection(repositorio=nome_repo)
 
         if nome_branch is None:
-            branch_a_ler = repositorio.default_branch
+            if hasattr(repositorio, 'default_branch'):
+                branch_a_ler = repositorio.default_branch
+            else:
+                branch_a_ler = 'main'
             print(f"Nenhuma branch especificada. Usando a branch padrão: '{branch_a_ler}'")
         else:
             branch_a_ler = nome_branch
