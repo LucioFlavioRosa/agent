@@ -26,6 +26,7 @@ azure-search-documents==11.4.0
 
 # Ferramentas e Utilitários
 PyGithub==2.7.0
+python-gitlab==6.3.0
 redis==6.4.0
 pathspec>=0.12.0
 PyYAML==6.0.1
