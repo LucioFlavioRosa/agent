@@ -14,12 +14,13 @@ class GitHubConnector:
     
     def _get_token_for_org(self, org_name: str) -> str:
         provider_type = type(self.repository_provider).__name__.lower()
+        
         if 'github' in provider_type:
             token_prefix = 'github-token'
         elif 'gitlab' in provider_type:
             token_prefix = 'gitlab-token'
-        elif 'bitbucket' in provider_type:
-            token_prefix = 'bitbucket-token'
+        elif 'azure' in provider_type:
+            token_prefix = 'azure-token'
         else:
             token_prefix = 'repo-token'
         
@@ -40,9 +41,9 @@ class GitHubConnector:
             return self._cached_repos[repositorio]
         
         try:
-            org_name, _ = repositorio.split('/')
-        except ValueError:
-            raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio'.")
+            org_name = repositorio.split('/')[0]
+        except (ValueError, IndexError):
+            raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio' ou 'org/proj/repo'.")
         
         token = self._get_token_for_org(org_name)
         
