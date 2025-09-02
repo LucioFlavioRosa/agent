@@ -409,7 +409,7 @@ def processar_e_subir_mudancas_agrupadas(
                 branch_de_origem=branch_anterior,  # Empilhamento: usa branch anterior como base
                 branch_alvo_do_pr=branch_anterior,  # PR aponta para branch anterior
                 mensagem_pr=resumo_do_pr,
-                descricao_pr=descricao_pr,
+                descricao_pr=descricao_do_pr,
                 conjunto_de_mudancas=conjunto_de_mudancas
             )
             print(f"[DEBUG] Resultado da branch {nome_da_branch_atual}: {resultado_da_branch}")
