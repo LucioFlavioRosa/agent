@@ -19,7 +19,6 @@ def _processar_uma_branch_gitlab(
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote GitLab para a Branch: '{nome_branch}' ---")
     print(f"[DEBUG][GITLAB] Tipo do objeto repo: {type(repo)}")
-    print(f"[DEBUG][GITLAB] Atributos disponíveis: {[attr for attr in dir(repo) if not attr.startswith('_')][:10]}...")
     
     resultado_branch = {
         "branch_name": nome_branch,
@@ -35,8 +34,8 @@ def _processar_uma_branch_gitlab(
         print(f"[DEBUG][GITLAB] Iniciando criação da branch: {nome_branch} a partir de {branch_de_origem}")
         try:
             print(f"[DEBUG][GITLAB] Chamando repo.branches.create com parâmetros: {{'branch': '{nome_branch}', 'ref': '{branch_de_origem}'}}")
-            result = repo.branches.create({'branch': nome_branch, 'ref': branch_de_origem})
-            print(f"[DEBUG][GITLAB] Branch GitLab '{nome_branch}' criada com sucesso. Resultado: {result}")
+            repo.branches.create({'branch': nome_branch, 'ref': branch_de_origem})
+            print(f"[DEBUG][GITLAB] Branch GitLab '{nome_branch}' criada com sucesso.")
         except Exception as e:
             print(f"[DEBUG][GITLAB] Exceção ao criar branch: {type(e).__name__}: {str(e)}")
             if "already exists" in str(e).lower():
@@ -53,7 +52,7 @@ def _processar_uma_branch_gitlab(
             caminho = mudanca.get("caminho_do_arquivo")
             status = mudanca.get("status", "").upper()
             conteudo = mudanca.get("conteudo")
-            justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}")
+            # justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}") # Não utilizada no commit
 
             print(f"[DEBUG][GITLAB] Mudança: arquivo='{caminho}', status='{status}', conteudo_length={len(conteudo) if conteudo else 0}")
 
@@ -62,72 +61,40 @@ def _processar_uma_branch_gitlab(
                 continue
 
             try:
-                # Verificação de existência do arquivo no GitLab
-                print(f"[DEBUG][GITLAB] Verificando existência do arquivo: {caminho}")
-                arquivo_existe = False
-                try:
-                    file_result = repo.files.get(file_path=caminho, ref=nome_branch)
-                    arquivo_existe = True
-                    print(f"[DEBUG][GITLAB] Arquivo {caminho} existe na branch {nome_branch}")
-                except Exception as check_e:
-                    arquivo_existe = False
-                    print(f"[DEBUG][GITLAB] Arquivo {caminho} não existe na branch {nome_branch}: {check_e}")
+                # --- LÓGICA DE COMMIT CORRIGIDA ---
 
-                # Processamento por status no GitLab
                 if status in ("ADICIONADO", "CRIADO"):
-                    if arquivo_existe:
-                        print(f"  [AVISO] Arquivo GitLab '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
-                        print(f"[DEBUG][GITLAB] Chamando repo.files.update para {caminho}")
-                        update_result = repo.files.update({
-                            'file_path': caminho,
-                            'branch': nome_branch,
-                            'content': conteudo,
-                            'commit_message': f"refactor: {caminho}"
-                        })
-                        print(f"[DEBUG][GITLAB] Update result: {update_result}")
-                    else:
-                        print(f"[DEBUG][GITLAB] Chamando repo.files.create para {caminho}")
-                        create_result = repo.files.create({
-                            'file_path': caminho,
-                            'branch': nome_branch,
-                            'content': conteudo,
-                            'commit_message': f"feat: {caminho}"
-                        })
-                        print(f"[DEBUG][GITLAB] Create result: {create_result}")
-                    
-                    print(f"  [CRIADO/MODIFICADO] GitLab {caminho}")
+                    print(f"[DEBUG][GITLAB] Chamando repo.files.create para {caminho}")
+                    # A chamada repo.files.create({...}) já estava correta! Ela espera um dicionário.
+                    dados_criacao = {
+                        'file_path': caminho,
+                        'branch': nome_branch,
+                        'content': conteudo,
+                        'commit_message': f"feat: Cria {caminho}"
+                    }
+                    repo.files.create(dados_criacao)
+                    print(f"  [CRIADO] GitLab {caminho}")
                     commits_realizados += 1
                     resultado_branch["arquivos_modificados"].append(caminho)
 
                 elif status == "MODIFICADO":
-                    if not arquivo_existe:
-                        print(f"  [ERRO] Arquivo GitLab '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
-                        continue
-                    
-                    print(f"[DEBUG][GITLAB] Chamando repo.files.update para modificar {caminho}")
-                    update_result = repo.files.update({
-                        'file_path': caminho,
-                        'branch': nome_branch,
-                        'content': conteudo,
-                        'commit_message': f"refactor: {caminho}"
-                    })
-                    print(f"[DEBUG][GITLAB] Update result: {update_result}")
+                    # --- CORREÇÃO APLICADA AQUI ---
+                    # O processo correto é: 1. Buscar o arquivo, 2. Alterar o conteúdo, 3. Salvar.
+                    print(f"[DEBUG][GITLAB] Buscando arquivo para modificar: {caminho}")
+                    arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
+                    arquivo.content = conteudo
+                    arquivo.save(branch=nome_branch, commit_message=f"refactor: Modifica {caminho}")
                     print(f"  [MODIFICADO] GitLab {caminho}")
                     commits_realizados += 1
                     resultado_branch["arquivos_modificados"].append(caminho)
 
                 elif status == "REMOVIDO":
-                    if not arquivo_existe:
-                        print(f"  [AVISO] Arquivo GitLab '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
-                        continue
-                    
+                    # --- CORREÇÃO APLICADA AQUI ---
+                    # A função delete não aceita um dicionário, passamos os parâmetros diretamente.
                     print(f"[DEBUG][GITLAB] Chamando repo.files.delete para {caminho}")
-                    delete_result = repo.files.delete({
-                        'file_path': caminho,
-                        'branch': nome_branch,
-                        'commit_message': f"refactor: remove {caminho}"
-                    })
-                    print(f"[DEBUG][GITLAB] Delete result: {delete_result}")
+                    repo.files.delete(file_path=caminho,
+                                      branch=nome_branch,
+                                      commit_message=f"refactor: Remove {caminho}")
                     print(f"  [REMOVIDO] GitLab {caminho}")
                     commits_realizados += 1
                     resultado_branch["arquivos_modificados"].append(caminho)
@@ -145,15 +112,12 @@ def _processar_uma_branch_gitlab(
         if commits_realizados > 0:
             try:
                 print(f"\n[DEBUG][GITLAB] Criando Merge Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
-                print(f"[DEBUG][GITLAB] Parâmetros do MR: source_branch='{nome_branch}', target_branch='{branch_alvo_do_pr}', title='{mensagem_pr}'")
-                
                 mr_result = repo.mergerequests.create({
                     'source_branch': nome_branch,
                     'target_branch': branch_alvo_do_pr,
                     'title': mensagem_pr,
                     'description': descricao_pr
                 })
-                print(f"[DEBUG][GITLAB] MR criado com sucesso! Resultado: {mr_result}")
                 mr_url = getattr(mr_result, 'web_url', 'URL não disponível')
                 print(f"Merge Request GitLab criado com sucesso! URL: {mr_url}")
                 resultado_branch.update({"success": True, "pr_url": mr_url, "message": "MR criado."})
@@ -161,13 +125,14 @@ def _processar_uma_branch_gitlab(
             except Exception as mr_e:
                 print(f"[ERRO][GITLAB] Exceção ao criar MR: {type(mr_e).__name__}: {mr_e}")
                 if "already exists" in str(mr_e).lower():
-                    print("AVISO: MR para esta branch GitLab já existe.")
-                    resultado_branch.update({"success": True, "message": "MR já existente."})
+                    # Se o MR já existe, procuramos por ele para pegar a URL
+                    mrs = repo.mergerequests.list(state='opened', source_branch=nome_branch, target_branch=branch_alvo_do_pr)
+                    mr_url = mrs[0].web_url if mrs else "URL não encontrada"
+                    print(f"AVISO: MR para esta branch GitLab já existe. URL: {mr_url}")
+                    resultado_branch.update({"success": True, "pr_url": mr_url, "message": "MR já existente."})
                 else:
                     print(f"ERRO ao criar MR GitLab para '{nome_branch}': {mr_e}")
                     resultado_branch["message"] = f"Erro ao criar MR: {mr_e}"
-                    import traceback
-                    traceback.print_exc()
         else:
             print(f"\nNenhum commit realizado para a branch GitLab '{nome_branch}'. Pulando criação do MR.")
             resultado_branch.update({"success": True, "message": "Nenhuma mudança para commitar."})
@@ -180,7 +145,6 @@ def _processar_uma_branch_gitlab(
 
     print(f"[DEBUG][GITLAB] Resultado final da branch {nome_branch}: {resultado_branch}")
     return resultado_branch
-
 def _processar_uma_branch(
     repo,
     nome_branch: str,
