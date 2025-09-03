@@ -12,7 +12,7 @@ class GitHubConnector:
         self.repository_provider = repository_provider
         self.secret_manager = secret_manager or AzureSecretManager()
     
-    def _get_token_for_org(self, org_name: str, repository_type: str) -> str:
+    def _get_token_for_org(self, org_name: str, repository_type: str = 'github') -> str:
         print(f"[GitHub Connector] Tipo de repositório explícito: {repository_type}")
         
         if repository_type == 'github':
@@ -91,7 +91,7 @@ class GitHubConnector:
         
         return repositorio.strip()
     
-    def connection(self, repositorio: str, repository_type: str) -> Union[Repository, object]:
+    def connection(self, repositorio: str, repository_type: str = 'github') -> Union[Repository, object]:
         print(f"[GitHub Connector] Iniciando conexão para repositório: {repositorio} (tipo: {repository_type})")
         print(f"[GitHub Connector] Provider utilizado: {type(self.repository_provider).__name__}")
         
