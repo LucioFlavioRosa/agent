@@ -42,7 +42,7 @@ def _processar_uma_branch_azure(
         
         from tools.github_connector import GitHubConnector
         connector = GitHubConnector.create_with_defaults()
-        token = connector._get_token_for_org(organization)
+        token = connector._get_token_for_org(organization, 'azure')
         
         base_url = f"https://dev.azure.com/{organization}/{project}/_apis"
         headers = {
@@ -446,8 +446,14 @@ def processar_e_subir_mudancas_agrupadas(
         print(f"[DEBUG] Criando GitHubConnector com provider: {type(repository_provider).__name__}")
         connector = GitHubConnector(repository_provider=repository_provider)
         
-        print(f"[DEBUG] Estabelecendo conexão com repositório: {nome_repo}")
-        repo = connector.connection(repositorio=nome_repo)
+        repository_type = 'github'
+        if 'GitLab' in provider_name:
+            repository_type = 'gitlab'
+        elif 'Azure' in provider_name:
+            repository_type = 'azure'
+        
+        print(f"[DEBUG] Estabelecendo conexão com repositório: {nome_repo} (tipo: {repository_type})")
+        repo = connector.connection(repositorio=nome_repo, repository_type=repository_type)
         print(f"[DEBUG] Conexão estabelecida. Tipo do objeto repo: {type(repo)}")
         
         repo_type = "Azure DevOps" if _is_azure_repo(repo) else "GitLab" if _is_gitlab_project(repo) else "GitHub"
