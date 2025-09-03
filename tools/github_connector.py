@@ -12,20 +12,19 @@ class GitHubConnector:
         self.repository_provider = repository_provider
         self.secret_manager = secret_manager or AzureSecretManager()
     
-    def _get_token_for_org(self, org_name: str) -> str:
-        provider_type_name = type(self.repository_provider).__name__.lower()
-        print(f"[GitHub Connector] Detectado provider: {provider_type_name}")
+    def _get_token_for_org(self, org_name: str, repository_type: str) -> str:
+        print(f"[GitHub Connector] Tipo de repositório explícito: {repository_type}")
         
-        if 'github' in provider_type_name:
+        if repository_type == 'github':
             token_prefix = 'github-token'
-        elif 'gitlab' in provider_type_name:
+        elif repository_type == 'gitlab':
             token_prefix = 'gitlab-token'
-        elif 'azure' in provider_type_name:
+        elif repository_type == 'azure':
             token_prefix = 'azure-token'
         else:
             token_prefix = 'repo-token'
         
-        print(f"[GitHub Connector] Provider: {provider_type_name}, Token prefix selecionado: {token_prefix}")
+        print(f"[GitHub Connector] Repository type: {repository_type}, Token prefix selecionado: {token_prefix}")
         
         token_secret_name = f"{token_prefix}-{org_name}"
         print(f"[GitHub Connector] Tentando buscar token específico: {token_secret_name}")
@@ -41,7 +40,7 @@ class GitHubConnector:
                 print(f"[GitHub Connector] Token padrão '{token_prefix}' encontrado")
                 return token
             except ValueError as e:
-                print(f"[GitHub Connector] ERRO CRÍTICO: Nenhum token encontrado para provider {provider_type_name}")
+                print(f"[GitHub Connector] ERRO CRÍTICO: Nenhum token encontrado para repository type {repository_type}")
                 raise ValueError(f"ERRO CRÍTICO: Nenhum token encontrado. Verifique se existe '{token_secret_name}' ou '{token_prefix}' no gerenciador de segredos.") from e
     
     def _is_gitlab_project_id(self, repositorio: str) -> bool:
@@ -51,10 +50,8 @@ class GitHubConnector:
         except ValueError:
             return False
     
-    def _extract_org_name(self, repositorio: str) -> str:
-        provider_type_name = type(self.repository_provider).__name__.lower()
-        
-        if 'gitlab' in provider_type_name:
+    def _extract_org_name(self, repositorio: str, repository_type: str) -> str:
+        if repository_type == 'gitlab':
             if self._is_gitlab_project_id(repositorio):
                 print(f"[GitHub Connector] GitLab Project ID detectado: {repositorio}. Usando 'gitlab' como org_name para busca de token.")
                 return 'gitlab'
@@ -81,10 +78,8 @@ class GitHubConnector:
             print(f"[GitHub Connector] ERRO: Formato inválido do repositório: {repositorio}")
             raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio', 'org/proj/repo' ou Project ID numérico para GitLab.")
     
-    def _normalize_repository_identifier(self, repositorio: str) -> str:
-        provider_type_name = type(self.repository_provider).__name__.lower()
-        
-        if 'gitlab' in provider_type_name:
+    def _normalize_repository_identifier(self, repositorio: str, repository_type: str) -> str:
+        if repository_type == 'gitlab':
             if self._is_gitlab_project_id(repositorio):
                 normalized = str(repositorio).strip()
                 print(f"[GitHub Connector] GitLab Project ID normalizado: {normalized}")
@@ -96,18 +91,19 @@ class GitHubConnector:
         
         return repositorio.strip()
     
-    def connection(self, repositorio: str) -> Union[Repository, object]:
-        print(f"[GitHub Connector] Iniciando conexão para repositório: {repositorio}")
+    def connection(self, repositorio: str, repository_type: str) -> Union[Repository, object]:
+        print(f"[GitHub Connector] Iniciando conexão para repositório: {repositorio} (tipo: {repository_type})")
         print(f"[GitHub Connector] Provider utilizado: {type(self.repository_provider).__name__}")
         
-        normalized_repo = self._normalize_repository_identifier(repositorio)
+        normalized_repo = self._normalize_repository_identifier(repositorio, repository_type)
+        cache_key = f"{repository_type}:{normalized_repo}"
         
-        if normalized_repo in self._cached_repos:
+        if cache_key in self._cached_repos:
             print(f"[GitHub Connector] Retornando repositório '{normalized_repo}' do cache.")
-            return self._cached_repos[normalized_repo]
+            return self._cached_repos[cache_key]
         
-        org_name = self._extract_org_name(normalized_repo)
-        token = self._get_token_for_org(org_name)
+        org_name = self._extract_org_name(normalized_repo, repository_type)
+        token = self._get_token_for_org(org_name, repository_type)
         print(f"[GitHub Connector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
         
         try:
@@ -118,8 +114,7 @@ class GitHubConnector:
         except ValueError as get_error:
             print(f"[GitHub Connector] Repositório '{normalized_repo}' não encontrado. Erro: {get_error}")
             
-            provider_name = type(self.repository_provider).__name__
-            if 'gitlab' in provider_name.lower():
+            if repository_type == 'gitlab':
                 if self._is_gitlab_project_id(normalized_repo):
                     print(f"[GitHub Connector] AVISO: Project ID GitLab '{normalized_repo}' não encontrado ou inacessível.")
                     print(f"[GitHub Connector] AVISO: Não é possível criar projeto usando Project ID. Use o formato 'namespace/projeto' para criação.")
@@ -145,8 +140,8 @@ class GitHubConnector:
             print(f"[GitHub Connector] ERRO INESPERADO ao acessar '{normalized_repo}': {type(unexpected_error).__name__}: {unexpected_error}")
             raise
         
-        print(f"[GitHub Connector] Adicionando repositório '{normalized_repo}' ao cache.")
-        self._cached_repos[normalized_repo] = repo
+        print(f"[GitHub Connector] Adicionando repositório '{normalized_repo}' ao cache com chave '{cache_key}'.")
+        self._cached_repos[cache_key] = repo
         return repo
     
     @classmethod
