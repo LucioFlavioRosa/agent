@@ -8,6 +8,169 @@ from typing import Dict, Any, List, Optional
 def _is_gitlab_project(repo) -> bool:
     return hasattr(repo, 'web_url') or 'gitlab' in str(type(repo)).lower()
 
+def _is_azure_repo(repo) -> bool:
+    return hasattr(repo, '_provider_type') and repo._provider_type == 'azure_devops'
+
+def _processar_uma_branch_azure(
+    repo,
+    nome_branch: str,
+    branch_de_origem: str,
+    branch_alvo_do_pr: str,
+    mensagem_pr: str,
+    descricao_pr: str,
+    conjunto_de_mudancas: list
+) -> Dict[str, Any]:
+    print(f"\n--- Processando Lote Azure DevOps para a Branch: '{nome_branch}' ---")
+    print(f"[DEBUG][AZURE] Tipo do objeto repo: {type(repo)}")
+    
+    resultado_branch = {
+        "branch_name": nome_branch,
+        "success": False,
+        "pr_url": None,
+        "message": "",
+        "arquivos_modificados": []
+    }
+    commits_realizados = 0
+
+    try:
+        import requests
+        import base64
+        
+        organization = repo._organization
+        project = repo._project
+        repository = repo._repository
+        
+        # Obter token do provider
+        from tools.github_connector import GitHubConnector
+        connector = GitHubConnector.create_with_defaults()
+        token = connector._get_token_for_org(organization)
+        
+        base_url = f"https://dev.azure.com/{organization}/{project}/_apis"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Basic {base64.b64encode(f':{token}'.encode()).decode()}"
+        }
+        
+        # ETAPA 1: Obter referência da branch de origem
+        print(f"[DEBUG][AZURE] Obtendo referência da branch de origem: {branch_de_origem}")
+        refs_url = f"{base_url}/git/repositories/{repository}/refs?filter=heads/{branch_de_origem}&api-version=7.0"
+        refs_response = requests.get(refs_url, headers=headers)
+        
+        if refs_response.status_code != 200:
+            raise Exception(f"Erro ao obter referência da branch {branch_de_origem}: {refs_response.text}")
+        
+        refs_data = refs_response.json()
+        if not refs_data.get('value'):
+            raise Exception(f"Branch {branch_de_origem} não encontrada")
+        
+        source_commit_id = refs_data['value'][0]['objectId']
+        print(f"[DEBUG][AZURE] Commit ID da branch origem: {source_commit_id}")
+        
+        # ETAPA 2: Criar nova branch
+        print(f"[DEBUG][AZURE] Criando branch: {nome_branch}")
+        create_branch_url = f"{base_url}/git/repositories/{repository}/refs?api-version=7.0"
+        create_branch_payload = [{
+            "name": f"refs/heads/{nome_branch}",
+            "oldObjectId": "0000000000000000000000000000000000000000",
+            "newObjectId": source_commit_id
+        }]
+        
+        branch_response = requests.post(create_branch_url, headers=headers, json=create_branch_payload)
+        if branch_response.status_code not in [200, 201]:
+            if "already exists" in branch_response.text.lower():
+                print(f"AVISO: A branch Azure '{nome_branch}' já existe. Commits serão adicionados a ela.")
+            else:
+                raise Exception(f"Erro ao criar branch: {branch_response.text}")
+        
+        # ETAPA 3: Preparar mudanças para commit
+        changes = []
+        for mudanca in conjunto_de_mudancas:
+            caminho = mudanca.get("caminho_do_arquivo")
+            status = mudanca.get("status", "").upper()
+            conteudo = mudanca.get("conteudo")
+            
+            if not caminho:
+                continue
+                
+            change_item = {
+                "changeType": "edit",
+                "item": {"path": f"/{caminho}"},
+                "newContent": {
+                    "content": conteudo,
+                    "contentType": "rawtext"
+                }
+            }
+            
+            if status in ("ADICIONADO", "CRIADO"):
+                change_item["changeType"] = "add"
+            elif status == "MODIFICADO":
+                change_item["changeType"] = "edit"
+            elif status == "REMOVIDO":
+                change_item["changeType"] = "delete"
+                del change_item["newContent"]
+            
+            changes.append(change_item)
+            resultado_branch["arquivos_modificados"].append(caminho)
+        
+        if not changes:
+            print(f"\nNenhuma mudança para commitar na branch Azure '{nome_branch}'.")
+            resultado_branch.update({"success": True, "message": "Nenhuma mudança para commitar."})
+            return resultado_branch
+        
+        # ETAPA 4: Criar commit com todas as mudanças
+        print(f"[DEBUG][AZURE] Criando commit com {len(changes)} mudanças")
+        push_url = f"{base_url}/git/repositories/{repository}/pushes?api-version=7.0"
+        push_payload = {
+            "refUpdates": [{
+                "name": f"refs/heads/{nome_branch}",
+                "oldObjectId": source_commit_id
+            }],
+            "commits": [{
+                "comment": f"Refatoração automática: {mensagem_pr}",
+                "changes": changes
+            }]
+        }
+        
+        push_response = requests.post(push_url, headers=headers, json=push_payload)
+        if push_response.status_code not in [200, 201]:
+            raise Exception(f"Erro ao fazer push: {push_response.text}")
+        
+        commits_realizados = len(changes)
+        print(f"[DEBUG][AZURE] Commit realizado com sucesso. {commits_realizados} arquivos modificados.")
+        
+        # ETAPA 5: Criar Pull Request
+        print(f"[DEBUG][AZURE] Criando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'")
+        pr_url = f"{base_url}/git/repositories/{repository}/pullrequests?api-version=7.0"
+        pr_payload = {
+            "sourceRefName": f"refs/heads/{nome_branch}",
+            "targetRefName": f"refs/heads/{branch_alvo_do_pr}",
+            "title": mensagem_pr,
+            "description": descricao_pr
+        }
+        
+        pr_response = requests.post(pr_url, headers=headers, json=pr_payload)
+        if pr_response.status_code in [200, 201]:
+            pr_data = pr_response.json()
+            pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repository}/pullrequest/{pr_data['pullRequestId']}"
+            print(f"Pull Request Azure criado com sucesso! URL: {pr_web_url}")
+            resultado_branch.update({"success": True, "pr_url": pr_web_url, "message": "PR criado."})
+        else:
+            if "already exists" in pr_response.text.lower():
+                print(f"AVISO: PR para esta branch Azure já existe.")
+                resultado_branch.update({"success": True, "message": "PR já existente."})
+            else:
+                print(f"ERRO ao criar PR Azure: {pr_response.text}")
+                resultado_branch["message"] = f"Erro ao criar PR: {pr_response.text}"
+        
+    except Exception as e:
+        print(f"[ERRO][AZURE] ERRO FATAL ao processar branch Azure '{nome_branch}': {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        resultado_branch["message"] = f"Erro fatal: {e}"
+    
+    print(f"[DEBUG][AZURE] Resultado final da branch {nome_branch}: {resultado_branch}")
+    return resultado_branch
+
 def _processar_uma_branch_gitlab(
     repo,
     nome_branch: str,
@@ -30,7 +193,6 @@ def _processar_uma_branch_gitlab(
     commits_realizados = 0
 
     try:
-        # ETAPA 1: Criação da branch no GitLab
         print(f"[DEBUG][GITLAB] Iniciando criação da branch: {nome_branch} a partir de {branch_de_origem}")
         try:
             print(f"[DEBUG][GITLAB] Chamando repo.branches.create com parâmetros: {{'branch': '{nome_branch}', 'ref': '{branch_de_origem}'}}")
@@ -44,7 +206,6 @@ def _processar_uma_branch_gitlab(
                 print(f"[ERRO][GITLAB] Falha crítica ao criar branch: {e}")
                 raise
 
-        # ETAPA 2: Aplicação das mudanças no GitLab
         print(f"[DEBUG][GITLAB] Iniciando aplicação de {len(conjunto_de_mudancas)} mudanças no GitLab...")
         
         for i, mudanca in enumerate(conjunto_de_mudancas):
@@ -52,7 +213,6 @@ def _processar_uma_branch_gitlab(
             caminho = mudanca.get("caminho_do_arquivo")
             status = mudanca.get("status", "").upper()
             conteudo = mudanca.get("conteudo")
-            # justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}") # Não utilizada no commit
 
             print(f"[DEBUG][GITLAB] Mudança: arquivo='{caminho}', status='{status}', conteudo_length={len(conteudo) if conteudo else 0}")
 
@@ -61,11 +221,8 @@ def _processar_uma_branch_gitlab(
                 continue
 
             try:
-                # --- LÓGICA DE COMMIT CORRIGIDA ---
-
                 if status in ("ADICIONADO", "CRIADO"):
                     print(f"[DEBUG][GITLAB] Chamando repo.files.create para {caminho}")
-                    # A chamada repo.files.create({...}) já estava correta! Ela espera um dicionário.
                     dados_criacao = {
                         'file_path': caminho,
                         'branch': nome_branch,
@@ -78,8 +235,6 @@ def _processar_uma_branch_gitlab(
                     resultado_branch["arquivos_modificados"].append(caminho)
 
                 elif status == "MODIFICADO":
-                    # --- CORREÇÃO APLICADA AQUI ---
-                    # O processo correto é: 1. Buscar o arquivo, 2. Alterar o conteúdo, 3. Salvar.
                     print(f"[DEBUG][GITLAB] Buscando arquivo para modificar: {caminho}")
                     arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
                     arquivo.content = conteudo
@@ -89,8 +244,6 @@ def _processar_uma_branch_gitlab(
                     resultado_branch["arquivos_modificados"].append(caminho)
 
                 elif status == "REMOVIDO":
-                    # --- CORREÇÃO APLICADA AQUI ---
-                    # A função delete não aceita um dicionário, passamos os parâmetros diretamente.
                     print(f"[DEBUG][GITLAB] Chamando repo.files.delete para {caminho}")
                     repo.files.delete(file_path=caminho,
                                       branch=nome_branch,
@@ -107,7 +260,6 @@ def _processar_uma_branch_gitlab(
                 import traceback
                 traceback.print_exc()
             
-        # ETAPA 3: Criação do Merge Request no GitLab
         print(f"[DEBUG][GITLAB] Commits realizados: {commits_realizados}")
         if commits_realizados > 0:
             try:
@@ -125,7 +277,6 @@ def _processar_uma_branch_gitlab(
             except Exception as mr_e:
                 print(f"[ERRO][GITLAB] Exceção ao criar MR: {type(mr_e).__name__}: {mr_e}")
                 if "already exists" in str(mr_e).lower():
-                    # Se o MR já existe, procuramos por ele para pegar a URL
                     mrs = repo.mergerequests.list(state='opened', source_branch=nome_branch, target_branch=branch_alvo_do_pr)
                     mr_url = mrs[0].web_url if mrs else "URL não encontrada"
                     print(f"AVISO: MR para esta branch GitLab já existe. URL: {mr_url}")
@@ -145,6 +296,7 @@ def _processar_uma_branch_gitlab(
 
     print(f"[DEBUG][GITLAB] Resultado final da branch {nome_branch}: {resultado_branch}")
     return resultado_branch
+
 def _processar_uma_branch(
     repo,
     nome_branch: str,
@@ -154,7 +306,13 @@ def _processar_uma_branch(
     descricao_pr: str,
     conjunto_de_mudancas: list
 ) -> Dict[str, Any]:
-    # Detecção do tipo de repositório e delegação para fluxo específico
+    if _is_azure_repo(repo):
+        print(f"[DEBUG] Detectado repositório Azure DevOps, delegando para fluxo específico")
+        return _processar_uma_branch_azure(
+            repo, nome_branch, branch_de_origem, branch_alvo_do_pr,
+            mensagem_pr, descricao_pr, conjunto_de_mudancas
+        )
+    
     if _is_gitlab_project(repo):
         print(f"[DEBUG] Detectado repositório GitLab, delegando para fluxo específico")
         return _processar_uma_branch_gitlab(
@@ -162,7 +320,6 @@ def _processar_uma_branch(
             mensagem_pr, descricao_pr, conjunto_de_mudancas
         )
     
-    # Fluxo original do GitHub (mantido inalterado)
     print(f"\n--- Processando Lote para a Branch: '{nome_branch}' ---")
     
     resultado_branch = {
@@ -175,56 +332,41 @@ def _processar_uma_branch(
     commits_realizados = 0
 
     try:
-        # ETAPA 1: Criação da branch empilhada
-        # Tenta criar nova branch a partir da branch de origem (estratégia de empilhamento)
         ref_base = repo.get_git_ref(f"heads/{branch_de_origem}")
         repo.create_git_ref(ref=f"refs/heads/{nome_branch}", sha=ref_base.object.sha)
         print(f"Branch '{nome_branch}' criada a partir de '{branch_de_origem}'.")
         
     except GithubException as e:
-        # Tratamento específico: branch já existe (cenário comum em re-execuções)
         if e.status == 422 and "Reference already exists" in str(e.data):
             print(f"AVISO: A branch '{nome_branch}' já existe. Commits serão adicionados a ela.")
         else:
             raise
 
-    # ETAPA 2: Aplicação sequencial das mudanças
     print(f"Iniciando aplicação de {len(conjunto_de_mudancas)} mudanças...")
     
     for mudanca in conjunto_de_mudancas:
-        # Extração dos dados da mudança
         caminho = mudanca.get("caminho_do_arquivo")
         status = mudanca.get("status", "").upper()
         conteudo = mudanca.get("conteudo")
         justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}")
 
-        # Validação básica: mudanças sem caminho são ignoradas
         if not caminho:
             print("  [AVISO] Mudança ignorada por não ter 'caminho_do_arquivo'.")
             continue
 
         try:
-            # ETAPA 2.1: Verificação de existência do arquivo
-            # Determina se arquivo já existe na branch para escolher operação apropriada
             sha_arquivo_existente = None
             try:
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
             except UnknownObjectException:
-                # Arquivo não existe - será tratado como criação
                 pass
-
-            # ETAPA 2.2: Processamento diferenciado por status
-            # Cada tipo de mudança requer operação específica na API
             
             if status in ("ADICIONADO", "CRIADO"):
-                # Caso especial: arquivo marcado como ADICIONADO mas já existe
-                # Isso pode acontecer em re-execuções ou inconsistências de dados
                 if sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
                     repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
                 else:
-                    # Criação normal de novo arquivo
                     repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo, branch=nome_branch)
                     
                 print(f"  [CRIADO/MODIFICADO] {caminho}")
@@ -232,53 +374,42 @@ def _processar_uma_branch(
                 resultado_branch["arquivos_modificados"].append(caminho)
 
             elif status == "MODIFICADO":
-                # Validação: arquivo deve existir para ser modificado
                 if not sha_arquivo_existente:
                     print(f"  [ERRO] Arquivo '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
                     continue
                     
-                # Atualização do arquivo existente usando SHA para controle de versão
                 repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo, sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [MODIFICADO] {caminho}")
                 commits_realizados += 1
                 resultado_branch["arquivos_modificados"].append(caminho)
 
             elif status == "REMOVIDO":
-                # Validação: arquivo deve existir para ser removido
                 if not sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
                     continue
                     
-                # Remoção do arquivo usando SHA para identificação precisa
                 repo.delete_file(path=caminho, message=f"refactor: remove {caminho}", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [REMOVIDO] {caminho}")
                 commits_realizados += 1
                 resultado_branch["arquivos_modificados"].append(caminho)
             
             else:
-                # Status não reconhecido - log de aviso sem interromper processamento
                 print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo '{caminho}'. Ignorando.")
 
         except GithubException as e:
-            # Tratamento de erros específicos da API
             print(f"ERRO ao processar o arquivo '{caminho}': {e.data.get('message', str(e))}")
         except Exception as e:
-            # Tratamento de erros inesperados
             print(f"ERRO inesperado ao processar o arquivo '{caminho}': {e}")
             
-    # ETAPA 3: Criação do Pull Request (apenas se houve mudanças)
     if commits_realizados > 0:
         try:
             print(f"\nCriando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
             
-            # Criação do PR seguindo estratégia de empilhamento
-            # head=nome_branch (branch com mudanças), base=branch_alvo_do_pr (branch anterior)
             pr = repo.create_pull(title=mensagem_pr, body=descricao_pr, head=nome_branch, base=branch_alvo_do_pr)
             print(f"Pull Request criado com sucesso! URL: {pr.html_url}")
             resultado_branch.update({"success": True, "pr_url": pr.html_url, "message": "PR criado."})
             
         except GithubException as e:
-            # Tratamento específico: PR já existe para esta branch
             if e.status == 422 and "A pull request for these commits already exists" in str(e.data):
                 print("AVISO: PR para esta branch já existe.")
                 resultado_branch.update({"success": True, "message": "PR já existente."})
@@ -286,7 +417,6 @@ def _processar_uma_branch(
                 print(f"ERRO ao criar PR para '{nome_branch}': {e}")
                 resultado_branch["message"] = f"Erro ao criar PR: {e.data.get('message', str(e))}"
     else:
-        # Nenhum commit realizado - sucesso sem PR
         print(f"\nNenhum commit realizado para a branch '{nome_branch}'. Pulando criação do PR.")
         resultado_branch.update({"success": True, "message": "Nenhuma mudança para commitar."})
 
@@ -312,8 +442,6 @@ def processar_e_subir_mudancas_agrupadas(
         provider_name = type(repository_provider).__name__ if repository_provider else "GitHubRepositoryProvider (padrão)"
         print(f"--- Iniciando o Processo de Pull Requests Empilhados via {provider_name} ---")
         
-        # ETAPA 1: Inicialização das dependências
-        # Usa o provedor injetado ou cria um com dependências padrão
         if repository_provider is None:
             repository_provider = GitHubRepositoryProvider()
             print("AVISO: Nenhum provedor especificado. Usando GitHubRepositoryProvider como padrão.")
@@ -325,27 +453,19 @@ def processar_e_subir_mudancas_agrupadas(
         repo = connector.connection(repositorio=nome_repo)
         print(f"[DEBUG] Conexão estabelecida. Tipo do objeto repo: {type(repo)}")
         
-        # Detecção do tipo de repositório para logging
-        repo_type = "GitLab" if _is_gitlab_project(repo) else "GitHub"
+        repo_type = "Azure DevOps" if _is_azure_repo(repo) else "GitLab" if _is_gitlab_project(repo) else "GitHub"
         print(f"Tipo de repositório detectado: {repo_type}")
 
-        # ETAPA 2: Configuração da estratégia de empilhamento
-        # A primeira branch é criada a partir da base_branch
-        # Cada branch subsequente é criada a partir da anterior
         branch_anterior = base_branch
         lista_de_grupos = dados_agrupados.get("grupos", [])
         
-        # Validação básica dos dados de entrada
         if not lista_de_grupos:
             print("Nenhum grupo de mudanças encontrado para processar.")
             print(f"[DEBUG] SAÍDA processar_e_subir_mudancas_agrupadas: []")
             return []
 
-        # ETAPA 3: Processamento sequencial dos grupos
-        # Cada grupo vira uma branch + PR empilhado na sequência
         for i, grupo_atual in enumerate(lista_de_grupos):
             print(f"[DEBUG] Processando grupo {i+1}/{len(lista_de_grupos)}")
-            # Extração dos dados do grupo atual
             nome_da_branch_atual = grupo_atual.get("branch_sugerida")
             resumo_do_pr = grupo_atual.get("titulo_pr", "Refatoração Automática")
             descricao_do_pr = grupo_atual.get("resumo_do_pr", "")
@@ -355,7 +475,6 @@ def processar_e_subir_mudancas_agrupadas(
             print(f"[DEBUG]   titulo_pr: {resumo_do_pr}")
             print(f"[DEBUG]   número de mudanças: {len(conjunto_de_mudancas)}")
 
-            # Validação de dados do grupo
             if not nome_da_branch_atual:
                 print("AVISO: Um grupo foi ignorado por não ter uma 'branch_sugerida'.")
                 continue
@@ -364,14 +483,12 @@ def processar_e_subir_mudancas_agrupadas(
                 print(f"AVISO: O grupo para a branch '{nome_da_branch_atual}' não contém nenhuma mudança e será ignorado.")
                 continue
 
-            # ETAPA 3.1: Processamento da branch atual
-            # Chama a função especializada para processar uma branch individual
             print(f"[DEBUG] Chamando _processar_uma_branch para {nome_da_branch_atual}")
             resultado_da_branch = _processar_uma_branch(
                 repo=repo,
                 nome_branch=nome_da_branch_atual,
-                branch_de_origem=branch_anterior,  # Empilhamento: usa branch anterior como base
-                branch_alvo_do_pr=branch_anterior,  # PR aponta para branch anterior
+                branch_de_origem=branch_anterior,
+                branch_alvo_do_pr=branch_anterior,
                 mensagem_pr=resumo_do_pr,
                 descricao_pr=descricao_do_pr,
                 conjunto_de_mudancas=conjunto_de_mudancas
@@ -380,14 +497,11 @@ def processar_e_subir_mudancas_agrupadas(
             
             resultados_finais.append(resultado_da_branch)
 
-            # ETAPA 3.2: Atualização da cadeia de empilhamento
-            # Se a branch foi processada com sucesso e tem PR, ela vira a nova base
-            # Isso mantém a sequência de empilhamento para o próximo grupo
             if resultado_da_branch["success"] and resultado_da_branch.get("pr_url"):
                 branch_anterior = nome_da_branch_atual
                 print(f"Branch '{nome_da_branch_atual}' será usada como base para o próximo grupo.")
             
-            print("-" * 60)  # Separador visual entre grupos
+            print("-" * 60)
         
         print(f"[DEBUG] SAÍDA processar_e_subir_mudancas_agrupadas: {len(resultados_finais)} resultados")
         for i, resultado in enumerate(resultados_finais):
@@ -396,12 +510,10 @@ def processar_e_subir_mudancas_agrupadas(
         return resultados_finais
 
     except Exception as e:
-        # Tratamento de erros críticos no orquestrador
         print(f"ERRO FATAL NO ORQUESTRADOR DE COMMITS: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
         
-        # Retorna resultado de falha estruturado
         error_result = [{"success": False, "message": f"Erro fatal no orquestrador: {e}"}]
         print(f"[DEBUG] SAÍDA processar_e_subir_mudancas_agrupadas (ERRO): {error_result}")
         return error_result
