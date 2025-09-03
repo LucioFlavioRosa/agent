@@ -55,7 +55,7 @@ class GitHubRepositoryReader(IRepositoryReader):
         from tools.github_connector import GitHubConnector
         connector = GitHubConnector.create_with_defaults()
         organization = repositorio_dict.get('_organization')
-        token = connector._get_token_for_org(organization)
+        token = connector._get_token_for_org(organization, 'azure')
         
         import base64
         credentials = base64.b64encode(f":{token}".encode()).decode()
@@ -213,7 +213,14 @@ class GitHubRepositoryReader(IRepositoryReader):
         print(f"Iniciando leitura do repositório: {nome_repo} via {provider_name}")
 
         connector = GitHubConnector(repository_provider=self.repository_provider)
-        repositorio = connector.connection(repositorio=nome_repo)
+        
+        repository_type = 'github'
+        if 'GitLab' in provider_name:
+            repository_type = 'gitlab'
+        elif 'Azure' in provider_name:
+            repository_type = 'azure'
+        
+        repositorio = connector.connection(repositorio=nome_repo, repository_type=repository_type)
 
         if nome_branch is None:
             if hasattr(repositorio, 'default_branch'):
