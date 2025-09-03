@@ -25,6 +25,8 @@ class GitHubConnector:
         else:
             token_prefix = 'repo-token'
         
+        print(f"[GitHub Connector] Provider: {provider_type_name}, Token prefix selecionado: {token_prefix}")
+        
         token_secret_name = f"{token_prefix}-{org_name}"
         print(f"[GitHub Connector] Tentando buscar token específico: {token_secret_name}")
         
