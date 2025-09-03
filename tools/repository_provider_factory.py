@@ -4,13 +4,16 @@ from tools.github_repository_provider import GitHubRepositoryProvider
 from tools.gitlab_repository_provider import GitLabRepositoryProvider
 from tools.azure_repository_provider import AzureRepositoryProvider
 
-def get_repository_provider(repo_name: str) -> IRepositoryProvider:
+def get_repository_provider(repo_name: str, repository_type: Optional[str] = None) -> IRepositoryProvider:
+    if repository_type:
+        print(f"Usando repository_type explícito: {repository_type}")
+        return get_repository_provider_explicit(repository_type)
+    
     if not repo_name or not isinstance(repo_name, str):
         raise ValueError("Nome do repositório deve ser uma string não vazia.")
     
     repo_name = repo_name.strip()
     
-    # Detecção prioritária: Project ID numérico do GitLab
     try:
         project_id = int(repo_name)
         print(f"Detectado GitLab Project ID numérico: {project_id}")
@@ -26,16 +29,13 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
             "Esperado pelo menos 'org/repo' (2 partes) ou Project ID numérico para GitLab."
         )
     
-    # Azure DevOps: 3 partes
     if len(parts) == 3:
         print(f"Detectado repositório Azure DevOps: {repo_name}")
         return AzureRepositoryProvider()
     
-    # 2 partes: GitHub ou GitLab por path
     elif len(parts) == 2:
         org_name, repo_name_only = parts
         
-        # Indicadores específicos de GitLab
         gitlab_indicators = [
             'gitlab' in org_name.lower(),
             'gitlab' in repo_name_only.lower(),
@@ -43,7 +43,7 @@ def get_repository_provider(repo_name: str) -> IRepositoryProvider:
             org_name.endswith('-org'),
             org_name.endswith('-group'),
             org_name.endswith('-team'),
-            org_name.count('-') >= 2  # Padrão comum em namespaces GitLab
+            org_name.count('-') >= 2
         ]
         
         if sum(gitlab_indicators) >= 1:
