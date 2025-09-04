@@ -29,9 +29,9 @@ def processar_branch_azure(
         project = repo._project
         repository = repo._repository
         
-        from tools.github_connector import GitHubConnector
-        connector = GitHubConnector.create_with_defaults()
-        token = connector._get_token_for_org(organization, 'azure')
+        from tools.conectores.azure_conector import AzureConector
+        connector = AzureConector.create_with_defaults()
+        token = connector._get_token_for_org(organization)
         
         base_url = f"https://dev.azure.com/{organization}/{project}/_apis"
         headers = {
