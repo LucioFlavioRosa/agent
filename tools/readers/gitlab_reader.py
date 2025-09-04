@@ -1,12 +1,12 @@
 import base64
 from typing import Dict, Optional, List
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from tools.github_repository_provider import GitHubRepositoryProvider
+from tools.gitlab_repository_provider import GitLabRepositoryProvider
 
 class GitLabReader:
     
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        self.repository_provider = repository_provider or GitHubRepositoryProvider()
+        self.repository_provider = repository_provider or GitLabRepositoryProvider()
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         arquivos_lidos = {}
