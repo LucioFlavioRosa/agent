@@ -131,9 +131,9 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                 # 3. Se não for nenhum dos dois, o namespace é inválido
                 raise ValueError(f"O namespace '{namespace}' não foi encontrado como um grupo nem corresponde ao usuário autenticado ('{user.username}').")
 
-        # 4. Adiciona o namespace_id e cria o projeto
-        project_data['namespace_id'] = namespace_id
-        project = gl.projects.create(project_data)
+            # 4. Adiciona o namespace_id e cria o projeto
+            project_data['namespace_id'] = namespace_id
+            project = gl.projects.create(project_data)
             
             if not hasattr(project, 'default_branch'):
                 project.default_branch = 'main'
