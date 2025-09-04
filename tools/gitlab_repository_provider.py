@@ -112,24 +112,24 @@ class GitLabRepositoryProvider(IRepositoryProvider):
             
             namespace_id = None
         
-        # 1. Tenta encontrar o namespace como um GRUPO
-        try:
-            print(f"[GitLab Provider] Tentando encontrar o namespace '{namespace}' como um grupo...")
-            group = gl.groups.get(namespace)
-            namespace_id = group.id
-            print(f"[GitLab Provider] Sucesso! Namespace é um grupo. ID: {namespace_id}")
-        
-        except gitlab.exceptions.GitlabGetError:
-            print(f"[GitLab Provider] Namespace '{namespace}' não é um grupo. Verificando se é um usuário...")
+            # 1. Tenta encontrar o namespace como um GRUPO
+            try:
+                print(f"[GitLab Provider] Tentando encontrar o namespace '{namespace}' como um grupo...")
+                group = gl.groups.get(namespace)
+                namespace_id = group.id
+                print(f"[GitLab Provider] Sucesso! Namespace é um grupo. ID: {namespace_id}")
             
-            # 2. Se não for um grupo, verifica se é o USUÁRIO autenticado
-            user = gl.user
-            if user.username == namespace:
-                namespace_id = user.id
-                print(f"[GitLab Provider] Sucesso! Namespace corresponde ao usuário autenticado. ID: {namespace_id}")
-            else:
-                # 3. Se não for nenhum dos dois, o namespace é inválido
-                raise ValueError(f"O namespace '{namespace}' não foi encontrado como um grupo nem corresponde ao usuário autenticado ('{user.username}').")
+            except gitlab.exceptions.GitlabGetError:
+                print(f"[GitLab Provider] Namespace '{namespace}' não é um grupo. Verificando se é um usuário...")
+                
+                # 2. Se não for um grupo, verifica se é o USUÁRIO autenticado
+                user = gl.user
+                if user.username == namespace:
+                    namespace_id = user.id
+                    print(f"[GitLab Provider] Sucesso! Namespace corresponde ao usuário autenticado. ID: {namespace_id}")
+                else:
+                    # 3. Se não for nenhum dos dois, o namespace é inválido
+                    raise ValueError(f"O namespace '{namespace}' não foi encontrado como um grupo nem corresponde ao usuário autenticado ('{user.username}').")
 
             # 4. Adiciona o namespace_id e cria o projeto
             project_data['namespace_id'] = namespace_id
