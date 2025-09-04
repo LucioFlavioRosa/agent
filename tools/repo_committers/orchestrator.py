@@ -16,23 +16,24 @@ def processar_branch_por_provedor(
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
-    conjunto_de_mudancas: list
+    conjunto_de_mudancas: list,
+    repository_type: str
 ) -> Dict[str, Any]:
-    if _is_azure_repo(repo):
-        print(f"[DEBUG] Detectado repositório Azure DevOps, delegando para fluxo específico")
+    if repository_type == 'azure':
+        print(f"[DEBUG] Usando repository_type explícito: Azure DevOps")
         return processar_branch_azure(
             repo, nome_branch, branch_de_origem, branch_alvo_do_pr,
             mensagem_pr, descricao_pr, conjunto_de_mudancas
         )
     
-    if _is_gitlab_project(repo):
-        print(f"[DEBUG] Detectado repositório GitLab, delegando para fluxo específico")
+    if repository_type == 'gitlab':
+        print(f"[DEBUG] Usando repository_type explícito: GitLab")
         return processar_branch_gitlab(
             repo, nome_branch, branch_de_origem, branch_alvo_do_pr,
             mensagem_pr, descricao_pr, conjunto_de_mudancas
         )
     
-    print(f"[DEBUG] Detectado repositório GitHub, delegando para fluxo específico")
+    print(f"[DEBUG] Usando repository_type explícito: GitHub")
     return processar_branch_github(
         repo, nome_branch, branch_de_origem, branch_alvo_do_pr,
         mensagem_pr, descricao_pr, conjunto_de_mudancas
