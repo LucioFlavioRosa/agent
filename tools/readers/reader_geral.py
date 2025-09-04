@@ -49,48 +49,34 @@ class ReaderGeral(IRepositoryReader):
             print(f"ERRO INESPERADO ao carregar workflows: {e}")
             raise
 
-    def _identificar_tipo_repositorio(self, repositorio):
-        if isinstance(repositorio, dict) and repositorio.get('_provider_type') == 'azure_devops':
-            return 'azure'
-        elif hasattr(repositorio, 'web_url') or 'gitlab' in str(type(repositorio)).lower():
-            return 'gitlab'
-        else:
-            return 'github'
-
     def read_repository(
         self, 
         nome_repo: str, 
-        tipo_analise: str, 
+        tipo_analise: str,
+        repository_type: str,
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None
     ) -> Dict[str, str]:
         provider_name = type(self.repository_provider).__name__
         print(f"[Reader Geral] Iniciando leitura do repositório: {nome_repo} via {provider_name}")
+        print(f"[Reader Geral] Tipo de repositório explícito: {repository_type}")
 
         conexao_geral = ConexaoGeral.create_with_defaults()
         
-        repository_type = 'github'
-        if 'GitLab' in provider_name:
-            repository_type = 'gitlab'
-        elif 'Azure' in provider_name:
-            repository_type = 'azure'
-        
-        print(f"[Reader Geral] Tipo de repositório detectado: {repository_type}")
+        print(f"[Reader Geral] Usando repository_type explícito: {repository_type}")
         
         repositorio = conexao_geral.connection(repositorio=nome_repo, repository_type=repository_type, repository_provider=self.repository_provider)
-        tipo_repo_identificado = self._identificar_tipo_repositorio(repositorio)
         
-        print(f"[Reader Geral] Tipo de repositório identificado após conexão: {tipo_repo_identificado}")
         print(f"[Reader Geral] Objeto repositório recebido: {type(repositorio)}")
         
         resultado = None
         
-        if tipo_repo_identificado == 'azure':
+        if repository_type == 'azure':
             print(f"[Reader Geral] Delegando para Azure Reader")
             resultado = self.azure_reader.read_repository_internal(
                 repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes
             )
-        elif tipo_repo_identificado == 'gitlab':
+        elif repository_type == 'gitlab':
             print(f"[Reader Geral] Delegando para GitLab Reader")
             resultado = self.gitlab_reader.read_repository_internal(
                 repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes
@@ -104,7 +90,7 @@ class ReaderGeral(IRepositoryReader):
         print(f"[Reader Geral] Resultado da leitura: {len(resultado) if resultado else 0} arquivos")
         
         if not resultado:
-            print(f"[Reader Geral] AVISO CRÍTICO: Leitura retornou vazia para repositório {nome_repo} (tipo: {tipo_repo_identificado})")
+            print(f"[Reader Geral] AVISO CRÍTICO: Leitura retornou vazia para repositório {nome_repo} (tipo: {repository_type})")
             print(f"[Reader Geral] Parâmetros: tipo_analise={tipo_analise}, branch={nome_branch}, arquivos_especificos={arquivos_especificos}")
         else:
             print(f"[Reader Geral] Arquivos lidos com sucesso: {list(resultado.keys())[:5]}{'...' if len(resultado) > 5 else ''}")
