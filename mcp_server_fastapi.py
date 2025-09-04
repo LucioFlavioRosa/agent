@@ -218,8 +218,8 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
-            
-            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
+
+            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
