@@ -38,6 +38,7 @@ class AgenteRevisor:
             codigo_para_analise = self.repository_reader.read_repository(
                 nome_repo=repositorio,
                 tipo_analise=tipo_analise,
+                repository_type=repository_type,
                 nome_branch=nome_branch,
                 arquivos_especificos=arquivos_especificos
             )
