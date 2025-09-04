@@ -1,18 +1,18 @@
 import requests
 from typing import Dict, Optional, List
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from tools.github_repository_provider import GitHubRepositoryProvider
-from tools.github_connector import GitHubConnector
+from tools.azure_repository_provider import AzureRepositoryProvider
+from tools.conectores.azure_conector import AzureConector
 
 class AzureReader:
     
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        self.repository_provider = repository_provider or GitHubRepositoryProvider()
+        self.repository_provider = repository_provider or AzureRepositoryProvider()
 
     def _get_azure_auth_headers(self, repositorio_dict: dict) -> dict:
-        connector = GitHubConnector.create_with_defaults()
+        connector = AzureConector.create_with_defaults()
         organization = repositorio_dict.get('_organization')
-        token = connector._get_token_for_org(organization, 'azure')
+        token = connector._get_token_for_org(organization)
         
         import base64
         credentials = base64.b64encode(f":{token}".encode()).decode()
