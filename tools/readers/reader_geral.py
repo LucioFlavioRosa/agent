@@ -5,7 +5,7 @@ from typing import Dict, Optional, List
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
-from tools.github_connector import GitHubConnector
+from tools.conectores.conexao_geral import ConexaoGeral
 from .github_reader import GitHubReader
 from .gitlab_reader import GitLabReader
 from .azure_reader import AzureReader
@@ -57,6 +57,14 @@ class ReaderGeral(IRepositoryReader):
         else:
             return 'github'
 
+    def _determinar_repository_type_por_provider(self, provider_name: str) -> str:
+        if 'GitLab' in provider_name:
+            return 'gitlab'
+        elif 'Azure' in provider_name:
+            return 'azure'
+        else:
+            return 'github'
+
     def read_repository(
         self, 
         nome_repo: str, 
@@ -67,15 +75,15 @@ class ReaderGeral(IRepositoryReader):
         provider_name = type(self.repository_provider).__name__
         print(f"Iniciando leitura do repositório: {nome_repo} via {provider_name}")
 
-        connector = GitHubConnector(repository_provider=self.repository_provider)
+        conexao_geral = ConexaoGeral.create_with_defaults()
+        repository_type = self._determinar_repository_type_por_provider(provider_name)
         
-        repository_type = 'github'
-        if 'GitLab' in provider_name:
-            repository_type = 'gitlab'
-        elif 'Azure' in provider_name:
-            repository_type = 'azure'
+        repositorio = conexao_geral.connection(
+            repositorio=nome_repo, 
+            repository_type=repository_type, 
+            repository_provider=self.repository_provider
+        )
         
-        repositorio = connector.connection(repositorio=nome_repo, repository_type=repository_type)
         tipo_repo_identificado = self._identificar_tipo_repositorio(repositorio)
         
         if tipo_repo_identificado == 'azure':
