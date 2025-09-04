@@ -110,20 +110,30 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                 'default_branch': 'main'
             }
             
-            print(f"[GitLab Provider] Tentando criar em namespace/grupo: {namespace}")
-            try:
-                group = gl.groups.get(namespace)
-                group_name = group.attributes.get('name', namespace)
-                project_data['namespace_id'] = group.id
-                print(f"[GitLab Provider] Grupo encontrado: {group_name}, ID: {group.id}")
-                project = gl.projects.create(project_data)
-                
-            except gitlab.exceptions.GitlabGetError as group_error:
-                print(f"[GitLab Provider] Grupo '{namespace}' não encontrado ou sem permissão ({group_error.response_code}), criando como projeto pessoal")
-                if 'namespace_id' in project_data:
-                    del project_data['namespace_id']
-                project = gl.projects.create(project_data)
-                print(f"[GitLab Provider] Projeto criado como pessoal devido à falta de acesso ao grupo '{namespace}'")
+            namespace_id = None
+        
+        # 1. Tenta encontrar o namespace como um GRUPO
+        try:
+            print(f"[GitLab Provider] Tentando encontrar o namespace '{namespace}' como um grupo...")
+            group = gl.groups.get(namespace)
+            namespace_id = group.id
+            print(f"[GitLab Provider] Sucesso! Namespace é um grupo. ID: {namespace_id}")
+        
+        except gitlab.exceptions.GitlabGetError:
+            print(f"[GitLab Provider] Namespace '{namespace}' não é um grupo. Verificando se é um usuário...")
+            
+            # 2. Se não for um grupo, verifica se é o USUÁRIO autenticado
+            user = gl.user
+            if user.username == namespace:
+                namespace_id = user.id
+                print(f"[GitLab Provider] Sucesso! Namespace corresponde ao usuário autenticado. ID: {namespace_id}")
+            else:
+                # 3. Se não for nenhum dos dois, o namespace é inválido
+                raise ValueError(f"O namespace '{namespace}' não foi encontrado como um grupo nem corresponde ao usuário autenticado ('{user.username}').")
+
+        # 4. Adiciona o namespace_id e cria o projeto
+        project_data['namespace_id'] = namespace_id
+        project = gl.projects.create(project_data)
             
             if not hasattr(project, 'default_branch'):
                 project.default_branch = 'main'
