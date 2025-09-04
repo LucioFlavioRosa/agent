@@ -2,17 +2,25 @@ import requests
 from typing import Dict, Optional, List
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
-from tools.github_connector import GitHubConnector
+from tools.azure_secret_manager import AzureSecretManager
 
 class AzureReader:
     
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
         self.repository_provider = repository_provider or GitHubRepositoryProvider()
+        self.secret_manager = AzureSecretManager()
 
     def _get_azure_auth_headers(self, repositorio_dict: dict) -> dict:
-        connector = GitHubConnector.create_with_defaults()
         organization = repositorio_dict.get('_organization')
-        token = connector._get_token_for_org(organization, 'azure')
+        
+        token_secret_name = f"azure-token-{organization}"
+        try:
+            token = self.secret_manager.get_secret(token_secret_name)
+        except ValueError:
+            try:
+                token = self.secret_manager.get_secret('azure-token')
+            except ValueError as e:
+                raise ValueError(f"ERRO CRÍTICO: Nenhum token Azure encontrado. Verifique se existe '{token_secret_name}' ou 'azure-token' no gerenciador de segredos.") from e
         
         import base64
         credentials = base64.b64encode(f":{token}".encode()).decode()
@@ -45,9 +53,15 @@ class AzureReader:
                     data = response.json()
                     content = data.get('content', '')
                     arquivos_lidos[caminho_arquivo] = content
+                elif response.status_code == 404:
+                    print(f"  [AVISO] Arquivo '{caminho_arquivo}' não encontrado na branch '{branch_a_ler}'. Ignorando.")
+                elif response.status_code == 403:
+                    print(f"  [AVISO] Acesso negado ao arquivo '{caminho_arquivo}'. Verifique permissões do token. Ignorando.")
                 else:
                     print(f"  [AVISO] Arquivo '{caminho_arquivo}' não encontrado ou inacessível (status: {response.status_code}). Ignorando.")
                     
+            except requests.exceptions.RequestException as e:
+                print(f"  [AVISO] Erro de rede ao ler arquivo '{caminho_arquivo}': {e}. Ignorando.")
             except Exception as e:
                 print(f"  [AVISO] Falha ao ler arquivo '{caminho_arquivo}': {e}. Ignorando.")
         
@@ -70,7 +84,11 @@ class AzureReader:
             items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
             response = requests.get(items_url, headers=headers, timeout=30)
             
-            if response.status_code != 200:
+            if response.status_code == 404:
+                raise ValueError(f"Branch '{branch_a_ler}' não encontrada no repositório Azure DevOps.")
+            elif response.status_code == 403:
+                raise ValueError(f"Acesso negado à branch '{branch_a_ler}'. Verifique as permissões do token.")
+            elif response.status_code != 200:
                 raise Exception(f"Erro ao obter lista de arquivos: {response.status_code} - {response.text}")
             
             items_data = response.json()
@@ -98,15 +116,26 @@ class AzureReader:
                         content_data = content_response.json()
                         file_content = content_data.get('content', '')
                         arquivos_do_repo[file_path] = file_content
+                    elif content_response.status_code == 404:
+                        print(f"AVISO: Arquivo '{file_path}' não encontrado na branch '{branch_a_ler}'. Pulando.")
+                    elif content_response.status_code == 403:
+                        print(f"AVISO: Acesso negado ao arquivo '{file_path}'. Pulando.")
                     else:
                         print(f"AVISO: Falha ao ler conteúdo do arquivo '{file_path}' (status: {content_response.status_code}). Pulando.")
                         
+                except requests.exceptions.RequestException as e:
+                    print(f"AVISO: Erro de rede ao ler arquivo '{item.get('path')}': {e}. Pulando.")
                 except Exception as e:
                     print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{item.get('path')}'. Pulando. Erro: {e}")
 
+        except requests.exceptions.RequestException as e:
+            print(f"ERRO CRÍTICO: Erro de rede durante a comunicação com a API Azure DevOps: {e}")
+            raise ValueError(f"Erro de rede ao acessar repositório Azure DevOps: {e}") from e
         except Exception as e:
+            if isinstance(e, ValueError):
+                raise
             print(f"ERRO CRÍTICO durante a comunicação com a API Azure DevOps: {e}")
-            raise
+            raise ValueError(f"Erro inesperado ao acessar repositório Azure DevOps: {e}") from e
         
         print(f"\nLeitura completa Azure DevOps concluída. Total de {len(arquivos_do_repo)} arquivos lidos e processados.")
         return arquivos_do_repo
