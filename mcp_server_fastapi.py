@@ -11,7 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # --- Módulos do projeto ---
 from tools.job_store import RedisJobStore
-from tools import commit_multiplas_branchs
+from tools.repo_committers.orchestrator import processar_branch_por_provedor
+from tools.conectores.conexao_geral import ConexaoGeral
+from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider, get_repository_provider_explicit
 
 # --- Classes e dependências ---
@@ -21,7 +23,6 @@ from tools.requisicao_openai import OpenAILLMProvider
 from tools.requisicao_claude import AnthropicClaudeProvider
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
-from tools.github_reader import GitHubRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 
 # --- WORKFLOW_REGISTRY ---
@@ -156,7 +157,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
         print(f"[{job_id}] Usando tipo de repositório explícito: {repository_type}")
         repository_provider = get_repository_provider_explicit(repository_type)
         
-        repo_reader = GitHubRepositoryReader(repository_provider=repository_provider)
+        repo_reader = ReaderGeral(repository_provider=repository_provider)
         
         workflow = WORKFLOW_REGISTRY.get(job_info['data']['original_analysis_type'])
         if not workflow: raise ValueError("Workflow não encontrado.")
@@ -218,7 +219,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
             
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -291,13 +292,28 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
         branch_base_para_pr = job_info['data'].get('branch_name', 'main')
         
         print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
-        print(f"[{job_id}] Chamando commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas...")
-        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
-            nome_repo=job_info['data']['repo_name'], 
-            dados_agrupados=dados_finais_formatados,
-            base_branch=branch_base_para_pr,
+        print(f"[{job_id}] Chamando processar_e_subir_mudancas_agrupadas...")
+        
+        conexao_geral = ConexaoGeral.create_with_defaults()
+        repo = conexao_geral.connection(
+            repositorio=repo_name,
+            repository_type=repository_type,
             repository_provider=repository_provider
         )
+        
+        commit_results = []
+        for grupo in dados_finais_formatados["grupos"]:
+            resultado_branch = processar_branch_por_provedor(
+                repo=repo,
+                nome_branch=grupo["branch_sugerida"],
+                branch_de_origem=branch_base_para_pr,
+                branch_alvo_do_pr=branch_base_para_pr,
+                mensagem_pr=grupo["titulo_pr"],
+                descricao_pr=grupo["resumo_do_pr"],
+                conjunto_de_mudancas=grupo["conjunto_de_mudancas"]
+            )
+            commit_results.append(resultado_branch)
+        
         print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
         job_info['data']['commit_details'] = commit_results
 
