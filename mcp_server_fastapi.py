@@ -15,6 +15,7 @@ from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.conectores.conexao_geral import ConexaoGeral
 from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider, get_repository_provider_explicit
+from tools.blob_report_uploader import upload_report_to_blob
 
 # --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
@@ -96,15 +97,18 @@ class FinalStatusResponse(BaseModel):
     error_details: Optional[str] = Field(None)
     analysis_report: Optional[str] = Field(None)
     diagnostic_logs: Optional[Dict[str, Any]] = Field(None)
+    report_blob_url: Optional[str] = Field(None)
 
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
+    report_blob_url: Optional[str] = Field(None)
 
 class AnalysisByNameResponse(BaseModel):
     job_id: str
     analysis_name: str
     analysis_report: Optional[str]
+    report_blob_url: Optional[str] = Field(None)
 
 # --- Configuração do Servidor FastAPI ---
 app = FastAPI(
@@ -219,7 +223,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -229,6 +233,15 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     report_text = current_step_result.get("relatorio",
                                                       json.dumps(current_step_result, indent=2, ensure_ascii=False))
                     job_info['data']['analysis_report'] = report_text
+                    
+                    if job_info['data'].get('analysis_name') and report_text:
+                        try:
+                            blob_url = upload_report_to_blob(report_text, job_info['data']['analysis_name'])
+                            job_info['data']['report_blob_url'] = blob_url
+                            print(f"[{job_id}] Relatório salvo no Blob Storage: {blob_url}")
+                        except Exception as e:
+                            print(f"[{job_id}] Erro ao salvar relatório no Blob Storage: {e}")
+                    
                     print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo. Finalizando.")
                     job_info['status'] = 'completed'
                     job_store.set_job(job_id, job_info)
@@ -241,6 +254,15 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                 report_text = current_step_result.get("relatorio",
                                                       json.dumps(current_step_result, indent=2, ensure_ascii=False))
                 job_info['data']['analysis_report'] = report_text
+                
+                if job_info['data'].get('analysis_name') and report_text:
+                    try:
+                        blob_url = upload_report_to_blob(report_text, job_info['data']['analysis_name'])
+                        job_info['data']['report_blob_url'] = blob_url
+                        print(f"[{job_id}] Relatório salvo no Blob Storage: {blob_url}")
+                    except Exception as e:
+                        print(f"[{job_id}] Erro ao salvar relatório no Blob Storage: {e}")
+                
                 job_info['status'] = 'pending_approval'
                 job_info['data']['paused_at_step'] = current_step_index
                 job_store.set_job(job_id, job_info)
@@ -404,7 +426,8 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     if not report:
         raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
 
-    return ReportResponse(job_id=job_id, analysis_report=report)
+    blob_url = job.get("data", {}).get("report_blob_url")
+    return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
@@ -417,11 +440,13 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
         raise HTTPException(status_code=404, detail="Job associado não encontrado ou expirado")
     
     report = job.get("data", {}).get("analysis_report")
+    blob_url = job.get("data", {}).get("report_blob_url")
     
     return AnalysisByNameResponse(
         job_id=job_id,
         analysis_name=analysis_name,
-        analysis_report=report
+        analysis_report=report,
+        report_blob_url=blob_url
     )
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
@@ -484,6 +509,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
 
     status = job.get('status')
     logs = job.get("data", {}).get("diagnostic_logs")
+    blob_url = job.get("data", {}).get("report_blob_url")
 
     try:
         if status == 'completed':
@@ -491,7 +517,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 return FinalStatusResponse(
                     job_id=job_id,
                     status=status,
-                    analysis_report=job.get("data", {}).get("analysis_report")
+                    analysis_report=job.get("data", {}).get("analysis_report"),
+                    report_blob_url=blob_url
                 )
             else:
                 summary_list = []
@@ -509,17 +536,19 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                     job_id=job_id, 
                     status=status, 
                     summary=summary_list,
-                    diagnostic_logs=logs
+                    diagnostic_logs=logs,
+                    report_blob_url=blob_url
                 )
         elif status == 'failed':
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
                 error_details=job.get("error_details", "Nenhum detalhe de erro encontrado."),
-                diagnostic_logs=logs
+                diagnostic_logs=logs,
+                report_blob_url=blob_url
             )
         else:
-            return FinalStatusResponse(job_id=job_id, status=status)
+            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url)
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
