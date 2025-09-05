@@ -140,25 +140,6 @@ def _try_read_report_from_blob(analysis_name: str) -> Optional[str]:
         print(f"Erro ao ler relatório do Blob Storage: {e}")
         return None
 
-def _handle_report_logic_at_approval_point(job_info: dict, current_step_result: dict, job_id: str) -> str:
-    gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
-    analysis_name = job_info['data'].get('analysis_name')
-    
-    if not gerar_novo_relatorio and analysis_name:
-        try:
-            print(f"[{job_id}] Tentando usar relatório existente do Blob Storage: {analysis_name}")
-            existing_report = read_report_from_blob(analysis_name)
-            print(f"[{job_id}] Relatório existente encontrado e carregado com sucesso")
-            return existing_report
-        except FileNotFoundError:
-            print(f"[{job_id}] Relatório não encontrado no Blob Storage. Gerando novo relatório.")
-        except Exception as e:
-            print(f"[{job_id}] Erro ao ler relatório do Blob Storage: {e}. Gerando novo relatório.")
-    
-    report_text = current_step_result.get("relatorio", json.dumps(current_step_result, indent=2, ensure_ascii=False))
-    print(f"[{job_id}] Usando relatório gerado pela IA")
-    return report_text
-
 # --- Funções de Tarefa (Tasks) ---
 def handle_task_exception(job_id: str, e: Exception, step: str, job_info: Optional[Dict] = None):
     error_message = f"Erro fatal durante a etapa '{step}': {str(e)}"
@@ -225,6 +206,9 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     "observacoes_prioritarias_do_usuario": observacoes_humanas
                 }
 
+            # Flag para controlar se o relatório foi gerado pelo agente ou lido do Blob
+            report_was_generated_by_agent = True
+
             # Lógica de uso inteligente de relatórios do Blob Storage para etapa de índice 0
             if current_step_index == 0:
                 gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
@@ -243,6 +227,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                                 }
                             }
                         }
+                        report_was_generated_by_agent = False
                     else:
                         print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
                         agent_response = None
@@ -280,17 +265,18 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
             
             if current_step_index == 0:
                 if job_info['data'].get('gerar_relatorio_apenas') is True:
-                    report_text = _handle_report_logic_at_approval_point(job_info, current_step_result, job_id)
+                    report_text = current_step_result.get("relatorio", json.dumps(current_step_result, indent=2, ensure_ascii=False))
                     job_info['data']['analysis_report'] = report_text
                     
-                    if job_info['data'].get('analysis_name') and report_text:
+                    # Salva no Blob Storage apenas se o relatório foi gerado pelo agente
+                    if job_info['data'].get('analysis_name') and report_text and report_was_generated_by_agent:
                         try:
                             blob_url = upload_report_to_blob(report_text, job_info['data']['analysis_name'])
                             job_info['data']['report_blob_url'] = blob_url
@@ -304,12 +290,13 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     return 
             
             if step.get('requires_approval'):
-                print(f"[{job_id}] Etapa requer aprovação. Aplicando lógica inteligente de relatório.")
+                print(f"[{job_id}] Etapa requer aprovação.")
 
-                report_text = _handle_report_logic_at_approval_point(job_info, current_step_result, job_id)
+                report_text = current_step_result.get("relatorio", json.dumps(current_step_result, indent=2, ensure_ascii=False))
                 job_info['data']['analysis_report'] = report_text
                 
-                if job_info['data'].get('analysis_name') and report_text:
+                # Salva no Blob Storage apenas se o relatório foi gerado pelo agente
+                if job_info['data'].get('analysis_name') and report_text and report_was_generated_by_agent:
                     try:
                         blob_url = upload_report_to_blob(report_text, job_info['data']['analysis_name'])
                         job_info['data']['report_blob_url'] = blob_url
