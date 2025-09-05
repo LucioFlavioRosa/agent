@@ -27,4 +27,6 @@ def read_report_from_blob(analysis_name: str) -> str:
         blob_data = blob_client.download_blob()
         return blob_data.readall().decode('utf-8')
     except Exception as e:
-        raise FileNotFoundError(f"Report '{analysis_name}' not found in Blob Storage: {e}")
+        if "BlobNotFound" in str(e) or "404" in str(e):
+            raise FileNotFoundError(f"Report '{analysis_name}' not found in Blob Storage")
+        raise RuntimeError(f"Error reading report from Blob Storage: {e}")
