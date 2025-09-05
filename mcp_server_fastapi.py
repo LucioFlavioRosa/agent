@@ -16,6 +16,7 @@ from tools.conectores.conexao_geral import ConexaoGeral
 from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider, get_repository_provider_explicit
 from tools.blob_report_uploader import upload_report_to_blob
+from tools.blob_report_reader import read_report_from_blob
 
 # --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
@@ -72,6 +73,7 @@ class StartAnalysisPayload(BaseModel):
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
+    gerar_novo_relatorio: bool = Field(True, description="Se False, tenta ler relatório existente do Blob Storage usando analysis_name")
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
@@ -223,7 +225,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -371,12 +373,42 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'model_name': payload.model_name,
             'usar_rag': payload.usar_rag,
             'gerar_relatorio_apenas': payload.gerar_relatorio_apenas,
+            'gerar_novo_relatorio': payload.gerar_novo_relatorio,
             'arquivos_especificos': payload.arquivos_especificos,
             'analysis_name': payload.analysis_name,
             'repository_type': payload.repository_type
         },
         'error_details': None
     }
+    
+    # Lógica de leitura de relatório existente do Blob Storage
+    if not payload.gerar_novo_relatorio and payload.analysis_name:
+        try:
+            print(f"[{job_id}] Tentando ler relatório existente do Blob Storage: {payload.analysis_name}")
+            existing_report = read_report_from_blob(payload.analysis_name)
+            
+            initial_job_data['data']['analysis_report'] = existing_report
+            initial_job_data['status'] = 'completed'
+            
+            # Tenta obter a URL do blob também
+            container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
+            if container_name:
+                blob_url = f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME', 'storage')}.blob.core.windows.net/{container_name}/reports/{payload.analysis_name}.md"
+                initial_job_data['data']['report_blob_url'] = blob_url
+            
+            job_store.set_job(job_id, initial_job_data)
+            
+            if payload.analysis_name:
+                analysis_name_to_job_id[payload.analysis_name] = job_id
+            
+            print(f"[{job_id}] Relatório existente encontrado e carregado com sucesso")
+            return StartAnalysisResponse(job_id=job_id)
+            
+        except FileNotFoundError:
+            print(f"[{job_id}] Relatório não encontrado no Blob Storage. Prosseguindo com geração normal.")
+        except Exception as e:
+            print(f"[{job_id}] Erro ao ler relatório do Blob Storage: {e}. Prosseguindo com geração normal.")
+    
     job_store.set_job(job_id, initial_job_data)
     
     if payload.analysis_name:
@@ -485,6 +517,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
             'model_name': original_job['data'].get('model_name'),
             'usar_rag': original_job['data'].get('usar_rag', False),
             'gerar_relatorio_apenas': False,
+            'gerar_novo_relatorio': True,
             'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
             'analysis_name': f"{analysis_name}-implementation",
             'repository_type': original_repository_type
