@@ -131,9 +131,9 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
     else:
         return OpenAILLMProvider(rag_retriever=rag_retriever)
 
-def _try_read_report_from_blob(analysis_name: str) -> Optional[str]:
+def _try_read_report_from_blob(analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str) -> Optional[str]:
     try:
-        return read_report_from_blob(analysis_name)
+        return read_report_from_blob(analysis_type, repository_type, repo_name, branch_name, analysis_name)
     except FileNotFoundError:
         return None
     except Exception as e:
@@ -216,7 +216,13 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                 
                 if not gerar_novo_relatorio and analysis_name:
                     print(f"[{job_id}] Tentando ler relatório existente do Blob Storage: {analysis_name}")
-                    existing_report = _try_read_report_from_blob(analysis_name)
+                    existing_report = _try_read_report_from_blob(
+                        job_info['data']['original_analysis_type'],
+                        repository_type,
+                        repo_name,
+                        job_info['data'].get('branch_name', 'main'),
+                        analysis_name
+                    )
                     
                     if existing_report:
                         print(f"[{job_id}] Relatório encontrado no Blob Storage, usando relatório existente")
@@ -265,7 +271,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -278,7 +284,14 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     # Salva no Blob Storage apenas se o relatório foi gerado pelo agente
                     if job_info['data'].get('analysis_name') and report_text and report_was_generated_by_agent:
                         try:
-                            blob_url = upload_report_to_blob(report_text, job_info['data']['analysis_name'])
+                            blob_url = upload_report_to_blob(
+                                report_text,
+                                job_info['data']['original_analysis_type'],
+                                repository_type,
+                                repo_name,
+                                job_info['data'].get('branch_name', 'main'),
+                                job_info['data']['analysis_name']
+                            )
                             job_info['data']['report_blob_url'] = blob_url
                             print(f"[{job_id}] Relatório salvo no Blob Storage: {blob_url}")
                         except Exception as e:
@@ -298,7 +311,14 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                 # Salva no Blob Storage apenas se o relatório foi gerado pelo agente
                 if job_info['data'].get('analysis_name') and report_text and report_was_generated_by_agent:
                     try:
-                        blob_url = upload_report_to_blob(report_text, job_info['data']['analysis_name'])
+                        blob_url = upload_report_to_blob(
+                            report_text,
+                            job_info['data']['original_analysis_type'],
+                            repository_type,
+                            repo_name,
+                            job_info['data'].get('branch_name', 'main'),
+                            job_info['data']['analysis_name']
+                        )
                         job_info['data']['report_blob_url'] = blob_url
                         print(f"[{job_id}] Relatório salvo no Blob Storage: {blob_url}")
                     except Exception as e:
