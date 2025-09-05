@@ -131,6 +131,24 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
     else:
         return OpenAILLMProvider(rag_retriever=rag_retriever)
 
+def _handle_report_logic_at_approval_point(job_info: dict, current_step_result: dict, job_id: str) -> str:
+    gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
+    analysis_name = job_info['data'].get('analysis_name')
+    
+    if not gerar_novo_relatorio and analysis_name:
+        try:
+            print(f"[{job_id}] Tentando usar relatório existente do Blob Storage: {analysis_name}")
+            existing_report = read_report_from_blob(analysis_name)
+            print(f"[{job_id}] Relatório existente encontrado e carregado com sucesso")
+            return existing_report
+        except FileNotFoundError:
+            print(f"[{job_id}] Relatório não encontrado no Blob Storage. Gerando novo relatório.")
+        except Exception as e:
+            print(f"[{job_id}] Erro ao ler relatório do Blob Storage: {e}. Gerando novo relatório.")
+    
+    report_text = current_step_result.get("relatorio", json.dumps(current_step_result, indent=2, ensure_ascii=False))
+    print(f"[{job_id}] Usando relatório gerado pela IA")
+    return report_text
 
 # --- Funções de Tarefa (Tasks) ---
 def handle_task_exception(job_id: str, e: Exception, step: str, job_info: Optional[Dict] = None):
@@ -225,15 +243,14 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
             
             if current_step_index == 0:
                 if job_info['data'].get('gerar_relatorio_apenas') is True:
-                    report_text = current_step_result.get("relatorio",
-                                                      json.dumps(current_step_result, indent=2, ensure_ascii=False))
+                    report_text = _handle_report_logic_at_approval_point(job_info, current_step_result, job_id)
                     job_info['data']['analysis_report'] = report_text
                     
                     if job_info['data'].get('analysis_name') and report_text:
@@ -250,11 +267,9 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     return 
             
             if step.get('requires_approval'):
-                print(f"[{job_id}] Etapa requer aprovação. Extraindo relatório e pausando workflow.")
+                print(f"[{job_id}] Etapa requer aprovação. Aplicando lógica inteligente de relatório.")
 
-                # Extrai o texto do relatório da chave "relatorio"
-                report_text = current_step_result.get("relatorio",
-                                                      json.dumps(current_step_result, indent=2, ensure_ascii=False))
+                report_text = _handle_report_logic_at_approval_point(job_info, current_step_result, job_id)
                 job_info['data']['analysis_report'] = report_text
                 
                 if job_info['data'].get('analysis_name') and report_text:
@@ -380,34 +395,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         },
         'error_details': None
     }
-    
-    # Lógica de leitura de relatório existente do Blob Storage
-    if not payload.gerar_novo_relatorio and payload.analysis_name:
-        try:
-            print(f"[{job_id}] Tentando ler relatório existente do Blob Storage: {payload.analysis_name}")
-            existing_report = read_report_from_blob(payload.analysis_name)
-            
-            initial_job_data['data']['analysis_report'] = existing_report
-            initial_job_data['status'] = 'completed'
-            
-            # Tenta obter a URL do blob também
-            container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
-            if container_name:
-                blob_url = f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME', 'storage')}.blob.core.windows.net/{container_name}/reports/{payload.analysis_name}.md"
-                initial_job_data['data']['report_blob_url'] = blob_url
-            
-            job_store.set_job(job_id, initial_job_data)
-            
-            if payload.analysis_name:
-                analysis_name_to_job_id[payload.analysis_name] = job_id
-            
-            print(f"[{job_id}] Relatório existente encontrado e carregado com sucesso")
-            return StartAnalysisResponse(job_id=job_id)
-            
-        except FileNotFoundError:
-            print(f"[{job_id}] Relatório não encontrado no Blob Storage. Prosseguindo com geração normal.")
-        except Exception as e:
-            print(f"[{job_id}] Erro ao ler relatório do Blob Storage: {e}. Prosseguindo com geração normal.")
     
     job_store.set_job(job_id, initial_job_data)
     
