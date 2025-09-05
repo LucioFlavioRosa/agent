@@ -131,6 +131,15 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
     else:
         return OpenAILLMProvider(rag_retriever=rag_retriever)
 
+def _try_read_report_from_blob(analysis_name: str) -> Optional[str]:
+    try:
+        return read_report_from_blob(analysis_name)
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        print(f"Erro ao ler relatório do Blob Storage: {e}")
+        return None
+
 def _handle_report_logic_at_approval_point(job_info: dict, current_step_result: dict, job_id: str) -> str:
     gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
     analysis_name = job_info['data'].get('analysis_name')
@@ -216,33 +225,62 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     "observacoes_prioritarias_do_usuario": observacoes_humanas
                 }
 
-            agent_type = step.get("agent_type")
-            if agent_type == "revisor":
-                agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
-                # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
-                instrucoes = job_info['data']['instrucoes_extras'] if current_step_index == 0 else json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
-                agent_params.update({
-                    'repositorio': job_info['data']['repo_name'], 
-                    'nome_branch': job_info['data']['branch_name'], 
-                    'instrucoes_extras': instrucoes,
-                    'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
-                    'repository_type': repository_type
-                })
-                print(f"[{job_id}] Agente Revisor: repositorio='{agent_params['repositorio']}', branch='{agent_params['nome_branch']}', tipo='{repository_type}'")
-                agent_response = agente.main(**agent_params)
-            elif agent_type == "processador":
-                agente = AgenteProcessador(llm_provider=llm_provider)
-                # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
-                agent_params['codigo'] = {"instrucoes_iniciais": job_info['data']['instrucoes_extras']} if current_step_index == 0 else input_para_etapa
-                agent_params['repository_type'] = repository_type
-                agent_response = agente.main(**agent_params)
+            # Lógica de uso inteligente de relatórios do Blob Storage para etapa de índice 0
+            if current_step_index == 0:
+                gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
+                analysis_name = job_info['data'].get('analysis_name')
+                
+                if not gerar_novo_relatorio and analysis_name:
+                    print(f"[{job_id}] Tentando ler relatório existente do Blob Storage: {analysis_name}")
+                    existing_report = _try_read_report_from_blob(analysis_name)
+                    
+                    if existing_report:
+                        print(f"[{job_id}] Relatório encontrado no Blob Storage, usando relatório existente")
+                        agent_response = {
+                            'resultado': {
+                                'reposta_final': {
+                                    'reposta_final': json.dumps({"relatorio": existing_report}, ensure_ascii=False)
+                                }
+                            }
+                        }
+                    else:
+                        print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
+                        agent_response = None
+                else:
+                    print(f"[{job_id}] Configurado para gerar novo relatório via agente")
+                    agent_response = None
             else:
-                raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
+                agent_response = None
+
+            # Se agent_response não foi definido pela lógica do Blob Storage, chama o agente normalmente
+            if agent_response is None:
+                agent_type = step.get("agent_type")
+                if agent_type == "revisor":
+                    agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
+                    # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
+                    instrucoes = job_info['data']['instrucoes_extras'] if current_step_index == 0 else json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
+                    agent_params.update({
+                        'repositorio': job_info['data']['repo_name'], 
+                        'nome_branch': job_info['data']['branch_name'], 
+                        'instrucoes_extras': instrucoes,
+                        'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
+                        'repository_type': repository_type
+                    })
+                    print(f"[{job_id}] Agente Revisor: repositorio='{agent_params['repositorio']}', branch='{agent_params['nome_branch']}', tipo='{repository_type}'")
+                    agent_response = agente.main(**agent_params)
+                elif agent_type == "processador":
+                    agente = AgenteProcessador(llm_provider=llm_provider)
+                    # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
+                    agent_params['codigo'] = {"instrucoes_iniciais": job_info['data']['instrucoes_extras']} if current_step_index == 0 else input_para_etapa
+                    agent_params['repository_type'] = repository_type
+                    agent_response = agente.main(**agent_params)
+                else:
+                    raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
 
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
