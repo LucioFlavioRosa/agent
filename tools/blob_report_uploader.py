@@ -8,7 +8,7 @@ def upload_report_to_blob(report_text: str, analysis_name: str) -> str:
         raise RuntimeError('Azure Blob Storage container name missing.')
     
     connection_string = None
-    secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING_SECRET_NAME', 'AZURE_STORAGE_CONNECTION_STRING')
+    secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
     
     try:
         secret_manager = AzureSecretManager()
