@@ -24,6 +24,9 @@ azure-core==1.35.0
 # Azure SDK para AI Search (RAG)
 azure-search-documents==11.4.0
 
+# azure storage
+azure-storage-blob==12.26.0
+
 # Ferramentas e Utilitários
 PyGithub==2.7.0
 python-gitlab==6.3.0
