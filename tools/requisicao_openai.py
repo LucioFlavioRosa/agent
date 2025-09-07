@@ -1,4 +1,6 @@
 import os
+import uuid
+from datetime import datetime
 from openai import AzureOpenAI
 from typing import Optional, Dict, Any
 
@@ -6,12 +8,9 @@ from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 from domain.interfaces.secret_manager_interface import ISecretManager
 from tools.azure_secret_manager import AzureSecretManager
+from tools.azure_table_logger import log_tokens_async
 
 class OpenAILLMProvider(ILLMProviderComplete):
-    """
-    Implementação refatorada que implementa a interface completa de LLM,
-    seguindo o princípio da Inversão de Dependência.
-    """
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
         self.rag_retriever = rag_retriever
         self.secret_manager = secret_manager or AzureSecretManager()
@@ -50,8 +49,9 @@ class OpenAILLMProvider(ILLMProviderComplete):
         model_name: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação da interface completa com todas as funcionalidades."""
         modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
+        job_id = str(uuid.uuid4())
+        timestamp = datetime.utcnow().isoformat()
         
         prompt_sistema_base = self.carregar_prompt(tipo_tarefa)
         prompt_sistema_final = prompt_sistema_base
@@ -85,10 +85,13 @@ class OpenAILLMProvider(ILLMProviderComplete):
             tokens_entrada = response.usage.prompt_tokens
             tokens_saida = response.usage.completion_tokens
 
+            log_tokens_async(job_id, tokens_entrada, tokens_saida, timestamp)
+
             return {
                 'reposta_final': conteudo_resposta,
                 'tokens_entrada': tokens_entrada,
-                'tokens_saida': tokens_saida
+                'tokens_saida': tokens_saida,
+                'job_id': job_id
             }
             
         except Exception as e:
@@ -103,7 +106,6 @@ class OpenAILLMProvider(ILLMProviderComplete):
         usar_rag: bool = False,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação específica para RAG."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
@@ -120,7 +122,6 @@ class OpenAILLMProvider(ILLMProviderComplete):
         model_name: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação específica para seleção de modelo."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
