@@ -257,7 +257,8 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                         'nome_branch': job_info['data']['branch_name'], 
                         'instrucoes_extras': instrucoes,
                         'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
-                        'repository_type': repository_type
+                        'repository_type': repository_type,
+                        'job_id': job_id
                     })
                     print(f"[{job_id}] Agente Revisor: repositorio='{agent_params['repositorio']}', branch='{agent_params['nome_branch']}', tipo='{repository_type}'")
                     agent_response = agente.main(**agent_params)
