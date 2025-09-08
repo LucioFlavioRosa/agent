@@ -62,17 +62,27 @@ class AzureTableLogger:
             self.table_client.create_entity(entity=entity)
             print(f"Log de tokens salvo com sucesso para job_id: {job_id}")
         except Exception as e:
-            print(f"Erro ao salvar log de tokens: {e}")
+            print(f"AVISO: Falha no logging de tokens (não afeta o resultado principal): {e}")
+            try:
+                print(f"Detalhes do erro de logging - job_id: {job_id}, projeto: {projeto}, modelo: {llm_model}")
+            except Exception:
+                print("Erro adicional ao tentar logar detalhes da falha")
     
     def log_tokens_async(self, projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str):
-        thread = threading.Thread(
-            target=self._log_tokens_sync,
-            args=(projeto, analysis_type, llm_model, tokens_in, tokens_out, data, hora, status_update, job_id),
-            daemon=True
-        )
-        thread.start()
+        try:
+            thread = threading.Thread(
+                target=self._log_tokens_sync,
+                args=(projeto, analysis_type, llm_model, tokens_in, tokens_out, data, hora, status_update, job_id),
+                daemon=True
+            )
+            thread.start()
+        except Exception as e:
+            print(f"AVISO: Falha ao iniciar thread de logging assíncrono (não afeta o resultado principal): {e}")
 
 _logger_instance = AzureTableLogger()
 
 def log_tokens_async(projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str):
-    _logger_instance.log_tokens_async(projeto, analysis_type, llm_model, tokens_in, tokens_out, data, hora, status_update, job_id)
+    try:
+        _logger_instance.log_tokens_async(projeto, analysis_type, llm_model, tokens_in, tokens_out, data, hora, status_update, job_id)
+    except Exception as e:
+        print(f"AVISO: Falha na função global de logging assíncrono (não afeta o resultado principal): {e}")
