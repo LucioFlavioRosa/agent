@@ -252,15 +252,25 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
                     # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
                     instrucoes = job_info['data']['instrucoes_extras'] if current_step_index == 0 else json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
+                    
+                    # Extrair variáveis necessárias do job_info e step
+                    projeto = job_info['data']['projeto']
+                    llm_model = model_para_etapa
+                    status_update = step['status_update']
+                    
                     agent_params.update({
                         'repositorio': job_info['data']['repo_name'], 
                         'nome_branch': job_info['data']['branch_name'], 
                         'instrucoes_extras': instrucoes,
                         'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
                         'repository_type': repository_type,
-                        'job_id': job_id
+                        'job_id': job_id,
+                        'projeto': projeto,
+                        'llm_model': llm_model,
+                        'status_update': status_update
                     })
                     print(f"[{job_id}] Agente Revisor: repositorio='{agent_params['repositorio']}', branch='{agent_params['nome_branch']}', tipo='{repository_type}'")
+                    print(f"[{job_id}] Passando variáveis: projeto='{projeto}', llm_model='{llm_model}', status_update='{status_update}', job_id='{job_id}'")
                     agent_response = agente.main(**agent_params)
                 elif agent_type == "processador":
                     agente = AgenteProcessador(llm_provider=llm_provider)
@@ -274,7 +284,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result

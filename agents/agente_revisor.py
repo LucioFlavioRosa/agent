@@ -69,11 +69,19 @@ class AgenteRevisor:
         model_name: Optional[str] = None,
         max_token_out: int = 15000,
         arquivos_especificos: Optional[List[str]] = None,
-        job_id: Optional[str] = None
+        job_id: Optional[str] = None,
+        projeto: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        status_update: Optional[str] = None
     ) -> Dict[str, Any]:
         print(f"[Agente Revisor] Iniciando análise - repositório: {repositorio} (tipo: {repository_type})")
-        if job_id:
-            print(f"[Agente Revisor] Job ID recebido: {job_id}")
+        
+        print(f"[Agente Revisor] Variáveis recebidas:")
+        print(f"[Agente Revisor] - job_id: {job_id}")
+        print(f"[Agente Revisor] - projeto: {projeto}")
+        print(f"[Agente Revisor] - llm_model: {llm_model}")
+        print(f"[Agente Revisor] - status_update: {status_update}")
+        print(f"[Agente Revisor] - model_name: {model_name}")
         
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
