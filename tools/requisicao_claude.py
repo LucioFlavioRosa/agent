@@ -8,7 +8,7 @@ from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 from domain.interfaces.secret_manager_interface import ISecretManager
 from tools.azure_secret_manager import AzureSecretManager
-from tools.azure_table_logger import log_tokens_async
+from tools.azure_table_logger import log_tokens
 
 class AnthropicClaudeProvider(ILLMProviderComplete):
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
@@ -81,7 +81,7 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
             hora_atual = datetime.utcnow().strftime("%H:%M:%S")
             
             try:
-                log_tokens_async(
+                log_tokens(
                     projeto=projeto,
                     analysis_type=tipo_tarefa,
                     llm_model=modelo_final,
