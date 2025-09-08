@@ -1,17 +1,16 @@
 import os
+import uuid
 import anthropic
+from datetime import datetime
 from typing import Optional, Dict, Any
 
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 from domain.interfaces.secret_manager_interface import ISecretManager
 from tools.azure_secret_manager import AzureSecretManager
+from tools.azure_table_logger import log_tokens_async
 
 class AnthropicClaudeProvider(ILLMProviderComplete):
-    """
-    Implementação refatorada para Claude seguindo princípios SOLID,
-    com injeção de dependência para o gerenciador de segredos.
-    """
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
         self.rag_retriever = rag_retriever
         self.secret_manager = secret_manager or AzureSecretManager()
@@ -42,8 +41,8 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
         model_name: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação da interface completa com todas as funcionalidades."""
         modelo_final = model_name or "claude-3-opus-20240229"
+        job_id = str(uuid.uuid4())
         
         prompt_sistema = self.carregar_prompt(tipo_tarefa)
 
@@ -73,11 +72,29 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
             )
             
             conteudo_resposta = response.content[0].text
+            tokens_entrada = response.usage.input_tokens
+            tokens_saida = response.usage.output_tokens
+            
+            projeto = model_name or "claude"
+            data_atual = datetime.utcnow().strftime("%Y-%m-%d")
+            hora_atual = datetime.utcnow().strftime("%H:%M:%S")
+            
+            log_tokens_async(
+                projeto=projeto,
+                analysis_type=tipo_tarefa,
+                llm_model=modelo_final,
+                tokens_in=tokens_entrada,
+                tokens_out=tokens_saida,
+                data=data_atual,
+                hora=hora_atual,
+                status_update="completed",
+                job_id=job_id
+            )
             
             return {
                 'reposta_final': conteudo_resposta,
-                'tokens_entrada': response.usage.input_tokens,
-                'tokens_saida': response.usage.output_tokens
+                'tokens_entrada': tokens_entrada,
+                'tokens_saida': tokens_saida
             }
             
         except Exception as e:
@@ -92,7 +109,6 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
         usar_rag: bool = False,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação específica para RAG."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
@@ -109,7 +125,6 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
         model_name: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
-        """Implementação específica para seleção de modelo."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
