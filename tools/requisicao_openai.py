@@ -85,7 +85,7 @@ class OpenAILLMProvider(ILLMProviderComplete):
             tokens_entrada = response.usage.prompt_tokens
             tokens_saida = response.usage.completion_tokens
 
-            log_tokens_async(job_id, tokens_entrada, tokens_saida, timestamp)
+            #log_tokens_async(job_id, tokens_entrada, tokens_saida, timestamp)
 
             return {
                 'reposta_final': conteudo_resposta,
