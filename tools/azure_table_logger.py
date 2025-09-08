@@ -7,21 +7,21 @@ from tools.azure_secret_manager import AzureSecretManager
 
 class AzureTableLogger:
     def __init__(self):
-        self.table_name = os.environ.get("AZURE_TABLE_NAME", "tokenlogs")
+        self.table_name = os.getenv("AZURE_TABLE_NAME", "tokenlogs")
         self.table_service_client = None
         self.secret_manager = AzureSecretManager()
         
         connection_string = None
-        secret_name = os.environ.get("AZURE_TABLE_CONN_STRING")
+        secret_name = os.getenv("AZURE_TABLE_CONN_STRING")
         
         if secret_name:
             try:
                 connection_string = self.secret_manager.get_secret(secret_name)
             except Exception as e:
                 print(f"Warning: Failed to get connection string from Key Vault: {e}")
-                connection_string = os.environ.get("AZURE_TABLE_CONN_STRING")
+                connection_string = os.getenv("AZURE_TABLE_CONN_STRING")
         else:
-            connection_string = os.environ.get("AZURE_TABLE_CONN_STRING")
+            connection_string = os.getenv("AZURE_TABLE_CONN_STRING")
         
         if connection_string:
             try:
