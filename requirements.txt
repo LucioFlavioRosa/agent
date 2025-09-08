@@ -26,7 +26,7 @@ azure-search-documents==11.4.0
 
 # azure storage
 azure-storage-blob==12.26.0
-azure-data-tables==12.7.0
+opencensus-ext-azure==1.1.15
 
 # Ferramentas e Utilitários
 PyGithub==2.7.0
