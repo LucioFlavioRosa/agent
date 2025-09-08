@@ -1,5 +1,4 @@
 import os
-import threading
 from datetime import datetime
 from azure.data.tables import TableServiceClient, TableEntity
 from typing import Optional
@@ -36,10 +35,10 @@ class AzureTableLogger:
                 print(f"Erro ao inicializar Azure Table Logger: {e}")
                 self.table_service_client = None
     
-    def _log_tokens_sync(self, projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str):
+    def log_tokens(self, projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str) -> bool:
         if not self.table_service_client:
             print("Azure Table Logger não configurado. Log de tokens ignorado.")
-            return
+            return False
         
         try:
             timestamp = datetime.utcnow().isoformat()
@@ -62,28 +61,20 @@ class AzureTableLogger:
             
             self.table_client.create_entity(entity=entity)
             print(f"Log de tokens salvo com sucesso para job_id: {job_id}")
+            return True
         except Exception as e:
             print(f"AVISO: Falha no logging de tokens (não afeta o resultado principal): {e}")
             try:
                 print(f"Detalhes do erro de logging - job_id: {job_id}, projeto: {projeto}, modelo: {llm_model}")
             except Exception:
                 print("Erro adicional ao tentar logar detalhes da falha")
-    
-    def log_tokens_async(self, projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str):
-        try:
-            thread = threading.Thread(
-                target=self._log_tokens_sync,
-                args=(projeto, analysis_type, llm_model, tokens_in, tokens_out, data, hora, status_update, job_id),
-                daemon=True
-            )
-            thread.start()
-        except Exception as e:
-            print(f"AVISO: Falha ao iniciar thread de logging assíncrono (não afeta o resultado principal): {e}")
+            return False
 
 _logger_instance = AzureTableLogger()
 
-def log_tokens_async(projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str):
+def log_tokens(projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str) -> bool:
     try:
-        _logger_instance.log_tokens_async(projeto, analysis_type, llm_model, tokens_in, tokens_out, data, hora, status_update, job_id)
+        return _logger_instance.log_tokens(projeto, analysis_type, llm_model, tokens_in, tokens_out, data, hora, status_update, job_id)
     except Exception as e:
-        print(f"AVISO: Falha na função global de logging assíncrono (não afeta o resultado principal): {e}")
+        print(f"AVISO: Falha na função global de logging (não afeta o resultado principal): {e}")
+        return False
