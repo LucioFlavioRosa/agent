@@ -11,55 +11,70 @@ class AzureTableLogger:
         print(f"[AzureTableLogger] Nome da tabela: {self.table_name}")
         
         self.table_service_client = None
+        self.table_client = None
         self.secret_manager = AzureSecretManager()
         
         connection_string = None
         secret_name = os.getenv("AZURE_TABLE_CONN_STRING")
         print(f"[AzureTableLogger] Secret name da variável de ambiente: {secret_name}")
+        print(f"[AzureTableLogger] Valor direto da variável AZURE_TABLE_CONN_STRING: {'***definido***' if os.getenv('AZURE_TABLE_CONN_STRING') else 'NÃO DEFINIDO'}")
         
         if secret_name:
             try:
                 print(f"[AzureTableLogger] Tentando obter connection string do Key Vault...")
                 connection_string = self.secret_manager.get_secret(secret_name)
-                print(f"[AzureTableLogger] Connection string obtida do Key Vault com sucesso (tamanho: {len(connection_string) if connection_string else 0})")
+                if connection_string:
+                    print(f"[AzureTableLogger] Connection string obtida do Key Vault com sucesso (tamanho: {len(connection_string)})")
+                else:
+                    print(f"[AzureTableLogger] Connection string do Key Vault está vazia ou None")
             except Exception as e:
-                print(f"Warning: Failed to get connection string from Key Vault: {e}")
-                connection_string = os.getenv("AZURE_TABLE_CONN_STRING")
-                print(f"[AzureTableLogger] Usando connection string da variável de ambiente como fallback (tamanho: {len(connection_string) if connection_string else 0})")
-        else:
-            connection_string = os.getenv("AZURE_TABLE_CONN_STRING")
-            print(f"[AzureTableLogger] Usando connection string diretamente da variável de ambiente (tamanho: {len(connection_string) if connection_string else 0})")
+                print(f"[AzureTableLogger] Erro ao obter connection string do Key Vault: {type(e).__name__}: {str(e)}")
+                connection_string = None
         
         if not connection_string:
-            print(f"[AzureTableLogger] ERRO CRÍTICO: Connection string está vazia ou None")
+            print(f"[AzureTableLogger] Tentando usar connection string da variável de ambiente como fallback...")
+            connection_string = os.getenv("AZURE_TABLE_CONN_STRING")
+            if connection_string:
+                print(f"[AzureTableLogger] Connection string obtida da variável de ambiente (tamanho: {len(connection_string)})")
+            else:
+                print(f"[AzureTableLogger] Connection string da variável de ambiente também está vazia ou None")
+        
+        if not connection_string:
+            print(f"[AzureTableLogger] ERRO CRÍTICO: Nenhuma connection string válida encontrada")
+            print(f"[AzureTableLogger] Verifique se AZURE_TABLE_CONN_STRING está definido corretamente")
             self.table_service_client = None
             return
         
-        if connection_string:
-            try:
-                print(f"[AzureTableLogger] Criando TableServiceClient...")
-                self.table_service_client = TableServiceClient.from_connection_string(
-                    conn_str=connection_string
-                )
-                print(f"[AzureTableLogger] TableServiceClient criado com sucesso")
-                
-                print(f"[AzureTableLogger] Obtendo table client para tabela: {self.table_name}")
-                self.table_client = self.table_service_client.get_table_client(
-                    table_name=self.table_name
-                )
-                print(f"[AzureTableLogger] Table client obtido com sucesso")
-                
-                print(f"[AzureTableLogger] Criando tabela se não existir...")
-                self.table_client.create_table(exist_ok=True)
-                print(f"[AzureTableLogger] Tabela criada/verificada com sucesso")
-            except Exception as e:
-                print(f"Erro ao inicializar Azure Table Logger: {e}")
-                print(f"[AzureTableLogger] Detalhes do erro de inicialização: {type(e).__name__}: {str(e)}")
-                self.table_service_client = None
+        assert connection_string, "Connection string não pode estar vazia"
+        assert len(connection_string.strip()) > 0, "Connection string não pode estar em branco"
+        
+        try:
+            print(f"[AzureTableLogger] Criando TableServiceClient...")
+            self.table_service_client = TableServiceClient.from_connection_string(
+                conn_str=connection_string
+            )
+            print(f"[AzureTableLogger] TableServiceClient criado com sucesso")
+            
+            print(f"[AzureTableLogger] Obtendo table client para tabela: {self.table_name}")
+            self.table_client = self.table_service_client.get_table_client(
+                table_name=self.table_name
+            )
+            print(f"[AzureTableLogger] Table client obtido com sucesso")
+            
+            print(f"[AzureTableLogger] Testando conexão criando tabela se não existir...")
+            self.table_client.create_table(exist_ok=True)
+            print(f"[AzureTableLogger] Teste de conexão bem-sucedido - tabela criada/verificada")
+            
+            print(f"[AzureTableLogger] Inicialização completa com sucesso")
+        except Exception as e:
+            print(f"[AzureTableLogger] ERRO na inicialização do TableServiceClient: {type(e).__name__}: {str(e)}")
+            print(f"[AzureTableLogger] Connection string usada tinha tamanho: {len(connection_string)}")
+            print(f"[AzureTableLogger] Primeiros 20 caracteres da connection string: {connection_string[:20]}...")
+            self.table_service_client = None
+            self.table_client = None
     
     @staticmethod
     def diagnostico_conexao():
-        """Método de diagnóstico para verificar configurações e conexão"""
         diagnostico = {
             "azure_table_name": os.getenv("AZURE_TABLE_NAME"),
             "azure_table_conn_string_env_exists": bool(os.getenv("AZURE_TABLE_CONN_STRING")),
@@ -85,15 +100,38 @@ class AzureTableLogger:
         try:
             logger_test = AzureTableLogger()
             diagnostico["connection_status"] = "success" if logger_test.table_service_client else "failed"
+            if logger_test.table_service_client:
+                diagnostico["table_client_available"] = bool(logger_test.table_client)
         except Exception as e:
             diagnostico["connection_status"] = f"error: {str(e)}"
         
         return diagnostico
     
+    @staticmethod
+    def test_connection():
+        print("[AzureTableLogger] Iniciando teste de conexão...")
+        try:
+            logger_test = AzureTableLogger()
+            if not logger_test.table_service_client:
+                print("[AzureTableLogger] TESTE FALHOU: table_service_client é None")
+                print("[AzureTableLogger] Verifique as variáveis de ambiente:")
+                print(f"[AzureTableLogger] - AZURE_TABLE_CONN_STRING: {'DEFINIDO' if os.getenv('AZURE_TABLE_CONN_STRING') else 'NÃO DEFINIDO'}")
+                print(f"[AzureTableLogger] - AZURE_TABLE_NAME: {os.getenv('AZURE_TABLE_NAME', 'NÃO DEFINIDO')}")
+                return False
+            
+            if not logger_test.table_client:
+                print("[AzureTableLogger] TESTE FALHOU: table_client é None")
+                return False
+            
+            print("[AzureTableLogger] TESTE PASSOU: Conexão estabelecida com sucesso")
+            return True
+        except Exception as e:
+            print(f"[AzureTableLogger] TESTE FALHOU com exceção: {type(e).__name__}: {str(e)}")
+            return False
+    
     def log_tokens(self, projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str) -> bool:
         print(f"[AzureTableLogger] Iniciando log_tokens para job_id: {job_id}")
         print(f"[AzureTableLogger] Parâmetros recebidos:")
-        print(f"[AzureTableLogger] - nome_secreto: {secret_name}")
         print(f"[AzureTableLogger] - projeto: {projeto} (tipo: {type(projeto)})")
         print(f"[AzureTableLogger] - analysis_type: {analysis_type} (tipo: {type(analysis_type)})")
         print(f"[AzureTableLogger] - llm_model: {llm_model} (tipo: {type(llm_model)})")
@@ -104,7 +142,6 @@ class AzureTableLogger:
         print(f"[AzureTableLogger] - status_update: {status_update} (tipo: {type(status_update)})")
         print(f"[AzureTableLogger] - job_id: {job_id} (tipo: {type(job_id)})")
         
-        # Validação de parâmetros
         if not projeto or not isinstance(projeto, str):
             print(f"[AzureTableLogger] ERRO: Parâmetro 'projeto' inválido: {projeto}")
             return False
@@ -130,8 +167,17 @@ class AzureTableLogger:
             return False
         
         if not self.table_service_client:
-            print("Azure Table Logger não configurado. Log de tokens ignorado.")
+            print("[AzureTableLogger] ERRO: Azure Table Logger não configurado corretamente")
             print(f"[AzureTableLogger] table_service_client é None - conexão não foi estabelecida")
+            print(f"[AzureTableLogger] Estado das variáveis de ambiente:")
+            print(f"[AzureTableLogger] - AZURE_TABLE_CONN_STRING: {'DEFINIDO' if os.getenv('AZURE_TABLE_CONN_STRING') else 'NÃO DEFINIDO'}")
+            print(f"[AzureTableLogger] - AZURE_TABLE_NAME: {os.getenv('AZURE_TABLE_NAME', 'NÃO DEFINIDO')}")
+            print(f"[AzureTableLogger] INSTRUÇÃO: Verifique se as variáveis de ambiente estão configuradas corretamente")
+            print(f"[AzureTableLogger] INSTRUÇÃO: Execute AzureTableLogger.test_connection() para diagnóstico detalhado")
+            return False
+        
+        if not self.table_client:
+            print("[AzureTableLogger] ERRO: table_client é None - cliente da tabela não foi inicializado")
             return False
         
         print(f"[AzureTableLogger] Validação de parâmetros concluída com sucesso")
@@ -186,7 +232,6 @@ class AzureTableLogger:
                 print(f"Erro adicional ao tentar logar detalhes da falha: {inner_e}")
                 print(f"[AzureTableLogger] Erro adicional (inner): {type(inner_e).__name__}: {str(inner_e)}")
             
-            # Log adicional do estado do cliente
             print(f"[AzureTableLogger] Estado do cliente:")
             print(f"[AzureTableLogger] - table_service_client: {type(self.table_service_client) if self.table_service_client else 'None'}")
             print(f"[AzureTableLogger] - table_client: {type(self.table_client) if hasattr(self, 'table_client') and self.table_client else 'None'}")
