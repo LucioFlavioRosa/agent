@@ -45,19 +45,20 @@ class AzureTableLogger:
             timestamp = datetime.utcnow().isoformat()
             row_key = f"{job_id}_{timestamp.replace(':', '-').replace('.', '-')}"
             
-            entity = TableEntity()
-            entity["PartitionKey"] = projeto
-            entity["RowKey"] = row_key
-            entity["Projeto"] = projeto
-            entity["AnalysisType"] = analysis_type
-            entity["LLMModel"] = llm_model
-            entity["TokensIn"] = tokens_in
-            entity["TokensOut"] = tokens_out
-            entity["Data"] = data
-            entity["Hora"] = hora
-            entity["StatusUpdate"] = status_update
-            entity["JobId"] = job_id
-            entity["CreatedAt"] = timestamp
+            entity = TableEntity(
+            PartitionKey = projeto
+            RowKey = row_key
+            Projeto = projeto
+            AnalysisType = analysis_type
+            LLMModel = llm_model
+            TokensIn = tokens_in
+            TokensOut = tokens_out
+            Data = data
+            Hora = hora
+            StatusUpdate = status_update
+            JobId = job_id
+            CreatedAt = timestamp
+            )
             
             self.table_client.create_entity(entity=entity)
             print(f"Log de tokens salvo com sucesso para job_id: {job_id}")
