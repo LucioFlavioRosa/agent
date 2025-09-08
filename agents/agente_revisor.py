@@ -68,9 +68,12 @@ class AgenteRevisor:
         usar_rag: bool = False,
         model_name: Optional[str] = None,
         max_token_out: int = 15000,
-        arquivos_especificos: Optional[List[str]] = None
+        arquivos_especificos: Optional[List[str]] = None,
+        job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         print(f"[Agente Revisor] Iniciando análise - repositório: {repositorio} (tipo: {repository_type})")
+        if job_id:
+            print(f"[Agente Revisor] Job ID recebido: {job_id}")
         
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
@@ -100,7 +103,8 @@ class AgenteRevisor:
             instrucoes_extras=instrucoes_extras,
             usar_rag=usar_rag,
             model_name=model_name,
-            max_token_out=max_token_out
+            max_token_out=max_token_out,
+            job_id=job_id
         )
 
         print(f"[Agente Revisor] Resposta recebida da IA: {type(resultado_da_ia)}")
