@@ -39,10 +39,11 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         modelo_final = model_name or "claude-3-opus-20240229"
-        job_id = str(uuid.uuid4())
+        job_id_final = job_id or str(uuid.uuid4())
         
         prompt_sistema = self.carregar_prompt(tipo_tarefa)
 
@@ -88,7 +89,7 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
                 data=data_atual,
                 hora=hora_atual,
                 status_update="completed",
-                job_id=job_id
+                job_id=job_id_final
             )
             
             return {
@@ -107,14 +108,16 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
         prompt_principal: str,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
             instrucoes_extras=instrucoes_extras,
             usar_rag=usar_rag,
-            max_token_out=max_token_out
+            max_token_out=max_token_out,
+            job_id=job_id
         )
     
     def executar_prompt_com_modelo(
@@ -123,12 +126,14 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
         prompt_principal: str,
         instrucoes_extras: str = "",
         model_name: Optional[str] = None,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
             instrucoes_extras=instrucoes_extras,
             model_name=model_name,
-            max_token_out=max_token_out
+            max_token_out=max_token_out,
+            job_id=job_id
         )
