@@ -93,6 +93,7 @@ class AzureTableLogger:
     def log_tokens(self, projeto: str, analysis_type: str, llm_model: str, tokens_in: int, tokens_out: int, data: str, hora: str, status_update: str, job_id: str) -> bool:
         print(f"[AzureTableLogger] Iniciando log_tokens para job_id: {job_id}")
         print(f"[AzureTableLogger] Parâmetros recebidos:")
+        print(f"[AzureTableLogger] - nome_secreto: {secret_name}")
         print(f"[AzureTableLogger] - projeto: {projeto} (tipo: {type(projeto)})")
         print(f"[AzureTableLogger] - analysis_type: {analysis_type} (tipo: {type(analysis_type)})")
         print(f"[AzureTableLogger] - llm_model: {llm_model} (tipo: {type(llm_model)})")
