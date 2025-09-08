@@ -68,6 +68,7 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
     repo_name: str
+    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
     analysis_type: ValidAnalysisTypes
     branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
@@ -131,9 +132,9 @@ def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchR
     else:
         return OpenAILLMProvider(rag_retriever=rag_retriever)
 
-def _try_read_report_from_blob(analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str) -> Optional[str]:
+def _try_read_report_from_blob(projeto: str, analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str) -> Optional[str]:
     try:
-        return read_report_from_blob(analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        return read_report_from_blob(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
     except FileNotFoundError:
         return None
     except Exception as e:
@@ -217,6 +218,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                 if not gerar_novo_relatorio and analysis_name:
                     print(f"[{job_id}] Tentando ler relatório existente do Blob Storage: {analysis_name}")
                     existing_report = _try_read_report_from_blob(
+                        job_info['data']['projeto'],
                         job_info['data']['original_analysis_type'],
                         repository_type,
                         repo_name,
@@ -271,7 +273,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -286,6 +288,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                         try:
                             blob_url = upload_report_to_blob(
                                 report_text,
+                                job_info['data']['projeto'],
                                 job_info['data']['original_analysis_type'],
                                 repository_type,
                                 repo_name,
@@ -313,6 +316,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     try:
                         blob_url = upload_report_to_blob(
                             report_text,
+                            job_info['data']['projeto'],
                             job_info['data']['original_analysis_type'],
                             repository_type,
                             repo_name,
@@ -421,11 +425,19 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     
     job_id = str(uuid.uuid4())
     analysis_type_str = payload.analysis_type.value
+    
+    # Geração automática de nome de análise se não fornecido
+    analysis_name = payload.analysis_name
+    if not analysis_name:
+        analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
+        print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
+    
     initial_job_data = {
         'status': 'starting',
         'data': {
             'repo_name': normalized_repo_name,  # Usa o valor normalizado
             'original_repo_name': payload.repo_name,  # Preserva o valor original para rastreabilidade
+            'projeto': payload.projeto,
             'branch_name': payload.branch_name,
             'original_analysis_type': analysis_type_str,
             'instrucoes_extras': payload.instrucoes_extras,
@@ -434,7 +446,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'gerar_relatorio_apenas': payload.gerar_relatorio_apenas,
             'gerar_novo_relatorio': payload.gerar_novo_relatorio,
             'arquivos_especificos': payload.arquivos_especificos,
-            'analysis_name': payload.analysis_name,
+            'analysis_name': analysis_name,
             'repository_type': payload.repository_type
         },
         'error_details': None
@@ -442,10 +454,10 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     
     job_store.set_job(job_id, initial_job_data)
     
-    if payload.analysis_name:
-        analysis_name_to_job_id[payload.analysis_name] = job_id
+    if analysis_name:
+        analysis_name_to_job_id[analysis_name] = job_id
     
-    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type})")
+    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
     
     # A chamada agora é sempre para a mesma função, começando do passo 0
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
@@ -542,6 +554,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
         'data': {
             'repo_name': normalized_repo_name,
             'original_repo_name': original_repo_name,
+            'projeto': original_job['data']['projeto'],
             'branch_name': original_job['data']['branch_name'],
             'original_analysis_type': 'implementacao',
             'instrucoes_extras': f"Gerar código baseado no seguinte relatório:\n\n{report}",
@@ -559,7 +572,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     job_store.set_job(new_job_id, new_job_data)
     analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
     
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type})")
+    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}'")
     
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     
