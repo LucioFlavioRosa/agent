@@ -196,7 +196,6 @@ class ILLMProviderWithModelSelection(ILLMProvider):
         prompt_principal: str,
         instrucoes_extras: str = "",
         model_name: Optional[str] = None,
-        model_name: Optional[str] = None,
         job_id: Optional[str] = None,
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
