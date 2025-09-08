@@ -46,17 +46,17 @@ class AzureTableLogger:
             row_key = f"{job_id}_{timestamp.replace(':', '-').replace('.', '-')}"
             
             entity = TableEntity(
-            PartitionKey = projeto
-            RowKey = row_key
-            Projeto = projeto
-            AnalysisType = analysis_type
-            LLMModel = llm_model
-            TokensIn = tokens_in
-            TokensOut = tokens_out
-            Data = data
-            Hora = hora
-            StatusUpdate = status_update
-            JobId = job_id
+            PartitionKey = projeto,
+            RowKey = row_key,
+            Projeto = projeto,
+            AnalysisType = analysis_type,
+            LLMModel = llm_model,
+            TokensIn = tokens_in,
+            TokensOut = tokens_out,
+            Data = data,
+            Hora = hora,
+            StatusUpdate = status_update,
+            JobId = job_id,
             CreatedAt = timestamp
             )
             
