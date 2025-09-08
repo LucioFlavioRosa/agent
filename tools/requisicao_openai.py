@@ -85,7 +85,21 @@ class OpenAILLMProvider(ILLMProviderComplete):
             tokens_entrada = response.usage.prompt_tokens
             tokens_saida = response.usage.completion_tokens
 
-            #log_tokens_async(job_id, tokens_entrada, tokens_saida, timestamp)
+            projeto = model_name or "openai"
+            data_atual = datetime.utcnow().strftime("%Y-%m-%d")
+            hora_atual = datetime.utcnow().strftime("%H:%M:%S")
+            
+            log_tokens_async(
+                projeto=projeto,
+                analysis_type=tipo_tarefa,
+                llm_model=modelo_final,
+                tokens_in=tokens_entrada,
+                tokens_out=tokens_saida,
+                data=data_atual,
+                hora=hora_atual,
+                status_update="completed",
+                job_id=job_id
+            )
 
             return {
                 'reposta_final': conteudo_resposta,
