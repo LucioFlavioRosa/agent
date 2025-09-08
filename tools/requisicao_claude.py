@@ -8,7 +8,6 @@ from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 from domain.interfaces.secret_manager_interface import ISecretManager
 from tools.azure_secret_manager import AzureSecretManager
-from tools.azure_table_logger import log_tokens
 
 class AnthropicClaudeProvider(ILLMProviderComplete):
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
@@ -79,21 +78,6 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
             projeto = model_name or "claude"
             data_atual = datetime.utcnow().strftime("%Y-%m-%d")
             hora_atual = datetime.utcnow().strftime("%H:%M:%S")
-            
-            try:
-                log_tokens(
-                    projeto=projeto,
-                    analysis_type=tipo_tarefa,
-                    llm_model=modelo_final,
-                    tokens_in=tokens_entrada,
-                    tokens_out=tokens_saida,
-                    data=data_atual,
-                    hora=hora_atual,
-                    status_update="completed",
-                    job_id=job_id_final
-                )
-            except Exception as log_error:
-                print(f"AVISO: Falha no logging de tokens (não afeta o resultado): {log_error}")
             
             return {
                 'reposta_final': conteudo_resposta,
