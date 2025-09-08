@@ -90,17 +90,20 @@ class OpenAILLMProvider(ILLMProviderComplete):
             data_atual = datetime.utcnow().strftime("%Y-%m-%d")
             hora_atual = datetime.utcnow().strftime("%H:%M:%S")
             
-            log_tokens_async(
-                projeto=projeto,
-                analysis_type=tipo_tarefa,
-                llm_model=modelo_final,
-                tokens_in=tokens_entrada,
-                tokens_out=tokens_saida,
-                data=data_atual,
-                hora=hora_atual,
-                status_update="completed",
-                job_id=job_id_final
-            )
+            try:
+                log_tokens_async(
+                    projeto=projeto,
+                    analysis_type=tipo_tarefa,
+                    llm_model=modelo_final,
+                    tokens_in=tokens_entrada,
+                    tokens_out=tokens_saida,
+                    data=data_atual,
+                    hora=hora_atual,
+                    status_update="completed",
+                    job_id=job_id_final
+                )
+            except Exception as log_error:
+                print(f"AVISO: Falha no logging de tokens (não afeta o resultado): {log_error}")
 
             return {
                 'reposta_final': conteudo_resposta,
