@@ -136,6 +136,29 @@ relatorio_implentacao_feature:
         tipo_analise: "agrupamento_commits"
         max_token_out: 30000
 
+relatorio_implentacao_feature:
+  description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação na azure"
+  extensions: [".py", ".txt"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "melhorias_azure"
+      requires_approval: true
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
+
 relatorio_owasp:
   description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido"
   extensions: [".py"]
