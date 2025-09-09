@@ -136,7 +136,7 @@ relatorio_implentacao_feature:
         tipo_analise: "agrupamento_commits"
         max_token_out: 30000
 
-relatorio_implentacao_feature:
+relatorio_implentacao_feature_azure:
   description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação na azure"
   extensions: [".py", ".txt"]
   steps:
