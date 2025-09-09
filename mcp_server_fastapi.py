@@ -266,11 +266,8 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                         'repository_type': repository_type,
                         'job_id': job_id,
                         'projeto': projeto,
-                        'llm_model': llm_model,
                         'status_update': status_update
                     })
-                    print(f"[{job_id}] Agente Revisor: repositorio='{agent_params['repositorio']}', branch='{agent_params['nome_branch']}', tipo='{repository_type}'")
-                    print(f"[{job_id}] Passando variáveis: projeto='{projeto}', llm_model='{llm_model}', status_update='{status_update}', job_id='{job_id}'")
                     agent_response = agente.main(**agent_params)
                 elif agent_type == "processador":
                     agente = AgenteProcessador(llm_provider=llm_provider)
