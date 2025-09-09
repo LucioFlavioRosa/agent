@@ -24,19 +24,6 @@ class AgenteRevisor:
         arquivos_especificos: Optional[List[str]] = None
     ) -> Dict[str, str]:
         try:
-            print(f"[Agente Revisor] Parâmetros de entrada:")
-            print(f"[Agente Revisor] - repositorio: {repositorio}")
-            print(f"[Agente Revisor] - nome_branch: {nome_branch}")
-            print(f"[Agente Revisor] - tipo_analise: {tipo_analise}")
-            print(f"[Agente Revisor] - repository_type: {repository_type}")
-            print(f"[Agente Revisor] - arquivos_especificos: {arquivos_especificos}")
-            
-            if arquivos_especificos and len(arquivos_especificos) > 0:
-                print(f"[Agente Revisor] Iniciando a leitura filtrada do repositório: {repositorio}, branch: {nome_branch}, tipo: {repository_type}")
-                print(f"[Agente Revisor] Arquivos específicos solicitados: {len(arquivos_especificos)} arquivos")
-            else:
-                print(f"[Agente Revisor] Iniciando a leitura completa do repositório: {repositorio}, branch: {nome_branch}, tipo: {repository_type}")
-            
             codigo_para_analise = self.repository_reader.read_repository(
                 nome_repo=repositorio,
                 tipo_analise=tipo_analise,
@@ -44,16 +31,7 @@ class AgenteRevisor:
                 nome_branch=nome_branch,
                 arquivos_especificos=arquivos_especificos
             )
-            
-            print(f"[Agente Revisor] Resultado da leitura: {type(codigo_para_analise)} com {len(codigo_para_analise) if codigo_para_analise else 0} itens")
-            
-            if not codigo_para_analise:
-                print(f"[Agente Revisor] AVISO CRÍTICO: codigo_para_analise está vazio")
-                print(f"[Agente Revisor] Tipo do objeto retornado: {type(codigo_para_analise)}")
-                print(f"[Agente Revisor] Conteúdo do objeto: {codigo_para_analise}")
-            else:
-                print(f"[Agente Revisor] Arquivos obtidos: {list(codigo_para_analise.keys())[:3]}{'...' if len(codigo_para_analise) > 3 else ''}")
-            
+                
             return codigo_para_analise
             
         except Exception as e:
@@ -73,17 +51,8 @@ class AgenteRevisor:
         arquivos_especificos: Optional[List[str]] = None,
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
-        llm_model: Optional[str] = None,
         status_update: Optional[str] = None
     ) -> Dict[str, Any]:
-        print(f"[Agente Revisor] Iniciando análise - repositório: {repositorio} (tipo: {repository_type})")
-        
-        print(f"[Agente Revisor] Variáveis recebidas:")
-        print(f"[Agente Revisor] - job_id: {job_id}")
-        print(f"[Agente Revisor] - projeto: {projeto}")
-        print(f"[Agente Revisor] - llm_model: {llm_model}")
-        print(f"[Agente Revisor] - status_update: {status_update}")
-        print(f"[Agente Revisor] - model_name: {model_name}")
         
         log_custom_data(
             job_id=job_id,
@@ -91,7 +60,7 @@ class AgenteRevisor:
             status="INICIADO",
             repositorio=repositorio,
             tipo_analise=tipo_analise,
-            model_name=model_name or llm_model
+            model_name=model_name
         )
         
         codigo_para_analise = self._get_code(
@@ -120,12 +89,8 @@ class AgenteRevisor:
             
             return {"resultado": {"reposta_final": {}}}
 
-        print(f"[Agente Revisor] Preparando código para envio à IA ({len(codigo_para_analise)} arquivos)")
         codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
-        tokens_in_estimate = len(codigo_str) // 4
-        print(f"[Agente Revisor] Tamanho do JSON de código: {len(codigo_str)} caracteres")
-
-        print(f"[Agente Revisor] Enviando para LLM Provider (modelo: {model_name})")
+        
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
             prompt_principal=codigo_str,
@@ -133,29 +98,17 @@ class AgenteRevisor:
             usar_rag=usar_rag,
             model_name=model_name,
             max_token_out=max_token_out,
-            job_id=job_id
         )
-
-        print(f"[Agente Revisor] Resposta recebida da IA: {type(resultado_da_ia)}")
-        if resultado_da_ia:
-            print(f"[Agente Revisor] Conteúdo da resposta (primeiros 200 chars): {str(resultado_da_ia)[:200]}...")
-            tokens_out_estimate = len(str(resultado_da_ia)) // 4
-            status_final = "CONCLUIDO"
-        else:
-            print(f"[Agente Revisor] AVISO CRÍTICO: IA retornou resposta vazia ou None")
-            tokens_out_estimate = 0
-            status_final = "ERRO_RESPOSTA_VAZIA"
 
         log_custom_data(
             job_id=job_id,
             projeto=projeto,
-            tokens_in=tokens_in_estimate,
-            tokens_out=tokens_out_estimate,
+            tokens_in=resultado_da_ia['tokens_entrada'],
+            tokens_out=resultado_da_ia['tokens_saida'],
             status=status_final,
             repositorio=repositorio,
             tipo_analise=tipo_analise,
-            model_name=model_name or llm_model,
-            max_token_out=max_token_out
+            model_name=model_name,
         )
 
         return {
