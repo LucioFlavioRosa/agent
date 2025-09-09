@@ -50,6 +50,20 @@ class AzureADGroupsService:
             print(f"[Azure AD Groups] Erro ao buscar grupos para {user_email}: {e}")
             return []
     
+    def user_in_group(self, user_email: str, group_name: str) -> bool:
+        try:
+            print(f"[Azure AD Groups] Verificando se {user_email} pertence ao grupo: {group_name}")
+            
+            user_groups = self.get_user_groups(user_email)
+            is_member = group_name in user_groups
+            
+            print(f"[Azure AD Groups] Usuário {user_email} {'pertence' if is_member else 'não pertence'} ao grupo {group_name}")
+            return is_member
+            
+        except Exception as e:
+            print(f"[Azure AD Groups] Erro ao verificar pertencimento ao grupo {group_name} para {user_email}: {e}")
+            return False
+    
     def get_user_id_by_email(self, user_email: str) -> Optional[str]:
         try:
             user_endpoint = f"/users/{user_email}"
@@ -62,3 +76,7 @@ class AzureADGroupsService:
 def get_user_groups(user_email: str) -> List[str]:
     service = AzureADGroupsService()
     return service.get_user_groups(user_email)
+
+def check_user_in_group(user_email: str, group_name: str) -> bool:
+    service = AzureADGroupsService()
+    return service.user_in_group(user_email, group_name)
