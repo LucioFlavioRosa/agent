@@ -168,8 +168,6 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
         repo_name = job_info['data']['repo_name']
         repository_type = job_info['data']['repository_type']
         
-        print(f"[{job_id}] Usando repositório: '{repo_name}' (tipo: {repository_type})")
-        print(f"[{job_id}] Usando tipo de repositório explícito: {repository_type}")
         repository_provider = get_repository_provider_explicit(repository_type)
         
         repo_reader = ReaderGeral(repository_provider=repository_provider)
@@ -255,7 +253,6 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
                     
                     # Extrair variáveis necessárias do job_info e step
                     projeto = job_info['data']['projeto']
-                    llm_model = model_para_etapa
                     status_update = step['status_update']
                     
                     agent_params.update({
