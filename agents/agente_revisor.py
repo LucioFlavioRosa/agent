@@ -2,6 +2,7 @@ import json
 from typing import Optional, Dict, Any, List
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
+from agents.logging_utils import init_logger, log_custom_data
 
 class AgenteRevisor:
     
@@ -12,6 +13,7 @@ class AgenteRevisor:
     ):
         self.repository_reader = repository_reader
         self.llm_provider = llm_provider
+        init_logger()
 
     def _get_code(
         self,
@@ -83,6 +85,15 @@ class AgenteRevisor:
         print(f"[Agente Revisor] - status_update: {status_update}")
         print(f"[Agente Revisor] - model_name: {model_name}")
         
+        log_custom_data(
+            job_id=job_id,
+            projeto=projeto,
+            status="INICIADO",
+            repositorio=repositorio,
+            tipo_analise=tipo_analise,
+            model_name=model_name or llm_model
+        )
+        
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,
@@ -98,10 +109,20 @@ class AgenteRevisor:
                 print(f"[Agente Revisor] AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
             
             print(f"[Agente Revisor] Retornando resposta vazia devido à ausência de código")
+            
+            log_custom_data(
+                job_id=job_id,
+                projeto=projeto,
+                status="ERRO_SEM_CODIGO",
+                repositorio=repositorio,
+                tipo_analise=tipo_analise
+            )
+            
             return {"resultado": {"reposta_final": {}}}
 
         print(f"[Agente Revisor] Preparando código para envio à IA ({len(codigo_para_analise)} arquivos)")
         codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
+        tokens_in_estimate = len(codigo_str) // 4
         print(f"[Agente Revisor] Tamanho do JSON de código: {len(codigo_str)} caracteres")
 
         print(f"[Agente Revisor] Enviando para LLM Provider (modelo: {model_name})")
@@ -118,8 +139,24 @@ class AgenteRevisor:
         print(f"[Agente Revisor] Resposta recebida da IA: {type(resultado_da_ia)}")
         if resultado_da_ia:
             print(f"[Agente Revisor] Conteúdo da resposta (primeiros 200 chars): {str(resultado_da_ia)[:200]}...")
+            tokens_out_estimate = len(str(resultado_da_ia)) // 4
+            status_final = "CONCLUIDO"
         else:
             print(f"[Agente Revisor] AVISO CRÍTICO: IA retornou resposta vazia ou None")
+            tokens_out_estimate = 0
+            status_final = "ERRO_RESPOSTA_VAZIA"
+
+        log_custom_data(
+            job_id=job_id,
+            projeto=projeto,
+            tokens_in=tokens_in_estimate,
+            tokens_out=tokens_out_estimate,
+            status=status_final,
+            repositorio=repositorio,
+            tipo_analise=tipo_analise,
+            model_name=model_name or llm_model,
+            max_token_out=max_token_out
+        )
 
         return {
             "resultado": {
