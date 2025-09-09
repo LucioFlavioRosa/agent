@@ -1,5 +1,7 @@
 import json
 from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
+
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
@@ -57,6 +59,7 @@ class AgenteRevisor:
         log_custom_data(
             job_id=job_id,
             projeto=projeto,
+            hora_inicio=datetime.now(timezone.utc).isoformat(),
             status="INICIADO",
             tipo_repositorio=repository_type,
             nome_repositorio=repositorio,
@@ -85,7 +88,8 @@ class AgenteRevisor:
                 projeto=projeto,
                 status="ERRO_SEM_CODIGO",
                 repositorio=repositorio,
-                tipo_analise=tipo_analise
+                tipo_analise=tipo_analise,
+                hora_erro=datetime.now(timezone.utc).isoformat()
             )
             
             return {"resultado": {"reposta_final": {}}}
@@ -104,6 +108,7 @@ class AgenteRevisor:
         log_custom_data(
             job_id=job_id,
             projeto=projeto,
+            hora_termino=datetime.now(timezone.utc).isoformat(),
             tokens_in=resultado_da_ia['tokens_entrada'],
             tokens_out=resultado_da_ia['tokens_saida'],
             status='FINALIZADO',
