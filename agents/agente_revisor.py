@@ -58,7 +58,8 @@ class AgenteRevisor:
             job_id=job_id,
             projeto=projeto,
             status="INICIADO",
-            repositorio=repositorio,
+            tipo_repositorio=repository_type,
+            nome_repositorio=repositorio,
             tipo_analise=tipo_analise,
             model_name=model_name
         )
@@ -106,7 +107,8 @@ class AgenteRevisor:
             tokens_in=resultado_da_ia['tokens_entrada'],
             tokens_out=resultado_da_ia['tokens_saida'],
             status='FINALIZADO',
-            repositorio=repositorio,
+            tipo_repositorio=repository_type,
+            nome_repositorio=repositorio,
             tipo_analise=tipo_analise,
             model_name=model_name,
         )
