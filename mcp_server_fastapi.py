@@ -65,6 +65,67 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
         detail=f"Formato de repositório GitLab inválido: '{repo_name}'. Use o Project ID numérico (RECOMENDADO para máxima robustez) ou o path completo 'namespace/projeto'. Exemplos: Project ID: '123456', Path: 'meugrupo/meuprojeto'"
     )
 
+def get_user_group_and_permissions(user_email: str) -> Dict:
+    if not user_email:
+        return {
+            "group": "default",
+            "allowed_tokens": [],
+            "allowed_repos": [],
+            "has_access": False
+        }
+    
+    user_email = user_email.lower().strip()
+    
+    # Mock inicial - mapear e-mail para grupo e permissões
+    user_groups_map = {
+        "admin@company.com": {
+            "group": "admin",
+            "allowed_tokens": ["github-token", "gitlab-token", "azure-token"],
+            "allowed_repos": ["*"],  # Acesso a todos os repositórios
+            "has_access": True
+        },
+        "devops@company.com": {
+            "group": "devops",
+            "allowed_tokens": ["github-token-devops", "gitlab-token-devops"],
+            "allowed_repos": ["company/backend", "company/frontend", "123456"],
+            "has_access": True
+        },
+        "dev@company.com": {
+            "group": "developer",
+            "allowed_tokens": ["github-token-dev"],
+            "allowed_repos": ["company/test-repo"],
+            "has_access": True
+        }
+    }
+    
+    return user_groups_map.get(user_email, {
+        "group": "unauthorized",
+        "allowed_tokens": [],
+        "allowed_repos": [],
+        "has_access": False
+    })
+
+def validate_user_access(user_email: str, repository_name: str) -> Dict:
+    permissions = get_user_group_and_permissions(user_email)
+    
+    if not permissions["has_access"]:
+        return {"authorized": False, "reason": "Usuário não autorizado"}
+    
+    allowed_repos = permissions["allowed_repos"]
+    
+    # Acesso total para admin
+    if "*" in allowed_repos:
+        return {"authorized": True, "permissions": permissions}
+    
+    # Verificar se o repositório está na lista permitida
+    if repository_name in allowed_repos:
+        return {"authorized": True, "permissions": permissions}
+    
+    return {
+        "authorized": False, 
+        "reason": f"Usuário do grupo '{permissions['group']}' não tem acesso ao repositório '{repository_name}'"
+    }
+
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
     repo_name: str
@@ -79,6 +140,7 @@ class StartAnalysisPayload(BaseModel):
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
     repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    user_email: Optional[str] = Field(None, description="E-mail do usuário para controle de acesso RBAC")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -87,6 +149,7 @@ class UpdateJobPayload(BaseModel):
     job_id: str
     action: Literal["approve", "reject"]
     instrucoes_extras: Optional[str] = None
+    user_email: Optional[str] = Field(None, description="E-mail do usuário para controle de acesso RBAC")
 
 class PullRequestSummary(BaseModel):
     pull_request_url: str
@@ -278,7 +341,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -422,6 +485,18 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 # --- Endpoints da API ---
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    # Validação RBAC
+    if payload.user_email:
+        access_validation = validate_user_access(payload.user_email, payload.repo_name)
+        if not access_validation["authorized"]:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Acesso negado: {access_validation['reason']}"
+            )
+        print(f"[RBAC] Usuário {payload.user_email} autorizado para repositório {payload.repo_name}")
+    else:
+        print(f"[RBAC] AVISO: Nenhum user_email fornecido, prosseguindo sem validação RBAC")
+    
     # Validação e normalização específica para GitLab
     normalized_repo_name = payload.repo_name
     if payload.repository_type == 'gitlab':
@@ -452,7 +527,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'gerar_novo_relatorio': payload.gerar_novo_relatorio,
             'arquivos_especificos': payload.arquivos_especificos,
             'analysis_name': analysis_name,
-            'repository_type': payload.repository_type
+            'repository_type': payload.repository_type,
+            'user_email': payload.user_email
         },
         'error_details': None
     }
@@ -462,7 +538,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     if analysis_name:
         analysis_name_to_job_id[analysis_name] = job_id
     
-    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
+    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}', Usuário: '{payload.user_email}'")
     
     # A chamada agora é sempre para a mesma função, começando do passo 0
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
@@ -475,8 +551,22 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
     if not job or job.get('status') != 'pending_approval':
         raise HTTPException(status_code=400, detail="Job não encontrado ou não está aguardando aprovação.")
     
+    # Validação RBAC para aprovação
+    if payload.user_email:
+        original_repo = job.get('data', {}).get('repo_name', '')
+        access_validation = validate_user_access(payload.user_email, original_repo)
+        if not access_validation["authorized"]:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Acesso negado para aprovação: {access_validation['reason']}"
+            )
+        print(f"[RBAC] Usuário {payload.user_email} autorizado para aprovar job {payload.job_id}")
+    else:
+        print(f"[RBAC] AVISO: Nenhum user_email fornecido para aprovação, prosseguindo sem validação RBAC")
+    
     if payload.action == 'approve':
         job['data']['instrucoes_extras_aprovacao'] = payload.instrucoes_extras
+        job['data']['approver_email'] = payload.user_email
         job['status'] = 'workflow_started'
         
         # Descobre de qual passo continuar
@@ -491,6 +581,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida."}
     
     if payload.action == 'reject':
+        job['data']['rejector_email'] = payload.user_email
         job['status'] = 'rejected'
         job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
@@ -530,7 +621,7 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
     )
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
-def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
+def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks, user_email: Optional[str] = None):
     job_id = analysis_name_to_job_id.get(analysis_name)
     if not job_id:
         raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
@@ -545,6 +636,18 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     
     original_repo_name = original_job['data']['repo_name']
     original_repository_type = original_job['data']['repository_type']
+    
+    # Validação RBAC
+    if user_email:
+        access_validation = validate_user_access(user_email, original_repo_name)
+        if not access_validation["authorized"]:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Acesso negado: {access_validation['reason']}"
+            )
+        print(f"[RBAC] Usuário {user_email} autorizado para geração de código do repositório {original_repo_name}")
+    else:
+        print(f"[RBAC] AVISO: Nenhum user_email fornecido para geração de código, prosseguindo sem validação RBAC")
     
     # Validação específica para GitLab se necessário
     normalized_repo_name = original_repo_name
@@ -569,7 +672,9 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
             'gerar_novo_relatorio': True,
             'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
             'analysis_name': f"{analysis_name}-implementation",
-            'repository_type': original_repository_type
+            'repository_type': original_repository_type,
+            'user_email': user_email,
+            'derived_from_analysis': analysis_name
         },
         'error_details': None
     }
@@ -577,7 +682,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     job_store.set_job(new_job_id, new_job_data)
     analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
     
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}'")
+    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}', Usuário: '{user_email}'")
     
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     
