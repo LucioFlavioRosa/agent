@@ -105,7 +105,7 @@ class AgenteRevisor:
             projeto=projeto,
             tokens_in=resultado_da_ia['tokens_entrada'],
             tokens_out=resultado_da_ia['tokens_saida'],
-            status='finalizacao',
+            status='FINALIZADO',
             repositorio=repositorio,
             tipo_analise=tipo_analise,
             model_name=model_name,
