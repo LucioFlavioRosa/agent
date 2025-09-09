@@ -17,6 +17,8 @@ from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider, get_repository_provider_explicit
 from tools.blob_report_uploader import upload_report_to_blob
 from tools.blob_report_reader import read_report_from_blob
+from tools.azure_ad_user_groups import get_user_groups
+from tools.rbac_authorizer import get_allowed_resources
 
 # --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
@@ -79,6 +81,7 @@ class StartAnalysisPayload(BaseModel):
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
     repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    user_email: Optional[str] = Field(None, description="E-mail do usuário para autenticação RBAC baseada em grupos do Azure AD")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -140,6 +143,34 @@ def _try_read_report_from_blob(projeto: str, analysis_type: str, repository_type
     except Exception as e:
         print(f"Erro ao ler relatório do Blob Storage: {e}")
         return None
+
+def _validate_user_authorization(user_email: Optional[str], repo_name: str, repository_type: str) -> Dict[str, Any]:
+    if not user_email:
+        print(f"[RBAC] Nenhum e-mail fornecido, prosseguindo sem validação RBAC")
+        return {"authorized": True, "allowed_resources": None}
+    
+    try:
+        print(f"[RBAC] Consultando grupos do usuário: {user_email}")
+        user_groups = get_user_groups(user_email)
+        print(f"[RBAC] Grupos encontrados para {user_email}: {user_groups}")
+        
+        allowed_resources = get_allowed_resources(user_groups)
+        print(f"[RBAC] Recursos permitidos: {allowed_resources}")
+        
+        if not user_groups:
+            print(f"[RBAC] Usuário {user_email} não pertence a nenhum grupo autorizado")
+            return {"authorized": False, "error": "Usuário não pertence a nenhum grupo autorizado"}
+        
+        allowed_repos = allowed_resources.get("repositories", [])
+        if allowed_repos and repo_name not in allowed_repos:
+            print(f"[RBAC] Repositório {repo_name} não está na lista de repositórios permitidos para o usuário")
+            return {"authorized": False, "error": f"Acesso negado ao repositório {repo_name}"}
+        
+        return {"authorized": True, "allowed_resources": allowed_resources}
+        
+    except Exception as e:
+        print(f"[RBAC] Erro durante validação de autorização: {e}")
+        return {"authorized": False, "error": f"Erro na validação de autorização: {str(e)}"}
 
 # --- Funções de Tarefa (Tasks) ---
 def handle_task_exception(job_id: str, e: Exception, step: str, job_info: Optional[Dict] = None):
@@ -278,7 +309,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -422,6 +453,11 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 # --- Endpoints da API ---
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    # Validação RBAC
+    auth_result = _validate_user_authorization(payload.user_email, payload.repo_name, payload.repository_type)
+    if not auth_result["authorized"]:
+        raise HTTPException(status_code=403, detail=auth_result["error"])
+    
     # Validação e normalização específica para GitLab
     normalized_repo_name = payload.repo_name
     if payload.repository_type == 'gitlab':
@@ -452,7 +488,9 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'gerar_novo_relatorio': payload.gerar_novo_relatorio,
             'arquivos_especificos': payload.arquivos_especificos,
             'analysis_name': analysis_name,
-            'repository_type': payload.repository_type
+            'repository_type': payload.repository_type,
+            'user_email': payload.user_email,
+            'allowed_resources': auth_result.get("allowed_resources")
         },
         'error_details': None
     }
@@ -462,7 +500,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     if analysis_name:
         analysis_name_to_job_id[analysis_name] = job_id
     
-    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
+    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}', Usuário: {payload.user_email or 'N/A'}")
     
     # A chamada agora é sempre para a mesma função, começando do passo 0
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
@@ -545,6 +583,12 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     
     original_repo_name = original_job['data']['repo_name']
     original_repository_type = original_job['data']['repository_type']
+    original_user_email = original_job['data'].get('user_email')
+    
+    # Validação RBAC para o novo job
+    auth_result = _validate_user_authorization(original_user_email, original_repo_name, original_repository_type)
+    if not auth_result["authorized"]:
+        raise HTTPException(status_code=403, detail=auth_result["error"])
     
     # Validação específica para GitLab se necessário
     normalized_repo_name = original_repo_name
@@ -569,7 +613,9 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
             'gerar_novo_relatorio': True,
             'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
             'analysis_name': f"{analysis_name}-implementation",
-            'repository_type': original_repository_type
+            'repository_type': original_repository_type,
+            'user_email': original_user_email,
+            'allowed_resources': auth_result.get("allowed_resources")
         },
         'error_details': None
     }
@@ -577,7 +623,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     job_store.set_job(new_job_id, new_job_data)
     analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
     
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}'")
+    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}', Usuário: {original_user_email or 'N/A'}")
     
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     
