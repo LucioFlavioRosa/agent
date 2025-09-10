@@ -7,7 +7,7 @@ import os
 class KeyVaultRBACService:
     def __init__(self):
         self.credential = DefaultAzureCredential()
-        self.keyvault_url = os.getenv('AZURE_KEYVAULT_URI', 'https://your-keyvault.vault.azure.net/')
+        self.keyvault_url = os.getenv('KEY_VAULT_URL', 'https://your-keyvault.vault.azure.net/')
         self.client = SecretClient(vault_url=self.keyvault_url, credential=self.credential)
         
         self.group_token_mapping = {
