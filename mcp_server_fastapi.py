@@ -17,6 +17,8 @@ from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider, get_repository_provider_explicit
 from tools.blob_report_uploader import upload_report_to_blob
 from tools.blob_report_reader import read_report_from_blob
+from tools.azure_ad_groups import get_user_groups
+from tools.keyvault_rbac import get_accessible_tokens
 
 # --- Classes e dependências ---
 from agents.agente_revisor import AgenteRevisor
@@ -65,8 +67,27 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
         detail=f"Formato de repositório GitLab inválido: '{repo_name}'. Use o Project ID numérico (RECOMENDADO para máxima robustez) ou o path completo 'namespace/projeto'. Exemplos: Project ID: '123456', Path: 'meugrupo/meuprojeto'"
     )
 
+def _validate_user_repository_access(user_email: str, repo_name: str, repository_type: str) -> bool:
+    try:
+        user_groups = get_user_groups(user_email)
+        print(f"[RBAC] Usuário {user_email} pertence aos grupos: {user_groups}")
+        
+        # Implementar lógica específica de validação de repositório por grupo
+        # Por enquanto, permitir acesso se o usuário tiver pelo menos um grupo
+        if not user_groups:
+            print(f"[RBAC] Usuário {user_email} não pertence a nenhum grupo")
+            return False
+        
+        print(f"[RBAC] Acesso ao repositório {repo_name} ({repository_type}) autorizado para {user_email}")
+        return True
+        
+    except Exception as e:
+        print(f"[RBAC] Erro ao validar acesso do usuário {user_email} ao repositório {repo_name}: {e}")
+        return False
+
 # --- Modelos de Dados Pydantic ---
 class StartAnalysisPayload(BaseModel):
+    user_email: str = Field(description="E-mail do usuário para validação de acesso via Azure AD")
     repo_name: str
     projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
     analysis_type: ValidAnalysisTypes
@@ -278,7 +299,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
             json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
             if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
 
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
+            current_step_result = json.loads(json_string.replace("", "").replace("", "").strip())
 
             job_info['data'][f'step_{current_step_index}_result'] = current_step_result
             previous_step_result = current_step_result
@@ -422,6 +443,30 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 # --- Endpoints da API ---
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    # Validação RBAC - Verificar acesso aos tokens do Key Vault
+    try:
+        accessible_tokens = get_accessible_tokens(payload.user_email)
+        print(f"[RBAC] Tokens acessíveis para {payload.user_email}: {accessible_tokens}")
+        
+        if not accessible_tokens:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Usuário {payload.user_email} não possui acesso a nenhum token do Key Vault. Verifique os grupos do Azure AD."
+            )
+    except Exception as e:
+        print(f"[RBAC] Erro ao verificar tokens acessíveis para {payload.user_email}: {e}")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Erro ao validar acesso aos tokens do Key Vault para o usuário {payload.user_email}"
+        )
+    
+    # Validação RBAC - Verificar acesso ao repositório
+    if not _validate_user_repository_access(payload.user_email, payload.repo_name, payload.repository_type):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Usuário {payload.user_email} não possui acesso ao repositório {payload.repo_name} ({payload.repository_type}). Verifique os grupos do Azure AD."
+        )
+    
     # Validação e normalização específica para GitLab
     normalized_repo_name = payload.repo_name
     if payload.repository_type == 'gitlab':
@@ -440,6 +485,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     initial_job_data = {
         'status': 'starting',
         'data': {
+            'user_email': payload.user_email,
             'repo_name': normalized_repo_name,  # Usa o valor normalizado
             'original_repo_name': payload.repo_name,  # Preserva o valor original para rastreabilidade
             'projeto': payload.projeto,
@@ -452,7 +498,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             'gerar_novo_relatorio': payload.gerar_novo_relatorio,
             'arquivos_especificos': payload.arquivos_especificos,
             'analysis_name': analysis_name,
-            'repository_type': payload.repository_type
+            'repository_type': payload.repository_type,
+            'accessible_tokens': accessible_tokens
         },
         'error_details': None
     }
@@ -462,7 +509,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     if analysis_name:
         analysis_name_to_job_id[analysis_name] = job_id
     
-    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
+    print(f"[{job_id}] Job criado - Usuário: {payload.user_email}, Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
     
     # A chamada agora é sempre para a mesma função, começando do passo 0
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
@@ -543,8 +590,29 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     if not report:
         raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
     
+    original_user_email = original_job['data']['user_email']
     original_repo_name = original_job['data']['repo_name']
     original_repository_type = original_job['data']['repository_type']
+    
+    # Validação RBAC para o job derivado
+    try:
+        accessible_tokens = get_accessible_tokens(original_user_email)
+        if not accessible_tokens:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Usuário {original_user_email} não possui mais acesso aos tokens do Key Vault"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Erro ao validar acesso aos tokens para job derivado: {e}"
+        )
+    
+    if not _validate_user_repository_access(original_user_email, original_repo_name, original_repository_type):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Usuário {original_user_email} não possui mais acesso ao repositório {original_repo_name}"
+        )
     
     # Validação específica para GitLab se necessário
     normalized_repo_name = original_repo_name
@@ -557,6 +625,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     new_job_data = {
         'status': 'starting',
         'data': {
+            'user_email': original_user_email,
             'repo_name': normalized_repo_name,
             'original_repo_name': original_repo_name,
             'projeto': original_job['data']['projeto'],
@@ -569,7 +638,8 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
             'gerar_novo_relatorio': True,
             'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
             'analysis_name': f"{analysis_name}-implementation",
-            'repository_type': original_repository_type
+            'repository_type': original_repository_type,
+            'accessible_tokens': accessible_tokens
         },
         'error_details': None
     }
@@ -577,7 +647,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     job_store.set_job(new_job_id, new_job_data)
     analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
     
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}'")
+    print(f"[{new_job_id}] Job derivado criado - Usuário: {original_user_email}, Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}'")
     
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     
