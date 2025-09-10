@@ -1,73 +1,89 @@
-import os
-from typing import Optional
+from typing import List, Optional
+from tools.azure_ad_groups import get_user_groups
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from azure.core.exceptions import ResourceNotFoundError, ClientAuthenticationError
+import os
 
 class KeyVaultRBACService:
-    def __init__(self, keyvault_uri: Optional[str] = None):
-        self.keyvault_uri = keyvault_uri or os.getenv("KEYVAULT_URI")
-        if not self.keyvault_uri:
-            raise ValueError("KEYVAULT_URI deve ser fornecido via parâmetro ou variável de ambiente")
-        
+    def __init__(self):
         self.credential = DefaultAzureCredential()
-        self.client = SecretClient(vault_url=self.keyvault_uri, credential=self.credential)
+        self.keyvault_url = os.getenv('AZURE_KEYVAULT_URI', 'https://your-keyvault.vault.azure.net/')
+        self.client = SecretClient(vault_url=self.keyvault_url, credential=self.credential)
+        
+        self.group_token_mapping = {
+            'DevOps-Team': ['github-token', 'gitlab-token', 'azure-devops-token'],
+            'Developers': ['github-token', 'gitlab-token'],
+            'QA-Team': ['github-token'],
+            'Admins': ['github-token', 'gitlab-token', 'azure-devops-token', 'admin-token']
+        }
     
-    def get_secret_for_group(self, group_name: str, secret_name: str) -> Optional[str]:
+    def get_accessible_tokens(self, user_email: str) -> List[str]:
         try:
-            print(f"[KeyVault RBAC] Buscando secret '{secret_name}' para grupo '{group_name}'")
+            print(f"[KeyVault RBAC] Verificando tokens acessíveis para usuário: {user_email}")
             
-            full_secret_name = f"{group_name}-{secret_name}"
+            user_groups = get_user_groups(user_email)
+            if not user_groups:
+                print(f"[KeyVault RBAC] Usuário {user_email} não pertence a nenhum grupo")
+                return []
             
-            secret = self.client.get_secret(full_secret_name)
+            accessible_tokens = set()
             
-            print(f"[KeyVault RBAC] Secret '{full_secret_name}' encontrado com sucesso")
+            for group in user_groups:
+                tokens_for_group = self.group_token_mapping.get(group, [])
+                accessible_tokens.update(tokens_for_group)
+                print(f"[KeyVault RBAC] Grupo '{group}' concede acesso aos tokens: {tokens_for_group}")
+            
+            accessible_tokens_list = list(accessible_tokens)
+            print(f"[KeyVault RBAC] Tokens finais acessíveis para {user_email}: {accessible_tokens_list}")
+            
+            return accessible_tokens_list
+            
+        except Exception as e:
+            print(f"[KeyVault RBAC] Erro ao determinar tokens acessíveis para {user_email}: {e}")
+            return []
+    
+    def validate_token_access(self, user_email: str, token_name: str) -> bool:
+        try:
+            accessible_tokens = self.get_accessible_tokens(user_email)
+            has_access = token_name in accessible_tokens
+            
+            print(f"[KeyVault RBAC] Usuário {user_email} {'tem' if has_access else 'não tem'} acesso ao token '{token_name}'")
+            return has_access
+            
+        except Exception as e:
+            print(f"[KeyVault RBAC] Erro ao validar acesso ao token '{token_name}' para {user_email}: {e}")
+            return False
+    
+    def get_secret_value(self, user_email: str, secret_name: str) -> Optional[str]:
+        try:
+            if not self.validate_token_access(user_email, secret_name):
+                print(f"[KeyVault RBAC] Acesso negado ao secret '{secret_name}' para usuário {user_email}")
+                return None
+            
+            secret = self.client.get_secret(secret_name)
+            print(f"[KeyVault RBAC] Secret '{secret_name}' recuperado com sucesso para {user_email}")
             return secret.value
             
-        except ResourceNotFoundError:
-            print(f"[KeyVault RBAC] Secret '{full_secret_name}' não encontrado no Key Vault")
-            return None
-        except ClientAuthenticationError as e:
-            print(f"[KeyVault RBAC] Erro de autenticação ao acessar Key Vault: {e}")
-            return None
         except Exception as e:
-            print(f"[KeyVault RBAC] Erro inesperado ao buscar secret '{full_secret_name}': {e}")
+            print(f"[KeyVault RBAC] Erro ao recuperar secret '{secret_name}' para {user_email}: {e}")
             return None
-    
-    def get_repository_token_for_group(self, group_name: str, repository_type: str) -> Optional[str]:
-        try:
-            print(f"[KeyVault RBAC] Buscando token de repositório '{repository_type}' para grupo '{group_name}'")
-            
-            token_secret_name = f"{repository_type}-token"
-            return self.get_secret_for_group(group_name, token_secret_name)
-            
-        except Exception as e:
-            print(f"[KeyVault RBAC] Erro ao buscar token de repositório para grupo '{group_name}': {e}")
-            return None
-    
-    def list_secrets_for_group(self, group_name: str) -> list:
-        try:
-            print(f"[KeyVault RBAC] Listando secrets disponíveis para grupo '{group_name}'")
-            
-            group_prefix = f"{group_name}-"
-            group_secrets = []
-            
-            for secret_properties in self.client.list_properties_of_secrets():
-                if secret_properties.name.startswith(group_prefix):
-                    secret_name = secret_properties.name[len(group_prefix):]
-                    group_secrets.append(secret_name)
-            
-            print(f"[KeyVault RBAC] Secrets encontrados para grupo '{group_name}': {group_secrets}")
-            return group_secrets
-            
-        except Exception as e:
-            print(f"[KeyVault RBAC] Erro ao listar secrets para grupo '{group_name}': {e}")
-            return []
 
-def get_secret_for_group(group_name: str, secret_name: str, keyvault_uri: Optional[str] = None) -> Optional[str]:
-    service = KeyVaultRBACService(keyvault_uri)
-    return service.get_secret_for_group(group_name, secret_name)
+_keyvault_service = None
 
-def get_repository_token_for_group(group_name: str, repository_type: str, keyvault_uri: Optional[str] = None) -> Optional[str]:
-    service = KeyVaultRBACService(keyvault_uri)
-    return service.get_repository_token_for_group(group_name, repository_type)
+def get_keyvault_service() -> KeyVaultRBACService:
+    global _keyvault_service
+    if _keyvault_service is None:
+        _keyvault_service = KeyVaultRBACService()
+    return _keyvault_service
+
+def get_accessible_tokens(user_email: str) -> List[str]:
+    service = get_keyvault_service()
+    return service.get_accessible_tokens(user_email)
+
+def validate_token_access(user_email: str, token_name: str) -> bool:
+    service = get_keyvault_service()
+    return service.validate_token_access(user_email, token_name)
+
+def get_secret_value(user_email: str, secret_name: str) -> Optional[str]:
+    service = get_keyvault_service()
+    return service.get_secret_value(user_email, secret_name)
