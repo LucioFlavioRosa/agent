@@ -135,7 +135,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
 
         if agent_type == "revisor":
-            instrucoes = job_info['data']['instrucoes_extras'] if current_step_index == 0 else json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
+            instrucoes = job_info['data'].get('instrucoes_extras', '')
+            
+            if current_step_index > 0:
+                instrucoes += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR (APROVADO PELO USUÁRIO):\n"
+                instrucoes += json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
+                
+            observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
+            if observacoes_humanas:
+                instrucoes += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
 
             agent_params.update({
                 'repositorio': job_info['data']['repo_name'], 
