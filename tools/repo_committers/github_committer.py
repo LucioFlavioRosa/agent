@@ -1,5 +1,6 @@
 from github import GithubException, UnknownObjectException
 from typing import Dict, Any, List
+from tools.repo_committers.base_committer import BaseCommitter
 
 def processar_branch_github(
     repo,
@@ -12,13 +13,7 @@ def processar_branch_github(
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote GitHub para a Branch: '{nome_branch}' ---")
     
-    resultado_branch = {
-        "branch_name": nome_branch,
-        "success": False,
-        "pr_url": None,
-        "message": "",
-        "arquivos_modificados": []
-    }
+    resultado_branch = BaseCommitter._inicializar_resultado_branch(nome_branch)
     commits_realizados = 0
 
     try:
@@ -34,15 +29,12 @@ def processar_branch_github(
 
     print(f"Iniciando aplicação de {len(conjunto_de_mudancas)} mudanças...")
     
-    for mudanca in conjunto_de_mudancas:
-        caminho = mudanca.get("caminho_do_arquivo")
-        status = mudanca.get("status", "").upper()
-        conteudo = mudanca.get("conteudo")
-        justificativa = mudanca.get("justificativa", f"Aplicando mudança em {caminho}")
-
-        if not caminho:
-            print("  [AVISO] Mudança ignorada por não ter 'caminho_do_arquivo'.")
-            continue
+    mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
+    
+    for mudanca in mudancas_validas:
+        caminho = mudanca["caminho"]
+        status = mudanca["status"]
+        conteudo = mudanca["conteudo"]
 
         try:
             sha_arquivo_existente = None
@@ -61,7 +53,6 @@ def processar_branch_github(
                     
                 print(f"  [CRIADO/MODIFICADO] {caminho}")
                 commits_realizados += 1
-                resultado_branch["arquivos_modificados"].append(caminho)
 
             elif status == "MODIFICADO":
                 if not sha_arquivo_existente:
@@ -71,7 +62,6 @@ def processar_branch_github(
                 repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [MODIFICADO] {caminho}")
                 commits_realizados += 1
-                resultado_branch["arquivos_modificados"].append(caminho)
 
             elif status == "REMOVIDO":
                 if not sha_arquivo_existente:
@@ -81,7 +71,6 @@ def processar_branch_github(
                 repo.delete_file(path=caminho, message=f"refactor: remove {caminho}", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [REMOVIDO] {caminho}")
                 commits_realizados += 1
-                resultado_branch["arquivos_modificados"].append(caminho)
             
             else:
                 print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo '{caminho}'. Ignorando.")
@@ -97,17 +86,17 @@ def processar_branch_github(
             
             pr = repo.create_pull(title=mensagem_pr, body=descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA.", head=nome_branch, base=branch_alvo_do_pr)
             print(f"Pull Request criado com sucesso! URL: {pr.html_url}")
-            resultado_branch.update({"success": True, "pr_url": pr.html_url, "message": "PR criado."})
+            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr.html_url)
             
         except GithubException as e:
             if e.status == 422 and "A pull request for these commits already exists" in str(e.data):
                 print("AVISO: PR para esta branch já existe.")
-                resultado_branch.update({"success": True, "message": "PR já existente."})
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="PR já existente.")
             else:
                 print(f"ERRO ao criar PR para '{nome_branch}': {e}")
-                resultado_branch["message"] = f"Erro ao criar PR: {e.data.get('message', str(e))}"
+                BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar PR: {e.data.get('message', str(e))}")
     else:
         print(f"\nNenhum commit realizado para a branch '{nome_branch}'. Pulando criação do PR.")
-        resultado_branch.update({"success": True, "message": "Nenhuma mudança para commitar."})
+        BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="Nenhuma mudança para commitar.")
 
     return resultado_branch
