@@ -49,6 +49,72 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
         detail=f"Formato de repositório GitLab inválido: '{repo_name}'. Use o Project ID numérico (RECOMENDADO para máxima robustez) ou o path completo 'namespace/projeto'. Exemplos: Project ID: '123456', Path: 'meugrupo/meuprojeto'"
     )
 
+def _normalize_repo_name_by_type(repo_name: str, repository_type: str) -> str:
+    """Normaliza o nome do repositório baseado no tipo."""
+    if repository_type == 'gitlab':
+        normalized = _validate_and_normalize_gitlab_repo_name(repo_name)
+        print(f"GitLab - Repo original: '{repo_name}', normalizado: '{normalized}'")
+        return normalized
+    return repo_name
+
+def _generate_analysis_name(analysis_name: Optional[str], job_id: str) -> str:
+    """Gera um nome de análise se não fornecido."""
+    if not analysis_name:
+        analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
+        print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
+    return analysis_name
+
+def _create_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
+    """Cria a estrutura de dados inicial do job."""
+    return {
+        'status': 'starting',
+        'data': {
+            'repo_name': normalized_repo_name,
+            'original_repo_name': payload.repo_name,
+            'projeto': payload.projeto,
+            'branch_name': payload.branch_name,
+            'original_analysis_type': payload.analysis_type.value,
+            'instrucoes_extras': payload.instrucoes_extras,
+            'model_name': payload.model_name,
+            'usar_rag': payload.usar_rag,
+            'gerar_relatorio_apenas': payload.gerar_relatorio_apenas,
+            'gerar_novo_relatorio': payload.gerar_novo_relatorio,
+            'arquivos_especificos': payload.arquivos_especificos,
+            'analysis_name': analysis_name,
+            'repository_type': payload.repository_type
+        },
+        'error_details': None
+    }
+
+def _get_job_or_404(job_id: str, error_message: str = "Job ID não encontrado ou expirado") -> dict:
+    """Busca um job ou retorna erro 404."""
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=error_message)
+    return job
+
+def _get_job_by_analysis_name_or_404(analysis_name: str) -> tuple[str, dict]:
+    """Busca um job pelo nome da análise ou retorna erro 404."""
+    job_id = analysis_name_to_job_id.get(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
+    
+    job = _get_job_or_404(job_id, "Job associado não encontrado ou expirado")
+    return job_id, job
+
+def _get_report_from_job(job: dict, job_id: str) -> str:
+    """Extrai o relatório de um job ou retorna erro 404."""
+    report = job.get("data", {}).get("analysis_report")
+    if not report:
+        raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
+    return report
+
+def _create_response_with_blob_url(job_id: str, job: dict, **kwargs) -> dict:
+    """Cria uma resposta incluindo a URL do blob se disponível."""
+    blob_url = job.get("data", {}).get("report_blob_url")
+    response_data = {"job_id": job_id, "report_blob_url": blob_url, **kwargs}
+    return response_data
+
 class StartAnalysisPayload(BaseModel):
     repo_name: str
     projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
@@ -114,38 +180,12 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    normalized_repo_name = payload.repo_name
-    if payload.repository_type == 'gitlab':
-        normalized_repo_name = _validate_and_normalize_gitlab_repo_name(payload.repo_name)
-        print(f"GitLab - Repo original: '{payload.repo_name}', normalizado: '{normalized_repo_name}'")
+    normalized_repo_name = _normalize_repo_name_by_type(payload.repo_name, payload.repository_type)
     
     job_id = str(uuid.uuid4())
-    analysis_type_str = payload.analysis_type.value
+    analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
     
-    analysis_name = payload.analysis_name
-    if not analysis_name:
-        analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
-        print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
-    
-    initial_job_data = {
-        'status': 'starting',
-        'data': {
-            'repo_name': normalized_repo_name,
-            'original_repo_name': payload.repo_name,
-            'projeto': payload.projeto,
-            'branch_name': payload.branch_name,
-            'original_analysis_type': analysis_type_str,
-            'instrucoes_extras': payload.instrucoes_extras,
-            'model_name': payload.model_name,
-            'usar_rag': payload.usar_rag,
-            'gerar_relatorio_apenas': payload.gerar_relatorio_apenas,
-            'gerar_novo_relatorio': payload.gerar_novo_relatorio,
-            'arquivos_especificos': payload.arquivos_especificos,
-            'analysis_name': analysis_name,
-            'repository_type': payload.repository_type
-        },
-        'error_details': None
-    }
+    initial_job_data = _create_job_data(payload, normalized_repo_name, analysis_name)
     
     job_store.set_job(job_id, initial_job_data)
     
@@ -160,9 +200,10 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
-    job = job_store.get_job(payload.job_id)
-    if not job or job.get('status') != 'pending_approval':
-        raise HTTPException(status_code=400, detail="Job não encontrado ou não está aguardando aprovação.")
+    job = _get_job_or_404(payload.job_id, "Job não encontrado ou não está aguardando aprovação.")
+    
+    if job.get('status') != 'pending_approval':
+        raise HTTPException(status_code=400, detail="Job não está aguardando aprovação.")
     
     if payload.action == 'approve':
         job['data']['instrucoes_extras_aprovacao'] = payload.instrucoes_extras
@@ -184,58 +225,33 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
-    job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
-    
-    report = job.get("data", {}).get("analysis_report")
-    if not report:
-        raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
-
-    blob_url = job.get("data", {}).get("report_blob_url")
-    return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
+    job = _get_job_or_404(job_id)
+    report = _get_report_from_job(job, job_id)
+    response_data = _create_response_with_blob_url(job_id, job, analysis_report=report)
+    return ReportResponse(**response_data)
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
-    job_id = analysis_name_to_job_id.get(analysis_name)
-    if not job_id:
-        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
-    
-    job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job associado não encontrado ou expirado")
+    job_id, job = _get_job_by_analysis_name_or_404(analysis_name)
     
     report = job.get("data", {}).get("analysis_report")
-    blob_url = job.get("data", {}).get("report_blob_url")
-    
-    return AnalysisByNameResponse(
-        job_id=job_id,
-        analysis_name=analysis_name,
-        analysis_report=report,
-        report_blob_url=blob_url
+    response_data = _create_response_with_blob_url(
+        job_id, job, 
+        analysis_name=analysis_name, 
+        analysis_report=report
     )
+    
+    return AnalysisByNameResponse(**response_data)
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
-    job_id = analysis_name_to_job_id.get(analysis_name)
-    if not job_id:
-        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
-    
-    original_job = job_store.get_job(job_id)
-    if not original_job:
-        raise HTTPException(status_code=404, detail="Job original não encontrado ou expirado")
-    
-    report = original_job.get("data", {}).get("analysis_report")
-    if not report:
-        raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
+    original_job_id, original_job = _get_job_by_analysis_name_or_404(analysis_name)
+    report = _get_report_from_job(original_job, original_job_id)
     
     original_repo_name = original_job['data']['repo_name']
     original_repository_type = original_job['data']['repository_type']
     
-    normalized_repo_name = original_repo_name
-    if original_repository_type == 'gitlab':
-        normalized_repo_name = _validate_and_normalize_gitlab_repo_name(original_repo_name)
-        print(f"GitLab derivado - Repo original: '{original_repo_name}', normalizado: '{normalized_repo_name}'")
+    normalized_repo_name = _normalize_repo_name_by_type(original_repo_name, original_repository_type)
     
     new_job_id = str(uuid.uuid4())
     
@@ -270,9 +286,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
-    job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    job = _get_job_or_404(job_id)
 
     status = job.get('status')
     logs = job.get("data", {}).get("diagnostic_logs")
