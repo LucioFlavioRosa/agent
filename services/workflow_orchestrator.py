@@ -13,8 +13,7 @@ from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.repository_provider_factory import get_repository_provider_explicit
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
-    def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
-                 workflow_registry: Dict[str, Any]):
+    def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, workflow_registry: Dict[str, Any]):
         self.job_manager = job_manager
         self.blob_storage = blob_storage
         self.workflow_registry = workflow_registry
@@ -43,13 +42,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 self.job_manager.update_job_status(job_id, step['status_update'])
                 
-                step_result = self._execute_step(job_id, job_info, step, current_step_index, 
-                                               previous_step_result, repo_reader, i, start_from_step)
+                step_result = self._execute_step(job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step)
                 
                 job_info['data'][f'step_{current_step_index}_result'] = step_result
                 previous_step_result = step_result
                 
-                if self._should_generate_report_only(job_info, current_step_index):
+                if current_step_index == 0 and job_info['data'].get('gerar_relatorio_apenas') is True:
                     self._handle_report_only_mode(job_id, job_info, step_result)
                     return
                 
@@ -62,9 +60,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_manager.handle_job_error(job_id, e, 'workflow')
     
-    def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
-                     current_step_index: int, previous_step_result: Dict[str, Any], 
-                     repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
+    def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], current_step_index: int, previous_step_result: Dict[str, Any], repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
         
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
@@ -88,14 +84,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_response = self._try_read_existing_report(job_id, job_info, current_step_index)
         
         if agent_response is None:
-            agent_response = self._execute_agent(job_id, job_info, step, agent_params, 
-                                               input_para_etapa, current_step_index, repo_reader, llm_provider)
+            agent_response = self._execute_agent(job_id, job_info, step, agent_params, input_para_etapa, current_step_index, repo_reader, llm_provider)
         
         json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
         if not json_string.strip():
             raise ValueError(f"IA retornou resposta vazia.")
             
-        return json.loads(json_string.replace("```json", "").replace("```", "").strip())
+        return json.loads(json_string.replace("", "").replace("", "").strip())
         
     def _try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], current_step_index: int) -> Optional[Dict[str, Any]]:
         if current_step_index == 0:
@@ -127,9 +122,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         
         return None
     
-    def _execute_agent(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
-                      agent_params: Dict[str, Any], input_para_etapa: Dict[str, Any], 
-                      current_step_index: int, repo_reader: ReaderGeral, llm_provider) -> Dict[str, Any]:
+    def _execute_agent(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], agent_params: Dict[str, Any], input_para_etapa: Dict[str, Any], current_step_index: int, repo_reader: ReaderGeral, llm_provider) -> Dict[str, Any]:
         
         agent_type = step.get("agent_type")
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
@@ -154,9 +147,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             return agente.main(**agent_params)
         
         raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
-    
-    def _should_generate_report_only(self, job_info: Dict[str, Any], current_step_index: int) -> bool:
-        return current_step_index == 0 and job_info['data'].get('gerar_relatorio_apenas') is True
     
     def _handle_report_only_mode(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any]) -> None:
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
@@ -197,8 +187,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             except Exception as e:
                 print(f"[{job_id}] Erro ao salvar relatório no Blob Storage: {e}")
     
-    def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
-                          final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+    def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         
         workflow_steps = workflow.get("steps", [])
         num_total_steps = len(workflow_steps)
@@ -248,8 +237,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         
         return dados_finais_formatados
     
-    def _execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
-                        repository_type: str, repo_name: str) -> None:
+    def _execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         
         branch_base_para_pr = job_info['data'].get('branch_name', 'main')
         
