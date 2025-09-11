@@ -115,7 +115,7 @@ relatorio_documentacao:
 
 relatorio_implentacao_feature:
   description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação técnico, detalhado e sequenciado"
-  extensions: [".py", ".txt"]
+  extensions: [".py", ".txt", ".yaml"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
