@@ -1,4 +1,5 @@
 from typing import Dict, Any, List
+from tools.repo_committers.base_committer import BaseCommitter
 
 def processar_branch_gitlab(
     repo,
@@ -12,13 +13,7 @@ def processar_branch_gitlab(
     print(f"\n--- Processando Lote GitLab para a Branch: '{nome_branch}' ---")
     print(f"[DEBUG][GITLAB] Tipo do objeto repo: {type(repo)}")
     
-    resultado_branch = {
-        "branch_name": nome_branch,
-        "success": False,
-        "pr_url": None,
-        "message": "",
-        "arquivos_modificados": []
-    }
+    resultado_branch = BaseCommitter._inicializar_resultado_branch(nome_branch)
     commits_realizados = 0
 
     try:
@@ -37,17 +32,15 @@ def processar_branch_gitlab(
 
         print(f"[DEBUG][GITLAB] Iniciando aplicação de {len(conjunto_de_mudancas)} mudanças no GitLab...")
         
-        for i, mudanca in enumerate(conjunto_de_mudancas):
-            print(f"[DEBUG][GITLAB] Processando mudança {i+1}/{len(conjunto_de_mudancas)}")
-            caminho = mudanca.get("caminho_do_arquivo")
-            status = mudanca.get("status", "").upper()
-            conteudo = mudanca.get("conteudo")
+        mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
+        
+        for i, mudanca in enumerate(mudancas_validas):
+            print(f"[DEBUG][GITLAB] Processando mudança {i+1}/{len(mudancas_validas)}")
+            caminho = mudanca["caminho"]
+            status = mudanca["status"]
+            conteudo = mudanca["conteudo"]
 
             print(f"[DEBUG][GITLAB] Mudança: arquivo='{caminho}', status='{status}', conteudo_length={len(conteudo) if conteudo else 0}")
-
-            if not caminho:
-                print("  [AVISO] Mudança ignorada por não ter 'caminho_do_arquivo'.")
-                continue
 
             try:
                 if status in ("ADICIONADO", "CRIADO"):
@@ -61,7 +54,6 @@ def processar_branch_gitlab(
                     repo.files.create(dados_criacao)
                     print(f"  [CRIADO] GitLab {caminho}")
                     commits_realizados += 1
-                    resultado_branch["arquivos_modificados"].append(caminho)
 
                 elif status == "MODIFICADO":
                     print(f"[DEBUG][GITLAB] Buscando arquivo para modificar: {caminho}")
@@ -70,7 +62,6 @@ def processar_branch_gitlab(
                     arquivo.save(branch=nome_branch, commit_message=f"refactor: Modifica {caminho}")
                     print(f"  [MODIFICADO] GitLab {caminho}")
                     commits_realizados += 1
-                    resultado_branch["arquivos_modificados"].append(caminho)
 
                 elif status == "REMOVIDO":
                     print(f"[DEBUG][GITLAB] Chamando repo.files.delete para {caminho}")
@@ -79,7 +70,6 @@ def processar_branch_gitlab(
                                       commit_message=f"refactor: Remove {caminho}")
                     print(f"  [REMOVIDO] GitLab {caminho}")
                     commits_realizados += 1
-                    resultado_branch["arquivos_modificados"].append(caminho)
                 
                 else:
                     print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo GitLab '{caminho}'. Ignorando.")
@@ -101,7 +91,7 @@ def processar_branch_gitlab(
                 })
                 mr_url = getattr(mr_result, 'web_url', 'URL não disponível')
                 print(f"Merge Request GitLab criado com sucesso! URL: {mr_url}")
-                resultado_branch.update({"success": True, "pr_url": mr_url, "message": "MR criado."})
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_url)
                 
             except Exception as mr_e:
                 print(f"[ERRO][GITLAB] Exceção ao criar MR: {type(mr_e).__name__}: {mr_e}")
@@ -109,19 +99,19 @@ def processar_branch_gitlab(
                     mrs = repo.mergerequests.list(state='opened', source_branch=nome_branch, target_branch=branch_alvo_do_pr)
                     mr_url = mrs[0].web_url if mrs else "URL não encontrada"
                     print(f"AVISO: MR para esta branch GitLab já existe. URL: {mr_url}")
-                    resultado_branch.update({"success": True, "pr_url": mr_url, "message": "MR já existente."})
+                    BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_url, "MR já existente.")
                 else:
                     print(f"ERRO ao criar MR GitLab para '{nome_branch}': {mr_e}")
-                    resultado_branch["message"] = f"Erro ao criar MR: {mr_e}"
+                    BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar MR: {mr_e}")
         else:
             print(f"\nNenhum commit realizado para a branch GitLab '{nome_branch}'. Pulando criação do MR.")
-            resultado_branch.update({"success": True, "message": "Nenhuma mudança para commitar."})
+            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="Nenhuma mudança para commitar.")
 
     except Exception as e:
         print(f"[ERRO][GITLAB] ERRO FATAL ao processar branch GitLab '{nome_branch}': {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
-        resultado_branch["message"] = f"Erro fatal: {e}"
+        BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro fatal: {e}")
 
     print(f"[DEBUG][GITLAB] Resultado final da branch {nome_branch}: {resultado_branch}")
     return resultado_branch
