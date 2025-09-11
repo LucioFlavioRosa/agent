@@ -1,5 +1,3 @@
-# Arquivo: AzureReader (VERSÃO CORRIGIDA E OTIMIZADA)
-
 import requests
 from typing import Dict, Optional, List
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
@@ -10,12 +8,9 @@ import base64
 class AzureReader:
     
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        # A injeção de dependência aqui é ótima, mas o resto do código não a usa.
-        # Vamos manter por consistência, mas o `_get_azure_auth_headers` cria seu próprio conector.
         self.repository_provider = repository_provider or AzureRepositoryProvider()
 
     def _get_azure_auth_headers(self, repositorio_dict: dict) -> dict:
-        # Esta função está correta e não precisa de mudanças.
         connector = AzureConector.create_with_defaults()
         organization = repositorio_dict.get('_organization')
         token = connector._get_token_for_org(organization)
@@ -25,10 +20,6 @@ class AzureReader:
             "Content-Type": "application/json",
             "Authorization": f"Basic {credentials}"
         }
-
-    # ### FUNÇÃO REMOVIDA ###
-    # A função _ler_arquivos_especificos é redundante. Podemos usar a _ler_repositorio_completo
-    # para ambos os casos, apenas mudando como filtramos a lista de arquivos.
 
     def _ler_repositorio_completo(self, repositorio_dict: dict, branch_a_ler: str, extensoes_alvo: List[str], arquivos_especificos: Optional[List[str]] = None) -> Dict[str, str]:
         arquivos_do_repo = {}
@@ -45,15 +36,13 @@ class AzureReader:
         try:
             print(f"[Azure Reader] Obtendo árvore de arquivos da branch '{branch_a_ler}'...")
             
-            # Chamada ÚNICA para buscar a lista de todos os arquivos
             items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
-            response = requests.get(items_url, headers=headers, timeout=60) # Aumentado o timeout
-            response.raise_for_status() # Lança erro para status 4xx/5xx
+            response = requests.get(items_url, headers=headers, timeout=60)
+            response.raise_for_status()
             
             all_items = response.json().get('value', [])
             print(f"[Azure Reader] Árvore obtida. {len(all_items)} itens totais encontrados.")
 
-            # Filtra os itens para pegar apenas os arquivos que queremos
             if arquivos_especificos:
                 print(f"[Azure Reader] Filtrando por {len(arquivos_especificos)} arquivos específicos.")
                 arquivos_para_ler = [
@@ -69,25 +58,19 @@ class AzureReader:
 
             print(f"[Azure Reader] {len(arquivos_para_ler)} arquivos selecionados para leitura de conteúdo.")
 
-            # ### OTIMIZAÇÃO PRINCIPAL ###
-            # Agora, fazemos UMA chamada para cada arquivo para buscar seu conteúdo.
-            # Infelizmente, a API do Azure não tem um "bulk get content", mas isso isola o problema.
             for item in arquivos_para_ler:
                 file_path = item.get('path')
                 try:
-                    # A URL para o conteúdo já vem no item! Não precisamos construir uma nova.
                     content_url = item.get('url')
                     if not content_url:
-                        continue # Pula se não houver URL
+                        continue
                     
-                    # Para obter o conteúdo como texto, adicione o header 'Accept'
                     content_headers = headers.copy()
-                    content_headers['Accept'] = 'application/octet-stream' # Pede o conteúdo bruto
+                    content_headers['Accept'] = 'application/octet-stream'
                     
                     content_response = requests.get(content_url, headers=content_headers, timeout=30)
                     content_response.raise_for_status()
                     
-                    # O conteúdo virá diretamente no corpo da resposta
                     arquivos_do_repo[file_path] = content_response.text
                     print(f"[Azure Reader] Conteúdo de '{file_path}' lido com sucesso.")
 
@@ -100,8 +83,6 @@ class AzureReader:
         
         return arquivos_do_repo
 
-    # ### FUNÇÃO PRINCIPAL MODIFICADA ###
-    # Agora ela chama a função otimizada para ambos os casos.
     def read_repository_internal(
         self, 
         repositorio, 
@@ -119,7 +100,6 @@ class AzureReader:
             if extensoes_alvo is None:
                 raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado no mapeamento")
         
-        # Chama a ÚNICA função de leitura, passando os filtros corretos
         return self._ler_repositorio_completo(
             repositorio_dict=repositorio,
             branch_a_ler=branch_a_ler,
