@@ -47,9 +47,14 @@ def init_logger() -> logging.Logger:
 def log_custom_data(
     job_id: Optional[str] = None,
     projeto: Optional[str] = None,
+    data_hora: Optional[str] = None,
     tokens_in: Optional[int] = None,
     tokens_out: Optional[int] = None,
     status: Optional[str] = None,
+    tipo_repositorio:Optional[str] = None,
+    nome_repositorio:Optional[str] = None,
+    tipo_analise:Optional[str] = None,
+    model_name:Optional[str] = None,
     **kwargs
 ) -> None:
     try:
@@ -61,12 +66,22 @@ def log_custom_data(
             custom_dimensions['job_id'] = job_id
         if projeto is not None:
             custom_dimensions['projeto'] = projeto
+        if data_hora is not None:
+            custom_dimensions['data_hora'] = data_hora
         if tokens_in is not None:
             custom_dimensions['tokens_in'] = tokens_in
         if tokens_out is not None:
             custom_dimensions['tokens_out'] = tokens_out
         if status is not None:
             custom_dimensions['status'] = status
+        if tipo_repositorio is not None:
+            custom_dimensions['tipo_repositorio'] = tipo_repositorio
+        if nome_repositorio is not None:
+            custom_dimensions['nome_repositorio'] = nome_repositorio
+        if tipo_analise is not None:
+            custom_dimensions['tipo_analise'] = tipo_analise
+        if model_name is not None:
+            custom_dimensions['model_name'] = model_name
         
         for key, value in kwargs.items():
             if value is not None:
