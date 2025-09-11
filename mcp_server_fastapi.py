@@ -4,6 +4,7 @@ import yaml
 import time
 import traceback
 import enum
+
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
@@ -22,6 +23,53 @@ def load_workflow_registry(filepath: str) -> dict:
 WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
 valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
 ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
+
+class StartAnalysisPayload(BaseModel):
+    repo_name: str
+    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
+    analysis_type: ValidAnalysisTypes
+    branch_name: Optional[str] = None
+    instrucoes_extras: Optional[str] = None
+    usar_rag: bool = Field(False)
+    gerar_relatorio_apenas: bool = Field(False)
+    gerar_novo_relatorio: bool = Field(True, description="Se False, tenta ler relatório existente do Blob Storage usando analysis_name")
+    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
+    analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
+    repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+
+class StartAnalysisResponse(BaseModel):
+    job_id: str
+
+class UpdateJobPayload(BaseModel):
+    job_id: str
+    action: Literal["approve", "reject"]
+    instrucoes_extras: Optional[str] = None
+
+class PullRequestSummary(BaseModel):
+    pull_request_url: str
+    branch_name: str
+    arquivos_modificados: List[str]
+
+class FinalStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    summary: Optional[List[PullRequestSummary]] = Field(None)
+    error_details: Optional[str] = Field(None)
+    analysis_report: Optional[str] = Field(None)
+    diagnostic_logs: Optional[Dict[str, Any]] = Field(None)
+    report_blob_url: Optional[str] = Field(None)
+
+class ReportResponse(BaseModel):
+    job_id: str
+    analysis_report: Optional[str]
+    report_blob_url: Optional[str] = Field(None)
+
+class AnalysisByNameResponse(BaseModel):
+    job_id: str
+    analysis_name: str
+    analysis_report: Optional[str]
+    report_blob_url: Optional[str] = Field(None)
 
 def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     repo_name = repo_name.strip()
@@ -166,53 +214,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             diagnostic_logs=logs,
             report_blob_url=blob_url
         )
-
-class StartAnalysisPayload(BaseModel):
-    repo_name: str
-    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
-    analysis_type: ValidAnalysisTypes
-    branch_name: Optional[str] = None
-    instrucoes_extras: Optional[str] = None
-    usar_rag: bool = Field(False)
-    gerar_relatorio_apenas: bool = Field(False)
-    gerar_novo_relatorio: bool = Field(True, description="Se False, tenta ler relatório existente do Blob Storage usando analysis_name")
-    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
-    arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
-    analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
-    repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
-
-class StartAnalysisResponse(BaseModel):
-    job_id: str
-
-class UpdateJobPayload(BaseModel):
-    job_id: str
-    action: Literal["approve", "reject"]
-    instrucoes_extras: Optional[str] = None
-
-class PullRequestSummary(BaseModel):
-    pull_request_url: str
-    branch_name: str
-    arquivos_modificados: List[str]
-
-class FinalStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    summary: Optional[List[PullRequestSummary]] = Field(None)
-    error_details: Optional[str] = Field(None)
-    analysis_report: Optional[str] = Field(None)
-    diagnostic_logs: Optional[Dict[str, Any]] = Field(None)
-    report_blob_url: Optional[str] = Field(None)
-
-class ReportResponse(BaseModel):
-    job_id: str
-    analysis_report: Optional[str]
-    report_blob_url: Optional[str] = Field(None)
-
-class AnalysisByNameResponse(BaseModel):
-    job_id: str
-    analysis_name: str
-    analysis_report: Optional[str]
-    report_blob_url: Optional[str] = Field(None)
 
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
