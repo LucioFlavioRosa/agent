@@ -90,7 +90,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not json_string.strip():
             raise ValueError(f"IA retornou resposta vazia.")
             
-        return json.loads(json_string.replace("", "").replace("", "").strip())
+        return json.loads(json_string.replace("```json", "").replace("```", "").strip())
         
     def _try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], current_step_index: int) -> Optional[Dict[str, Any]]:
         if current_step_index == 0:
