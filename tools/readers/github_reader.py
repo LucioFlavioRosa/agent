@@ -3,33 +3,21 @@ from typing import Dict, Optional, List
 from github import GithubException, UnknownObjectException
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
+from tools.readers.base_reader import BaseReader
 
-class GitHubReader:
+class GitHubReader(BaseReader):
     
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        self.repository_provider = repository_provider or GitHubRepositoryProvider()
+        super().__init__(repository_provider or GitHubRepositoryProvider())
+
+    def _read_github_file(self, repositorio, caminho_arquivo: str, branch_a_ler: str) -> str:
+        file_content = repositorio.get_contents(caminho_arquivo, ref=branch_a_ler)
+        return base64.b64decode(file_content.content).decode('utf-8')
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
-        arquivos_lidos = {}
-        total_arquivos = len(arquivos_especificos)
-        
-        print(f"Modo de leitura filtrada GitHub ativado. Lendo {total_arquivos} arquivos específicos...")
-        
-        for i, caminho_arquivo in enumerate(arquivos_especificos):
-            try:
-                print(f"  [{i+1}/{total_arquivos}] Lendo: {caminho_arquivo}")
-                
-                file_content = repositorio.get_contents(caminho_arquivo, ref=branch_a_ler)
-                decoded_content = base64.b64decode(file_content.content).decode('utf-8')
-                arquivos_lidos[caminho_arquivo] = decoded_content
-                
-            except UnknownObjectException:
-                print(f"  [AVISO] Arquivo '{caminho_arquivo}' não encontrado na branch '{branch_a_ler}'. Ignorando.")
-            except Exception as e:
-                print(f"  [AVISO] Falha ao ler arquivo '{caminho_arquivo}': {e}. Ignorando.")
-        
-        print(f"Leitura filtrada GitHub concluída. {len(arquivos_lidos)} de {total_arquivos} arquivos lidos com sucesso.")
-        return arquivos_lidos
+        return self._ler_arquivos_especificos_base(
+            repositorio, branch_a_ler, arquivos_especificos, "GitHub", self._read_github_file
+        )
 
     def _ler_repositorio_completo(self, repositorio, branch_a_ler: str, tipo_analise: str, extensoes_alvo: List[str]) -> Dict[str, str]:
         arquivos_do_repo = {}
@@ -83,18 +71,12 @@ class GitHubReader:
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None
     ) -> Dict[str, str]:
-        if nome_branch is None:
-            branch_a_ler = repositorio.default_branch
-            print(f"Nenhuma branch especificada. Usando a branch padrão GitHub: '{branch_a_ler}'")
-        else:
-            branch_a_ler = nome_branch
+        branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "GitHub")
         
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitHub ativado para {len(arquivos_especificos)} arquivos específicos.")
             return self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
         else:
             print("Modo de leitura completa GitHub ativado (filtro por extensão).")
-            extensoes_alvo = mapeamento_tipo_extensoes.get(tipo_analise.lower())
-            if extensoes_alvo is None:
-                raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou não possui 'extensions' definidas em workflows.yaml")
+            extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
             return self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
