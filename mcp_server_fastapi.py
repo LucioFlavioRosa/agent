@@ -50,22 +50,24 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     )
 
 def _normalize_repo_name_by_type(repo_name: str, repository_type: str) -> str:
-    """Normaliza o nome do repositório baseado no tipo."""
+    """Normaliza o nome do repositório baseado no tipo. Aplica DRY para evitar duplicação de lógica."""
     if repository_type == 'gitlab':
         normalized = _validate_and_normalize_gitlab_repo_name(repo_name)
         print(f"GitLab - Repo original: '{repo_name}', normalizado: '{normalized}'")
         return normalized
     return repo_name
 
-def _generate_analysis_name(analysis_name: Optional[str], job_id: str) -> str:
-    """Gera um nome de análise se não fornecido."""
-    if not analysis_name:
-        analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
-        print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
+def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
+    """Gera nome de análise se não fornecido. Aplica DRY para evitar duplicação."""
+    if provided_name:
+        return provided_name
+    
+    analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
+    print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
     return analysis_name
 
-def _create_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
-    """Cria a estrutura de dados inicial do job."""
+def _create_base_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
+    """Cria estrutura base de dados do job. Aplica DRY para evitar duplicação de estrutura."""
     return {
         'status': 'starting',
         'data': {
@@ -86,34 +88,31 @@ def _create_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, a
         'error_details': None
     }
 
-def _get_job_or_404(job_id: str, error_message: str = "Job ID não encontrado ou expirado") -> dict:
-    """Busca um job ou retorna erro 404."""
+def _register_job_and_start_workflow(job_id: str, job_data: dict, analysis_name: str, background_tasks: BackgroundTasks, start_from_step: int = 0):
+    """Registra job no store e inicia workflow. Aplica DRY para evitar duplicação de processo."""
+    job_store.set_job(job_id, job_data)
+    
+    if analysis_name:
+        analysis_name_to_job_id[analysis_name] = job_id
+    
+    repo_info = job_data['data']
+    print(f"[{job_id}] Job criado - Repositório: '{repo_info['repo_name']}' (tipo: {repo_info['repository_type']}), Projeto: '{repo_info['projeto']}'")
+    
+    background_tasks.add_task(run_workflow_task, job_id, start_from_step)
+
+def _get_job_or_404(job_id: str) -> dict:
+    """Busca job ou retorna 404. Aplica DRY para evitar duplicação de validação."""
     job = job_store.get_job(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail=error_message)
+        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
     return job
 
-def _get_job_by_analysis_name_or_404(analysis_name: str) -> tuple[str, dict]:
-    """Busca um job pelo nome da análise ou retorna erro 404."""
-    job_id = analysis_name_to_job_id.get(analysis_name)
-    if not job_id:
-        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
-    
-    job = _get_job_or_404(job_id, "Job associado não encontrado ou expirado")
-    return job_id, job
-
-def _get_report_from_job(job: dict, job_id: str) -> str:
-    """Extrai o relatório de um job ou retorna erro 404."""
+def _get_report_from_job(job: dict) -> str:
+    """Extrai relatório do job ou retorna erro. Aplica DRY para evitar duplicação de extração."""
     report = job.get("data", {}).get("analysis_report")
     if not report:
         raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
     return report
-
-def _create_response_with_blob_url(job_id: str, job: dict, **kwargs) -> dict:
-    """Cria uma resposta incluindo a URL do blob se disponível."""
-    blob_url = job.get("data", {}).get("report_blob_url")
-    response_data = {"job_id": job_id, "report_blob_url": blob_url, **kwargs}
-    return response_data
 
 class StartAnalysisPayload(BaseModel):
     repo_name: str
@@ -181,26 +180,17 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     normalized_repo_name = _normalize_repo_name_by_type(payload.repo_name, payload.repository_type)
-    
     job_id = str(uuid.uuid4())
     analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
     
-    initial_job_data = _create_job_data(payload, normalized_repo_name, analysis_name)
-    
-    job_store.set_job(job_id, initial_job_data)
-    
-    if analysis_name:
-        analysis_name_to_job_id[analysis_name] = job_id
-    
-    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
-    
-    background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
+    initial_job_data = _create_base_job_data(payload, normalized_repo_name, analysis_name)
+    _register_job_and_start_workflow(job_id, initial_job_data, analysis_name, background_tasks)
     
     return StartAnalysisResponse(job_id=job_id)
     
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
-    job = _get_job_or_404(payload.job_id, "Job não encontrado ou não está aguardando aprovação.")
+    job = _get_job_or_404(payload.job_id)
     
     if job.get('status') != 'pending_approval':
         raise HTTPException(status_code=400, detail="Job não está aguardando aprovação.")
@@ -226,68 +216,74 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
     job = _get_job_or_404(job_id)
-    report = _get_report_from_job(job, job_id)
-    response_data = _create_response_with_blob_url(job_id, job, analysis_report=report)
-    return ReportResponse(**response_data)
+    report = _get_report_from_job(job)
+    blob_url = job.get("data", {}).get("report_blob_url")
+    
+    return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
-    job_id, job = _get_job_by_analysis_name_or_404(analysis_name)
+    job_id = analysis_name_to_job_id.get(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
     
+    job = _get_job_or_404(job_id)
     report = job.get("data", {}).get("analysis_report")
-    response_data = _create_response_with_blob_url(
-        job_id, job, 
-        analysis_name=analysis_name, 
-        analysis_report=report
-    )
+    blob_url = job.get("data", {}).get("report_blob_url")
     
-    return AnalysisByNameResponse(**response_data)
+    return AnalysisByNameResponse(
+        job_id=job_id,
+        analysis_name=analysis_name,
+        analysis_report=report,
+        report_blob_url=blob_url
+    )
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
-    original_job_id, original_job = _get_job_by_analysis_name_or_404(analysis_name)
-    report = _get_report_from_job(original_job, original_job_id)
+    job_id = analysis_name_to_job_id.get(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
     
-    original_repo_name = original_job['data']['repo_name']
-    original_repository_type = original_job['data']['repository_type']
+    original_job = _get_job_or_404(job_id)
+    report = _get_report_from_job(original_job)
     
-    normalized_repo_name = _normalize_repo_name_by_type(original_repo_name, original_repository_type)
+    original_data = original_job['data']
+    normalized_repo_name = _normalize_repo_name_by_type(
+        original_data['original_repo_name'], 
+        original_data['repository_type']
+    )
     
     new_job_id = str(uuid.uuid4())
+    new_analysis_name = f"{analysis_name}-implementation"
     
     new_job_data = {
         'status': 'starting',
         'data': {
             'repo_name': normalized_repo_name,
-            'original_repo_name': original_repo_name,
-            'projeto': original_job['data']['projeto'],
-            'branch_name': original_job['data']['branch_name'],
+            'original_repo_name': original_data['original_repo_name'],
+            'projeto': original_data['projeto'],
+            'branch_name': original_data['branch_name'],
             'original_analysis_type': 'implementacao',
             'instrucoes_extras': f"Gerar código baseado no seguinte relatório:\n\n{report}",
-            'model_name': original_job['data'].get('model_name'),
-            'usar_rag': original_job['data'].get('usar_rag', False),
+            'model_name': original_data.get('model_name'),
+            'usar_rag': original_data.get('usar_rag', False),
             'gerar_relatorio_apenas': False,
             'gerar_novo_relatorio': True,
-            'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
-            'analysis_name': f"{analysis_name}-implementation",
-            'repository_type': original_repository_type
+            'arquivos_especificos': original_data.get('arquivos_especificos'),
+            'analysis_name': new_analysis_name,
+            'repository_type': original_data['repository_type']
         },
         'error_details': None
     }
     
-    job_store.set_job(new_job_id, new_job_data)
-    analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
-    
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}'")
-    
-    background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
+    _register_job_and_start_workflow(new_job_id, new_job_data, new_analysis_name, background_tasks)
     
     return StartAnalysisResponse(job_id=new_job_id)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job = _get_job_or_404(job_id)
-
+    
     status = job.get('status')
     logs = job.get("data", {}).get("diagnostic_logs")
     blob_url = job.get("data", {}).get("report_blob_url")
