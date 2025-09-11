@@ -15,6 +15,48 @@ from services.workflow_orchestrator import WorkflowOrchestrator
 from services.job_manager import JobManager
 from services.blob_storage_service import BlobStorageService
 
+# Constantes para Status de Jobs
+class JobStatus:
+    STARTING = 'starting'
+    PENDING_APPROVAL = 'pending_approval'
+    WORKFLOW_STARTED = 'workflow_started'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+    REJECTED = 'rejected'
+
+# Constantes para Nomes de Campos
+class JobFields:
+    STATUS = 'status'
+    DATA = 'data'
+    ERROR_DETAILS = 'error_details'
+    REPO_NAME = 'repo_name'
+    ORIGINAL_REPO_NAME = 'original_repo_name'
+    PROJETO = 'projeto'
+    BRANCH_NAME = 'branch_name'
+    ORIGINAL_ANALYSIS_TYPE = 'original_analysis_type'
+    INSTRUCOES_EXTRAS = 'instrucoes_extras'
+    MODEL_NAME = 'model_name'
+    USAR_RAG = 'usar_rag'
+    GERAR_RELATORIO_APENAS = 'gerar_relatorio_apenas'
+    GERAR_NOVO_RELATORIO = 'gerar_novo_relatorio'
+    ARQUIVOS_ESPECIFICOS = 'arquivos_especificos'
+    ANALYSIS_NAME = 'analysis_name'
+    REPOSITORY_TYPE = 'repository_type'
+    ANALYSIS_REPORT = 'analysis_report'
+    REPORT_BLOB_URL = 'report_blob_url'
+    COMMIT_DETAILS = 'commit_details'
+    DIAGNOSTIC_LOGS = 'diagnostic_logs'
+    INSTRUCOES_EXTRAS_APROVACAO = 'instrucoes_extras_aprovacao'
+    PAUSED_AT_STEP = 'paused_at_step'
+    SUCCESS = 'success'
+    PR_URL = 'pr_url'
+    ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
+
+# Constantes para Actions
+class JobActions:
+    APPROVE = 'approve'
+    REJECT = 'reject'
+
 def load_workflow_registry(filepath: str) -> dict:
     print(f"Carregando workflows do arquivo: {filepath}")
     with open(filepath, 'r', encoding='utf-8') as f:
@@ -117,28 +159,28 @@ def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
 def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
     """Cria a estrutura inicial de dados do job."""
     return {
-        'status': 'starting',
-        'data': {
-            'repo_name': normalized_repo_name,
-            'original_repo_name': payload.repo_name,
-            'projeto': payload.projeto,
-            'branch_name': payload.branch_name,
-            'original_analysis_type': payload.analysis_type.value,
-            'instrucoes_extras': payload.instrucoes_extras,
-            'model_name': payload.model_name,
-            'usar_rag': payload.usar_rag,
-            'gerar_relatorio_apenas': payload.gerar_relatorio_apenas,
-            'gerar_novo_relatorio': payload.gerar_novo_relatorio,
-            'arquivos_especificos': payload.arquivos_especificos,
-            'analysis_name': analysis_name,
-            'repository_type': payload.repository_type
+        JobFields.STATUS: JobStatus.STARTING,
+        JobFields.DATA: {
+            JobFields.REPO_NAME: normalized_repo_name,
+            JobFields.ORIGINAL_REPO_NAME: payload.repo_name,
+            JobFields.PROJETO: payload.projeto,
+            JobFields.BRANCH_NAME: payload.branch_name,
+            JobFields.ORIGINAL_ANALYSIS_TYPE: payload.analysis_type.value,
+            JobFields.INSTRUCOES_EXTRAS: payload.instrucoes_extras,
+            JobFields.MODEL_NAME: payload.model_name,
+            JobFields.USAR_RAG: payload.usar_rag,
+            JobFields.GERAR_RELATORIO_APENAS: payload.gerar_relatorio_apenas,
+            JobFields.GERAR_NOVO_RELATORIO: payload.gerar_novo_relatorio,
+            JobFields.ARQUIVOS_ESPECIFICOS: payload.arquivos_especificos,
+            JobFields.ANALYSIS_NAME: analysis_name,
+            JobFields.REPOSITORY_TYPE: payload.repository_type
         },
-        'error_details': None
+        JobFields.ERROR_DETAILS: None
     }
 
 def _validate_job_for_approval(job: dict, job_id: str) -> None:
     """Valida se o job está em estado válido para aprovação."""
-    if not job or job.get('status') != 'pending_approval':
+    if not job or job.get(JobFields.STATUS) != JobStatus.PENDING_APPROVAL:
         raise HTTPException(status_code=400, detail="Job não encontrado ou não está aguardando aprovação.")
 
 def _validate_job_exists(job: dict, job_id: str) -> None:
@@ -155,61 +197,63 @@ def _validate_analysis_exists(analysis_name: str) -> str:
 
 def _get_report_from_job(job: dict, job_id: str) -> str:
     """Extrai o relatório do job ou levanta exceção se não encontrado."""
-    report = job.get("data", {}).get("analysis_report")
+    report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
     if not report:
         if job_id:
-            raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
+            raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get(JobFields.STATUS)}")
         else:
             raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
     return report
 
 def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
     """Cria dados para job derivado de implementação."""
+    original_data = original_job[JobFields.DATA]
     return {
-        'status': 'starting',
-        'data': {
-            'repo_name': normalized_repo_name,
-            'original_repo_name': original_job['data']['repo_name'],
-            'projeto': original_job['data']['projeto'],
-            'branch_name': original_job['data']['branch_name'],
-            'original_analysis_type': 'implementacao',
-            'instrucoes_extras': f"Gerar código baseado no seguinte relatório:\n\n{report}",
-            'model_name': original_job['data'].get('model_name'),
-            'usar_rag': original_job['data'].get('usar_rag', False),
-            'gerar_relatorio_apenas': False,
-            'gerar_novo_relatorio': True,
-            'arquivos_especificos': original_job['data'].get('arquivos_especificos'),
-            'analysis_name': f"{analysis_name}-implementation",
-            'repository_type': original_job['data']['repository_type']
+        JobFields.STATUS: JobStatus.STARTING,
+        JobFields.DATA: {
+            JobFields.REPO_NAME: normalized_repo_name,
+            JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
+            JobFields.PROJETO: original_data[JobFields.PROJETO],
+            JobFields.BRANCH_NAME: original_data[JobFields.BRANCH_NAME],
+            JobFields.ORIGINAL_ANALYSIS_TYPE: 'implementacao',
+            JobFields.INSTRUCOES_EXTRAS: f"Gerar código baseado no seguinte relatório:\n\n{report}",
+            JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
+            JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
+            JobFields.GERAR_RELATORIO_APENAS: False,
+            JobFields.GERAR_NOVO_RELATORIO: True,
+            JobFields.ARQUIVOS_ESPECIFICOS: original_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+            JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
+            JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE]
         },
-        'error_details': None
+        JobFields.ERROR_DETAILS: None
     }
 
 def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
     """Constrói resposta para jobs completados."""
-    if job.get("data", {}).get("gerar_relatorio_apenas") is True:
+    job_data = job.get(JobFields.DATA, {})
+    if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
         return FinalStatusResponse(
             job_id=job_id,
-            status='completed',
-            analysis_report=job.get("data", {}).get("analysis_report"),
+            status=JobStatus.COMPLETED,
+            analysis_report=job_data.get(JobFields.ANALYSIS_REPORT),
             report_blob_url=blob_url
         )
     else:
         summary_list = []
-        commit_details = job.get("data", {}).get("commit_details", [])
+        commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
         for pr_info in commit_details:
-            if pr_info.get("success") and pr_info.get("pr_url"):
+            if pr_info.get(JobFields.SUCCESS) and pr_info.get(JobFields.PR_URL):
                 summary_list.append(
                     PullRequestSummary(
-                        pull_request_url=pr_info.get("pr_url"),
-                        branch_name=pr_info.get("branch_name"),
-                        arquivos_modificados=pr_info.get("arquivos_modificados", [])
+                        pull_request_url=pr_info.get(JobFields.PR_URL),
+                        branch_name=pr_info.get(JobFields.BRANCH_NAME),
+                        arquivos_modificados=pr_info.get(JobFields.ARQUIVOS_MODIFICADOS, [])
                     )
                 )
-        logs = job.get("data", {}).get("diagnostic_logs")
+        logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         return FinalStatusResponse(
             job_id=job_id, 
-            status='completed', 
+            status=JobStatus.COMPLETED, 
             summary=summary_list,
             diagnostic_logs=logs,
             report_blob_url=blob_url
@@ -256,23 +300,23 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
     job = job_store.get_job(payload.job_id)
     _validate_job_for_approval(job, payload.job_id)
     
-    if payload.action == 'approve':
-        job['data']['instrucoes_extras_aprovacao'] = payload.instrucoes_extras
-        job['status'] = 'workflow_started'
+    if payload.action == JobActions.APPROVE:
+        job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
+        job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
         
-        paused_step = job['data'].get('paused_at_step', 0)
+        paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
         start_from_step = paused_step + 1
         
         job_store.set_job(payload.job_id, job)
         
         background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
         
-        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida."}
+        return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.WORKFLOW_STARTED, "message": "Aprovação recebida."}
     
-    if payload.action == 'reject':
-        job['status'] = 'rejected'
+    if payload.action == JobActions.REJECT:
+        job[JobFields.STATUS] = JobStatus.REJECTED
         job_store.set_job(payload.job_id, job)
-        return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
+        return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
 
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
@@ -280,7 +324,7 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     _validate_job_exists(job, job_id)
     
     report = _get_report_from_job(job, job_id)
-    blob_url = job.get("data", {}).get("report_blob_url")
+    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
     
     return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 
@@ -291,8 +335,8 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
     
-    report = job.get("data", {}).get("analysis_report")
-    blob_url = job.get("data", {}).get("report_blob_url")
+    report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
+    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
     
     return AnalysisByNameResponse(
         job_id=job_id,
@@ -310,8 +354,9 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     
     report = _get_report_from_job(original_job, None)
     
-    original_repo_name = original_job['data']['repo_name']
-    original_repository_type = original_job['data']['repository_type']
+    original_data = original_job[JobFields.DATA]
+    original_repo_name = original_data[JobFields.REPO_NAME]
+    original_repository_type = original_data[JobFields.REPOSITORY_TYPE]
     
     normalized_repo_name = _normalize_repo_name_by_type(original_repo_name, original_repository_type)
     
@@ -322,7 +367,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     job_store.set_job(new_job_id, new_job_data)
     analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
     
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_job['data']['projeto']}'")
+    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
     
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     
@@ -333,18 +378,18 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
 
-    status = job.get('status')
-    blob_url = job.get("data", {}).get("report_blob_url")
+    status = job.get(JobFields.STATUS)
+    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
 
     try:
-        if status == 'completed':
+        if status == JobStatus.COMPLETED:
             return _build_completed_response(job_id, job, blob_url)
-        elif status == 'failed':
-            logs = job.get("data", {}).get("diagnostic_logs")
+        elif status == JobStatus.FAILED:
+            logs = job.get(JobFields.DATA, {}).get(JobFields.DIAGNOSTIC_LOGS)
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
-                error_details=job.get("error_details", "Nenhum detalhe de erro encontrado."),
+                error_details=job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado."),
                 diagnostic_logs=logs,
                 report_blob_url=blob_url
             )
