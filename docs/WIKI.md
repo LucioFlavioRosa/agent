@@ -1,467 +1,365 @@
-# Wiki - Multi-Agent Code Platform (MCP)
+# MCP Server - Multi-Agent Code Platform
 
-## 📋 Índice
-
-1. [Visão Geral](#visão-geral)
-2. [Estrutura Geral do Projeto](#estrutura-geral-do-projeto)
-3. [Descrição das Pastas](#descrição-das-pastas)
-4. [Como Adicionar uma Nova API de LLM](#como-adicionar-uma-nova-api-de-llm)
-5. [Como Adicionar um Novo Repositório](#como-adicionar-um-novo-repositório)
-6. [Fluxo de Execução](#fluxo-de-execução)
-7. [Configuração e Deploy](#configuração-e-deploy)
+## Wiki de Documentação Técnica
 
 ---
 
-## 🎯 Visão Geral
+## 1. Estrutura Geral do Projeto
 
-O **Multi-Agent Code Platform (MCP)** é uma plataforma robusta que orquestra agentes de IA para análise e refatoração de código em repositórios GitHub, GitLab e Azure DevOps. A arquitetura segue princípios de **Clean Architecture** com injeção de dependências, garantindo alta modularidade e testabilidade.
+O **MCP Server** é uma plataforma robusta para orquestração de agentes de IA que automatiza análises de código e geração de implementações. O sistema utiliza uma arquitetura baseada em microserviços com FastAPI, Redis para persistência de jobs e Azure Blob Storage para armazenamento de relatórios.
 
-### Principais Características:
-- ✅ Suporte a múltiplos provedores de repositório (GitHub, GitLab, Azure DevOps)
-- ✅ Integração com múltiplos provedores de LLM (OpenAI, Claude)
-- ✅ Sistema de workflows configuráveis via YAML
-- ✅ Armazenamento de jobs com Redis
-- ✅ Sistema de aprovação para mudanças críticas
-- ✅ Upload automático de relatórios para Azure Blob Storage
-- ✅ Sistema RAG para políticas empresariais
-- ✅ API REST completa com FastAPI
-
----
-
-## 🏗️ Estrutura Geral do Projeto
+### Arquitetura Principal
 
 
-mcp-server/
-├── agents/                     # Agentes de IA especializados
-├── domain/                     # Camada de domínio (interfaces)
-├── services/                   # Camada de serviços e orquestração
-├── tools/                      # Ferramentas e utilitários
-├── docs/                       # Documentação
-├── workflows.yaml              # Configuração de workflows
-├── mcp_server_fastapi.py       # Servidor principal FastAPI
-└── requirements.txt            # Dependências Python
+MCP Server
+├── API Layer (FastAPI)
+├── Workflow Orchestrator
+├── Job Manager
+├── Storage Services (Redis + Blob)
+└── Tools & Services
 
+
+### Fluxo de Execução
+
+1. **Recepção de Requisição**: API recebe solicitação de análise
+2. **Criação de Job**: Sistema gera job único com UUID
+3. **Orquestração**: Workflow Orchestrator executa etapas definidas
+4. **Processamento**: Agentes de IA processam código conforme workflow
+5. **Armazenamento**: Resultados são persistidos no Redis e Blob Storage
+6. **Resposta**: API retorna status e resultados ao cliente
 
 ---
 
-## 📁 Descrição das Pastas
+## 2. Descrição de Cada Pasta
 
-### 🤖 `/agents`
-Contém os agentes de IA especializados que executam tarefas específicas.
+### `/docs/`
+**Propósito**: Documentação técnica e guias do projeto
+- Contém esta wiki e outros documentos de referência
+- Manuais de instalação e configuração
+- Exemplos de uso e casos de teste
 
-- **`agente_revisor.py`**: Agente responsável por análise de código em repositórios
-- **`agente_processador.py`**: Agente que processa resultados de outras etapas
-- **`logging_utils.py`**: Utilitários para logging com Azure Application Insights
+### `/services/`
+**Propósito**: Serviços principais da aplicação
+- `workflow_orchestrator.py`: Coordena execução de workflows
+- `job_manager.py`: Gerencia ciclo de vida dos jobs
+- `blob_storage_service.py`: Interface com Azure Blob Storage
+- Outros serviços especializados
 
-### 🏛️ `/domain/interfaces`
-Camada de domínio seguindo Clean Architecture - define contratos através de interfaces.
+### `/tools/`
+**Propósito**: Ferramentas e utilitários
+- `job_store.py`: Abstração para persistência Redis
+- Utilitários de validação e formatação
+- Helpers para integração com APIs externas
 
-- **`llm_provider_interface.py`**: Interface para provedores de LLM
-- **`repository_reader_interface.py`**: Interface para leitores de repositório
-- **`repository_provider_interface.py`**: Interface para provedores de repositório
-- **`secret_manager_interface.py`**: Interface para gerenciamento de segredos
-- **`job_manager_interface.py`**: Interface para gerenciamento de jobs
-- **`blob_storage_interface.py`**: Interface para armazenamento de blobs
-- **`workflow_orchestrator_interface.py`**: Interface para orquestração de workflows
-- **`rag_retriever_interface.py`**: Interface para sistema RAG
-- **`changeset_filler_interface.py`**: Interface para preenchimento de changesets
-- **`job_store_interface.py`**: Interface para armazenamento de jobs
+### `/workflows/`
+**Propósito**: Definições de workflows em YAML
+- `workflows.yaml`: Configurações de todos os workflows disponíveis
+- Templates de análise por tipo de projeto
+- Configurações de etapas e dependências
 
-### ⚙️ `/services`
-Camada de serviços que implementa a lógica de negócio.
+### `/config/`
+**Propósito**: Arquivos de configuração
+- Configurações de ambiente
+- Credenciais e chaves de API
+- Parâmetros de conexão com serviços externos
 
-- **`workflow_orchestrator.py`**: Orquestrador principal de workflows
-- **`job_manager.py`**: Gerenciador de jobs e estados
-- **`blob_storage_service.py`**: Serviço para Azure Blob Storage
-- **`factories/`**: Fábricas para criação de objetos
-  - **`agent_factory.py`**: Fábrica de agentes
-  - **`llm_provider_factory.py`**: Fábrica de provedores LLM
-
-### 🔧 `/tools`
-Ferramentas e utilitários especializados.
-
-#### Conectores (`/tools/conectores`)
-- **`conexao_geral.py`**: Orquestrador geral de conexões
-- **`base_conector.py`**: Classe base para conectores
-- **`github_conector.py`**: Conector específico para GitHub
-- **`gitlab_conector.py`**: Conector específico para GitLab
-- **`azure_conector.py`**: Conector específico para Azure DevOps
-
-#### Leitores (`/tools/readers`)
-- **`reader_geral.py`**: Leitor geral que delega para leitores específicos
-- **`base_reader.py`**: Classe base para leitores
-- **`github_reader.py`**: Leitor específico para GitHub
-- **`gitlab_reader.py`**: Leitor específico para GitLab
-- **`azure_reader.py`**: Leitor específico para Azure DevOps
-
-#### Committers (`/tools/repo_committers`)
-- **`orchestrator.py`**: Orquestrador de commits por provedor
-- **`base_committer.py`**: Classe base para committers
-- **`github_committer.py`**: Committer específico para GitHub
-- **`gitlab_committer.py`**: Committer específico para GitLab
-- **`azure_committer.py`**: Committer específico para Azure DevOps
-
-#### Outros Utilitários
-- **`requisicao_openai.py`**: Provedor OpenAI/Azure OpenAI
-- **`requisicao_claude.py`**: Provedor Anthropic Claude
-- **`rag_retriever.py`**: Sistema RAG com Azure AI Search
-- **`preenchimento.py`**: Preenchimento de changesets
-- **`job_store.py`**: Armazenamento Redis para jobs
-- **`azure_secret_manager.py`**: Gerenciador de segredos Azure Key Vault
-- **`blob_report_*.py`**: Utilitários para Azure Blob Storage
+### `/tests/`
+**Propósito**: Testes automatizados
+- Testes unitários dos serviços
+- Testes de integração da API
+- Mocks e fixtures para desenvolvimento
 
 ---
 
-## 🚀 Como Adicionar uma Nova API de LLM
+## 3. Como Adicionar uma Nova API de LLM
 
-### Passo 1: Criar o Provedor
+### Passo 1: Criar o Serviço de LLM
 
-Crie um novo arquivo em `/tools/` (ex: `requisicao_gemini.py`):
+Crie um novo arquivo em `/services/llm_providers/`:
 
 python
-from typing import Optional, Dict, Any
-from domain.interfaces.llm_provider_interface import ILLMProviderComplete
-from domain.interfaces.rag_retriever_interface import IRAGRetriever
-from domain.interfaces.secret_manager_interface import ISecretManager
-from tools.azure_secret_manager import AzureSecretManager
+# services/llm_providers/nova_api_llm.py
+from typing import Dict, Any, Optional
+from .base_llm_provider import BaseLLMProvider
 
-class GeminiLLMProvider(ILLMProviderComplete):
-    def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
-        self.rag_retriever = rag_retriever
-        self.secret_manager = secret_manager or AzureSecretManager()
+class NovaAPILLMProvider(BaseLLMProvider):
+    def __init__(self, api_key: str, base_url: str):
+        self.api_key = api_key
+        self.base_url = base_url
+    
+    async def generate_response(self, prompt: str, model: str = "default") -> str:
+        # Implementar lógica de chamada para a nova API
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
         
-        # Configurar cliente da API
-        api_key = self.secret_manager.get_secret("GEMINI_API_KEY")
-        # ... inicialização do cliente
-    
-    def carregar_prompt(self, tipo_tarefa: str) -> str:
-        # Implementar carregamento de prompts
-        pass
-    
-    def executar_prompt(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        usar_rag: bool = False,
-        model_name: Optional[str] = None,
-        max_token_out: int = 15000,
-        job_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        # Implementar lógica de execução
-        # Deve retornar: {'reposta_final': str, 'tokens_entrada': int, 'tokens_saida': int}
-        pass
-    
-    # Implementar outros métodos da interface...
-
-
-### Passo 2: Registrar na Factory
-
-Edite `/services/factories/llm_provider_factory.py`:
-
-python
-from tools.requisicao_gemini import GeminiLLMProvider  # Adicionar import
-
-class LLMProviderFactory:
-    _providers: Dict[str, Type[ILLMProvider]] = {
-        'openai': OpenAILLMProvider,
-        'claude': AnthropicClaudeProvider,
-        'gemini': GeminiLLMProvider,  # Adicionar aqui
-    }
-    
-    @classmethod
-    def create_provider(cls, model_name: Optional[str], rag_retriever: AzureAISearchRAGRetriever) -> ILLMProvider:
-        model_lower = (model_name or "").lower()
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "max_tokens": 4000
+        }
         
-        if "gemini" in model_lower:  # Adicionar detecção
-            provider_class = cls._providers.get('gemini', OpenAILLMProvider)
-        elif "claude" in model_lower:
-            provider_class = cls._providers.get('claude', OpenAILLMProvider)
-        else:
-            provider_class = cls._providers.get('openai', OpenAILLMProvider)
+        # Fazer requisição HTTP para a API
+        # Processar resposta
+        # Retornar texto gerado
+        pass
+    
+    def get_available_models(self) -> list:
+        return ["modelo-1", "modelo-2", "modelo-premium"]
+
+
+### Passo 2: Registrar no Factory Pattern
+
+Edite `/services/llm_factory.py`:
+
+python
+from .llm_providers.nova_api_llm import NovaAPILLMProvider
+
+class LLMFactory:
+    @staticmethod
+    def create_provider(provider_type: str, **kwargs):
+        providers = {
+            "openai": OpenAIProvider,
+            "anthropic": AnthropicProvider,
+            "nova_api": NovaAPILLMProvider,  # Adicionar aqui
+        }
         
-        return provider_class(rag_retriever=rag_retriever)
+        if provider_type not in providers:
+            raise ValueError(f"Provider {provider_type} não suportado")
+        
+        return providers[provider_type](**kwargs)
 
 
-### Passo 3: Configurar Segredos
+### Passo 3: Configurar Variáveis de Ambiente
 
-Adicione as chaves necessárias no Azure Key Vault:
-- `GEMINI_API_KEY`: Chave da API do Gemini
+Adicione no arquivo `.env`:
 
-### Passo 4: Atualizar Requirements
-
-Adicione as dependências necessárias no `requirements.txt`:
-
-google-generativeai==0.3.2
+env
+NOVA_API_KEY=sua_chave_aqui
+NOVA_API_BASE_URL=https://api.nova-llm.com/v1
 
 
----
+### Passo 4: Atualizar Workflows
 
-## 📦 Como Adicionar um Novo Repositório
+Edite `workflows.yaml` para incluir a nova opção:
 
-### Passo 1: Criar o Repository Provider
-
-Crie um novo arquivo em `/tools/` (ex: `bitbucket_repository_provider.py`):
-
-python
-from typing import Any
-from domain.interfaces.repository_provider_interface import IRepositoryProvider
-
-class BitbucketRepositoryProvider(IRepositoryProvider):
-    def get_repository(self, repository_name: str, token: str) -> Any:
-        # Implementar lógica para obter repositório
-        pass
-    
-    def create_repository(self, repository_name: str, token: str, description: str = "", private: bool = True) -> Any:
-        # Implementar lógica para criar repositório
-        pass
+yaml
+analise_codigo:
+  steps:
+    - name: "analise_inicial"
+      agent: "code_analyzer"
+      llm_providers:
+        - "openai"
+        - "anthropic"
+        - "nova_api"  # Adicionar aqui
+      default_model: "gpt-4"
+      nova_api_model: "modelo-premium"  # Modelo específico
 
 
-### Passo 2: Criar o Conector
+### Passo 5: Testes
 
-Crie `/tools/conectores/bitbucket_conector.py`:
+Crie testes em `/tests/test_nova_api_llm.py`:
 
 python
-from tools.conectores.base_conector import BaseConector
-from tools.bitbucket_repository_provider import BitbucketRepositoryProvider
+import pytest
+from services.llm_providers.nova_api_llm import NovaAPILLMProvider
 
-class BitbucketConector(BaseConector):
-    def _extract_org_name(self, repositorio: str) -> str:
-        # Implementar extração do nome da organização
-        pass
-    
-    def connection(self, repositorio: str):
-        org_name = self._extract_org_name(repositorio)
-        return self._handle_repository_connection(repositorio, "Bitbucket", org_name)
-    
-    @classmethod
-    def create_with_defaults(cls) -> 'BitbucketConector':
-        return cls(repository_provider=BitbucketRepositoryProvider())
+@pytest.fixture
+def nova_provider():
+    return NovaAPILLMProvider(
+        api_key="test_key",
+        base_url="https://test.api.com"
+    )
 
-
-### Passo 3: Criar o Reader
-
-Crie `/tools/readers/bitbucket_reader.py`:
-
-python
-from typing import Dict, Optional, List
-from tools.readers.base_reader import BaseReader
-from tools.bitbucket_repository_provider import BitbucketRepositoryProvider
-
-class BitbucketReader(BaseReader):
-    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        super().__init__(repository_provider or BitbucketRepositoryProvider())
-    
-    def read_repository_internal(
-        self, 
-        repositorio, 
-        tipo_analise: str, 
-        nome_branch: str = None,
-        arquivos_especificos: Optional[List[str]] = None,
-        mapeamento_tipo_extensoes: Dict = None
-    ) -> Dict[str, str]:
-        # Implementar lógica de leitura
-        pass
-
-
-### Passo 4: Criar o Committer
-
-Crie `/tools/repo_committers/bitbucket_committer.py`:
-
-python
-from typing import Dict, Any
-from tools.repo_committers.base_committer import BaseCommitter
-
-def processar_branch_bitbucket(
-    repo,
-    nome_branch: str,
-    branch_de_origem: str,
-    branch_alvo_do_pr: str,
-    mensagem_pr: str,
-    descricao_pr: str,
-    conjunto_de_mudancas: list
-) -> Dict[str, Any]:
-    # Implementar lógica de commit e PR
+def test_generate_response(nova_provider):
+    # Implementar testes unitários
     pass
 
 
-### Passo 5: Integrar no Sistema
+---
 
-#### 5.1 Atualizar ConexaoGeral
+## 4. Como Adicionar um Novo Repositório
 
-Edite `/tools/conectores/conexao_geral.py`:
+### Passo 1: Criar o Connector
 
-python
-from tools.conectores.bitbucket_conector import BitbucketConector  # Adicionar import
-
-class ConexaoGeral:
-    def _get_conector(self, repository_type: str, repository_provider: IRepositoryProvider):
-        # ... código existente ...
-        elif repository_type == 'bitbucket':  # Adicionar
-            conector = BitbucketConector(repository_provider, self.secret_manager)
-        # ... resto do código ...
-
-
-#### 5.2 Atualizar ReaderGeral
-
-Edite `/tools/readers/reader_geral.py`:
+Crie um novo arquivo em `/services/repository_connectors/`:
 
 python
-from .bitbucket_reader import BitbucketReader  # Adicionar import
+# services/repository_connectors/novo_repo_connector.py
+from typing import Dict, List, Optional
+from .base_repository_connector import BaseRepositoryConnector
 
-class ReaderGeral(IRepositoryReader):
-    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        # ... código existente ...
-        self.bitbucket_reader = BitbucketReader(repository_provider)  # Adicionar
+class NovoRepoConnector(BaseRepositoryConnector):
+    def __init__(self, access_token: str, base_url: str):
+        self.access_token = access_token
+        self.base_url = base_url
     
-    def read_repository(self, ...):
-        # ... código existente ...
-        elif repository_type == 'bitbucket':  # Adicionar
-            resultado = self.bitbucket_reader.read_repository_internal(...)
-        # ... resto do código ...
+    async def clone_repository(self, repo_name: str, branch: str = "main") -> str:
+        # Implementar lógica de clone
+        # Retornar caminho local do repositório clonado
+        pass
+    
+    async def create_branch(self, repo_name: str, branch_name: str, base_branch: str = "main") -> bool:
+        # Implementar criação de branch
+        pass
+    
+    async def create_pull_request(self, repo_name: str, source_branch: str, target_branch: str, title: str, description: str) -> str:
+        # Implementar criação de PR
+        # Retornar URL do PR criado
+        pass
+    
+    async def commit_changes(self, repo_path: str, message: str, files: List[str]) -> str:
+        # Implementar commit de mudanças
+        # Retornar hash do commit
+        pass
+    
+    def validate_repo_name(self, repo_name: str) -> str:
+        # Implementar validação específica do formato
+        # Exemplo: para Bitbucket pode ser "workspace/repo-name"
+        if "/" not in repo_name:
+            raise ValueError("Formato inválido. Use: workspace/repo-name")
+        return repo_name
 
 
-#### 5.3 Atualizar Orchestrator
+### Passo 2: Registrar no Factory
 
-Edite `/tools/repo_committers/orchestrator.py`:
-
-python
-from .bitbucket_committer import processar_branch_bitbucket  # Adicionar import
-
-def processar_branch_por_provedor(...):
-    if repository_type == 'bitbucket':  # Adicionar
-        return processar_branch_bitbucket(...)
-    # ... resto do código ...
-
-
-#### 5.4 Atualizar Factory
-
-Edite `/tools/repository_provider_factory.py`:
-
-python
-from tools.bitbucket_repository_provider import BitbucketRepositoryProvider  # Adicionar
-
-def get_repository_provider_explicit(provider_type: str) -> IRepositoryProvider:
-    # ... código existente ...
-    elif provider_type == 'bitbucket':  # Adicionar
-        return BitbucketRepositoryProvider()
-    # ... resto do código ...
-
-
-#### 5.5 Atualizar API
-
-Edite `mcp_server_fastapi.py` para adicionar 'bitbucket' como opção válida:
+Edite `/services/repository_factory.py`:
 
 python
-repository_type: Literal['github', 'gitlab', 'azure', 'bitbucket'] = Field(...)
+from .repository_connectors.novo_repo_connector import NovoRepoConnector
+
+class RepositoryFactory:
+    @staticmethod
+    def create_connector(repo_type: str, **kwargs):
+        connectors = {
+            "github": GitHubConnector,
+            "gitlab": GitLabConnector,
+            "azure": AzureDevOpsConnector,
+            "novo_repo": NovoRepoConnector,  # Adicionar aqui
+        }
+        
+        if repo_type not in connectors:
+            raise ValueError(f"Tipo de repositório {repo_type} não suportado")
+        
+        return connectors[repo_type](**kwargs)
 
 
-### Passo 6: Configurar Segredos
+### Passo 3: Atualizar Modelos Pydantic
 
-Adicione no Azure Key Vault:
-- `bitbucket-token`: Token padrão
-- `bitbucket-token-{org}`: Tokens específicos por organização
+Edite `mcp_server_fastapi.py`:
+
+python
+class StartAnalysisPayload(BaseModel):
+    # ... outros campos ...
+    repository_type: Literal['github', 'gitlab', 'azure', 'novo_repo'] = Field(
+        description="Tipo do repositório: 'github', 'gitlab', 'azure', 'novo_repo'."
+    )
+
+
+### Passo 4: Implementar Validação Específica
+
+Adicione função de validação em `mcp_server_fastapi.py`:
+
+python
+def _validate_and_normalize_novo_repo_name(repo_name: str) -> str:
+    repo_name = repo_name.strip()
+    
+    if '/' not in repo_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Formato de repositório NovoRepo inválido: '{repo_name}'. Use o formato 'workspace/repo-name'."
+        )
+    
+    parts = repo_name.split('/')
+    if len(parts) != 2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Formato inválido. Esperado exatamente 'workspace/repo-name', recebido: '{repo_name}'"
+        )
+    
+    return repo_name
+
+def _normalize_repo_name_by_type(repo_name: str, repository_type: str) -> str:
+    """Normaliza o nome do repositório baseado no tipo."""
+    if repository_type == 'gitlab':
+        return _validate_and_normalize_gitlab_repo_name(repo_name)
+    elif repository_type == 'novo_repo':
+        return _validate_and_normalize_novo_repo_name(repo_name)
+    return repo_name
+
+
+### Passo 5: Configurar Credenciais
+
+Adicione no arquivo `.env`:
+
+env
+NOVO_REPO_ACCESS_TOKEN=seu_token_aqui
+NOVO_REPO_BASE_URL=https://api.novo-repo.com/v2
+
+
+### Passo 6: Atualizar Documentação da API
+
+A documentação Swagger será automaticamente atualizada com o novo tipo de repositório devido ao uso de `Literal` no Pydantic.
+
+### Passo 7: Testes de Integração
+
+Crie testes em `/tests/test_novo_repo_integration.py`:
+
+python
+import pytest
+from services.repository_connectors.novo_repo_connector import NovoRepoConnector
+
+@pytest.fixture
+def novo_repo_connector():
+    return NovoRepoConnector(
+        access_token="test_token",
+        base_url="https://test.novo-repo.com"
+    )
+
+def test_validate_repo_name(novo_repo_connector):
+    # Testar validação de nomes
+    valid_name = "workspace/my-repo"
+    assert novo_repo_connector.validate_repo_name(valid_name) == valid_name
+    
+    with pytest.raises(ValueError):
+        novo_repo_connector.validate_repo_name("invalid-format")
+
 
 ---
 
-## 🔄 Fluxo de Execução
+## Considerações Importantes
 
-### 1. Recepção da Requisição
-- FastAPI recebe requisição em `/start-analysis`
-- Valida parâmetros e cria job no Redis
-- Inicia workflow em background
+### Segurança
+- Sempre use variáveis de ambiente para credenciais
+- Implemente rate limiting para APIs externas
+- Valide e sanitize todas as entradas de usuário
 
-### 2. Orquestração do Workflow
-- `WorkflowOrchestrator` carrega configuração do `workflows.yaml`
-- Executa etapas sequencialmente
-- Gerencia estados e aprovações
+### Performance
+- Use conexões assíncronas quando possível
+- Implemente cache para operações repetitivas
+- Configure timeouts apropriados para APIs externas
 
-### 3. Execução dos Agentes
-- `AgentFactory` cria agentes especializados
-- `LLMProviderFactory` fornece provedor de IA apropriado
-- Agentes processam código e geram resultados
+### Monitoramento
+- Adicione logs estruturados para debugging
+- Implemente métricas de performance
+- Configure alertas para falhas críticas
 
-### 4. Processamento de Resultados
-- `ChangesetFiller` preenche detalhes dos changesets
-- Sistema valida e agrupa mudanças por branch
-
-### 5. Commit e PR
-- Conectores específicos criam branches
-- Committers aplicam mudanças
-- Sistema cria Pull/Merge Requests
+### Manutenibilidade
+- Siga os padrões de código existentes
+- Documente todas as funções públicas
+- Mantenha testes atualizados
 
 ---
 
-## ⚙️ Configuração e Deploy
+## Recursos Adicionais
 
-### Variáveis de Ambiente Obrigatórias
-
-bash
-# Redis
-REDIS_URL=redis://...
-
-# Azure Key Vault
-KEY_VAULT_URL=https://your-vault.vault.azure.net/
-
-# Azure OpenAI
-AZURE_OPENAI_MODELS=https://your-openai.openai.azure.com/
-AZURE_DEFAULT_DEPLOYMENT_NAME=gpt-4
-AZURE_OPENAI_EMBEDDING_MODEL_NAME=text-embedding-ada-002
-
-# Azure AI Search (RAG)
-AI_SEARCH_ENDPOINT=https://your-search.search.windows.net
-AI_SEARCH_INDEX_NAME=your-index
-
-# Azure Blob Storage
-AZURE_STORAGE_CONTAINER_NAME=reports
-AZURE_STORAGE_CONNECTION_STRING=azure-storage-connection
-
-# Application Insights
-APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...
-
-
-### Segredos no Azure Key Vault
-
-
-# LLM APIs
-openaiapi
-ANTHROPICAAPIKEY
-
-# Repository Tokens
-github-token
-gitlab-token
-azure-token
-
-# Azure Services
-azure-openai-modelos
-aisearchapi
-azure-storage-connection
-
-
-### Deploy
-
-1. **Instalar dependências**:
-   bash
-   pip install -r requirements.txt
-   
-
-2. **Configurar variáveis de ambiente**
-
-3. **Executar servidor**:
-   bash
-   uvicorn mcp_server_fastapi:app --host 0.0.0.0 --port 8000
-   
+- **Swagger UI**: Disponível em `/docs` quando o servidor estiver rodando
+- **Logs**: Configurados para output estruturado em JSON
+- **Health Check**: Endpoint `/health` para monitoramento
+- **Métricas**: Endpoint `/metrics` para Prometheus
 
 ---
 
-## 📚 Recursos Adicionais
-
-- **Logs**: Sistema integrado com Azure Application Insights
-- **Monitoramento**: Métricas de tokens, tempo de execução e erros
-- **Cache**: Sistema de cache para repositórios e conexões
-- **Retry**: Lógica de retry automática para APIs externas
-- **Validação**: Validação robusta de entrada com Pydantic
-
----
-
-*Esta wiki é mantida pela equipe de desenvolvimento. Para contribuições ou dúvidas, abra uma issue no repositório.*
+*Última atualização: $(date)*
+*Versão da API: 9.0.0*
