@@ -78,6 +78,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         input_para_etapa = previous_step_result
         observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
 
+        if observacoes_humanas is None:
+            observacoes_humanas = "Aplique as mudanças apontandas pelo relatório"
+
         if step_iteration == 0 and start_from_step > 0:
             print(f"[{job_id}] Incorporando observações humanas da aprovação ao contexto.")
             input_para_etapa = {
