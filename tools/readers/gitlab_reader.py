@@ -2,31 +2,21 @@ import base64
 from typing import Dict, Optional, List
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.gitlab_repository_provider import GitLabRepositoryProvider
+from tools.readers.base_reader import BaseReader
 
-class GitLabReader:
+class GitLabReader(BaseReader):
     
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        self.repository_provider = repository_provider or GitLabRepositoryProvider()
+        super().__init__(repository_provider or GitLabRepositoryProvider())
+
+    def _read_gitlab_file(self, repositorio, caminho_arquivo: str, branch_a_ler: str) -> str:
+        file_content = repositorio.files.get(file_path=caminho_arquivo, ref=branch_a_ler)
+        return base64.b64decode(file_content.content).decode('utf-8')
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
-        arquivos_lidos = {}
-        total_arquivos = len(arquivos_especificos)
-        
-        print(f"Modo de leitura filtrada GitLab ativado. Lendo {total_arquivos} arquivos específicos...")
-        
-        for i, caminho_arquivo in enumerate(arquivos_especificos):
-            try:
-                print(f"  [{i+1}/{total_arquivos}] Lendo: {caminho_arquivo}")
-                
-                file_content = repositorio.files.get(file_path=caminho_arquivo, ref=branch_a_ler)
-                decoded_content = base64.b64decode(file_content.content).decode('utf-8')
-                arquivos_lidos[caminho_arquivo] = decoded_content
-                
-            except Exception as e:
-                print(f"  [AVISO] Falha ao ler arquivo '{caminho_arquivo}': {e}. Ignorando.")
-        
-        print(f"Leitura filtrada GitLab concluída. {len(arquivos_lidos)} de {total_arquivos} arquivos lidos com sucesso.")
-        return arquivos_lidos
+        return self._ler_arquivos_especificos_base(
+            repositorio, branch_a_ler, arquivos_especificos, "GitLab", self._read_gitlab_file
+        )
 
     def _ler_repositorio_completo(self, repositorio, branch_a_ler: str, tipo_analise: str, extensoes_alvo: List[str]) -> Dict[str, str]:
         arquivos_do_repo = {}
@@ -70,21 +60,12 @@ class GitLabReader:
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None
     ) -> Dict[str, str]:
-        if nome_branch is None:
-            if hasattr(repositorio, 'default_branch'):
-                branch_a_ler = repositorio.default_branch
-            else:
-                branch_a_ler = 'main'
-            print(f"Nenhuma branch especificada. Usando a branch padrão GitLab: '{branch_a_ler}'")
-        else:
-            branch_a_ler = nome_branch
+        branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "GitLab")
         
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitLab ativado para {len(arquivos_especificos)} arquivos específicos.")
             return self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
         else:
             print("Modo de leitura completa GitLab ativado (filtro por extensão).")
-            extensoes_alvo = mapeamento_tipo_extensoes.get(tipo_analise.lower())
-            if extensoes_alvo is None:
-                raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou não possui 'extensions' definidas em workflows.yaml")
+            extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
             return self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
