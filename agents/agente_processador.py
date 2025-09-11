@@ -31,8 +31,4 @@ class AgenteProcessador:
             max_token_out=max_token_out
         )
 
-        return {
-            "resultado": {
-                "reposta_final": resultado_da_ia
-            }
-        }
+        return {"resultado": {"reposta_final": resultado_da_ia}}
