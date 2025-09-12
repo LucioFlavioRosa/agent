@@ -159,7 +159,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         # --- 4. Processamento da Resposta ---
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()                 
+        cleaned_string = json_string.replace("", "").replace("", "").strip()                 
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
@@ -285,7 +285,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
 
-        self._save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        # CORREÇÃO: Só salva no Blob Storage se gerar_novo_relatorio=True
+        if job_info['data'].get('gerar_novo_relatorio', True):
+            self._save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        else:
+            print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
 
         print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo. Finalizando.")
         self.job_manager.update_job_status(job_id, 'completed')
@@ -297,13 +301,22 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
 
-        self._save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        # CORREÇÃO: Só salva no Blob Storage se gerar_novo_relatorio=True
+        if job_info['data'].get('gerar_novo_relatorio', True):
+            self._save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        else:
+            print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
 
         job_info['status'] = 'pending_approval'
         job_info['data']['paused_at_step'] = step_index
         self.job_manager.update_job(job_id, job_info)
 
     def _save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
+        # CORREÇÃO: Verificação defensiva adicional para gerar_novo_relatorio
+        if not job_info['data'].get('gerar_novo_relatorio', True):
+            print(f"[{job_id}] gerar_novo_relatorio=False - Abortando salvamento no Blob Storage")
+            return
+            
         if job_info['data'].get('analysis_name') and report_text and report_generated_by_agent:
             try:
                 blob_url = self.blob_storage.upload_report(
