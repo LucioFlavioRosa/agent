@@ -161,16 +161,22 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             return agente.main(**agent_params)
             
         elif agent_type == "processador":
-            # Na primeira etapa, o input são as instruções do usuário.
+            # Lógica para garantir que o input para o agente seja sempre consistente
+            input_final_para_agente = {}
+        
             if current_step_index == 0:
+                # Na primeira etapa, o input são as instruções originais do usuário.
                 input_final_para_agente = {"instrucoes_iniciais": job_info['data']['instrucoes_extras']}
             else:
-                # Nas etapas seguintes, o input principal é o resultado da etapa anterior.
-                # Verificamos se o input é o "pacote" de retomada e extraímos o resultado.
+                # Nas etapas seguintes (após aprovação), o input principal é o resultado da etapa anterior.
+                resultado_anterior = input_para_etapa
+                
+                # Desempacota o resultado se ele vier da etapa de aprovação
                 if isinstance(input_para_etapa, dict) and "resultado_etapa_anterior" in input_para_etapa:
-                    input_final_para_agente = input_para_etapa["resultado_etapa_anterior"]
-                else:
-                    input_final_para_agente = input_para_etapa
+                    resultado_anterior = input_para_etapa["resultado_etapa_anterior"]
+                
+                # Remonta o dicionário na estrutura que o agente espera, usando o resultado anterior como instrução.
+                input_final_para_agente = {"instrucoes_iniciais": resultado_anterior}
         
             agent_params['codigo'] = input_final_para_agente
             agent_params['repository_type'] = job_info['data']['repository_type']
