@@ -95,39 +95,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_manager.handle_job_error(job_id, e, 'workflow')
 
-    def resume_workflow_after_approval(self, job_id: str) -> None:
-        """
-        Método utilitário para retomar o workflow após aprovação do usuário.
-        Este método deve ser chamado pelo serviço/API que processa a aprovação.
-        """
-        try:
-            job_info = self.job_manager.get_job(job_id)
-            if not job_info:
-                raise ValueError(f"Job {job_id} não encontrado.")
-            
-            if job_info.get('status') != 'pending_approval':
-                raise ValueError(f"Job {job_id} não está aguardando aprovação. Status atual: {job_info.get('status')}")
-            
-            paused_at_step = job_info['data'].get('paused_at_step')
-            if paused_at_step is None:
-                raise ValueError(f"Job {job_id} não possui informação sobre a etapa pausada.")
-            
-            # Atualizar status do job para 'in_progress' antes de retomar
-            job_info['status'] = 'in_progress'
-            self.job_manager.update_job(job_id, job_info)
-            
-            # Retomar workflow a partir do próximo step
-            next_step = paused_at_step + 1
-            print(f"[{job_id}] Retomando workflow após aprovação. Próximo step: {next_step}")
-            
-            self.execute_workflow(job_id, start_from_step=next_step)
-            
-        except Exception as e:
-            print(f"[{job_id}] Erro ao retomar workflow após aprovação: {e}")
-            self.job_manager.handle_job_error(job_id, e, 'resume_workflow')
-
-    # Substitua todo o seu método _execute_step por este
-
     def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                      current_step_index: int, previous_step_result: Dict[str, Any], 
                      repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
@@ -141,7 +108,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'model_name': model_para_etapa
         })
     
-        # --- 2. Preparação CONSISTENTE do Input ---
+        # --- 2. Preparação CONSISTENTE do Input com Incorporação de instrucoes_extras ---
         input_para_agente_final = {}
         
         # Se for a primeira etapa, o input são as instruções originais do usuário.
@@ -150,8 +117,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             input_para_agente_final = {"instrucoes_iniciais": instrucoes}
         else:
             # Nas etapas seguintes, o input é o resultado da etapa anterior.
-            # Nós o re-empacotamos no formato que o agente 'processador' espera.
-            input_para_agente_final = {"instrucoes_iniciais": previous_step_result}
+            # CORREÇÃO: Verificar se há contexto mesclado com instrucoes_extras após aprovação
+            if 'resultado_etapa_anterior_com_instrucoes' in job_info['data']:
+                # Usar o contexto mesclado que inclui as instruções do usuário
+                contexto_mesclado = job_info['data']['resultado_etapa_anterior_com_instrucoes']
+                input_para_agente_final = {"instrucoes_iniciais": contexto_mesclado}
+                print(f"[{job_id}] Usando contexto mesclado com instrucoes_extras do usuário")
+            else:
+                # Fallback para o comportamento anterior
+                input_para_agente_final = {"instrucoes_iniciais": previous_step_result}
     
         # --- 3. Execução do Agente ---
         agent_type = step.get("agent_type")
@@ -161,8 +135,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             # Esta lógica é para workflows que usam o 'revisor' em etapas > 0
             instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
             instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
-            # Usamos o resultado puro da etapa anterior
-            instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
+            
+            # CORREÇÃO: Usar contexto mesclado se disponível
+            if 'resultado_etapa_anterior_com_instrucoes' in job_info['data']:
+                contexto_para_revisor = job_info['data']['resultado_etapa_anterior_com_instrucoes']
+            else:
+                contexto_para_revisor = previous_step_result
+                
+            instrucoes_formatadas += json.dumps(contexto_para_revisor, indent=2, ensure_ascii=False)
+            
             agent_params['instrucoes_extras'] = instrucoes_formatadas
             agent_params.update({
                                     'repositorio': job_info['data']['repo_name'],
@@ -326,14 +307,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_manager.update_job_status(job_id, 'completed')
 
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
-        """
-        Pausa o workflow para aprovação do usuário.
-        IMPORTANTE: Após aprovação, o serviço/API deve chamar resume_workflow_after_approval(job_id)
-        para continuar o workflow a partir do próximo step.
-        """
         print(f"[{job_id}] Etapa requer aprovação.")
 
-        #job_info = self.job_manager.get_job(job_id)
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
 
@@ -343,11 +318,79 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         else:
             print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
 
+        # NOVA FUNCIONALIDADE: Preparar contexto mesclado para etapas subsequentes
+        self._prepare_merged_context_for_next_steps(job_id, job_info, step_result)
+
         job_info['status'] = 'pending_approval'
         job_info['data']['paused_at_step'] = step_index
         self.job_manager.update_job(job_id, job_info)
+
+    def _prepare_merged_context_for_next_steps(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any]) -> None:
+        """
+        Prepara o contexto mesclado que inclui o relatório aprovado e as instruções extras do usuário.
+        Este contexto será usado como input para as etapas subsequentes após a aprovação.
+        """
+        # Obter as instruções extras do usuário (comentários na aprovação)
+        instrucoes_extras_aprovacao = job_info['data'].get('instrucoes_extras_aprovacao', '')
+        instrucoes_extras_originais = job_info['data'].get('instrucoes_extras', '')
         
-        print(f"[{job_id}] Workflow pausado na etapa {step_index}. Para continuar, chame resume_workflow_after_approval('{job_id}')")
+        # Criar contexto mesclado robusto
+        contexto_mesclado = {
+            "relatorio_aprovado": step_result,
+            "instrucoes_originais": instrucoes_extras_originais,
+            "instrucoes_usuario_aprovacao": instrucoes_extras_aprovacao,
+            "contexto_completo": f"""
+# RELATÓRIO APROVADO PELO USUÁRIO:
+{json.dumps(step_result, indent=2, ensure_ascii=False)}
+
+# INSTRUÇÕES ORIGINAIS:
+{instrucoes_extras_originais}
+
+# OBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:
+{instrucoes_extras_aprovacao}
+
+# DIRETIVA OBRIGATÓRIA:
+As instruções e observações do usuário devem ser SEMPRE consideradas e implementadas nas etapas seguintes.
+Se houver conflito entre o relatório e as instruções do usuário, as instruções do usuário têm PRIORIDADE MÁXIMA.
+"""
+        }
+        
+        # Salvar o contexto mesclado para uso nas próximas etapas
+        job_info['data']['resultado_etapa_anterior_com_instrucoes'] = contexto_mesclado
+        
+        print(f"[{job_id}] Contexto mesclado preparado com instruções do usuário para etapas subsequentes")
+
+    def continue_workflow_after_approval(self, job_id: str, approval_data: Dict[str, Any]) -> None:
+        """
+        Continua o workflow após aprovação do usuário, garantindo que as instruções extras
+        sejam incorporadas ao contexto das próximas etapas.
+        """
+        try:
+            job_info = self.job_manager.get_job(job_id)
+            if not job_info:
+                raise ValueError("Job não encontrado.")
+
+            # Atualizar job_info com dados da aprovação
+            if 'instrucoes_extras_aprovacao' in approval_data:
+                job_info['data']['instrucoes_extras_aprovacao'] = approval_data['instrucoes_extras_aprovacao']
+                
+                # CORREÇÃO: Recriar o contexto mesclado com as novas instruções
+                step_result = job_info['data'].get(f"step_{job_info['data']['paused_at_step']}_result", {})
+                self._prepare_merged_context_for_next_steps(job_id, job_info, step_result)
+                
+                print(f"[{job_id}] Instruções extras da aprovação incorporadas ao contexto: {approval_data['instrucoes_extras_aprovacao']}")
+
+            # Continuar workflow a partir da próxima etapa
+            paused_step = job_info['data'].get('paused_at_step', 0)
+            next_step = paused_step + 1
+            
+            job_info['status'] = 'running'
+            self.job_manager.update_job(job_id, job_info)
+            
+            self.execute_workflow(job_id, start_from_step=next_step)
+            
+        except Exception as e:
+            self.job_manager.handle_job_error(job_id, e, 'approval_continuation')
 
     def _save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
         # CORREÇÃO: Verificação defensiva adicional para gerar_novo_relatorio
