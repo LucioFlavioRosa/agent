@@ -95,6 +95,37 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_manager.handle_job_error(job_id, e, 'workflow')
 
+    def resume_workflow_after_approval(self, job_id: str) -> None:
+        """
+        Método utilitário para retomar o workflow após aprovação do usuário.
+        Este método deve ser chamado pelo serviço/API que processa a aprovação.
+        """
+        try:
+            job_info = self.job_manager.get_job(job_id)
+            if not job_info:
+                raise ValueError(f"Job {job_id} não encontrado.")
+            
+            if job_info.get('status') != 'pending_approval':
+                raise ValueError(f"Job {job_id} não está aguardando aprovação. Status atual: {job_info.get('status')}")
+            
+            paused_at_step = job_info['data'].get('paused_at_step')
+            if paused_at_step is None:
+                raise ValueError(f"Job {job_id} não possui informação sobre a etapa pausada.")
+            
+            # Atualizar status do job para 'in_progress' antes de retomar
+            job_info['status'] = 'in_progress'
+            self.job_manager.update_job(job_id, job_info)
+            
+            # Retomar workflow a partir do próximo step
+            next_step = paused_at_step + 1
+            print(f"[{job_id}] Retomando workflow após aprovação. Próximo step: {next_step}")
+            
+            self.execute_workflow(job_id, start_from_step=next_step)
+            
+        except Exception as e:
+            print(f"[{job_id}] Erro ao retomar workflow após aprovação: {e}")
+            self.job_manager.handle_job_error(job_id, e, 'resume_workflow')
+
     # Substitua todo o seu método _execute_step por este
 
     def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
@@ -159,7 +190,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         # --- 4. Processamento da Resposta ---
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
  
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
@@ -295,6 +326,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_manager.update_job_status(job_id, 'completed')
 
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
+        """
+        Pausa o workflow para aprovação do usuário.
+        IMPORTANTE: Após aprovação, o serviço/API deve chamar resume_workflow_after_approval(job_id)
+        para continuar o workflow a partir do próximo step.
+        """
         print(f"[{job_id}] Etapa requer aprovação.")
 
         #job_info = self.job_manager.get_job(job_id)
@@ -310,6 +346,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info['status'] = 'pending_approval'
         job_info['data']['paused_at_step'] = step_index
         self.job_manager.update_job(job_id, job_info)
+        
+        print(f"[{job_id}] Workflow pausado na etapa {step_index}. Para continuar, chame resume_workflow_after_approval('{job_id}')")
 
     def _save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
         # CORREÇÃO: Verificação defensiva adicional para gerar_novo_relatorio
