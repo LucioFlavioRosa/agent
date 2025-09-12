@@ -159,8 +159,20 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 'status_update': step['status_update']
             })
             return agente.main(**agent_params)
+            
         elif agent_type == "processador":
-            agent_params['codigo'] = {"instrucoes_iniciais": job_info['data']['instrucoes_extras']} if current_step_index == 0 else input_para_etapa
+            # Na primeira etapa, o input são as instruções do usuário.
+            if current_step_index == 0:
+                input_final_para_agente = {"instrucoes_iniciais": job_info['data']['instrucoes_extras']}
+            else:
+                # Nas etapas seguintes, o input principal é o resultado da etapa anterior.
+                # Verificamos se o input é o "pacote" de retomada e extraímos o resultado.
+                if isinstance(input_para_etapa, dict) and "resultado_etapa_anterior" in input_para_etapa:
+                    input_final_para_agente = input_para_etapa["resultado_etapa_anterior"]
+                else:
+                    input_final_para_agente = input_para_etapa
+        
+            agent_params['codigo'] = input_final_para_agente
             agent_params['repository_type'] = job_info['data']['repository_type']
             return agente.main(**agent_params)
 
