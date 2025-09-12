@@ -48,27 +48,27 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     existing_report_result = self._try_read_existing_report(job_id, job_info, current_step_index)
                     if existing_report_result:
                         print(f"[{job_id}] Relatório existente encontrado no Blob Storage")
-                        
+
                         # Extrair o relatório do resultado
                         report_data = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
                         report_text = report_data.get('relatorio', '')
-                        
+
                         # Salvar no job_info
                         job_info['data']['analysis_report'] = report_text
                         job_info['data'][f'step_{current_step_index}_result'] = report_data
-                        
+
                         # Verificar se é modo apenas relatório
                         if self._should_generate_report_only(job_info, current_step_index):
                             print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
                             self.job_manager.update_job_status(job_id, 'completed')
                             return
-                        
+
                         # CORREÇÃO: Se não for modo apenas relatório, pausar para aprovação mesmo com relatório existente
                         if step.get('requires_approval'):
                             print(f"[{job_id}] Relatório existente carregado. Pausando para aprovação do usuário.")
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
-                        
+
                         # Se não requer aprovação, continuar com o próximo step usando o relatório existente
                         previous_step_result = report_data
                         continue
@@ -95,10 +95,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_manager.handle_job_error(job_id, e, 'workflow')
 
+    # Substitua todo o seu método _execute_step por este
+
     def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                      current_step_index: int, previous_step_result: Dict[str, Any], 
                      repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
-    
+
         # --- 1. Preparação do Agente ---
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
@@ -107,43 +109,43 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa
         })
-    
-        # --- 2. Preparação CONSISTENTE do Input com Incorporação de instrucoes_extras ---
+
+        # --- 2. Preparação CONSISTENTE do Input ---
         input_para_agente_final = {}
-        
+
         # Se for a primeira etapa, o input são as instruções originais do usuário.
         if current_step_index == 0:
             instrucoes = job_info['data'].get('instrucoes_extras')
             input_para_agente_final = {"instrucoes_iniciais": instrucoes}
         else:
             # Nas etapas seguintes, o input é o resultado da etapa anterior.
-            # CORREÇÃO: Verificar se há contexto mesclado com instrucoes_extras após aprovação
-            if 'resultado_etapa_anterior_com_instrucoes' in job_info['data']:
-                # Usar o contexto mesclado que inclui as instruções do usuário
-                contexto_mesclado = job_info['data']['resultado_etapa_anterior_com_instrucoes']
-                input_para_agente_final = {"instrucoes_iniciais": contexto_mesclado}
-                print(f"[{job_id}] Usando contexto mesclado com instrucoes_extras do usuário")
-            else:
-                # Fallback para o comportamento anterior
-                input_para_agente_final = {"instrucoes_iniciais": previous_step_result}
-    
+            # Nós o re-empacotamos no formato que o agente 'processador' espera.
+            input_para_agente_final = {"instrucoes_iniciais": previous_step_result}
+
+
+
+
+
+
+
+
         # --- 3. Execução do Agente ---
         agent_type = step.get("agent_type")
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
-    
+
         if agent_type == "revisor":
             # Esta lógica é para workflows que usam o 'revisor' em etapas > 0
             instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
             instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
-            
-            # CORREÇÃO: Usar contexto mesclado se disponível
-            if 'resultado_etapa_anterior_com_instrucoes' in job_info['data']:
-                contexto_para_revisor = job_info['data']['resultado_etapa_anterior_com_instrucoes']
-            else:
-                contexto_para_revisor = previous_step_result
-                
-            instrucoes_formatadas += json.dumps(contexto_para_revisor, indent=2, ensure_ascii=False)
-            
+            # Usamos o resultado puro da etapa anterior
+            instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
+
+
+
+
+
+
+
             agent_params['instrucoes_extras'] = instrucoes_formatadas
             agent_params.update({
                                     'repositorio': job_info['data']['repo_name'],
@@ -155,32 +157,32 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     'projeto': job_info['data']['projeto'],
                                     'status_update': step['status_update']
                                 })
-            
+
         elif agent_type == "processador":
             # O processador recebe o input já formatado corretamente
             agent_params['codigo'] = input_para_agente_final
-    
+
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
-    
+
         # Atualiza os outros parâmetros
         agent_params['repository_type'] = job_info['data']['repository_type']
-        
+
         agent_response = agente.main(**agent_params)
-        
+
         # --- 4. Processamento da Resposta ---
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
- 
-        cleaned_string = json.loads(json_string.replace("```json", "").replace("```", "").strip())
-        
+
+        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
                 print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
                 return previous_step_result
             raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
-            
+
         return json.loads(cleaned_string)
-                         
+
     def _try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], current_step_index: int) -> Optional[Dict[str, Any]]:
         """Tenta ler relatório existente do Blob Storage se gerar_novo_relatorio=False"""
         if current_step_index == 0:
@@ -214,7 +216,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             job_info['data']['report_blob_url'] = blob_url
                         except Exception as url_e:
                             print(f"[{job_id}] Aviso: Não foi possível obter URL do blob: {url_e}")
-                        
+
                         return {
                             'resultado': {
                                 'reposta_final': {
@@ -225,7 +227,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     else:
                         print(f"[{job_id}] Relatório não encontrado no Blob Storage, será gerado novo relatório via agente")
                         return None
-                        
+
                 except Exception as e:
                     print(f"[{job_id}] Erro ao tentar ler relatório do Blob Storage: {e}. Gerando novo relatório via agente")
                     return None
@@ -245,11 +247,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         if agent_type == "revisor":
             instrucoes = job_info['data'].get('instrucoes_extras', '')
-            
+
             if current_step_index > 0:
                 instrucoes += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR (APROVADO PELO USUÁRIO):\n"
                 instrucoes += json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
-                
+
             observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
             if observacoes_humanas:
                 instrucoes += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
@@ -265,25 +267,25 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 'status_update': step['status_update']
             })
             return agente.main(**agent_params)
-            
+
         elif agent_type == "processador":
             input_final_para_agente = {}
-        
+
             # Se for a primeira etapa do workflow, o input são as instruções originais do usuário.
             if current_step_index == 0:
                 input_final_para_agente = {"instrucoes_iniciais": job_info['data'].get('instrucoes_extras')}
             else:
                 # Nas etapas seguintes, o input principal deve ser o resultado da etapa anterior.
                 resultado_anterior = input_para_etapa
-                
+
                 # VERIFICA e DESEMPACOTA o resultado se ele vier da etapa de aprovação.
                 if isinstance(input_para_etapa, dict) and "resultado_etapa_anterior" in input_para_etapa:
                     resultado_anterior = input_para_etapa.get("resultado_etapa_anterior")
-                
+
                 # Remonta o dicionário na estrutura que o agente espera,
                 # usando o resultado anterior (o relatório) como a instrução.
                 input_final_para_agente = {"instrucoes_iniciais": resultado_anterior}
-        
+
             agent_params['codigo'] = input_final_para_agente
             agent_params['repository_type'] = job_info['data']['repository_type']
             return agente.main(**agent_params)
@@ -292,7 +294,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _should_generate_report_only(self, job_info: Dict[str, Any], current_step_index: int) -> bool:
         return current_step_index == 0 and job_info['data'].get('gerar_relatorio_apenas') is True
-    
+
     def _handle_report_only_mode(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any]) -> None:
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
@@ -309,6 +311,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
 
+        #job_info = self.job_manager.get_job(job_id)
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
 
@@ -318,86 +321,86 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         else:
             print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
 
-        # NOVA FUNCIONALIDADE: Preparar contexto mesclado para etapas subsequentes
-        self._prepare_merged_context_for_next_steps(job_id, job_info, step_result)
+
+
 
         job_info['status'] = 'pending_approval'
         job_info['data']['paused_at_step'] = step_index
         self.job_manager.update_job(job_id, job_info)
 
-    def _prepare_merged_context_for_next_steps(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any]) -> None:
-        """
-        Prepara o contexto mesclado que inclui o relatório aprovado e as instruções extras do usuário.
-        Este contexto será usado como input para as etapas subsequentes após a aprovação.
-        """
-        # Obter as instruções extras do usuário (comentários na aprovação)
-        instrucoes_extras_aprovacao = job_info['data'].get('instrucoes_extras_aprovacao', '')
-        instrucoes_extras_originais = job_info['data'].get('instrucoes_extras', '')
-        
-        # Criar contexto mesclado robusto
-        contexto_mesclado = {
-            "relatorio_aprovado": step_result,
-            "instrucoes_originais": instrucoes_extras_originais,
-            "instrucoes_usuario_aprovacao": instrucoes_extras_aprovacao,
-            "contexto_completo": f"""
-# RELATÓRIO APROVADO PELO USUÁRIO:
-{json.dumps(step_result, indent=2, ensure_ascii=False)}
 
-# INSTRUÇÕES ORIGINAIS:
-{instrucoes_extras_originais}
 
-# OBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:
-{instrucoes_extras_aprovacao}
 
-# DIRETIVA OBRIGATÓRIA:
-As instruções e observações do usuário devem ser SEMPRE consideradas e implementadas nas etapas seguintes.
-Se houver conflito entre o relatório e as instruções do usuário, as instruções do usuário têm PRIORIDADE MÁXIMA.
-"""
-        }
-        
-        # Salvar o contexto mesclado para uso nas próximas etapas
-        job_info['data']['resultado_etapa_anterior_com_instrucoes'] = contexto_mesclado
-        
-        print(f"[{job_id}] Contexto mesclado preparado com instruções do usuário para etapas subsequentes")
 
-    def continue_workflow_after_approval(self, job_id: str, approval_data: Dict[str, Any]) -> None:
-        """
-        Continua o workflow após aprovação do usuário, garantindo que as instruções extras
-        sejam incorporadas ao contexto das próximas etapas.
-        """
-        try:
-            job_info = self.job_manager.get_job(job_id)
-            if not job_info:
-                raise ValueError("Job não encontrado.")
 
-            # Atualizar job_info com dados da aprovação
-            if 'instrucoes_extras_aprovacao' in approval_data:
-                job_info['data']['instrucoes_extras_aprovacao'] = approval_data['instrucoes_extras_aprovacao']
-                
-                # CORREÇÃO: Recriar o contexto mesclado com as novas instruções
-                step_result = job_info['data'].get(f"step_{job_info['data']['paused_at_step']}_result", {})
-                self._prepare_merged_context_for_next_steps(job_id, job_info, step_result)
-                
-                print(f"[{job_id}] Instruções extras da aprovação incorporadas ao contexto: {approval_data['instrucoes_extras_aprovacao']}")
 
-            # Continuar workflow a partir da próxima etapa
-            paused_step = job_info['data'].get('paused_at_step', 0)
-            next_step = paused_step + 1
-            
-            job_info['status'] = 'running'
-            self.job_manager.update_job(job_id, job_info)
-            
-            self.execute_workflow(job_id, start_from_step=next_step)
-            
-        except Exception as e:
-            self.job_manager.handle_job_error(job_id, e, 'approval_continuation')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def _save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
         # CORREÇÃO: Verificação defensiva adicional para gerar_novo_relatorio
         if not job_info['data'].get('gerar_novo_relatorio', True):
             print(f"[{job_id}] gerar_novo_relatorio=False - Abortando salvamento no Blob Storage")
             return
-            
+
         if job_info['data'].get('analysis_name') and report_text and report_generated_by_agent:
             try:
                 blob_url = self.blob_storage.upload_report(
