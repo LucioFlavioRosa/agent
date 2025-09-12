@@ -54,7 +54,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     return
 
                 if step.get('requires_approval'):
-                    self.handle_approval_step(job_id, current_step_index, step_result)
+                    # Agora passando a versão mais atual do job_info
+                    self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
 
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
@@ -221,10 +222,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo. Finalizando.")
         self.job_manager.update_job_status(job_id, 'completed')
 
-    def handle_approval_step(self, job_id: str, step_index: int, step_result: Dict[str, Any]) -> None:
+    def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
 
-        job_info = self.job_manager.get_job(job_id)
+        #job_info = self.job_manager.get_job(job_id)
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
 
