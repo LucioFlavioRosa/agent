@@ -97,7 +97,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                  instrucoes += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR (APROVADO PELO USUÁRIO):\n"
                  instrucoes += json.dumps(input_para_agente, indent=2, ensure_ascii=False)
             
-             agent_params.update({
+            agent_params.update({
                 'repositorio': job_info['data']['repo_name'], 
                 'nome_branch': job_info['data']['branch_name'], 
                 'instrucoes_extras': instrucoes,
