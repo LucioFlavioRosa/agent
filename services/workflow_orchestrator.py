@@ -74,18 +74,23 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa
         })
-    
-        # --- 2. Lógica de Input (aqui está a correção crucial) ---
+
         input_para_agente = {}
+        observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
         
-        # Se for a primeira etapa (index 0), o input são as instruções originais.
+        # Se for a primeira etapa (index 0), o input são as instruções originais do usuário.
         if current_step_index == 0:
             input_para_agente = {"instrucoes_iniciais": job_info['data'].get('instrucoes_extras')}
         else:
-            # Se for uma etapa seguinte, o input é o resultado da etapa anterior.
-            # Não precisamos mais do "pacote" de retomada, passamos o resultado diretamente.
+            # Se for uma etapa seguinte, o input base é o resultado da etapa anterior.
             input_para_agente = previous_step_result
-    
+            
+            # VERIFICA e DESEMPACOTA o resultado se ele vier de uma etapa de aprovação.
+            # Esta é a lógica que estava faltando.
+            if isinstance(previous_step_result, dict) and "resultado_etapa_anterior" in previous_step_result:
+                print(f"[{job_id}] Detectado 'pacote de retomada'. Extraindo resultado da etapa anterior.")
+                input_para_agente = previous_step_result.get("resultado_etapa_anterior", {})
+
         # --- 3. Execução do Agente (lógica do _execute_agent movida para cá) ---
         agent_type = step.get("agent_type")
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
