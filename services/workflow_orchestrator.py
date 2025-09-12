@@ -122,13 +122,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             # Nós o re-empacotamos no formato que o agente 'processador' espera.
             input_para_agente_final = {"instrucoes_iniciais": previous_step_result}
 
-
-
-
-
-
-
-
         # --- 3. Execução do Agente ---
         agent_type = step.get("agent_type")
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
@@ -140,11 +133,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             # Usamos o resultado puro da etapa anterior
             instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
 
-
-
-
-
-
+            # CORREÇÃO: Sempre considerar instruções extras de aprovação, independente da etapa
+            observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
+            if observacoes_humanas:
+                instrucoes_formatadas += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
+                print(f"[{job_id}] Aplicando instruções extras de aprovação na etapa {current_step_index}: {observacoes_humanas[:100]}...")
+                # Limpar as instruções após uso para evitar reaplicação
+                job_info['data']['instrucoes_extras_aprovacao'] = None
+                self.job_manager.update_job(job_id, job_info)
 
             agent_params['instrucoes_extras'] = instrucoes_formatadas
             agent_params.update({
@@ -159,6 +155,26 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 })
 
         elif agent_type == "processador":
+            # CORREÇÃO: Para agente processador, também considerar instruções extras de aprovação
+            if current_step_index > 0:  # Apenas em etapas após a primeira
+                observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
+                if observacoes_humanas:
+                    # Adicionar as observações ao input do processador
+                    if isinstance(input_para_agente_final.get('instrucoes_iniciais'), dict):
+                        # Se o input é um dict (resultado de etapa anterior), adicionar as observações
+                        input_para_agente_final['instrucoes_iniciais']['observacoes_aprovacao'] = observacoes_humanas
+                    elif isinstance(input_para_agente_final.get('instrucoes_iniciais'), str):
+                        # Se o input é uma string, concatenar as observações
+                        input_para_agente_final['instrucoes_iniciais'] += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
+                    else:
+                        # Caso geral: criar estrutura com observações
+                        input_para_agente_final['observacoes_aprovacao'] = observacoes_humanas
+                    
+                    print(f"[{job_id}] Aplicando instruções extras de aprovação no processador da etapa {current_step_index}: {observacoes_humanas[:100]}...")
+                    # Limpar as instruções após uso para evitar reaplicação
+                    job_info['data']['instrucoes_extras_aprovacao'] = None
+                    self.job_manager.update_job(job_id, job_info)
+
             # O processador recebe o input já formatado corretamente
             agent_params['codigo'] = input_para_agente_final
 
@@ -173,7 +189,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         # --- 4. Processamento da Resposta ---
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
 
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
@@ -321,79 +337,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         else:
             print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
 
-
-
-
         job_info['status'] = 'pending_approval'
         job_info['data']['paused_at_step'] = step_index
         self.job_manager.update_job(job_id, job_info)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     def _save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
         # CORREÇÃO: Verificação defensiva adicional para gerar_novo_relatorio
