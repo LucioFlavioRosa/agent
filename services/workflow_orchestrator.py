@@ -47,7 +47,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if current_step_index == 0:
                     existing_report_result = self._try_read_existing_report(job_id, job_info, current_step_index)
                     if existing_report_result:
-                        print(f"[{job_id}] Relatório existente encontrado no Blob Storage, finalizando workflow sem gerar novo relatório")
+                        print(f"[{job_id}] Relatório existente encontrado no Blob Storage")
                         
                         # Extrair o relatório do resultado
                         report_data = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
@@ -63,7 +63,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             self.job_manager.update_job_status(job_id, 'completed')
                             return
                         
-                        # Se não for modo apenas relatório, continuar com o próximo step usando o relatório existente
+                        # CORREÇÃO: Se não for modo apenas relatório, pausar para aprovação mesmo com relatório existente
+                        if step.get('requires_approval'):
+                            print(f"[{job_id}] Relatório existente carregado. Pausando para aprovação do usuário.")
+                            self.handle_approval_step(job_id, job_info, current_step_index, report_data)
+                            return
+                        
+                        # Se não requer aprovação, continuar com o próximo step usando o relatório existente
                         previous_step_result = report_data
                         continue
                     else:
@@ -153,7 +159,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         # --- 4. Processamento da Resposta ---
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
