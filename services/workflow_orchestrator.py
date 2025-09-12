@@ -62,11 +62,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_manager.handle_job_error(job_id, e, 'workflow')
 
+    # Substitua todo o seu método _execute_step por este
+
     def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                      current_step_index: int, previous_step_result: Dict[str, Any], 
                      repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
     
-       
+        # --- 1. Preparação do Agente ---
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy()
@@ -74,64 +76,50 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa
         })
-
-        input_para_agente = {}
-        observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
+    
+        # --- 2. Preparação CONSISTENTE do Input ---
+        input_para_agente_final = {}
         
-        # Se for a primeira etapa (index 0), o input são as instruções originais do usuário.
+        # Se for a primeira etapa, o input são as instruções originais do usuário.
         if current_step_index == 0:
-            input_para_agente = {"instrucoes_iniciais": job_info['data'].get('instrucoes_extras')}
+            instrucoes = job_info['data'].get('instrucoes_extras')
+            input_para_agente_final = {"instrucoes_iniciais": instrucoes}
         else:
-            # Se for uma etapa seguinte, o input base é o resultado da etapa anterior.
-            input_para_agente = previous_step_result
-            
-            # VERIFICA e DESEMPACOTA o resultado se ele vier de uma etapa de aprovação.
-            # Esta é a lógica que estava faltando.
-            if isinstance(previous_step_result, dict) and "resultado_etapa_anterior" in previous_step_result:
-                print(f"[{job_id}] Detectado 'pacote de retomada'. Extraindo resultado da etapa anterior.")
-                input_para_agente = previous_step_result.get("resultado_etapa_anterior", {})
-
-        # --- 3. Execução do Agente (lógica do _execute_agent movida para cá) ---
+            # Nas etapas seguintes, o input é o resultado da etapa anterior.
+            # Nós o re-empacotamos no formato que o agente 'processador' espera.
+            input_para_agente_final = {"instrucoes_iniciais": previous_step_result}
+    
+        # --- 3. Execução do Agente ---
         agent_type = step.get("agent_type")
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
     
         if agent_type == "revisor":
-            # A lógica para o revisor precisa ser ajustada para usar o input_para_agente
-            instrucoes = job_info['data'].get('instrucoes_extras', '')
-            if current_step_index > 0:
-                 instrucoes += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR (APROVADO PELO USUÁRIO):\n"
-                 instrucoes += json.dumps(input_para_agente, indent=2, ensure_ascii=False)
-            
-            agent_params.update({
-                'repositorio': job_info['data']['repo_name'], 
-                'nome_branch': job_info['data']['branch_name'], 
-                'instrucoes_extras': instrucoes,
-                'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
-                'repository_type': job_info['data']['repository_type'],
-                'job_id': job_id,
-                'projeto': job_info['data']['projeto'],
-                'status_update': step['status_update']
-            })
+            # Esta lógica é para workflows que usam o 'revisor' em etapas > 0
+            instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
+            instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
+            # Usamos o resultado puro da etapa anterior
+            instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
+            agent_params['instrucoes_extras'] = instrucoes_formatadas
+        
         elif agent_type == "processador":
-            # O processador recebe seu input na chave 'codigo'
-            agent_params['codigo'] = input_para_agente
-            agent_params['repository_type'] = job_info['data']['repository_type']
+            # O processador recebe o input já formatado corretamente
+            agent_params['codigo'] = input_para_agente_final
     
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
     
-        # Chama o agente com os parâmetros corretos
+        # Atualiza os outros parâmetros
+        agent_params['repository_type'] = job_info['data']['repository_type']
+        
         agent_response = agente.main(**agent_params)
         
-        # --- 4. Processamento da Resposta (igual ao seu código atual) ---
-        json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
+        # --- 4. Processamento da Resposta ---
+        json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
         cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
         
         if not cleaned_string:
-            # Se a IA retornar vazio, mas a etapa anterior tinha conteúdo, retorne o anterior
-            # Isso pode acontecer em etapas de "agrupamento" que não alteram o conteúdo
-            if previous_step_result:
-                print(f"[{job_id}] A IA retornou uma resposta vazia, mas a etapa anterior tinha conteúdo. Reutilizando o resultado anterior.")
+            if previous_step_result and isinstance(previous_step_result, dict):
+                print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
                 return previous_step_result
             raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
             
