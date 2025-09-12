@@ -95,8 +95,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_manager.handle_job_error(job_id, e, 'workflow')
 
-    # Substitua todo o seu método _execute_step por este
-
     def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                      current_step_index: int, previous_step_result: Dict[str, Any], 
                      repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
@@ -155,23 +153,31 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 })
 
         elif agent_type == "processador":
-            # CORREÇÃO: Para agente processador, também considerar instruções extras de aprovação
-            if current_step_index > 0:  # Apenas em etapas após a primeira
-                observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
-                if observacoes_humanas:
-                    # Adicionar as observações ao input do processador
-                    if isinstance(input_para_agente_final.get('instrucoes_iniciais'), dict):
-                        # Se o input é um dict (resultado de etapa anterior), adicionar as observações
+            # CORREÇÃO: Aplicar instruções extras em TODAS as etapas para processador
+            instrucoes_extras = job_info['data'].get('instrucoes_extras')
+            observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
+            
+            # Aplica instruções extras em todas as etapas
+            if instrucoes_extras or observacoes_humanas:
+                if isinstance(input_para_agente_final.get('instrucoes_iniciais'), dict):
+                    if instrucoes_extras:
+                        input_para_agente_final['instrucoes_iniciais']['instrucoes_extras'] = instrucoes_extras
+                    if observacoes_humanas:
                         input_para_agente_final['instrucoes_iniciais']['observacoes_aprovacao'] = observacoes_humanas
-                    elif isinstance(input_para_agente_final.get('instrucoes_iniciais'), str):
-                        # Se o input é uma string, concatenar as observações
+                elif isinstance(input_para_agente_final.get('instrucoes_iniciais'), str):
+                    if instrucoes_extras:
+                        input_para_agente_final['instrucoes_iniciais'] += f"\n\n---\n\nINSTRUÇÕES EXTRAS DO USUÁRIO:\n{instrucoes_extras}"
+                    if observacoes_humanas:
                         input_para_agente_final['instrucoes_iniciais'] += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
-                    else:
-                        # Caso geral: criar estrutura com observações
+                else:
+                    if instrucoes_extras:
+                        input_para_agente_final['instrucoes_extras'] = instrucoes_extras
+                    if observacoes_humanas:
                         input_para_agente_final['observacoes_aprovacao'] = observacoes_humanas
-                    
+                
+                # Limpa instrucoes_extras_aprovacao após uso
+                if observacoes_humanas:
                     print(f"[{job_id}] Aplicando instruções extras de aprovação no processador da etapa {current_step_index}: {observacoes_humanas[:100]}...")
-                    # Limpar as instruções após uso para evitar reaplicação
                     job_info['data']['instrucoes_extras_aprovacao'] = None
                     self.job_manager.update_job(job_id, job_info)
 
@@ -189,7 +195,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         # --- 4. Processamento da Resposta ---
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
 
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
