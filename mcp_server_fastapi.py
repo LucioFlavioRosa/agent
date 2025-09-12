@@ -307,7 +307,11 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
     _validate_job_for_approval(job, payload.job_id)
 
     if payload.action == JobActions.APPROVE:
-        job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
+        # CORREÇÃO: Sempre salvar instruções extras de aprovação, independente da etapa
+        if payload.instrucoes_extras:
+            job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
+            print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
+        
         job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
 
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
