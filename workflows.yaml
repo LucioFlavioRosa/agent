@@ -335,10 +335,10 @@ geracao_codigo_a_partir_de_reuniao:
       agent_type: "processador"
       params:
         tipo_analise: "criando_codigos"
-        max_token_out: 30000
+        max_token_out: 32000
     - status_update: "agrupando_commits"
       model_name: "gpt-4.1"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
-        max_token_out: 30000
+        max_token_out: 32000
