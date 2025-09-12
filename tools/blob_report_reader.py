@@ -4,6 +4,12 @@ from tools.azure_secret_manager import AzureSecretManager
 from tools.blob_report_path_builder import build_report_blob_path
 
 def read_report_from_blob(projeto: str, analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str) -> str:
+    """Lê um relatório do Azure Blob Storage.
+    
+    Returns:
+        str: Conteúdo do relatório se encontrado
+        None: Se o relatório não for encontrado (ao invés de levantar exceção)
+    """
     container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
     if not container_name:
         raise RuntimeError('Azure Blob Storage container name missing.')
@@ -31,5 +37,6 @@ def read_report_from_blob(projeto: str, analysis_type: str, repository_type: str
         return blob_data.readall().decode('utf-8')
     except Exception as e:
         if "BlobNotFound" in str(e) or "404" in str(e):
-            raise FileNotFoundError(f"Report not found: {blob_path}")
+            print(f"Report not found in blob storage: {blob_path}")
+            return None
         raise e
