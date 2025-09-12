@@ -27,12 +27,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             if not job_info:
                 raise ValueError("Job não encontrado.")
 
-            # NOVA LÓGICA: Verificar se deve usar relatório existente antes de executar qualquer step
-            if start_from_step == 0 and not job_info['data'].get('gerar_novo_relatorio', True):
-                existing_report = self._try_use_existing_report(job_id, job_info)
-                if existing_report:
-                    return  # Workflow finalizado com relatório existente
-
             workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
             if not workflow:
                 raise ValueError("Workflow não encontrado.")
@@ -48,6 +42,30 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 self.job_manager.update_job_status(job_id, step['status_update'])
+
+                # Verificar se deve tentar ler relatório existente antes de executar o agente
+                if current_step_index == 0:
+                    existing_report_result = self._try_read_existing_report(job_id, job_info, current_step_index)
+                    if existing_report_result:
+                        print(f"[{job_id}] Usando relatório existente do Blob Storage")
+                        step_result = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
+                        
+                        # Salvar o resultado da etapa
+                        job_info['data'][f'step_{current_step_index}_result'] = step_result
+                        previous_step_result = step_result
+                        
+                        # Se for modo apenas relatório, finalizar aqui
+                        if self._should_generate_report_only(job_info, current_step_index):
+                            self._handle_report_only_mode_with_existing_report(job_id, job_info, step_result)
+                            return
+                        
+                        # Se requer aprovação, pausar aqui
+                        if step.get('requires_approval'):
+                            self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                            return
+                        
+                        # Continuar para próxima etapa
+                        continue
 
                 step_result = self._execute_step(job_id, job_info, step, current_step_index, 
                                                previous_step_result, repo_reader, i, start_from_step)
@@ -68,58 +86,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         except Exception as e:
             self.job_manager.handle_job_error(job_id, e, 'workflow')
-
-    def _try_use_existing_report(self, job_id: str, job_info: Dict[str, Any]) -> bool:
-        """Tenta usar um relatório existente do Blob Storage. Retorna True se encontrou e finalizou o workflow."""
-        analysis_name = job_info['data'].get('analysis_name')
-        if not analysis_name:
-            print(f"[{job_id}] Sem analysis_name definido, não é possível buscar relatório existente")
-            return False
-
-        print(f"[{job_id}] Tentando ler relatório existente do Blob Storage: {analysis_name}")
-        
-        try:
-            existing_report = self.blob_storage.read_report(
-                job_info['data']['projeto'],
-                job_info['data']['original_analysis_type'],
-                job_info['data']['repository_type'],
-                job_info['data']['repo_name'],
-                job_info['data'].get('branch_name', 'main'),
-                analysis_name
-            )
-
-            if existing_report:
-                print(f"[{job_id}] Relatório encontrado no Blob Storage, usando relatório existente")
-                
-                # Preencher dados do job com o relatório existente
-                job_info['data']['analysis_report'] = existing_report
-                
-                # Construir URL do blob (assumindo que existe se conseguimos ler)
-                from tools.blob_report_path_builder import build_report_blob_path
-                blob_path = build_report_blob_path(
-                    job_info['data']['projeto'],
-                    job_info['data']['original_analysis_type'],
-                    job_info['data']['repository_type'],
-                    job_info['data']['repo_name'],
-                    job_info['data'].get('branch_name', 'main'),
-                    analysis_name
-                )
-                # Construir URL completa do blob (isso pode variar dependendo da implementação do blob storage)
-                job_info['data']['report_blob_url'] = f"https://storage.blob.core.windows.net/{blob_path}"
-                
-                # Finalizar workflow como completed
-                job_info['status'] = 'completed'
-                self.job_manager.update_job(job_id, job_info)
-                
-                print(f"[{job_id}] Workflow finalizado com relatório existente")
-                return True
-            else:
-                print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
-                return False
-                
-        except Exception as e:
-            print(f"[{job_id}] Erro ao tentar ler relatório existente: {e}. Gerando novo relatório via agente")
-            return False
 
     # Substitua todo o seu método _execute_step por este
 
@@ -195,7 +161,40 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         return json.loads(cleaned_string)
                          
     def _try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], current_step_index: int) -> Optional[Dict[str, Any]]:
-        # MÉTODO REMOVIDO - A lógica foi centralizada em _try_use_existing_report
+        if current_step_index == 0:
+            gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
+            analysis_name = job_info['data'].get('analysis_name')
+
+            if not gerar_novo_relatorio and analysis_name:
+                print(f"[{job_id}] Tentando ler relatório existente do Blob Storage: {analysis_name}")
+                try:
+                    existing_report = self.blob_storage.read_report(
+                        job_info['data']['projeto'],
+                        job_info['data']['original_analysis_type'],
+                        job_info['data']['repository_type'],
+                        job_info['data']['repo_name'],
+                        job_info['data'].get('branch_name', 'main'),
+                        analysis_name
+                    )
+
+                    if existing_report:
+                        print(f"[{job_id}] Relatório encontrado no Blob Storage, usando relatório existente")
+                        return {
+                            'resultado': {
+                                'reposta_final': {
+                                    'reposta_final': json.dumps({"relatorio": existing_report}, ensure_ascii=False)
+                                }
+                            }
+                        }
+                    else:
+                        print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
+                        return None
+                except Exception as e:
+                    print(f"[{job_id}] Erro ao tentar ler relatório do Blob Storage: {e}. Gerando novo relatório via agente")
+                    return None
+            else:
+                print(f"[{job_id}] gerar_novo_relatorio=True ou analysis_name não fornecido, gerando novo relatório via agente")
+
         return None
 
     def _execute_agent(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
@@ -264,6 +263,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo. Finalizando.")
         self.job_manager.update_job_status(job_id, 'completed')
 
+    def _handle_report_only_mode_with_existing_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any]) -> None:
+        """Manipula o modo apenas relatório quando um relatório existente foi encontrado no Blob Storage."""
+        report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
+        job_info['data']['analysis_report'] = report_text
+
+        # Não salva no blob novamente pois o relatório já existe
+        print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando sem salvar no blob.")
+        self.job_manager.update_job_status(job_id, 'completed')
+
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
 
@@ -278,7 +286,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_manager.update_job(job_id, job_info)
 
     def _save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
-        # AJUSTE: Só salva no Blob Storage se o relatório foi realmente gerado por um agente
         if job_info['data'].get('analysis_name') and report_text and report_generated_by_agent:
             try:
                 blob_url = self.blob_storage.upload_report(
