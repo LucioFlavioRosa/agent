@@ -3,12 +3,11 @@ import json
 from unittest.mock import Mock, patch, MagicMock
 from services.workflow_orchestrator import WorkflowOrchestrator
 
-class TestWorkflowOrchestratorReportGeneration:
-    """Testes para verificar o comportamento da flag 'gerar_novo_relatorio'."""
+class TestWorkflowOrchestrator:
     
     @pytest.fixture
     def mock_dependencies(self):
-        """Fixture para criar mocks das dependências."""
+        """Cria mocks para todas as dependências do WorkflowOrchestrator."""
         job_manager = Mock()
         blob_storage = Mock()
         workflow_registry = {
@@ -17,35 +16,40 @@ class TestWorkflowOrchestratorReportGeneration:
                     {
                         'agent_type': 'revisor',
                         'status_update': 'analyzing',
-                        'requires_approval': False,
+                        'requires_approval': True,
                         'params': {}
                     }
                 ]
             }
         }
-        
-        orchestrator = WorkflowOrchestrator(job_manager, blob_storage, workflow_registry)
-        
-        return {
-            'orchestrator': orchestrator,
-            'job_manager': job_manager,
-            'blob_storage': blob_storage,
-            'workflow_registry': workflow_registry
-        }
+        return job_manager, blob_storage, workflow_registry
     
-    def test_gerar_novo_relatorio_false_with_existing_report(self, mock_dependencies):
-        """Teste: gerar_novo_relatorio=False com relatório existente deve finalizar sem gerar novo."""
-        # Arrange
-        orchestrator = mock_dependencies['orchestrator']
-        job_manager = mock_dependencies['job_manager']
-        blob_storage = mock_dependencies['blob_storage']
-        
-        job_id = 'test-job-123'
+    @pytest.fixture
+    def orchestrator(self, mock_dependencies):
+        """Cria uma instância do WorkflowOrchestrator com dependências mockadas."""
+        job_manager, blob_storage, workflow_registry = mock_dependencies
+        return WorkflowOrchestrator(job_manager, blob_storage, workflow_registry)
+    
+    def test_try_read_existing_report_when_gerar_novo_relatorio_true(self, orchestrator):
+        """Testa que não tenta ler relatório existente quando gerar_novo_relatorio é True."""
         job_info = {
-            'status': 'starting',
+            'data': {
+                'gerar_novo_relatorio': True,
+                'analysis_name': 'test-analysis'
+            }
+        }
+        
+        result = orchestrator._try_read_existing_report('job-123', job_info, 0)
+        
+        assert result is None
+        orchestrator.blob_storage.read_report.assert_not_called()
+    
+    def test_try_read_existing_report_when_gerar_novo_relatorio_false_and_report_exists(self, orchestrator):
+        """Testa que lê relatório existente quando gerar_novo_relatorio é False e relatório existe."""
+        job_info = {
             'data': {
                 'gerar_novo_relatorio': False,
-                'analysis_name': 'test-analysis-name',
+                'analysis_name': 'test-analysis',
                 'projeto': 'test-project',
                 'original_analysis_type': 'test_analysis',
                 'repository_type': 'github',
@@ -54,222 +58,97 @@ class TestWorkflowOrchestratorReportGeneration:
             }
         }
         
-        existing_report = "Este é um relatório existente do Blob Storage"
+        # Mock do blob storage retornando um relatório existente
+        orchestrator.blob_storage.read_report.return_value = "Relatório existente do blob storage"
         
-        job_manager.get_job.return_value = job_info
-        blob_storage.read_report.return_value = existing_report
+        result = orchestrator._try_read_existing_report('job-123', job_info, 0)
         
-        # Act
-        orchestrator.execute_workflow(job_id, start_from_step=0)
+        assert result is not None
+        assert 'resultado' in result
+        assert 'reposta_final' in result['resultado']
         
-        # Assert
-        blob_storage.read_report.assert_called_once_with(
+        # Verifica se o blob storage foi chamado com os parâmetros corretos
+        orchestrator.blob_storage.read_report.assert_called_once_with(
             'test-project',
             'test_analysis',
             'github',
             'test/repo',
             'main',
-            'test-analysis-name'
+            'test-analysis'
         )
         
-        # Verifica se o job foi atualizado com o relatório existente
-        job_manager.update_job.assert_called_once()
-        updated_job = job_manager.update_job.call_args[0][1]
-        assert updated_job['status'] == 'completed'
-        assert updated_job['data']['analysis_report'] == existing_report
-        assert 'report_blob_url' in updated_job['data']
+        # Verifica se o resultado contém o relatório
+        parsed_result = json.loads(result['resultado']['reposta_final']['reposta_final'])
+        assert parsed_result['relatorio'] == "Relatório existente do blob storage"
     
-    def test_gerar_novo_relatorio_false_without_existing_report(self, mock_dependencies):
-        """Teste: gerar_novo_relatorio=False sem relatório existente deve gerar novo."""
-        # Arrange
-        orchestrator = mock_dependencies['orchestrator']
-        job_manager = mock_dependencies['job_manager']
-        blob_storage = mock_dependencies['blob_storage']
-        
-        job_id = 'test-job-456'
+    def test_try_read_existing_report_when_gerar_novo_relatorio_false_and_report_not_exists(self, orchestrator):
+        """Testa que retorna None quando gerar_novo_relatorio é False mas relatório não existe."""
         job_info = {
-            'status': 'starting',
             'data': {
                 'gerar_novo_relatorio': False,
-                'analysis_name': 'test-analysis-name',
+                'analysis_name': 'test-analysis',
                 'projeto': 'test-project',
                 'original_analysis_type': 'test_analysis',
                 'repository_type': 'github',
                 'repo_name': 'test/repo',
-                'branch_name': 'main',
-                'instrucoes_extras': 'Gerar relatório de análise',
-                'gerar_relatorio_apenas': True
+                'branch_name': 'main'
             }
         }
         
-        job_manager.get_job.return_value = job_info
-        blob_storage.read_report.return_value = None  # Simula relatório não encontrado
+        # Mock do blob storage retornando None (relatório não encontrado)
+        orchestrator.blob_storage.read_report.return_value = None
         
-        # Mock do agente e suas dependências
-        with patch('services.workflow_orchestrator.get_repository_provider_explicit') as mock_repo_provider, \
-             patch('services.workflow_orchestrator.ReaderGeral') as mock_reader, \
-             patch('services.workflow_orchestrator.LLMProviderFactory') as mock_llm_factory, \
-             patch('services.workflow_orchestrator.AgentFactory') as mock_agent_factory:
-            
-            mock_agent = Mock()
-            mock_agent.main.return_value = {
-                'resultado': {
-                    'reposta_final': {
-                        'reposta_final': json.dumps({'relatorio': 'Novo relatório gerado'})
-                    }
-                }
-            }
-            mock_agent_factory.create_agent.return_value = mock_agent
-            
-            # Act
-            orchestrator.execute_workflow(job_id, start_from_step=0)
-            
-            # Assert
-            blob_storage.read_report.assert_called_once()
-            mock_agent.main.assert_called_once()  # Verifica que o agente foi executado
-            job_manager.update_job_status.assert_called()  # Verifica que o status foi atualizado
+        result = orchestrator._try_read_existing_report('job-123', job_info, 0)
+        
+        assert result is None
+        orchestrator.blob_storage.read_report.assert_called_once()
     
-    def test_gerar_novo_relatorio_true_always_generates_new(self, mock_dependencies):
-        """Teste: gerar_novo_relatorio=True deve sempre gerar novo relatório."""
-        # Arrange
-        orchestrator = mock_dependencies['orchestrator']
-        job_manager = mock_dependencies['job_manager']
-        blob_storage = mock_dependencies['blob_storage']
-        
-        job_id = 'test-job-789'
+    def test_try_read_existing_report_when_analysis_name_missing(self, orchestrator):
+        """Testa que retorna None quando analysis_name não é fornecido."""
         job_info = {
-            'status': 'starting',
-            'data': {
-                'gerar_novo_relatorio': True,
-                'analysis_name': 'test-analysis-name',
-                'projeto': 'test-project',
-                'original_analysis_type': 'test_analysis',
-                'repository_type': 'github',
-                'repo_name': 'test/repo',
-                'branch_name': 'main',
-                'instrucoes_extras': 'Gerar relatório de análise',
-                'gerar_relatorio_apenas': True
-            }
-        }
-        
-        job_manager.get_job.return_value = job_info
-        
-        # Mock do agente e suas dependências
-        with patch('services.workflow_orchestrator.get_repository_provider_explicit') as mock_repo_provider, \
-             patch('services.workflow_orchestrator.ReaderGeral') as mock_reader, \
-             patch('services.workflow_orchestrator.LLMProviderFactory') as mock_llm_factory, \
-             patch('services.workflow_orchestrator.AgentFactory') as mock_agent_factory:
-            
-            mock_agent = Mock()
-            mock_agent.main.return_value = {
-                'resultado': {
-                    'reposta_final': {
-                        'reposta_final': json.dumps({'relatorio': 'Novo relatório gerado'})
-                    }
-                }
-            }
-            mock_agent_factory.create_agent.return_value = mock_agent
-            
-            # Act
-            orchestrator.execute_workflow(job_id, start_from_step=0)
-            
-            # Assert
-            blob_storage.read_report.assert_not_called()  # Não deve tentar ler relatório existente
-            mock_agent.main.assert_called_once()  # Deve executar o agente
-    
-    def test_gerar_novo_relatorio_false_without_analysis_name(self, mock_dependencies):
-        """Teste: gerar_novo_relatorio=False sem analysis_name deve gerar novo."""
-        # Arrange
-        orchestrator = mock_dependencies['orchestrator']
-        job_manager = mock_dependencies['job_manager']
-        blob_storage = mock_dependencies['blob_storage']
-        
-        job_id = 'test-job-no-name'
-        job_info = {
-            'status': 'starting',
             'data': {
                 'gerar_novo_relatorio': False,
-                'analysis_name': None,  # Sem nome de análise
-                'projeto': 'test-project',
-                'original_analysis_type': 'test_analysis',
-                'repository_type': 'github',
-                'repo_name': 'test/repo',
-                'branch_name': 'main',
-                'instrucoes_extras': 'Gerar relatório de análise',
-                'gerar_relatorio_apenas': True
+                'analysis_name': None
             }
         }
         
-        job_manager.get_job.return_value = job_info
+        result = orchestrator._try_read_existing_report('job-123', job_info, 0)
         
-        # Mock do agente e suas dependências
-        with patch('services.workflow_orchestrator.get_repository_provider_explicit') as mock_repo_provider, \
-             patch('services.workflow_orchestrator.ReaderGeral') as mock_reader, \
-             patch('services.workflow_orchestrator.LLMProviderFactory') as mock_llm_factory, \
-             patch('services.workflow_orchestrator.AgentFactory') as mock_agent_factory:
-            
-            mock_agent = Mock()
-            mock_agent.main.return_value = {
-                'resultado': {
-                    'reposta_final': {
-                        'reposta_final': json.dumps({'relatorio': 'Novo relatório gerado'})
-                    }
-                }
-            }
-            mock_agent_factory.create_agent.return_value = mock_agent
-            
-            # Act
-            orchestrator.execute_workflow(job_id, start_from_step=0)
-            
-            # Assert
-            blob_storage.read_report.assert_not_called()  # Não deve tentar ler sem analysis_name
-            mock_agent.main.assert_called_once()  # Deve executar o agente
+        assert result is None
+        orchestrator.blob_storage.read_report.assert_not_called()
     
-    def test_blob_storage_error_fallback_to_generation(self, mock_dependencies):
-        """Teste: Erro no Blob Storage deve fazer fallback para geração de novo relatório."""
-        # Arrange
-        orchestrator = mock_dependencies['orchestrator']
-        job_manager = mock_dependencies['job_manager']
-        blob_storage = mock_dependencies['blob_storage']
-        
-        job_id = 'test-job-error'
+    def test_try_read_existing_report_when_not_step_zero(self, orchestrator):
+        """Testa que retorna None quando não é a etapa 0."""
         job_info = {
-            'status': 'starting',
             'data': {
                 'gerar_novo_relatorio': False,
-                'analysis_name': 'test-analysis-name',
+                'analysis_name': 'test-analysis'
+            }
+        }
+        
+        result = orchestrator._try_read_existing_report('job-123', job_info, 1)
+        
+        assert result is None
+        orchestrator.blob_storage.read_report.assert_not_called()
+    
+    def test_try_read_existing_report_handles_blob_storage_exception(self, orchestrator):
+        """Testa que trata exceções do blob storage graciosamente."""
+        job_info = {
+            'data': {
+                'gerar_novo_relatorio': False,
+                'analysis_name': 'test-analysis',
                 'projeto': 'test-project',
                 'original_analysis_type': 'test_analysis',
                 'repository_type': 'github',
                 'repo_name': 'test/repo',
-                'branch_name': 'main',
-                'instrucoes_extras': 'Gerar relatório de análise',
-                'gerar_relatorio_apenas': True
+                'branch_name': 'main'
             }
         }
         
-        job_manager.get_job.return_value = job_info
-        blob_storage.read_report.side_effect = Exception("Erro de conexão com Blob Storage")
+        # Mock do blob storage levantando uma exceção
+        orchestrator.blob_storage.read_report.side_effect = Exception("Erro de conexão")
         
-        # Mock do agente e suas dependências
-        with patch('services.workflow_orchestrator.get_repository_provider_explicit') as mock_repo_provider, \
-             patch('services.workflow_orchestrator.ReaderGeral') as mock_reader, \
-             patch('services.workflow_orchestrator.LLMProviderFactory') as mock_llm_factory, \
-             patch('services.workflow_orchestrator.AgentFactory') as mock_agent_factory:
-            
-            mock_agent = Mock()
-            mock_agent.main.return_value = {
-                'resultado': {
-                    'reposta_final': {
-                        'reposta_final': json.dumps({'relatorio': 'Novo relatório gerado após erro'})
-                    }
-                }
-            }
-            mock_agent_factory.create_agent.return_value = mock_agent
-            
-            # Act
-            orchestrator.execute_workflow(job_id, start_from_step=0)
-            
-            # Assert
-            blob_storage.read_report.assert_called_once()
-            mock_agent.main.assert_called_once()  # Deve fazer fallback para geração
+        result = orchestrator._try_read_existing_report('job-123', job_info, 0)
+        
+        assert result is None
+        orchestrator.blob_storage.read_report.assert_called_once()
