@@ -101,7 +101,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             # Usamos o resultado puro da etapa anterior
             instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
             agent_params['instrucoes_extras'] = instrucoes_formatadas
-        
+            agent_params.update({
+                                    'repositorio': job_info['data']['repo_name'],
+                                    'nome_branch': job_info['data']['branch_name'], 
+                                    'instrucoes_extras': instrucoes_formatadas,
+                                    'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
+                                    'repository_type': job_info['data']['repository_type'],
+                                    'job_id': job_id,
+                                    'projeto': job_info['data']['projeto'],
+                                    'status_update': step['status_update']
+                                })
+            
         elif agent_type == "processador":
             # O processador recebe o input já formatado corretamente
             agent_params['codigo'] = input_para_agente_final
