@@ -19,7 +19,7 @@ class ConexaoGeral:
             if repository_type == 'github':
                 conector = GitHubConector(repository_provider, self.secret_manager)
             elif repository_type == 'gitlab':
-                conector = GitLabConector(repository_provider, self.secret_manager)
+                conector = GitLabConector(repository_provider)
             elif repository_type == 'azure':
                 conector = AzureConector(repository_provider, self.secret_manager)
             else:
