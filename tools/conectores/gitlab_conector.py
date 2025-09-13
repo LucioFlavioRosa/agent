@@ -1,7 +1,6 @@
 from typing import Dict, Union
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from tools.azure_secret_manager import AzureSecretManager
 from tools.gitlab_repository_provider import GitLabRepositoryProvider
 from tools.conectores.base_conector import BaseConector
 
