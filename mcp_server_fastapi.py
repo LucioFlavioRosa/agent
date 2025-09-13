@@ -235,8 +235,11 @@ def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_
 def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
     """Constrói resposta para jobs completados."""
     job_data = job.get(JobFields.DATA, {})
+    
+    print(f"[{job_id}] Construindo resposta final - gerar_relatorio_apenas: {job_data.get(JobFields.GERAR_RELATORIO_APENAS)}")
+    
     if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
-
+        print(f"[{job_id}] Modo relatório apenas - retornando resposta simples")
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.COMPLETED,
@@ -245,7 +248,11 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         )
     else:
         summary_list = []
+        
+        # Primeira tentativa: buscar em commit_details
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
+        print(f"[{job_id}] Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
+        
         for pr_info in commit_details:
             if pr_info.get(JobFields.SUCCESS) and pr_info.get(JobFields.PR_URL):
                 summary_list.append(
@@ -255,6 +262,68 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                         arquivos_modificados=pr_info.get(JobFields.ARQUIVOS_MODIFICADOS, [])
                     )
                 )
+        
+        # Segunda tentativa: buscar em diagnostic_logs se summary_list ainda estiver vazio
+        if not summary_list:
+            print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
+            diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
+            
+            # Buscar em final_result
+            final_result = diagnostic_logs.get('final_result', {})
+            if final_result:
+                print(f"[{job_id}] Analisando final_result em diagnostic_logs")
+                for key, value in final_result.items():
+                    if key.startswith('pr_grupo_') and isinstance(value, dict):
+                        print(f"[{job_id}] Encontrado grupo de PR: {key}")
+                        # Extrair informações do grupo de PR
+                        branch_name = value.get('resumo_do_pr', key.replace('pr_grupo_', 'branch-'))
+                        arquivos_modificados = []
+                        
+                        # Buscar arquivos modificados no conjunto_de_mudancas
+                        conjunto_mudancas = value.get('conjunto_de_mudancas', [])
+                        for mudanca in conjunto_mudancas:
+                            if mudanca.get('caminho_do_arquivo'):
+                                arquivos_modificados.append(mudanca['caminho_do_arquivo'])
+                        
+                        # Como não temos URL real do PR nos logs, criar uma URL informativa
+                        pr_url = f"PR criado para branch: {branch_name}"
+                        
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=pr_url,
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+            
+            # Se ainda não encontrou, buscar em penultimate_result
+            if not summary_list:
+                penultimate_result = diagnostic_logs.get('penultimate_result', {})
+                if penultimate_result and isinstance(penultimate_result, dict):
+                    print(f"[{job_id}] Analisando penultimate_result em diagnostic_logs")
+                    conjunto_mudancas = penultimate_result.get('conjunto_de_mudancas', [])
+                    if conjunto_mudancas:
+                        arquivos_modificados = []
+                        for mudanca in conjunto_mudancas:
+                            if mudanca.get('caminho_do_arquivo'):
+                                arquivos_modificados.append(mudanca['caminho_do_arquivo'])
+                        
+                        if arquivos_modificados:
+                            summary_list.append(
+                                PullRequestSummary(
+                                    pull_request_url="PR criado com base no resultado da análise",
+                                    branch_name="branch-implementacao",
+                                    arquivos_modificados=arquivos_modificados
+                                )
+                            )
+        
+        # Garantir que a URL do relatório seja extraída corretamente
+        if not blob_url:
+            blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
+            print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
+        
+        print(f"[{job_id}] Resposta final construída - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         return FinalStatusResponse(
             job_id=job_id, 
