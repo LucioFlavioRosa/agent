@@ -10,8 +10,26 @@ class GitLabReader(BaseReader):
         super().__init__(repository_provider or GitLabRepositoryProvider())
 
     def _read_gitlab_file(self, repositorio, caminho_arquivo: str, branch_a_ler: str) -> str:
-        file_content = repositorio.files.get(file_path=caminho_arquivo, ref=branch_a_ler)
-        return base64.b64decode(file_content.content).decode('utf-8')
+        try:
+            file_content = repositorio.files.get(file_path=caminho_arquivo, ref=branch_a_ler)
+            return base64.b64decode(file_content.content).decode('utf-8')
+        except Exception as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                raise FileNotFoundError(
+                    f"Arquivo '{caminho_arquivo}' não encontrado na branch '{branch_a_ler}' "
+                    f"do repositório GitLab '{repositorio.path_with_namespace}'."
+                ) from e
+            elif "403" in str(e) or "forbidden" in str(e).lower():
+                raise PermissionError(
+                    f"Sem permissão para acessar o arquivo '{caminho_arquivo}' "
+                    f"no repositório GitLab '{repositorio.path_with_namespace}'. "
+                    f"Verifique as permissões do token."
+                ) from e
+            else:
+                raise RuntimeError(
+                    f"Erro inesperado ao ler arquivo '{caminho_arquivo}' "
+                    f"do repositório GitLab '{repositorio.path_with_namespace}': {e}"
+                ) from e
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         return self._ler_arquivos_especificos_base(
@@ -22,10 +40,33 @@ class GitLabReader(BaseReader):
         arquivos_do_repo = {}
         
         try:
-            print(f"Obtendo árvore de arquivos GitLab da branch '{branch_a_ler}'...")
+            print(f"Obtendo árvore de arquivos GitLab da branch '{branch_a_ler}' do repositório '{repositorio.path_with_namespace}'...")
             
-            tree_items = repositorio.repository_tree(ref=branch_a_ler, recursive=True, all=True)
-            print(f"Árvore GitLab obtida. {len(tree_items)} itens totais encontrados.")
+            try:
+                tree_items = repositorio.repository_tree(ref=branch_a_ler, recursive=True, all=True)
+                print(f"Árvore GitLab obtida. {len(tree_items)} itens totais encontrados.")
+            except Exception as e:
+                if "404" in str(e) or "not found" in str(e).lower():
+                    if "branch" in str(e).lower() or "ref" in str(e).lower():
+                        raise ValueError(
+                            f"Branch '{branch_a_ler}' não encontrada no repositório GitLab "
+                            f"'{repositorio.path_with_namespace}'. Verifique se a branch existe."
+                        ) from e
+                    else:
+                        raise ValueError(
+                            f"Repositório GitLab '{repositorio.path_with_namespace}' não encontrado "
+                            f"ou sem permissão de acesso."
+                        ) from e
+                elif "403" in str(e) or "forbidden" in str(e).lower():
+                    raise PermissionError(
+                        f"Sem permissão para acessar a árvore do repositório GitLab "
+                        f"'{repositorio.path_with_namespace}'. Verifique as permissões do token."
+                    ) from e
+                else:
+                    raise RuntimeError(
+                        f"Erro inesperado ao obter árvore do repositório GitLab "
+                        f"'{repositorio.path_with_namespace}': {e}"
+                    ) from e
             
             arquivos_para_ler = [
                 item for item in tree_items
@@ -44,11 +85,20 @@ class GitLabReader(BaseReader):
                     arquivos_do_repo[item['path']] = decoded_content
                     
                 except Exception as e:
-                    print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{item['path']}'. Pulando. Erro: {e}")
+                    if "404" in str(e) or "not found" in str(e).lower():
+                        print(f"AVISO: Arquivo '{item['path']}' não encontrado (pode ter sido removido). Pulando.")
+                    elif "403" in str(e) or "forbidden" in str(e).lower():
+                        print(f"AVISO: Sem permissão para ler o arquivo '{item['path']}'. Pulando.")
+                    else:
+                        print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{item['path']}'. Pulando. Erro: {e}")
 
-        except Exception as e:
-            print(f"ERRO CRÍTICO durante a comunicação com a API GitLab: {e}")
+        except (ValueError, PermissionError, RuntimeError):
             raise
+        except Exception as e:
+            raise RuntimeError(
+                f"ERRO CRÍTICO durante a comunicação com a API GitLab "
+                f"para o repositório '{repositorio.path_with_namespace}': {e}"
+            ) from e
         
         return arquivos_do_repo
 
@@ -60,12 +110,21 @@ class GitLabReader(BaseReader):
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None
     ) -> Dict[str, str]:
-        branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "GitLab")
-        
-        if arquivos_especificos and len(arquivos_especificos) > 0:
-            print(f"Modo de leitura filtrada GitLab ativado para {len(arquivos_especificos)} arquivos específicos.")
-            return self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
-        else:
-            print("Modo de leitura completa GitLab ativado (filtro por extensão).")
-            extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
-            return self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
+        try:
+            branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "GitLab")
+            
+            if arquivos_especificos and len(arquivos_especificos) > 0:
+                print(f"Modo de leitura filtrada GitLab ativado para {len(arquivos_especificos)} arquivos específicos no repositório '{repositorio.path_with_namespace}'.")
+                return self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
+            else:
+                print(f"Modo de leitura completa GitLab ativado (filtro por extensão) para o repositório '{repositorio.path_with_namespace}'.")
+                extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
+                return self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
+                
+        except (ValueError, PermissionError, RuntimeError, FileNotFoundError):
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"Erro inesperado durante a leitura do repositório GitLab "
+                f"'{getattr(repositorio, 'path_with_namespace', 'desconhecido')}': {e}"
+            ) from e
