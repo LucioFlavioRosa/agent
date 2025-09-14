@@ -30,6 +30,42 @@ class GitLabRepositoryProvider(IRepositoryProvider):
         else:
             return repository_name.strip()
     
+    def _find_namespace_id(self, gl, namespace: str) -> int:
+        print(f"[GitLab Provider] Buscando namespace '{namespace}'...")
+        
+        # 1. Tenta encontrar como grupo
+        try:
+            print(f"[GitLab Provider] Tentando encontrar '{namespace}' como grupo...")
+            group = gl.groups.get(namespace)
+            print(f"[GitLab Provider] Namespace é um grupo. ID: {group.id}")
+            return group.id
+        except gitlab.exceptions.GitlabGetError:
+            print(f"[GitLab Provider] '{namespace}' não é um grupo.")
+        
+        # 2. Tenta encontrar como usuário
+        try:
+            print(f"[GitLab Provider] Tentando encontrar '{namespace}' como usuário...")
+            users = gl.users.list(username=namespace)
+            if users:
+                user = users[0]
+                print(f"[GitLab Provider] Namespace é um usuário. ID: {user.id}")
+                return user.id
+            else:
+                print(f"[GitLab Provider] Usuário '{namespace}' não encontrado.")
+        except Exception as e:
+            print(f"[GitLab Provider] Erro ao buscar usuário '{namespace}': {e}")
+        
+        # 3. Verifica se é o usuário autenticado
+        try:
+            user = gl.user
+            if user.username == namespace:
+                print(f"[GitLab Provider] Namespace corresponde ao usuário autenticado. ID: {user.id}")
+                return user.id
+        except Exception as e:
+            print(f"[GitLab Provider] Erro ao verificar usuário autenticado: {e}")
+        
+        raise ValueError(f"Namespace '{namespace}' não foi encontrado como grupo nem como usuário. Verifique se o namespace existe e se o token tem acesso a ele.")
+    
     def get_repository(self, repository_name: str, token: str) -> any:
         normalized_identifier = self._normalize_project_identifier(repository_name)
         print(f"[GitLab Provider] Tentando acessar o projeto: '{normalized_identifier}'")
@@ -44,6 +80,10 @@ class GitLabRepositoryProvider(IRepositoryProvider):
         except Exception as e:
             raise RuntimeError(f"Erro inesperado ao inicializar cliente GitLab: {e}")
     
+        # Estratégia de fallback: tenta buscar por formato original e depois pelo alternativo
+        project = None
+        last_error = None
+        
         try:
             if self._is_project_id(normalized_identifier):
                 project_id = int(normalized_identifier)
@@ -54,29 +94,56 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                 print(f"[GitLab Provider] Detectado path completo: {normalized_identifier}")
                 project = gl.projects.get(normalized_identifier)
                 print(f"[GitLab Provider] Projeto '{project.name_with_namespace}' encontrado com sucesso (ID: {project.id}).")
-            
-            if not hasattr(project, 'default_branch'):
-                default_branch = project.attributes.get('default_branch', 'main')
-                project.default_branch = default_branch
-                print(f"[GitLab Provider] Branch padrão definida: {default_branch}")
-            
-            return project
-            
+                
         except gitlab.exceptions.GitlabGetError as e:
-            if e.response_code == 404:
-                if self._is_project_id(normalized_identifier):
-                    print(f"[GitLab Provider] ERRO: Projeto com ID '{normalized_identifier}' não encontrado (404).")
-                    raise ValueError(f"Projeto GitLab com ID '{normalized_identifier}' não encontrado. Verifique se o ID está correto e se o token tem acesso a ele.")
-                else:
-                    print(f"[GitLab Provider] ERRO: Projeto '{normalized_identifier}' não encontrado (404).")
-                    raise ValueError(f"Repositório GitLab '{normalized_identifier}' não encontrado. Verifique o nome e se o token tem acesso a ele.")
-            elif e.response_code == 403:
-                print(f"[GitLab Provider] ERRO: Acesso negado ao projeto '{normalized_identifier}' (403).")
-                raise ValueError(f"Acesso negado ao repositório '{normalized_identifier}'. Verifique as permissões do token.")
-            else:
-                raise RuntimeError(f"Erro da API do GitLab ao buscar repositório ({e.response_code}): {e}")
+            last_error = e
+            print(f"[GitLab Provider] Primeira tentativa falhou: {e}")
+            
+            # Fallback: se falhou com nome completo, tenta interpretar como ID se for numérico
+            if not self._is_project_id(normalized_identifier):
+                # Tenta extrair um possível ID do final do path
+                parts = normalized_identifier.split('/')
+                if len(parts) >= 2 and parts[-1].isdigit():
+                    try:
+                        fallback_id = int(parts[-1])
+                        print(f"[GitLab Provider] Tentando fallback com possível ID: {fallback_id}")
+                        project = gl.projects.get(fallback_id)
+                        print(f"[GitLab Provider] Projeto encontrado via fallback ID: '{project.name_with_namespace}' (ID: {project.id}).")
+                        last_error = None
+                    except Exception as fallback_e:
+                        print(f"[GitLab Provider] Fallback também falhou: {fallback_e}")
+        
         except Exception as e:
-            raise RuntimeError(f"Erro inesperado ao buscar o projeto GitLab '{normalized_identifier}': {e}") from e
+            last_error = e
+            print(f"[GitLab Provider] Erro inesperado na busca: {e}")
+        
+        # Se ainda não encontrou o projeto, processa o erro
+        if project is None and last_error:
+            if isinstance(last_error, gitlab.exceptions.GitlabGetError):
+                if last_error.response_code == 404:
+                    if self._is_project_id(normalized_identifier):
+                        print(f"[GitLab Provider] ERRO: Projeto com ID '{normalized_identifier}' não encontrado (404).")
+                        raise ValueError(f"Projeto GitLab com ID '{normalized_identifier}' não encontrado. Verifique se o ID está correto e se o token tem acesso a ele.")
+                    else:
+                        print(f"[GitLab Provider] ERRO: Projeto '{normalized_identifier}' não encontrado (404).")
+                        raise ValueError(f"Repositório GitLab '{normalized_identifier}' não encontrado. Verifique se o namespace/projeto existe e se o token tem acesso a ele. Formato esperado: 'namespace/projeto' ou Project ID numérico.")
+                elif last_error.response_code == 403:
+                    print(f"[GitLab Provider] ERRO: Acesso negado ao projeto '{normalized_identifier}' (403).")
+                    raise ValueError(f"Acesso negado ao repositório '{normalized_identifier}'. Verifique as permissões do token.")
+                else:
+                    raise RuntimeError(f"Erro da API do GitLab ao buscar repositório ({last_error.response_code}): {last_error}")
+            else:
+                raise RuntimeError(f"Erro inesperado ao buscar o projeto GitLab '{normalized_identifier}': {last_error}") from last_error
+        
+        if project is None:
+            raise RuntimeError(f"Falha inexplicável ao buscar projeto '{normalized_identifier}'")
+            
+        if not hasattr(project, 'default_branch'):
+            default_branch = project.attributes.get('default_branch', 'main')
+            project.default_branch = default_branch
+            print(f"[GitLab Provider] Branch padrão definida: {default_branch}")
+        
+        return project
         
     def create_repository(self, repository_name: str, token: str, description: str = "", private: bool = True) -> Project:
         normalized_identifier = self._normalize_project_identifier(repository_name)
@@ -110,29 +177,14 @@ class GitLabRepositoryProvider(IRepositoryProvider):
                 'default_branch': 'main'
             }
             
-            namespace_id = None
-        
-            # 1. Tenta encontrar o namespace como um GRUPO
+            # Busca o namespace_id usando a nova lógica robusta
             try:
-                print(f"[GitLab Provider] Tentando encontrar o namespace '{namespace}' como um grupo...")
-                group = gl.groups.get(namespace)
-                namespace_id = group.id
-                print(f"[GitLab Provider] Sucesso! Namespace é um grupo. ID: {namespace_id}")
+                namespace_id = self._find_namespace_id(gl, namespace)
+                project_data['namespace_id'] = namespace_id
+            except ValueError as ns_error:
+                print(f"[GitLab Provider] Erro ao encontrar namespace: {ns_error}")
+                raise ValueError(f"Não foi possível criar o projeto '{normalized_identifier}': {ns_error}")
             
-            except gitlab.exceptions.GitlabGetError:
-                print(f"[GitLab Provider] Namespace '{namespace}' não é um grupo. Verificando se é um usuário...")
-                
-                # 2. Se não for um grupo, verifica se é o USUÁRIO autenticado
-                user = gl.user
-                if user.username == namespace:
-                    namespace_id = user.id
-                    print(f"[GitLab Provider] Sucesso! Namespace corresponde ao usuário autenticado. ID: {namespace_id}")
-                else:
-                    # 3. Se não for nenhum dos dois, o namespace é inválido
-                    raise ValueError(f"O namespace '{namespace}' não foi encontrado como um grupo nem corresponde ao usuário autenticado ('{user.username}').")
-
-            # 4. Adiciona o namespace_id e cria o projeto
-            project_data['namespace_id'] = namespace_id
             project = gl.projects.create(project_data)
             
             if not hasattr(project, 'default_branch'):
