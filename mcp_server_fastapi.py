@@ -59,14 +59,44 @@ class JobActions:
 
 def load_workflow_registry(filepath: str) -> dict:
     print(f"Carregando workflows do arquivo: {filepath}")
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+    workflows = {}
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for document in yaml.safe_load_all(f):
+                if document:
+                    workflows.update(document)
+    except yaml.YAMLError as e:
+        print(f"Erro ao processar YAML em streaming: {e}")
+        with open(filepath, 'r', encoding='utf-8') as f:
+            workflows = yaml.safe_load(f)
+    
+    return workflows
+
+class AnalysisNameStore:
+    def __init__(self, job_store: RedisJobStore):
+        self.job_store = job_store
+        self.cache_key = "analysis_name_to_job_id"
+    
+    def set_mapping(self, analysis_name: str, job_id: str):
+        try:
+            current_mapping = self.job_store.redis_client.hgetall(self.cache_key)
+            current_mapping[analysis_name] = job_id
+            self.job_store.redis_client.hset(self.cache_key, analysis_name, job_id)
+        except Exception as e:
+            print(f"Erro ao persistir mapeamento de análise: {e}")
+    
+    def get_job_id(self, analysis_name: str) -> Optional[str]:
+        try:
+            job_id = self.job_store.redis_client.hget(self.cache_key, analysis_name)
+            return job_id.decode('utf-8') if job_id else None
+        except Exception as e:
+            print(f"Erro ao buscar mapeamento de análise: {e}")
+            return None
 
 WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
 valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
 ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
-
-
 
 class StartAnalysisPayload(BaseModel):
     repo_name: str
@@ -144,7 +174,6 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     )
 
 def _normalize_repo_name_by_type(repo_name: str, repository_type: str) -> str:
-    """Normaliza o nome do repositório baseado no tipo."""
     if repository_type == 'gitlab':
         normalized = _validate_and_normalize_gitlab_repo_name(repo_name)
         print(f"GitLab - Repo original: '{repo_name}', normalizado: '{normalized}'")
@@ -152,7 +181,6 @@ def _normalize_repo_name_by_type(repo_name: str, repository_type: str) -> str:
     return repo_name
 
 def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
-    """Gera ou valida o nome da análise."""
     if provided_name:
         return provided_name
 
@@ -161,7 +189,6 @@ def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
     return analysis_name
 
 def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
-    """Cria a estrutura inicial de dados do job."""
     return {
         JobFields.STATUS: JobStatus.STARTING,
         JobFields.DATA: {
@@ -183,24 +210,20 @@ def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name
     }
 
 def _validate_job_for_approval(job: dict, job_id: str) -> None:
-    """Valida se o job está em estado válido para aprovação."""
     if not job or job.get(JobFields.STATUS) != JobStatus.PENDING_APPROVAL:
         raise HTTPException(status_code=400, detail="Job não encontrado ou não está aguardando aprovação.")
 
 def _validate_job_exists(job: dict, job_id: str) -> None:
-    """Valida se o job existe."""
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
 
-def _validate_analysis_exists(analysis_name: str) -> str:
-    """Valida se a análise existe e retorna o job_id."""
-    job_id = analysis_name_to_job_id.get(analysis_name)
+def _validate_analysis_exists(analysis_name: str, analysis_store: AnalysisNameStore) -> str:
+    job_id = analysis_store.get_job_id(analysis_name)
     if not job_id:
         raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
     return job_id
 
 def _get_report_from_job(job: dict, job_id: str) -> str:
-    """Extrai o relatório do job ou levanta exceção se não encontrado."""
     report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
     if not report:
         if job_id:
@@ -210,7 +233,6 @@ def _get_report_from_job(job: dict, job_id: str) -> str:
     return report
 
 def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
-    """Cria dados para job derivado de implementação."""
     original_data = original_job[JobFields.DATA]
     return {
         JobFields.STATUS: JobStatus.STARTING,
@@ -233,7 +255,6 @@ def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_
     }
 
 def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
-    """Constrói resposta para jobs completados."""
     job_data = job.get(JobFields.DATA, {})
     
     print(f"[{job_id}] Construindo resposta final - gerar_relatorio_apenas: {job_data.get(JobFields.GERAR_RELATORIO_APENAS)}")
@@ -345,7 +366,7 @@ job_store = RedisJobStore()
 job_manager = JobManager(job_store)
 blob_storage = BlobStorageService()
 workflow_orchestrator = WorkflowOrchestrator(job_manager, blob_storage, WORKFLOW_REGISTRY)
-analysis_name_to_job_id = {}
+analysis_store = AnalysisNameStore(job_store)
 
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
@@ -362,7 +383,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_store.set_job(job_id, initial_job_data)
 
     if analysis_name:
-        analysis_name_to_job_id[analysis_name] = job_id
+        analysis_store.set_mapping(analysis_name, job_id)
 
     print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
 
@@ -409,7 +430,7 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
-    job_id = _validate_analysis_exists(analysis_name)
+    job_id = _validate_analysis_exists(analysis_name, analysis_store)
 
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
@@ -427,7 +448,7 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
-    job_id = _validate_analysis_exists(analysis_name)
+    job_id = _validate_analysis_exists(analysis_name, analysis_store)
 
 
 
@@ -469,7 +490,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
 
 
     job_store.set_job(new_job_id, new_job_data)
-    analysis_name_to_job_id[f"{analysis_name}-implementation"] = new_job_id
+    analysis_store.set_mapping(f"{analysis_name}-implementation", new_job_id)
 
     print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
 
