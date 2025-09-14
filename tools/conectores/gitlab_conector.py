@@ -55,6 +55,8 @@ class GitLabConector(BaseConector):
                 print(f"[GitLab Conector] AVISO: Não é possível criar projeto usando Project ID. Use o formato 'namespace/projeto' para criação.")
                 raise ValueError(f"Projeto GitLab com ID '{normalized_repo}' não encontrado ou inacessível. Verifique o ID e permissões do token. Para criar novos projetos, use o formato 'namespace/projeto'.") from get_error
             else:
+                print(f"[GitLab Conector] Tentativa de busca por nome completo falhou. Detalhes: {get_error}")
+                print(f"[GitLab Conector] Dica: Verifique se o formato está correto ('namespace/projeto') ou tente usar o Project ID numérico.")
                 raise
     
     @classmethod
