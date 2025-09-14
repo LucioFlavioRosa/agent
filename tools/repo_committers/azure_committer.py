@@ -3,6 +3,7 @@ import requests
 import base64
 import traceback
 from tools.repo_committers.base_committer import BaseCommitter
+from tools.conectores.azure_conector import AzureConector
 
 def processar_branch_azure(
     repo: Dict[str, Any],
@@ -22,9 +23,8 @@ def processar_branch_azure(
         project = repo['_project']
         repository_id = repo['id']
 
-        from tools.conectores.azure_conector import AzureConector
         connector = AzureConector.create_with_defaults()
-        token = connector._get_token_for_org(organization)
+        token = connector._get_token_for_org(organization, platform='azure')
         
         base_url = f"https://dev.azure.com/{organization}/{project}/_apis"
         headers = {
