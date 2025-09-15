@@ -2,53 +2,53 @@ import pytest
 import uuid
 from unittest.mock import Mock, patch, MagicMock
 from fastapi.testclient import TestClient
-from mcp_server_fastapi import app, _validate_and_normalize_gitlab_repo_name, _normalize_repo_name_by_type
+from fastapi import HTTPException
 
+from mcp_server_fastapi import (
+    app, _validate_and_normalize_gitlab_repo_name, _normalize_repo_name_by_type,
+    _generate_analysis_name, _create_initial_job_data, _validate_job_for_approval,
+    _validate_job_exists, _validate_analysis_exists, _get_report_from_job,
+    _create_derived_job_data, _build_completed_response, StartAnalysisPayload,
+    UpdateJobPayload, JobStatus, JobFields, JobActions
+)
 
-class TestMCPServerFastAPI:
+client = TestClient(app)
+
+class TestValidateAndNormalizeGitlabRepoName:
     
-    def setup_method(self):
-        self.client = TestClient(app)
-    
-    def test_validate_and_normalize_gitlab_repo_name_with_project_id(self):
-        result = _validate_and_normalize_gitlab_repo_name("12345")
-        assert result == "12345"
+    def test_validate_and_normalize_gitlab_repo_name_com_id_numerico(self):
+        result = _validate_and_normalize_gitlab_repo_name("123456")
+        assert result == "123456"
         
-        result = _validate_and_normalize_gitlab_repo_name(" 67890 ")
-        assert result == "67890"
+        result = _validate_and_normalize_gitlab_repo_name(" 789012 ")
+        assert result == "789012"
     
-    def test_validate_and_normalize_gitlab_repo_name_with_path(self):
-        result = _validate_and_normalize_gitlab_repo_name("mygroup/myproject")
-        assert result == "mygroup/myproject"
+    def test_validate_and_normalize_gitlab_repo_name_com_path_completo(self):
+        result = _validate_and_normalize_gitlab_repo_name("meugrupo/meuprojeto")
+        assert result == "meugrupo/meuprojeto"
         
-        result = _validate_and_normalize_gitlab_repo_name("org/subgroup/project")
-        assert result == "org/subgroup/project"
+        result = _validate_and_normalize_gitlab_repo_name("namespace/subgrupo/projeto")
+        assert result == "namespace/subgrupo/projeto"
     
-    def test_validate_and_normalize_gitlab_repo_name_invalid_format(self):
-        with pytest.raises(Exception) as exc_info:
+    def test_validate_and_normalize_gitlab_repo_name_invalido(self):
+        with pytest.raises(HTTPException) as exc_info:
             _validate_and_normalize_gitlab_repo_name("invalid")
-        assert "Path GitLab inválido" in str(exc_info.value)
+        assert exc_info.value.status_code == 400
+        assert "Formato de repositório GitLab inválido" in str(exc_info.value.detail)
         
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_and_normalize_gitlab_repo_name("apenas/")
+        assert exc_info.value.status_code == 400
+        assert "Path GitLab inválido" in str(exc_info.value.detail)
+        
+        with pytest.raises(HTTPException) as exc_info:
             _validate_and_normalize_gitlab_repo_name("")
-        assert "Formato de repositório GitLab inválido" in str(exc_info.value)
-    
-    def test_normalize_repo_name_by_type_gitlab(self):
-        result = _normalize_repo_name_by_type("mygroup/project", "gitlab")
-        assert result == "mygroup/project"
-        
-        result = _normalize_repo_name_by_type("12345", "gitlab")
-        assert result == "12345"
-    
-    def test_normalize_repo_name_by_type_non_gitlab(self):
-        result = _normalize_repo_name_by_type("owner/repo", "github")
-        assert result == "owner/repo"
-        
-        result = _normalize_repo_name_by_type("org/project/repo", "azure")
-        assert result == "org/project/repo"
+        assert exc_info.value.status_code == 400
+
+class TestStartAnalysisEndpoint:
     
     @patch('mcp_server_fastapi.container')
-    def test_start_analysis_success(self, mock_container):
+    def test_start_analysis_endpoint_caminho_feliz(self, mock_container):
         mock_job_store = Mock()
         mock_analysis_service = Mock()
         mock_container.get_job_store.return_value = mock_job_store
@@ -57,287 +57,419 @@ class TestMCPServerFastAPI:
         payload = {
             "repo_name": "test/repo",
             "projeto": "test-project",
-            "analysis_type": "auditoria_testes",
+            "analysis_type": "analise_completa",
             "repository_type": "github"
         }
         
-        with patch('mcp_server_fastapi.uuid.uuid4') as mock_uuid:
-            mock_uuid.return_value = uuid.UUID('12345678-1234-5678-9012-123456789012')
-            
-            response = self.client.post("/start-analysis", json=payload)
+        response = client.post("/start-analysis", json=payload)
         
         assert response.status_code == 200
-        data = response.json()
-        assert "job_id" in data
-        assert data["job_id"] == "12345678-1234-5678-9012-123456789012"
+        response_data = response.json()
+        assert "job_id" in response_data
+        assert len(response_data["job_id"]) > 0
+        
+        mock_job_store.set_job.assert_called_once()
+        mock_analysis_service.register_analysis.assert_called_once()
     
-    @patch('mcp_server_fastapi.container')
-    def test_start_analysis_invalid_repository_type(self, mock_container):
+    def test_start_analysis_endpoint_input_invalido(self):
         payload = {
-            "repo_name": "test/repo",
+            "repo_name": "",
             "projeto": "test-project",
-            "analysis_type": "auditoria_testes",
-            "repository_type": "invalid_type"
+            "analysis_type": "invalid_type",
+            "repository_type": "github"
         }
         
-        response = self.client.post("/start-analysis", json=payload)
+        response = client.post("/start-analysis", json=payload)
         assert response.status_code == 422
-    
-    @patch('mcp_server_fastapi.container')
-    def test_start_analysis_missing_required_fields(self, mock_container):
-        payload = {
-            "repo_name": "test/repo",
-            "analysis_type": "auditoria_testes"
-        }
-        
-        response = self.client.post("/start-analysis", json=payload)
-        assert response.status_code == 422
-    
-    @patch('mcp_server_fastapi.container')
-    def test_start_analysis_with_gitlab_project_id(self, mock_container):
-        mock_job_store = Mock()
-        mock_analysis_service = Mock()
-        mock_container.get_job_store.return_value = mock_job_store
-        mock_container.get_analysis_name_service.return_value = mock_analysis_service
-        
-        payload = {
-            "repo_name": "12345",
-            "projeto": "gitlab-project",
-            "analysis_type": "auditoria_testes",
-            "repository_type": "gitlab"
-        }
-        
-        response = self.client.post("/start-analysis", json=payload)
-        assert response.status_code == 200
+
+class TestUpdateJobStatusEndpoint:
     
     @patch('mcp_server_fastapi.container')
     def test_update_job_status_approve(self, mock_container):
         mock_job_store = Mock()
         mock_container.get_job_store.return_value = mock_job_store
         
+        job_id = str(uuid.uuid4())
         mock_job = {
-            "status": "pending_approval",
-            "data": {"paused_at_step": 1}
+            JobFields.STATUS: JobStatus.PENDING_APPROVAL,
+            JobFields.DATA: {
+                JobFields.PAUSED_AT_STEP: 2
+            }
         }
         mock_job_store.get_job.return_value = mock_job
         
         payload = {
-            "job_id": "test-job-123",
+            "job_id": job_id,
             "action": "approve",
-            "instrucoes_extras": "Additional instructions"
+            "instrucoes_extras": "Instruções adicionais"
         }
         
-        response = self.client.post("/update-job-status", json=payload)
-        assert response.status_code == 200
+        response = client.post("/update-job-status", json=payload)
         
-        data = response.json()
-        assert data["job_id"] == "test-job-123"
-        assert data["status"] == "workflow_started"
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["job_id"] == job_id
+        assert response_data[JobFields.STATUS] == JobStatus.WORKFLOW_STARTED
+        assert response_data["message"] == "Aprovação recebida."
+        
+        mock_job_store.set_job.assert_called()
     
     @patch('mcp_server_fastapi.container')
     def test_update_job_status_reject(self, mock_container):
         mock_job_store = Mock()
         mock_container.get_job_store.return_value = mock_job_store
         
+        job_id = str(uuid.uuid4())
         mock_job = {
-            "status": "pending_approval",
-            "data": {"paused_at_step": 1}
+            JobFields.STATUS: JobStatus.PENDING_APPROVAL,
+            JobFields.DATA: {}
         }
         mock_job_store.get_job.return_value = mock_job
         
         payload = {
-            "job_id": "test-job-456",
+            "job_id": job_id,
             "action": "reject"
         }
         
-        response = self.client.post("/update-job-status", json=payload)
-        assert response.status_code == 200
+        response = client.post("/update-job-status", json=payload)
         
-        data = response.json()
-        assert data["status"] == "rejected"
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["job_id"] == job_id
+        assert response_data[JobFields.STATUS] == JobStatus.REJECTED
+        assert response_data["message"] == "Processo encerrado."
     
     @patch('mcp_server_fastapi.container')
-    def test_update_job_status_job_not_found(self, mock_container):
+    def test_update_job_status_job_nao_encontrado(self, mock_container):
         mock_job_store = Mock()
         mock_container.get_job_store.return_value = mock_job_store
+        
+        job_id = str(uuid.uuid4())
         mock_job_store.get_job.return_value = None
         
         payload = {
-            "job_id": "nonexistent-job",
+            "job_id": job_id,
             "action": "approve"
         }
         
-        response = self.client.post("/update-job-status", json=payload)
+        response = client.post("/update-job-status", json=payload)
         assert response.status_code == 400
-    
-    @patch('mcp_server_fastapi.container')
-    def test_update_job_status_invalid_status(self, mock_container):
-        mock_job_store = Mock()
-        mock_container.get_job_store.return_value = mock_job_store
+        assert "Job não encontrado ou não está aguardando aprovação" in response.json()["detail"]
         
         mock_job = {
-            "status": "completed",
-            "data": {}
+            JobFields.STATUS: JobStatus.COMPLETED,
+            JobFields.DATA: {}
         }
         mock_job_store.get_job.return_value = mock_job
         
-        payload = {
-            "job_id": "completed-job",
-            "action": "approve"
-        }
-        
-        response = self.client.post("/update-job-status", json=payload)
+        response = client.post("/update-job-status", json=payload)
         assert response.status_code == 400
+
+class TestGetJobReportEndpoint:
     
     @patch('mcp_server_fastapi.container')
-    def test_get_status_job_not_found(self, mock_container):
+    def test_get_job_report_job_inexistente(self, mock_container):
         mock_job_store = Mock()
         mock_container.get_job_store.return_value = mock_job_store
+        
+        job_id = str(uuid.uuid4())
         mock_job_store.get_job.return_value = None
         
-        response = self.client.get("/status/nonexistent-job")
+        response = client.get(f"/jobs/{job_id}/report")
         assert response.status_code == 404
+        assert "Job ID não encontrado ou expirado" in response.json()["detail"]
     
     @patch('mcp_server_fastapi.container')
-    def test_get_status_completed_job(self, mock_container):
+    def test_get_job_report_sem_relatorio(self, mock_container):
         mock_job_store = Mock()
         mock_container.get_job_store.return_value = mock_job_store
         
+        job_id = str(uuid.uuid4())
         mock_job = {
-            "status": "completed",
-            "data": {
-                "gerar_relatorio_apenas": True,
-                "analysis_report": "Test report content",
-                "report_blob_url": "https://blob.storage/report.md"
-            }
+            JobFields.STATUS: JobStatus.COMPLETED,
+            JobFields.DATA: {}
         }
         mock_job_store.get_job.return_value = mock_job
         
-        response = self.client.get("/status/completed-job")
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["status"] == "completed"
-        assert data["analysis_report"] == "Test report content"
-        assert data["report_blob_url"] == "https://blob.storage/report.md"
-    
-    @patch('mcp_server_fastapi.container')
-    def test_get_status_failed_job(self, mock_container):
-        mock_job_store = Mock()
-        mock_container.get_job_store.return_value = mock_job_store
-        
-        mock_job = {
-            "status": "failed",
-            "error_details": "Processing failed due to invalid input",
-            "data": {
-                "diagnostic_logs": {"error": "detailed error info"}
-            }
-        }
-        mock_job_store.get_job.return_value = mock_job
-        
-        response = self.client.get("/status/failed-job")
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["status"] == "failed"
-        assert data["error_details"] == "Processing failed due to invalid input"
-        assert data["diagnostic_logs"]["error"] == "detailed error info"
-    
-    @patch('mcp_server_fastapi.container')
-    def test_get_job_report_success(self, mock_container):
-        mock_job_store = Mock()
-        mock_container.get_job_store.return_value = mock_job_store
-        
-        mock_job = {
-            "data": {
-                "analysis_report": "Detailed analysis report",
-                "report_blob_url": "https://blob.storage/detailed-report.md"
-            }
-        }
-        mock_job_store.get_job.return_value = mock_job
-        
-        response = self.client.get("/jobs/report-job/report")
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["job_id"] == "report-job"
-        assert data["analysis_report"] == "Detailed analysis report"
-        assert data["report_blob_url"] == "https://blob.storage/detailed-report.md"
-    
-    @patch('mcp_server_fastapi.container')
-    def test_get_job_report_not_found(self, mock_container):
-        mock_job_store = Mock()
-        mock_container.get_job_store.return_value = mock_job_store
-        mock_job_store.get_job.return_value = None
-        
-        response = self.client.get("/jobs/missing-job/report")
+        response = client.get(f"/jobs/{job_id}/report")
         assert response.status_code == 404
+        assert "Relatório não encontrado para este job" in response.json()["detail"]
+
+class TestGetStatusEndpoint:
     
     @patch('mcp_server_fastapi.container')
-    def test_get_analysis_by_name_success(self, mock_container):
+    def test_get_status_completed(self, mock_container):
+        mock_job_store = Mock()
+        mock_container.get_job_store.return_value = mock_job_store
+        
+        job_id = str(uuid.uuid4())
+        mock_job = {
+            JobFields.STATUS: JobStatus.COMPLETED,
+            JobFields.DATA: {
+                JobFields.GERAR_RELATORIO_APENAS: False,
+                JobFields.COMMIT_DETAILS: [
+                    {
+                        JobFields.SUCCESS: True,
+                        JobFields.PR_URL: "https://github.com/test/repo/pull/1",
+                        JobFields.BRANCH_NAME: "feature-branch",
+                        JobFields.ARQUIVOS_MODIFICADOS: ["file1.py", "file2.py"]
+                    }
+                ],
+                JobFields.DIAGNOSTIC_LOGS: {"step1": "completed"},
+                JobFields.REPORT_BLOB_URL: "https://blob.storage/report.html"
+            }
+        }
+        mock_job_store.get_job.return_value = mock_job
+        
+        response = client.get(f"/status/{job_id}")
+        
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["job_id"] == job_id
+        assert response_data["status"] == JobStatus.COMPLETED
+        assert len(response_data["summary"]) == 1
+        assert response_data["summary"][0]["pull_request_url"] == "https://github.com/test/repo/pull/1"
+        assert response_data["report_blob_url"] == "https://blob.storage/report.html"
+    
+    @patch('mcp_server_fastapi.container')
+    def test_get_status_failed(self, mock_container):
+        mock_job_store = Mock()
+        mock_container.get_job_store.return_value = mock_job_store
+        
+        job_id = str(uuid.uuid4())
+        mock_job = {
+            JobFields.STATUS: JobStatus.FAILED,
+            JobFields.ERROR_DETAILS: "Erro durante execução",
+            JobFields.DATA: {
+                JobFields.DIAGNOSTIC_LOGS: {"error": "detailed error info"},
+                JobFields.REPORT_BLOB_URL: "https://blob.storage/error-report.html"
+            }
+        }
+        mock_job_store.get_job.return_value = mock_job
+        
+        response = client.get(f"/status/{job_id}")
+        
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["job_id"] == job_id
+        assert response_data["status"] == JobStatus.FAILED
+        assert response_data["error_details"] == "Erro durante execução"
+        assert response_data["diagnostic_logs"]["error"] == "detailed error info"
+
+class TestGetAnalysisByNameEndpoint:
+    
+    @patch('mcp_server_fastapi.container')
+    def test_get_analysis_by_name_inexistente(self, mock_container):
         mock_job_store = Mock()
         mock_analysis_service = Mock()
         mock_container.get_job_store.return_value = mock_job_store
         mock_container.get_analysis_name_service.return_value = mock_analysis_service
         
-        mock_analysis_service.find_job_by_analysis_name.return_value = "found-job-id"
-        mock_job_store.get_job.return_value = {
-            "data": {
-                "analysis_report": "Analysis by name report",
-                "report_blob_url": "https://blob.storage/named-analysis.md"
-            }
-        }
-        
-        response = self.client.get("/analyses/by-name/test-analysis")
-        assert response.status_code == 200
-        
-        data = response.json()
-        assert data["job_id"] == "found-job-id"
-        assert data["analysis_name"] == "test-analysis"
-        assert data["analysis_report"] == "Analysis by name report"
-    
-    @patch('mcp_server_fastapi.container')
-    def test_get_analysis_by_name_not_found(self, mock_container):
-        mock_analysis_service = Mock()
-        mock_container.get_analysis_name_service.return_value = mock_analysis_service
+        analysis_name = "nonexistent-analysis"
         mock_analysis_service.find_job_by_analysis_name.return_value = None
         
-        response = self.client.get("/analyses/by-name/missing-analysis")
+        response = client.get(f"/analyses/by-name/{analysis_name}")
         assert response.status_code == 404
+        assert f"Análise com nome '{analysis_name}' não encontrada" in response.json()["detail"]
+
+class TestStartCodeGenerationFromReportEndpoint:
     
-    def test_start_analysis_with_unicode_data(self):
-        with patch('mcp_server_fastapi.container') as mock_container:
-            mock_job_store = Mock()
-            mock_analysis_service = Mock()
-            mock_container.get_job_store.return_value = mock_job_store
-            mock_container.get_analysis_name_service.return_value = mock_analysis_service
-            
-            payload = {
-                "repo_name": "测试组织/测试项目",
-                "projeto": "Unicode项目 🚀",
-                "analysis_type": "auditoria_testes",
-                "repository_type": "github",
-                "instrucoes_extras": "测试指令 with emoji 🎯"
+    @patch('mcp_server_fastapi.container')
+    def test_start_code_generation_from_report_caminho_feliz(self, mock_container):
+        mock_job_store = Mock()
+        mock_analysis_service = Mock()
+        mock_container.get_job_store.return_value = mock_job_store
+        mock_container.get_analysis_name_service.return_value = mock_analysis_service
+        
+        analysis_name = "test-analysis"
+        original_job_id = str(uuid.uuid4())
+        mock_analysis_service.find_job_by_analysis_name.return_value = original_job_id
+        
+        original_job = {
+            JobFields.STATUS: JobStatus.COMPLETED,
+            JobFields.DATA: {
+                JobFields.REPO_NAME: "test/repo",
+                JobFields.PROJETO: "test-project",
+                JobFields.BRANCH_NAME: "main",
+                JobFields.MODEL_NAME: "gpt-4",
+                JobFields.USAR_RAG: False,
+                JobFields.ARQUIVOS_ESPECIFICOS: None,
+                JobFields.REPOSITORY_TYPE: "github",
+                JobFields.ANALYSIS_REPORT: "Relatório de análise completo"
             }
-            
-            response = self.client.post("/start-analysis", json=payload)
-            assert response.status_code == 200
+        }
+        mock_job_store.get_job.return_value = original_job
+        
+        response = client.post(f"/start-code-generation-from-report/{analysis_name}")
+        
+        assert response.status_code == 200
+        response_data = response.json()
+        assert "job_id" in response_data
+        assert len(response_data["job_id"]) > 0
+        
+        mock_job_store.set_job.assert_called()
+        mock_analysis_service.register_analysis.assert_called_with(
+            f"{analysis_name}-implementation", 
+            response_data["job_id"]
+        )
+
+class TestUtilityFunctions:
     
-    def test_start_analysis_with_edge_case_values(self):
-        with patch('mcp_server_fastapi.container') as mock_container:
-            mock_job_store = Mock()
-            mock_analysis_service = Mock()
-            mock_container.get_job_store.return_value = mock_job_store
-            mock_container.get_analysis_name_service.return_value = mock_analysis_service
-            
-            payload = {
-                "repo_name": "a" * 100,  # Very long repo name
-                "projeto": "edge-case-project",
-                "analysis_type": "auditoria_testes",
-                "repository_type": "github",
-                "max_token_out": 50000,  # Maximum token limit
-                "arquivos_especificos": ["file1.py"] * 1000  # Many files
+    def test_normalize_repo_name_by_type_gitlab(self):
+        result = _normalize_repo_name_by_type("123456", "gitlab")
+        assert result == "123456"
+        
+        result = _normalize_repo_name_by_type("group/project", "gitlab")
+        assert result == "group/project"
+    
+    def test_normalize_repo_name_by_type_github(self):
+        result = _normalize_repo_name_by_type("user/repo", "github")
+        assert result == "user/repo"
+    
+    def test_generate_analysis_name_provided(self):
+        job_id = str(uuid.uuid4())
+        result = _generate_analysis_name("custom-name", job_id)
+        assert result == "custom-name"
+    
+    def test_generate_analysis_name_auto_generated(self):
+        job_id = str(uuid.uuid4())
+        result = _generate_analysis_name(None, job_id)
+        assert result.startswith("analysis-")
+        assert len(result.split("-")[1]) == 8
+    
+    def test_validate_job_for_approval_valid(self):
+        job = {JobFields.STATUS: JobStatus.PENDING_APPROVAL}
+        _validate_job_for_approval(job, "test-job-id")
+    
+    def test_validate_job_for_approval_invalid(self):
+        job = {JobFields.STATUS: JobStatus.COMPLETED}
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_job_for_approval(job, "test-job-id")
+        assert exc_info.value.status_code == 400
+        
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_job_for_approval(None, "test-job-id")
+        assert exc_info.value.status_code == 400
+    
+    def test_validate_job_exists_valid(self):
+        job = {JobFields.STATUS: JobStatus.COMPLETED}
+        _validate_job_exists(job, "test-job-id")
+    
+    def test_validate_job_exists_invalid(self):
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_job_exists(None, "test-job-id")
+        assert exc_info.value.status_code == 404
+    
+    def test_validate_analysis_exists_valid(self):
+        mock_analysis_service = Mock()
+        mock_analysis_service.find_job_by_analysis_name.return_value = "job-id"
+        
+        result = _validate_analysis_exists("test-analysis", mock_analysis_service)
+        assert result == "job-id"
+    
+    def test_validate_analysis_exists_invalid(self):
+        mock_analysis_service = Mock()
+        mock_analysis_service.find_job_by_analysis_name.return_value = None
+        
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_analysis_exists("test-analysis", mock_analysis_service)
+        assert exc_info.value.status_code == 404
+    
+    def test_get_report_from_job_valid(self):
+        job = {
+            JobFields.DATA: {
+                JobFields.ANALYSIS_REPORT: "Test report"
             }
-            
-            response = self.client.post("/start-analysis", json=payload)
-            assert response.status_code == 200
+        }
+        result = _get_report_from_job(job, "job-id")
+        assert result == "Test report"
+    
+    def test_get_report_from_job_invalid(self):
+        job = {JobFields.DATA: {}}
+        with pytest.raises(HTTPException) as exc_info:
+            _get_report_from_job(job, "job-id")
+        assert exc_info.value.status_code == 404
+    
+    def test_create_initial_job_data(self):
+        payload = StartAnalysisPayload(
+            repo_name="test/repo",
+            projeto="test-project",
+            analysis_type="analise_completa",
+            repository_type="github"
+        )
+        
+        result = _create_initial_job_data(payload, "normalized-repo", "analysis-name")
+        
+        assert result[JobFields.STATUS] == JobStatus.STARTING
+        assert result[JobFields.DATA][JobFields.REPO_NAME] == "normalized-repo"
+        assert result[JobFields.DATA][JobFields.ORIGINAL_REPO_NAME] == "test/repo"
+        assert result[JobFields.DATA][JobFields.PROJETO] == "test-project"
+        assert result[JobFields.DATA][JobFields.ANALYSIS_NAME] == "analysis-name"
+    
+    def test_create_derived_job_data(self):
+        original_job = {
+            JobFields.DATA: {
+                JobFields.REPO_NAME: "test/repo",
+                JobFields.PROJETO: "test-project",
+                JobFields.BRANCH_NAME: "main",
+                JobFields.MODEL_NAME: "gpt-4",
+                JobFields.USAR_RAG: False,
+                JobFields.ARQUIVOS_ESPECIFICOS: None,
+                JobFields.REPOSITORY_TYPE: "github"
+            }
+        }
+        
+        result = _create_derived_job_data(original_job, "test-analysis", "normalized-repo", "Test report")
+        
+        assert result[JobFields.STATUS] == JobStatus.STARTING
+        assert result[JobFields.DATA][JobFields.REPO_NAME] == "normalized-repo"
+        assert result[JobFields.DATA][JobFields.ORIGINAL_ANALYSIS_TYPE] == "implementacao"
+        assert "Gerar código baseado no seguinte relatório" in result[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS]
+        assert result[JobFields.DATA][JobFields.ANALYSIS_NAME] == "test-analysis-implementation"
+    
+    def test_build_completed_response_relatorio_apenas(self):
+        job_id = "test-job-id"
+        job = {
+            JobFields.DATA: {
+                JobFields.GERAR_RELATORIO_APENAS: True,
+                JobFields.ANALYSIS_REPORT: "Test report"
+            }
+        }
+        blob_url = "https://blob.storage/report.html"
+        
+        result = _build_completed_response(job_id, job, blob_url)
+        
+        assert result.job_id == job_id
+        assert result.status == JobStatus.COMPLETED
+        assert result.analysis_report == "Test report"
+        assert result.report_blob_url == blob_url
+        assert result.summary is None
+    
+    def test_build_completed_response_com_prs(self):
+        job_id = "test-job-id"
+        job = {
+            JobFields.DATA: {
+                JobFields.GERAR_RELATORIO_APENAS: False,
+                JobFields.COMMIT_DETAILS: [
+                    {
+                        JobFields.SUCCESS: True,
+                        JobFields.PR_URL: "https://github.com/test/repo/pull/1",
+                        JobFields.BRANCH_NAME: "feature-branch",
+                        JobFields.ARQUIVOS_MODIFICADOS: ["file1.py", "file2.py"]
+                    }
+                ],
+                JobFields.DIAGNOSTIC_LOGS: {"step1": "completed"}
+            }
+        }
+        blob_url = "https://blob.storage/report.html"
+        
+        result = _build_completed_response(job_id, job, blob_url)
+        
+        assert result.job_id == job_id
+        assert result.status == JobStatus.COMPLETED
+        assert len(result.summary) == 1
+        assert result.summary[0].pull_request_url == "https://github.com/test/repo/pull/1"
+        assert result.summary[0].branch_name == "feature-branch"
+        assert result.summary[0].arquivos_modificados == ["file1.py", "file2.py"]
+        assert result.diagnostic_logs == {"step1": "completed"}
+        assert result.report_blob_url == blob_url
