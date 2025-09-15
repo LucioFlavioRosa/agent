@@ -57,7 +57,7 @@ class TestStartAnalysisEndpoint:
         payload = {
             "repo_name": "test/repo",
             "projeto": "test-project",
-            "analysis_type": "analise_completa",
+            "analysis_type": "geracao_codigo_a_partir_de_reuniao",
             "repository_type": "github"
         }
         
@@ -394,7 +394,7 @@ class TestUtilityFunctions:
         payload = StartAnalysisPayload(
             repo_name="test/repo",
             projeto="test-project",
-            analysis_type="analise_completa",
+            analysis_type="geracao_codigo_a_partir_de_reuniao",
             repository_type="github"
         )
         
