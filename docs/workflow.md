@@ -26,8 +26,7 @@ flowchart TD
     L -- Sim --> M["☁️ Salva relatório no Blob Storage"];
     M --> N["✅ Finaliza workflow"];
     L -- Não --> O{"👤 Step requer aprovação?"};
-    O -- Sim --> P["⏸️ Pausa para aprovação humana"];
-    P -- Aprovado --> Q;
+    O -- Sim --> P{"⏸️ Pausa para aprovação humana"};
     O -- Não --> Q{"🔄 Há mais steps?"};
     Q -- Sim --> E;
     Q -- Não --> R["🔧 Finaliza workflow"];
