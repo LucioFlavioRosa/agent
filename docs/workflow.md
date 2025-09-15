@@ -13,7 +13,7 @@ flowchart TD
     C -- Não --> Z["❌ Erro: Workflow não encontrado"];
     C -- Sim --> D["🔧 Prepara RepositoryProvider e ReaderGeral"];
     D --> E["🔄 Itera sobre steps do workflow"];
-    E --> F{"📊 É step 0?"};
+    E --> F{"📊 É step 0 (geração de relatório)?"};
     F -- Sim --> G{"🔄 gerar_novo_relatorio=False?"};
     G -- Sim --> H["☁️ Tenta ler relatório do Blob Storage"];
     H -- Encontrado --> I["📄 Carrega relatório existente"];
