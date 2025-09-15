@@ -1,21 +1,16 @@
 import json
 import uuid
-import yaml
 import time
 import traceback
-import enum
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 
-from tools.job_store import RedisJobStore
-from services.workflow_orchestrator import WorkflowOrchestrator
-from services.job_manager import JobManager
-from services.blob_storage_service import BlobStorageService
+from services.dependency_container import DependencyContainer
+from services.workflow_registry_service import WorkflowRegistryService
 
-# Constantes para Status de Jobs
 class JobStatus:
     STARTING = 'starting'
     PENDING_APPROVAL = 'pending_approval'
@@ -24,7 +19,6 @@ class JobStatus:
     FAILED = 'failed'
     REJECTED = 'rejected'
 
-# Constantes para Nomes de Campos
 class JobFields:
     STATUS = 'status'
     DATA = 'data'
@@ -52,51 +46,13 @@ class JobFields:
     PR_URL = 'pr_url'
     ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
 
-# Constantes para Actions
 class JobActions:
     APPROVE = 'approve'
     REJECT = 'reject'
 
-def load_workflow_registry(filepath: str) -> dict:
-    print(f"Carregando workflows do arquivo: {filepath}")
-    workflows = {}
-    
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f:
-            for document in yaml.safe_load_all(f):
-                if document:
-                    workflows.update(document)
-    except yaml.YAMLError as e:
-        print(f"Erro ao processar YAML em streaming: {e}")
-        with open(filepath, 'r', encoding='utf-8') as f:
-            workflows = yaml.safe_load(f)
-    
-    return workflows
-
-class AnalysisNameStore:
-    def __init__(self, job_store: RedisJobStore):
-        self.job_store = job_store
-        self.cache_key = "analysis_name_to_job_id"
-    
-    def set_mapping(self, analysis_name: str, job_id: str):
-        try:
-            current_mapping = self.job_store.redis_client.hgetall(self.cache_key)
-            current_mapping[analysis_name] = job_id
-            self.job_store.redis_client.hset(self.cache_key, analysis_name, job_id)
-        except Exception as e:
-            print(f"Erro ao persistir mapeamento de análise: {e}")
-    
-    def get_job_id(self, analysis_name: str) -> Optional[str]:
-        try:
-            job_id = self.job_store.redis_client.hget(self.cache_key, analysis_name)
-            return job_id.decode('utf-8') if job_id else None
-        except Exception as e:
-            print(f"Erro ao buscar mapeamento de análise: {e}")
-            return None
-
-WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
-valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
-ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
+container = DependencyContainer()
+workflow_registry_service = container.get_workflow_registry_service()
+ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
 
 class StartAnalysisPayload(BaseModel):
     repo_name: str
@@ -146,9 +102,7 @@ class AnalysisByNameResponse(BaseModel):
     report_blob_url: Optional[str] = Field(None)
 
 def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
-
     repo_name = repo_name.strip()
-
 
     try:
         project_id = int(repo_name)
@@ -217,8 +171,8 @@ def _validate_job_exists(job: dict, job_id: str) -> None:
     if not job:
         raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
 
-def _validate_analysis_exists(analysis_name: str, analysis_store: AnalysisNameStore) -> str:
-    job_id = analysis_store.get_job_id(analysis_name)
+def _validate_analysis_exists(analysis_name: str, analysis_service) -> str:
+    job_id = analysis_service.find_job_by_analysis_name(analysis_name)
     if not job_id:
         raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
     return job_id
@@ -270,7 +224,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
     else:
         summary_list = []
         
-        # Primeira tentativa: buscar em commit_details
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
         print(f"[{job_id}] Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
         
@@ -284,29 +237,24 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                     )
                 )
         
-        # Segunda tentativa: buscar em diagnostic_logs se summary_list ainda estiver vazio
         if not summary_list:
             print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
             diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
             
-            # Buscar em final_result
             final_result = diagnostic_logs.get('final_result', {})
             if final_result:
                 print(f"[{job_id}] Analisando final_result em diagnostic_logs")
                 for key, value in final_result.items():
                     if key.startswith('pr_grupo_') and isinstance(value, dict):
                         print(f"[{job_id}] Encontrado grupo de PR: {key}")
-                        # Extrair informações do grupo de PR
                         branch_name = value.get('resumo_do_pr', key.replace('pr_grupo_', 'branch-'))
                         arquivos_modificados = []
                         
-                        # Buscar arquivos modificados no conjunto_de_mudancas
                         conjunto_mudancas = value.get('conjunto_de_mudancas', [])
                         for mudanca in conjunto_mudancas:
                             if mudanca.get('caminho_do_arquivo'):
                                 arquivos_modificados.append(mudanca['caminho_do_arquivo'])
                         
-                        # Como não temos URL real do PR nos logs, criar uma URL informativa
                         pr_url = f"PR criado para branch: {branch_name}"
                         
                         summary_list.append(
@@ -317,7 +265,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                             )
                         )
             
-            # Se ainda não encontrou, buscar em penultimate_result
             if not summary_list:
                 penultimate_result = diagnostic_logs.get('penultimate_result', {})
                 if penultimate_result and isinstance(penultimate_result, dict):
@@ -338,7 +285,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                                 )
                             )
         
-        # Garantir que a URL do relatório seja extraída corretamente
         if not blob_url:
             blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
             print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
@@ -354,7 +300,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             report_blob_url=blob_url
         )
 
-
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA.",
@@ -362,17 +307,15 @@ app = FastAPI(
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-job_store = RedisJobStore()
-job_manager = JobManager(job_store)
-blob_storage = BlobStorageService()
-workflow_orchestrator = WorkflowOrchestrator(job_manager, blob_storage, WORKFLOW_REGISTRY)
-analysis_store = AnalysisNameStore(job_store)
-
 def run_workflow_task(job_id: str, start_from_step: int = 0):
+    workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    job_store = container.get_job_store()
+    analysis_service = container.get_analysis_name_service()
+    
     normalized_repo_name = _normalize_repo_name_by_type(payload.repo_name, payload.repository_type)
 
     job_id = str(uuid.uuid4())
@@ -383,7 +326,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_store.set_job(job_id, initial_job_data)
 
     if analysis_name:
-        analysis_store.set_mapping(analysis_name, job_id)
+        analysis_service.register_analysis(analysis_name, job_id)
 
     print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
 
@@ -393,11 +336,12 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
+    job_store = container.get_job_store()
+    
     job = job_store.get_job(payload.job_id)
     _validate_job_for_approval(job, payload.job_id)
 
     if payload.action == JobActions.APPROVE:
-        # CORREÇÃO: Sempre salvar instruções extras de aprovação, independente da etapa
         if payload.instrucoes_extras:
             job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
             print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
@@ -420,6 +364,8 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
+    job_store = container.get_job_store()
+    
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
 
@@ -430,11 +376,13 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
-    job_id = _validate_analysis_exists(analysis_name, analysis_store)
+    job_store = container.get_job_store()
+    analysis_service = container.get_analysis_name_service()
+    
+    job_id = _validate_analysis_exists(analysis_name, analysis_service)
 
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
-
 
     report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
@@ -448,17 +396,15 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
-    job_id = _validate_analysis_exists(analysis_name, analysis_store)
-
-
+    job_store = container.get_job_store()
+    analysis_service = container.get_analysis_name_service()
+    
+    job_id = _validate_analysis_exists(analysis_name, analysis_service)
 
     original_job = job_store.get_job(job_id)
     _validate_job_exists(original_job, job_id)
 
-
     report = _get_report_from_job(original_job, None)
-
-
 
     original_data = original_job[JobFields.DATA]
     original_repo_name = original_data[JobFields.REPO_NAME]
@@ -470,27 +416,8 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
 
     new_job_data = _create_derived_job_data(original_job, analysis_name, normalized_repo_name, report)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     job_store.set_job(new_job_id, new_job_data)
-    analysis_store.set_mapping(f"{analysis_name}-implementation", new_job_id)
+    analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
 
     print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
 
@@ -500,10 +427,10 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
+    job_store = container.get_job_store()
+    
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
-
-
 
     status = job.get(JobFields.STATUS)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
