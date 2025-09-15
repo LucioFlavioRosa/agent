@@ -22,15 +22,16 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.changeset_filler = ChangesetFiller()
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
+        
+        job_info = self.job_manager.get_job(job_id)
+        if not job_info:
+            raise ValueError("Job não encontrado.")
+
+        workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
+        if not workflow:
+            raise ValueError("Workflow não encontrado.")
+            
         try:
-            job_info = self.job_manager.get_job(job_id)
-            if not job_info:
-                raise ValueError("Job não encontrado.")
-
-            workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
-            if not workflow:
-                raise ValueError("Workflow não encontrado.")
-
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data']['repo_name']
             repository_provider = get_repository_provider_explicit(repository_type)
