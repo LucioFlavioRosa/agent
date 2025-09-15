@@ -104,6 +104,7 @@ class AnalysisByNameResponse(BaseModel):
 def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     repo_name = repo_name.strip()
 
+    # Etapa 1: Verifica se é um Project ID numérico (esta parte está correta)
     try:
         project_id = int(repo_name)
         print(f"GitLab Project ID detectado: {project_id}. Usando formato numérico para máxima robustez.")
@@ -111,17 +112,24 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     except ValueError:
         pass
 
+    # Etapa 2: Valida o formato de path 'namespace/projeto'
     if '/' in repo_name:
-        parts = repo_name.split('/')
+        parts = [p for p in repo_name.split('/') if p]
+
+        # A verificação agora é feita na lista de partes não vazias.
         if len(parts) >= 2:
-            print(f"GitLab path completo detectado: {repo_name}. RECOMENDAÇÃO: Use o Project ID numérico para máxima robustez contra renomeações.")
-            return repo_name
+            # Reconstrói o path para garantir que não haja barras extras.
+            normalized_path = '/'.join(parts)
+            print(f"GitLab path completo detectado: {normalized_path}. RECOMENDAÇÃO: Use o Project ID numérico para máxima robustez contra renomeações.")
+            return normalized_path
         else:
+            # Esta exceção agora será corretamente lançada para inputs como "apenas/".
             raise HTTPException(
                 status_code=400,
                 detail=f"Path GitLab inválido: '{repo_name}'. Esperado pelo menos 'namespace/projeto'. Exemplo: 'meugrupo/meuprojeto' ou use o Project ID numérico (recomendado)."
             )
 
+    # Etapa 3: Se não for um ID e não contiver '/', o formato é inválido.
     raise HTTPException(
         status_code=400,
         detail=f"Formato de repositório GitLab inválido: '{repo_name}'. Use o Project ID numérico (RECOMENDADO para máxima robustez) ou o path completo 'namespace/projeto'. Exemplos: Project ID: '123456', Path: 'meugrupo/meuprojeto'"
