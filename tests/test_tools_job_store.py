@@ -14,7 +14,8 @@ class TestRedisJobStore:
         self.job_store = RedisJobStore()
     
     @patch.dict('os.environ', {}, clear=True)
-    def test_init_without_redis_url_raises_error(self):
+    @pytest.mark.asyncio
+    async def test_init_without_redis_url_raises_error(self):
         with pytest.raises(ValueError, match="A variável de ambiente REDIS_URL não foi configurada"):
             RedisJobStore()
     
