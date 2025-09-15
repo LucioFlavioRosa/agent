@@ -109,7 +109,7 @@ flowchart TD
 ## Configuração de Workflow
 
 ### Estrutura do Workflow Registry
-
+```
 {
   "analysis_type": {
     "steps": [
@@ -130,8 +130,7 @@ flowchart TD
     ]
   }
 }
-
-
+```
 ### Parâmetros de Job
 - `original_analysis_type`: Tipo de análise a ser executada
 - `repository_type`: Tipo do repositório (github, azure_devops)
