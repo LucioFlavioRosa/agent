@@ -34,7 +34,7 @@ flowchart TD
     R --> S["📝 Preenche dados com ChangesetFiller"];
     S --> T["🔀 Executa commits nos repositórios"];
     T --> U["✅ Workflow concluído"];
-    P --> V["⏳ Aguarda aprovação do usuário"];
+    P -- Reprovado --> V["🔧 Finaliza workflow "];
     
     style A fill:#e1f5fe;
     style N fill:#c8e6c9;
