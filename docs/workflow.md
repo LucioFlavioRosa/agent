@@ -27,6 +27,7 @@ flowchart TD
     M --> N["✅ Finaliza workflow"];
     L -- Não --> O{"👤 Step requer aprovação?"};
     O -- Sim --> P{"⏸️ Pausa para aprovação humana"};
+    P -- Reprovado --> V["❌  Finaliza workflow "];
     P -- Aprovado --> Q;
     O -- Não --> Q{"🔄 Há mais steps?"};
     Q -- Sim --> E;
@@ -34,14 +35,13 @@ flowchart TD
     R --> S["📝 Preenche dados com ChangesetFiller"];
     S --> T["🔀 Executa commits nos repositórios"];
     T --> U["✅ Workflow concluído"];
-    P -- Reprovado --> V["🔧 Finaliza workflow "];
     
     style A fill:#e1f5fe;
     style N fill:#c8e6c9;
     style U fill:#c8e6c9;
     style Z fill:#ffcdd2;
+    style V fill:#ffcdd2;
     style P fill:#fff3e0;
-    style V fill:#fff3e0;
 ```
 ## Componentes Principais
 
