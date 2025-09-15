@@ -42,7 +42,7 @@ flowchart TD
     style Z fill:#ffcdd2;
     style P fill:#fff3e0;
     style V fill:#fff3e0;
-
+```
 ## Componentes Principais
 
 ### 1. WorkflowOrchestrator
