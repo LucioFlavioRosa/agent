@@ -27,6 +27,7 @@ flowchart TD
     M --> N["✅ Finaliza workflow"];
     L -- Não --> O{"👤 Step requer aprovação?"};
     O -- Sim --> P["⏸️ Pausa para aprovação humana"];
+    P --> Q;
     O -- Não --> Q{"🔄 Há mais steps?"};
     Q -- Sim --> E;
     Q -- Não --> R["🔧 Finaliza workflow"];
