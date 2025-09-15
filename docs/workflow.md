@@ -6,7 +6,7 @@ O `WorkflowOrchestrator` é o componente central responsável por gerenciar e ex
 
 ## Fluxo do Workflow
 
-mermaid
+```mermaid
 flowchart TD
     A["🚀 Início: execute_workflow(job_id, start_from_step)"] --> B["📋 Recupera job_info do JobManager"]
     B --> C{"🔍 Workflow encontrado?"}
