@@ -17,7 +17,7 @@ flowchart TD
     F -- Sim --> G{"🔄 gerar_novo_relatorio=False?"};
     G -- Sim --> H["☁️ Tenta ler relatório do Blob Storage"];
     H -- Encontrado --> I["📄 Carrega relatório existente"];
-    H -- Não encontrado --> J["🤖 Executa agente para gerar relatório"];
+    H -- Não encontrado --> J["🤖 Executa agente responsável pela tarefa"];
     G -- Não --> J;
     F -- Não --> J;
     J --> K["💾 Salva resultado do step"];
