@@ -8,40 +8,39 @@ O `WorkflowOrchestrator` é o componente central responsável por gerenciar e ex
 
 ```mermaid
 flowchart TD
-    A["🚀 Início: execute_workflow(job_id, start_from_step)"] --> B["📋 Recupera job_info do JobManager"]
-    B --> C{"🔍 Workflow encontrado?"}
-    C -- Não --> Z["❌ Erro: Workflow não encontrado"]
-    C -- Sim --> D["🔧 Prepara RepositoryProvider e ReaderGeral"]
-    D --> E["🔄 Itera sobre steps do workflow"]
-    E --> F{"📊 É step 0 (relatório)?"}
-    F -- Sim --> G{"🔄 gerar_novo_relatorio=False?"}
-    G -- Sim --> H["☁️ Tenta ler relatório do Blob Storage"]
-    H -- Encontrado --> I["📄 Carrega relatório existente"]
-    H -- Não encontrado --> J["🤖 Executa agente para gerar relatório"]
-    G -- Não --> J
-    F -- Não --> J
-    J --> K["💾 Salva resultado do step"]
-    I --> L{"📝 Modo apenas relatório?"}
-    K --> L
-    L -- Sim --> M["☁️ Salva relatório no Blob Storage"]
-    M --> N["✅ Finaliza workflow"]
-    L -- Não --> O{"👤 Step requer aprovação?"}
-    O -- Sim --> P["⏸️ Pausa para aprovação humana"]
-    O -- Não --> Q{"🔄 Há mais steps?"}
-    Q -- Sim --> E
-    Q -- Não --> R["🔧 Finaliza workflow"]
-    R --> S["📝 Preenche dados com ChangesetFiller"]
-    S --> T["🔀 Executa commits nos repositórios"]
-    T --> U["✅ Workflow concluído"]
-    P --> V["⏳ Aguarda aprovação do usuário"]
+    A["🚀 Início: execute_workflow(job_id, start_from_step)"] --> B["📋 Recupera job_info do JobManager"];
+    B --> C{"🔍 Workflow encontrado?"};
+    C -- Não --> Z["❌ Erro: Workflow não encontrado"];
+    C -- Sim --> D["🔧 Prepara RepositoryProvider e ReaderGeral"];
+    D --> E["🔄 Itera sobre steps do workflow"];
+    E --> F{"📊 É step 0 (relatório)?"};
+    F -- Sim --> G{"🔄 gerar_novo_relatorio=False?"};
+    G -- Sim --> H["☁️ Tenta ler relatório do Blob Storage"];
+    H -- Encontrado --> I["📄 Carrega relatório existente"];
+    H -- Não encontrado --> J["🤖 Executa agente para gerar relatório"];
+    G -- Não --> J;
+    F -- Não --> J;
+    J --> K["💾 Salva resultado do step"];
+    I --> L{"📝 Modo apenas relatório?"};
+    K --> L;
+    L -- Sim --> M["☁️ Salva relatório no Blob Storage"];
+    M --> N["✅ Finaliza workflow"];
+    L -- Não --> O{"👤 Step requer aprovação?"};
+    O -- Sim --> P["⏸️ Pausa para aprovação humana"];
+    O -- Não --> Q{"🔄 Há mais steps?"};
+    Q -- Sim --> E;
+    Q -- Não --> R["🔧 Finaliza workflow"];
+    R --> S["📝 Preenche dados com ChangesetFiller"];
+    S --> T["🔀 Executa commits nos repositórios"];
+    T --> U["✅ Workflow concluído"];
+    P --> V["⏳ Aguarda aprovação do usuário"];
     
-    style A fill:#e1f5fe
-    style N fill:#c8e6c9
-    style U fill:#c8e6c9
-    style Z fill:#ffcdd2
-    style P fill:#fff3e0
-    style V fill:#fff3e0
-
+    style A fill:#e1f5fe;
+    style N fill:#c8e6c9;
+    style U fill:#c8e6c9;
+    style Z fill:#ffcdd2;
+    style P fill:#fff3e0;
+    style V fill:#fff3e0;
 
 ## Componentes Principais
 
