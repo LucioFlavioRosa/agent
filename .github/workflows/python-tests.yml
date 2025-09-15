@@ -5,7 +5,7 @@ name: Run Python Tests
 on:
   # Roda quando um commit é enviado (push) para o branch 'main'
   push:
-    branches: [ main ]
+    branches: [ teste ]
     
   # Roda quando um Pull Request é aberto (ou atualizado) para o branch 'main'
   # Este é o gatilho mais importante para garantir a qualidade do código.
