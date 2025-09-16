@@ -176,7 +176,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
-        cleaned_string = json_string.replace("", "").replace("", "").strip()
+        cleaned_string = json.loads(json_string.replace("```json", "").replace("```", "").strip())
 
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
