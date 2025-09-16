@@ -28,12 +28,14 @@ class DependencyContainer:
 
     def get_report_manager(self):
         if self._report_manager is None:
-            self._report_manager = ReportManager(self.get_blob_storage_service())
+            self._report_manager = ReportManager(
+            blob_storage_service=self.get_blob_storage_service(),
+            job_manager=self.get_job_manager() 
+        )
         return self._report_manager
 
     def get_commit_manager(self):
         if self._commit_manager is None:
-            # Supondo que CommitManager precise de ConexaoGeral
             conexao_geral = ConexaoGeral.create_with_defaults()
             self._commit_manager = CommitManager(conexao_geral)
         return self._commit_manager
@@ -73,7 +75,6 @@ class DependencyContainer:
             self._blob_storage_service = BlobStorageService()
         return self._blob_storage_service
         
-
     def get_workflow_registry(self) -> dict:
         if self._workflow_registry is None:
             registry_service = self.get_workflow_registry_service()
