@@ -4,6 +4,9 @@ from services.job_manager import JobManager
 from services.blob_storage_service import BlobStorageService
 from services.analysis_name_service import AnalysisNameService, AnalysisNameCache
 from services.workflow_registry_service import WorkflowRegistryService
+from tools.rag_retriever import AzureAISearchRAGRetriever
+from tools.preenchimento import ChangesetFiller
+from tools.readers.reader_geral import ReaderGeral
 
 class DependencyContainer:
     def __init__(self):
@@ -13,6 +16,8 @@ class DependencyContainer:
         self._workflow_registry_service = None
         self._workflow_orchestrator = None
         self._analysis_name_service = None
+        self._rag_retriever = None
+        self._changeset_filler = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -49,3 +54,14 @@ class DependencyContainer:
             cache = AnalysisNameCache(self.get_job_store())
             self._analysis_name_service = AnalysisNameService(cache)
         return self._analysis_name_service
+
+    def get_rag_retriever(self):
+        if self._rag_retriever is None:
+            self._rag_retriever = AzureAISearchRAGRetriever()
+        return self._rag_retriever
+
+    def get_changeset_filler(self):
+        # Supondo que ChangesetFiller não precise de argumentos
+        if self._changeset_filler is None:
+            self._changeset_filler = ChangesetFiller()
+        return self._changeset_filler
