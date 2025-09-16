@@ -73,7 +73,7 @@ class GitHubRepositoryProvider(IRepositoryProvider):
         except Exception as e:
             raise RuntimeError(f"Erro inesperado ao criar repositório '{repository_name}': {e}") from e
 
-    def get_provider_type(self) -> str:
+    def get_provider(self) -> str:
         """Retorna o nome do provedor para cumprir a interface."""
         return "github"
         
