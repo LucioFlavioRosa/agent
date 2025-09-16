@@ -34,13 +34,22 @@ class DependencyContainer:
             self._workflow_registry_service = WorkflowRegistryService()
         return self._workflow_registry_service
     
-    def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
+    def get_workflow_orchestrator(self):
         if self._workflow_orchestrator is None:
-            workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
+            # Supondo que você tenha métodos para obter esses outros serviços no seu container
+            report_manager = self.get_report_manager()
+            commit_manager = self.get_commit_manager()
+            approval_handler = self.get_approval_handler()
+            rag_retriever = self.get_rag_retriever()
+    
             self._workflow_orchestrator = WorkflowOrchestrator(
-                self.get_job_manager(), 
-                self.get_blob_storage(), 
-                workflow_registry
+                job_manager=self.get_job_manager(),
+                blob_storage=self.get_blob_storage_service(),
+                workflow_registry=self.get_workflow_registry(),
+                report_manager=report_manager,
+                commit_manager=commit_manager,
+                approval_handler=approval_handler,
+                rag_retriever=rag_retriever
             )
         return self._workflow_orchestrator
     
