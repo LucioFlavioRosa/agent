@@ -12,11 +12,8 @@ from .azure_reader import AzureReader
 
 class ReaderGeral(IRepositoryReader):
     
-    def __init__(self, repository_provider: IRepositoryProvider):
-        if not repository_provider:
-            raise ValueError("ReaderGeral requer um repository_provider.")
-        
-        self.repository_provider = repository_provider
+    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
+        self.repository_provider = repository_provider or GitHubRepositoryProvider()
         self._mapeamento_tipo_extensoes = self._carregar_config_workflows()
         
         self.github_reader = GitHubReader(repository_provider)
