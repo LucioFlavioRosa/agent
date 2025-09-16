@@ -39,7 +39,7 @@ Implementa a lógica principal de orquestração:
 
 ## 2. Fluxo de Interação
 
-mermaid
+```mermaid
 flowchart TD
     subgraph "Configuração"
         YAML[workflows.yaml]
@@ -65,7 +65,7 @@ flowchart TD
     
     WRS -.->|Cache| WRS
     WRS -.->|Valida Tipos| WRS
-
+```
 
 ## 3. Processo Macro
 
