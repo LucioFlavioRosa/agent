@@ -108,15 +108,15 @@ flowchart TD
     W --> X[Extrai PRs dos Diagnostic Logs];
     X --> Y[Constrói Summary com PRs];
 
-    V --> Z[GET /status/{job_id}];
+    V --> Z["GET /status/{job_id}"];
     Y --> Z;
     S --> Z;
     O --> Z;
     
-    Z --> AA[GET /jobs/{job_id}/report];
-    Z --> BB[GET /analyses/by-name/{name}];
+    Z --> AA["GET /jobs/{job_id}/report"];
+    Z --> BB["GET /analyses/by-name/{name}"];
     
-    R --> CC[POST /start-code-generation-from-report];
+    R --> CC["POST /start-code-generation-from-report"];
     CC --> DD[Busca Job Original];
     DD --> EE[Extrai Relatório];
     EE --> FF[Cria Job Derivado];
