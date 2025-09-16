@@ -29,7 +29,7 @@ class AzureAISearchRAGRetriever(IRAGRetriever):
             credential=AzureKeyCredential(ai_search_api_key)
         )
 
-    def buscar_politicas(self, query: str, top_k: int = 5) -> str:
+    def retrieve(self, query: str, top_k: int = 5) -> str:
         try:
             print(f"[RAG Retriever] Gerando embedding para a consulta: '{query}'")
             response = self.openai_client.embeddings.create(
