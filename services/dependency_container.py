@@ -5,6 +5,11 @@ from services.blob_storage_service import BlobStorageService
 from services.analysis_name_service import AnalysisNameService, AnalysisNameCache
 from services.workflow_registry_service import WorkflowRegistryService
 
+from services.report_manager import ReportManager
+from services.commit_manager import CommitManager
+from services.approval_handler import ApprovalHandler
+from tools.rag_retriever import AzureAISearchRAGRetriever
+
 class DependencyContainer:
     def __init__(self):
         self._job_store = None
