@@ -18,6 +18,32 @@ class DependencyContainer:
         self._workflow_registry_service = None
         self._workflow_orchestrator = None
         self._analysis_name_service = None
+        self._report_manager = None
+        self._commit_manager = None
+        self._approval_handler = None
+        self._rag_retriever = None
+
+    def get_report_manager(self):
+        if self._report_manager is None:
+            self._report_manager = ReportManager(self.get_blob_storage_service())
+        return self._report_manager
+
+    def get_commit_manager(self):
+        if self._commit_manager is None:
+            # Supondo que CommitManager precise de ConexaoGeral
+            conexao_geral = ConexaoGeral.create_with_defaults()
+            self._commit_manager = CommitManager(conexao_geral)
+        return self._commit_manager
+
+    def get_approval_handler(self):
+        if self._approval_handler is None:
+            self._approval_handler = ApprovalHandler(self.get_job_manager(), self.get_report_manager())
+        return self._approval_handler
+    
+    def get_rag_retriever(self):
+        if self._rag_retriever is None:
+            self._rag_retriever = AzureAISearchRAGRetriever()
+        return self._rag_retriever
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -41,20 +67,14 @@ class DependencyContainer:
     
     def get_workflow_orchestrator(self):
         if self._workflow_orchestrator is None:
-            # Supondo que você tenha métodos para obter esses outros serviços no seu container
-            report_manager = self.get_report_manager()
-            commit_manager = self.get_commit_manager()
-            approval_handler = self.get_approval_handler()
-            rag_retriever = self.get_rag_retriever()
-    
             self._workflow_orchestrator = WorkflowOrchestrator(
                 job_manager=self.get_job_manager(),
                 blob_storage=self.get_blob_storage_service(),
                 workflow_registry=self.get_workflow_registry(),
-                report_manager=report_manager,
-                commit_manager=commit_manager,
-                approval_handler=approval_handler,
-                rag_retriever=rag_retriever
+                report_manager=self.get_report_manager(),
+                commit_manager=self.get_commit_manager(),
+                approval_handler=self.get_approval_handler(),
+                rag_retriever=self.get_rag_retriever()
             )
         return self._workflow_orchestrator
     
