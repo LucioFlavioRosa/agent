@@ -1,35 +1,25 @@
 import json
 from typing import Dict, Any, Optional
-from tools.repository_provider_factory import RepositoryProviderFactory
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
 from domain.interfaces.job_manager_interface import IJobManager
 from domain.interfaces.blob_storage_interface import IBlobStorageService
-from domain.interfaces.rag_retriever_interface import IRAGRetriever
-from domain.interfaces.changeset_filler_interface import IChangesetFiller
-from domain.interfaces.reader_interface import IReader
-from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from domain.interfaces.connection_interface import IConnection
-from domain.interfaces.commit_processor_interface import ICommitProcessor
 from services.factories.llm_provider_factory import LLMProviderFactory
 from services.factories.agent_factory import AgentFactory
+from tools.rag_retriever import AzureAISearchRAGRetriever
+from tools.preenchimento import ChangesetFiller
+from tools.readers.reader_geral import ReaderGeral
+from tools.conectores.conexao_geral import ConexaoGeral
+from tools.repo_committers.orchestrator import processar_branch_por_provedor
+from tools.repository_provider_factory import get_repository_provider_explicit
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
-                 workflow_registry: Dict[str, Any], rag_retriever: IRAGRetriever,
-                 changeset_filler: IChangesetFiller, reader: IReader,
-                 repository_provider: IRepositoryProvider, connection: IConnection,
-                 commit_processor: ICommitProcessor, provider_factory: RepositoryProviderFactory):
-                     
+                 workflow_registry: Dict[str, Any]):
         self.job_manager = job_manager
         self.blob_storage = blob_storage
         self.workflow_registry = workflow_registry
-        self.rag_retriever = rag_retriever
-        self.changeset_filler = changeset_filler
-        self.reader = reader
-        self.repository_provider = repository_provider
-        self.connection = connection
-        self.commit_processor = commit_processor
-        self.provider_factory = provider_factory
+        self.rag_retriever = AzureAISearchRAGRetriever()
+        self.changeset_filler = ChangesetFiller()
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         
@@ -44,10 +34,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         try:
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data']['repo_name']
-            repository_provider = self.provider_factory.create_provider(
-                repository_type=repository_type,
-                repo_name=repo_name
-            )
+            repository_provider = get_repository_provider_explicit(repository_type)
             repo_reader = ReaderGeral(repository_provider=repository_provider)
 
             previous_step_result = job_info['data'].get(f'step_{start_from_step - 1}_result', {})
@@ -57,27 +44,33 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 self.job_manager.update_job_status(job_id, step['status_update'])
 
+                # CORREÇÃO: Verificar se deve buscar relatório existente antes de executar o agente
                 if current_step_index == 0:
                     existing_report_result = self._try_read_existing_report(job_id, job_info, current_step_index)
                     if existing_report_result:
                         print(f"[{job_id}] Relatório existente encontrado no Blob Storage")
 
+                        # Extrair o relatório do resultado
                         report_data = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
                         report_text = report_data.get('relatorio', '')
 
+                        # Salvar no job_info
                         job_info['data']['analysis_report'] = report_text
                         job_info['data'][f'step_{current_step_index}_result'] = report_data
 
+                        # Verificar se é modo apenas relatório
                         if self._should_generate_report_only(job_info, current_step_index):
                             print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
                             self.job_manager.update_job_status(job_id, 'completed')
                             return
 
+                        # CORREÇÃO: Se não for modo apenas relatório, pausar para aprovação mesmo com relatório existente
                         if step.get('requires_approval'):
                             print(f"[{job_id}] Relatório existente carregado. Pausando para aprovação do usuário.")
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
 
+                        # Se não requer aprovação, continuar com o próximo step usando o relatório existente
                         previous_step_result = report_data
                         continue
                     else:
@@ -94,6 +87,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     return
 
                 if step.get('requires_approval'):
+                    # Agora passando a versão mais atual do job_info
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
 
@@ -104,8 +98,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                      current_step_index: int, previous_step_result: Dict[str, Any], 
-                     repo_reader: IReader, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
+                     repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
 
+        # --- 1. Preparação do Agente ---
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy()
@@ -114,26 +109,35 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'model_name': model_para_etapa
         })
 
+        # --- 2. Preparação CONSISTENTE do Input ---
         input_para_agente_final = {}
 
+        # Se for a primeira etapa, o input são as instruções originais do usuário.
         if current_step_index == 0:
             instrucoes = job_info['data'].get('instrucoes_extras')
             input_para_agente_final = {"instrucoes_iniciais": instrucoes}
         else:
+            # Nas etapas seguintes, o input é o resultado da etapa anterior.
+            # Nós o re-empacotamos no formato que o agente 'processador' espera.
             input_para_agente_final = {"instrucoes_iniciais": previous_step_result}
 
+        # --- 3. Execução do Agente ---
         agent_type = step.get("agent_type")
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
 
         if agent_type == "revisor":
+            # Esta lógica é para workflows que usam o 'revisor' em etapas > 0
             instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
             instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
+            # Usamos o resultado puro da etapa anterior
             instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
 
+            # CORREÇÃO: Sempre considerar instruções extras de aprovação, independente da etapa
             observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
             if observacoes_humanas:
                 instrucoes_formatadas += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
                 print(f"[{job_id}] Aplicando instruções extras de aprovação na etapa {current_step_index}: {observacoes_humanas[:100]}...")
+                # Limpar as instruções após uso para evitar reaplicação
                 job_info['data']['instrucoes_extras_aprovacao'] = None
                 self.job_manager.update_job(job_id, job_info)
 
@@ -150,9 +154,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 })
 
         elif agent_type == "processador":
+            # CORREÇÃO: Aplicar instruções extras em TODAS as etapas para processador
             instrucoes_extras = job_info['data'].get('instrucoes_extras')
             observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
             
+            # Aplica instruções extras em todas as etapas
             if instrucoes_extras or observacoes_humanas:
                 if isinstance(input_para_agente_final.get('instrucoes_iniciais'), dict):
                     if instrucoes_extras:
@@ -170,23 +176,27 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     if observacoes_humanas:
                         input_para_agente_final['observacoes_aprovacao'] = observacoes_humanas
                 
+                # Limpa instrucoes_extras_aprovacao após uso
                 if observacoes_humanas:
                     print(f"[{job_id}] Aplicando instruções extras de aprovação no processador da etapa {current_step_index}: {observacoes_humanas[:100]}...")
                     job_info['data']['instrucoes_extras_aprovacao'] = None
                     self.job_manager.update_job(job_id, job_info)
 
+            # O processador recebe o input já formatado corretamente
             agent_params['codigo'] = input_para_agente_final
 
         else:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
 
+        # Atualiza os outros parâmetros
         agent_params['repository_type'] = job_info['data']['repository_type']
 
         agent_response = agente.main(**agent_params)
 
+        # --- 4. Processamento da Resposta ---
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
-        cleaned_string = json_string.replace("", "").replace("", "").strip()
+        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
 
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
@@ -197,6 +207,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         return json.loads(cleaned_string)
 
     def _try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], current_step_index: int) -> Optional[Dict[str, Any]]:
+        """Tenta ler relatório existente do Blob Storage se gerar_novo_relatorio=False"""
         if current_step_index == 0:
             gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
             analysis_name = job_info['data'].get('analysis_name')
@@ -215,6 +226,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                     if existing_report:
                         print(f"[{job_id}] Relatório encontrado no Blob Storage, reutilizando relatório existente")
+                        # Construir URL do blob para referência
                         try:
                             blob_url = self.blob_storage.get_report_url(
                                 job_info['data']['projeto'],
@@ -251,7 +263,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _execute_agent(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                       agent_params: Dict[str, Any], input_para_etapa: Dict[str, Any], 
-                      current_step_index: int, repo_reader: IReader, llm_provider) -> Dict[str, Any]:
+                      current_step_index: int, repo_reader: ReaderGeral, llm_provider) -> Dict[str, Any]:
 
         agent_type = step.get("agent_type")
         agente = AgentFactory.create_agent(agent_type, repo_reader, llm_provider)
@@ -282,14 +294,19 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         elif agent_type == "processador":
             input_final_para_agente = {}
 
+            # Se for a primeira etapa do workflow, o input são as instruções originais do usuário.
             if current_step_index == 0:
                 input_final_para_agente = {"instrucoes_iniciais": job_info['data'].get('instrucoes_extras')}
             else:
+                # Nas etapas seguintes, o input principal deve ser o resultado da etapa anterior.
                 resultado_anterior = input_para_etapa
 
+                # VERIFICA e DESEMPACOTA o resultado se ele vier da etapa de aprovação.
                 if isinstance(input_para_etapa, dict) and "resultado_etapa_anterior" in input_para_etapa:
                     resultado_anterior = input_para_etapa.get("resultado_etapa_anterior")
 
+                # Remonta o dicionário na estrutura que o agente espera,
+                # usando o resultado anterior (o relatório) como a instrução.
                 input_final_para_agente = {"instrucoes_iniciais": resultado_anterior}
 
             agent_params['codigo'] = input_final_para_agente
@@ -305,6 +322,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
 
+        # CORREÇÃO: Só salva no Blob Storage se gerar_novo_relatorio=True
         if job_info['data'].get('gerar_novo_relatorio', True):
             self._save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
         else:
@@ -316,9 +334,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
 
+        #job_info = self.job_manager.get_job(job_id)
         report_text = step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
         job_info['data']['analysis_report'] = report_text
 
+        # CORREÇÃO: Só salva no Blob Storage se gerar_novo_relatorio=True
         if job_info['data'].get('gerar_novo_relatorio', True):
             self._save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
         else:
@@ -329,6 +349,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_manager.update_job(job_id, job_info)
 
     def _save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
+        # CORREÇÃO: Verificação defensiva adicional para gerar_novo_relatorio
         if not job_info['data'].get('gerar_novo_relatorio', True):
             print(f"[{job_id}] gerar_novo_relatorio=False - Abortando salvamento no Blob Storage")
             return
@@ -407,16 +428,27 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
 
-        repository_provider = self.repository_provider.get_provider(repository_type)
-        repo = self.connection.connection(
+        repository_provider = get_repository_provider_explicit(repository_type)
+        conexao_geral = ConexaoGeral.create_with_defaults()
+        repo = conexao_geral.connection(
             repositorio=repo_name,
             repository_type=repository_type,
             repository_provider=repository_provider
         )
 
-        commit_results = self.commit_processor.process_commits(
-            repo, dados_finais_formatados, branch_base_para_pr, repository_type
-        )
+        commit_results = []
+        for grupo in dados_finais_formatados["grupos"]:
+            resultado_branch = processar_branch_por_provedor(
+                repo=repo,
+                nome_branch=grupo["branch_sugerida"],
+                branch_de_origem=branch_base_para_pr,
+                branch_alvo_do_pr=branch_base_para_pr,
+                mensagem_pr=grupo["titulo_pr"],
+                descricao_pr=grupo["resumo_do_pr"],
+                conjunto_de_mudancas=grupo["conjunto_de_mudancas"],
+                repository_type=repository_type
+            )
+            commit_results.append(resultado_branch)
 
         print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
         job_info['data']['commit_details'] = commit_results
