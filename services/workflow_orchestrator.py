@@ -1,5 +1,6 @@
 import json
 from typing import Dict, Any, Optional
+from tools.repository_provider_factory import RepositoryProviderFactory
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
 from domain.interfaces.job_manager_interface import IJobManager
 from domain.interfaces.blob_storage_interface import IBlobStorageService
@@ -17,7 +18,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                  workflow_registry: Dict[str, Any], rag_retriever: IRAGRetriever,
                  changeset_filler: IChangesetFiller, reader: IReader,
                  repository_provider: IRepositoryProvider, connection: IConnection,
-                 commit_processor: ICommitProcessor):
+                 commit_processor: ICommitProcessor, provider_factory: RepositoryProviderFactory):
+                     
         self.job_manager = job_manager
         self.blob_storage = blob_storage
         self.workflow_registry = workflow_registry
@@ -27,6 +29,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.repository_provider = repository_provider
         self.connection = connection
         self.commit_processor = commit_processor
+        self.provider_factory = provider_factory
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         
@@ -41,8 +44,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         try:
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data']['repo_name']
-            repository_provider = self.repository_provider.get_provider(repository_type)
-            repo_reader = self.reader
+            repository_provider = self.provider_factory.create_provider(
+                repository_type=repository_type,
+                repo_name=repo_name
+            )
+            repo_reader = ReaderGeral(repository_provider=repository_provider)
 
             previous_step_result = job_info['data'].get(f'step_{start_from_step - 1}_result', {})
             steps_to_run = workflow.get('steps', [])[start_from_step:]
