@@ -8,7 +8,6 @@ from services.report_manager import ReportManager
 from services.commit_manager import CommitManager
 from services.approval_handler import ApprovalHandler
 from tools.rag_retriever import AzureAISearchRAGRetriever
-from services.workflow_registry_service.WorkflowRegistryService import load_workflow_registry 
 
 
 class DependencyContainer:
@@ -24,6 +23,7 @@ class DependencyContainer:
         self._approval_handler = None
         self._rag_retriever = None
         self._blob_storage_service = None
+        self._workflow_registry_service = None
         self._workflow_registry = None
 
     def get_report_manager(self):
@@ -72,16 +72,19 @@ class DependencyContainer:
         if self._blob_storage_service is None:
             self._blob_storage_service = BlobStorageService()
         return self._blob_storage_service
+        
 
-    def get_workflow_registry(self):
+    def get_workflow_registry(self) -> dict:
         if self._workflow_registry is None:
-            # Carrega o registro do arquivo YAML, como você já faz no mcp_server_fastapi.py
-            self._workflow_registry = load_workflow_registry("workflows.yaml")
+            registry_service = self.get_workflow_registry_service()
+            self._workflow_registry = registry_service.registry
+            
         return self._workflow_registry
     
     def get_workflow_orchestrator(self):
         if self._workflow_orchestrator is None:
             self._workflow_orchestrator = WorkflowOrchestrator(
+                registry_service = self.get_workflow_registry_service(),
                 job_manager=self.get_job_manager(),
                 blob_storage=self.get_blob_storage_service(),
                 workflow_registry=self.get_workflow_registry(),
