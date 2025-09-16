@@ -8,7 +8,7 @@ from services.report_manager import ReportManager
 from services.commit_manager import CommitManager
 from services.approval_handler import ApprovalHandler
 from tools.rag_retriever import AzureAISearchRAGRetriever
-from mcp_server_fastapi import load_workflow_registry 
+from services.workflow_registry_service.WorkflowRegistryService import load_workflow_registry 
 
 
 class DependencyContainer:
