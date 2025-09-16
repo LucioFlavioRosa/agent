@@ -18,6 +18,7 @@ class DependencyContainer:
         self._analysis_name_service = None
         self._rag_retriever = None
         self._changeset_filler = None
+        self._reader = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -54,6 +55,11 @@ class DependencyContainer:
         if self._changeset_filler is None:
             self._changeset_filler = ChangesetFiller()
         return self._changeset_filler
+
+    def get_reader(self) -> ReaderGeral:
+        if self._reader is None:
+            self._reader = ReaderGeral()
+        return self._reader
 
     def get_workflow_orchestrator(self):
         if self._workflow_orchestrator is None:
