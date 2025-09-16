@@ -39,15 +39,21 @@ class DependencyContainer:
             self._workflow_registry_service = WorkflowRegistryService()
         return self._workflow_registry_service
     
-    def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
-        if self._workflow_orchestrator is None:
-            workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
-            self._workflow_orchestrator = WorkflowOrchestrator(
-                self.get_job_manager(), 
-                self.get_blob_storage(), 
-                workflow_registry
-            )
-        return self._workflow_orchestrator
+    def get_workflow_orchestrator(self):
+    if self._workflow_orchestrator is None:
+        workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
+        self._workflow_orchestrator = WorkflowOrchestrator(
+            job_manager=self.get_job_manager(),
+            blob_storage=self.get_blob_storage(),
+            workflow_registry=workflow_registry,
+            rag_retriever=self.get_rag_retriever(),
+            changeset_filler=self.get_changeset_filler(),
+            reader=self.get_reader(),
+            repository_provider=self.get_repository_provider(),
+            connection=self.get_connection(),
+            commit_processor=self.get_commit_processor()
+        )
+    return self._workflow_orchestrator
     
     def get_analysis_name_service(self) -> AnalysisNameService:
         if self._analysis_name_service is None:
@@ -61,7 +67,6 @@ class DependencyContainer:
         return self._rag_retriever
 
     def get_changeset_filler(self):
-        # Supondo que ChangesetFiller não precise de argumentos
         if self._changeset_filler is None:
             self._changeset_filler = ChangesetFiller()
         return self._changeset_filler
