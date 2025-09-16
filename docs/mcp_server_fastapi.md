@@ -73,7 +73,7 @@ Utiliza o `DependencyContainer` para gerenciar:
 
 ## Diagrama Macro do Processo
 
-mermaid
+```mermaid
 flowchart TD
     A[Usuário faz requisição] -->|POST /start-analysis| B[Validação e Normalização]
     B --> C[Criação do Job ID]
@@ -122,11 +122,11 @@ flowchart TD
     EE --> FF[Cria Job Derivado]
     FF --> GG[Novo Workflow de Implementação]
     GG --> H
-
+```
 
 ## Fluxo de Estados do Job
 
-mermaid
+```mermaid
 stateDiagram-v2
     [*] --> STARTING: Job criado
     STARTING --> PENDING_APPROVAL: Workflow pausado
@@ -138,7 +138,7 @@ stateDiagram-v2
     REJECTED --> [*]
     COMPLETED --> [*]
     FAILED --> [*]
-
+```
 
 ## Tipos de Repositório Suportados
 
