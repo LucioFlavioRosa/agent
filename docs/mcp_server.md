@@ -2,274 +2,161 @@
 
 ## Visão Geral
 
-O `mcp_server_fastapi.py` implementa um servidor FastAPI robusto para orquestrar workflows de análise e geração de código usando agentes de IA. O sistema gerencia jobs assíncronos, aprovações manuais, geração de relatórios e integração com diferentes tipos de repositórios (GitHub, GitLab, Azure DevOps).
+O **MCP Server FastAPI** é um servidor robusto que orquestra agentes de IA para análise e implementação de código. Ele utiliza Redis para gerenciamento de jobs e oferece uma API REST completa para iniciar análises, aprovar workflows e consultar resultados.
 
-## Arquitetura do Sistema
+## Arquitetura Principal
 
-### Componentes Principais
+### Classes de Controle
 
-- **FastAPI Server**: API REST para comunicação externa
-- **Job Store (Redis)**: Armazenamento persistente de jobs e estados
-- **Workflow Orchestrator**: Orquestrador de workflows de análise
-- **Dependency Container**: Injeção de dependências e serviços
-- **Analysis Name Service**: Gerenciamento de nomes de análises
+- **JobStatus**: Define os estados possíveis de um job
+  - `STARTING`: Job iniciado
+  - `PENDING_APPROVAL`: Aguardando aprovação manual
+  - `WORKFLOW_STARTED`: Workflow em execução
+  - `COMPLETED`: Concluído com sucesso
+  - `FAILED`: Falhou durante execução
+  - `REJECTED`: Rejeitado pelo usuário
 
-### Estados de Job
+- **JobFields**: Constantes para campos de dados dos jobs
+- **JobActions**: Ações disponíveis (`APPROVE`, `REJECT`)
 
-| Estado | Descrição |
-|--------|----------|
-| `starting` | Job foi criado e está iniciando |
-| `pending_approval` | Aguardando aprovação manual do usuário |
-| `workflow_started` | Workflow foi aprovado e está executando |
-| `completed` | Job finalizado com sucesso |
-| `failed` | Job falhou durante execução |
-| `rejected` | Job foi rejeitado pelo usuário |
+### Modelos de Dados (Pydantic)
 
-## Fluxo do Workflow
+- **StartAnalysisPayload**: Payload para iniciar análise
+- **UpdateJobPayload**: Payload para aprovar/rejeitar jobs
+- **FinalStatusResponse**: Resposta completa de status
+- **PullRequestSummary**: Resumo de Pull Requests criados
+- **ReportResponse**: Resposta com relatório de análise
+- **AnalysisByNameResponse**: Resposta de análise por nome
+
+## Fluxo de Trabalho
 
 mermaid
 flowchart TD
-    A[Usuário inicia análise via /start-analysis] -->|Cria Job| B[Job armazenado no Redis]
-    B --> C[Workflow Orchestrator executa workflow]
-    C --> D{Job requer aprovação?}
-    D -- Sim --> E[Job aguarda aprovação via /update-job-status]
-    E --> F{Aprovado ou Rejeitado?}
-    F -- Aprovado --> G[Workflow continua]
-    F -- Rejeitado --> H[Job marcado como rejeitado]
-    D -- Não --> G
-    G --> I[Job executa análise e/ou gera código]
-    I --> J[Relatório gerado]
-    J --> K[Usuário consulta relatório via /jobs/{job_id}/report]
-    J --> L[Usuário pode iniciar geração de código via /start-code-generation-from-report/{analysis_name}]
-    K --> M[Usuário consulta status via /status/{job_id}]
+    A[Cliente POST /start-analysis] --> B[Validação e Normalização do Repo]
+    B --> C[Geração de Job ID único]
+    C --> D[Criação de dados iniciais do job]
+    D --> E[Armazenamento no Job Store]
+    E --> F[Registro do nome da análise]
+    F --> G[Execução do workflow em background]
+    
+    G --> H{Workflow precisa de aprovação?}
+    H -->|Sim| I[Status: PENDING_APPROVAL]
+    H -->|Não| J[Continua execução]
+    
+    I --> K[Cliente POST /update-job-status]
+    K --> L{Ação do usuário}
+    L -->|APPROVE| M[Status: WORKFLOW_STARTED]
+    L -->|REJECT| N[Status: REJECTED]
+    
+    M --> O[Retoma workflow do passo pausado]
+    O --> J
+    
+    J --> P{Execução bem-sucedida?}
+    P -->|Sim| Q[Status: COMPLETED]
+    P -->|Não| R[Status: FAILED]
+    
+    Q --> S[Geração de relatórios]
+    S --> T[Criação de Pull Requests]
+    T --> U[Cliente GET /status/{job_id}]
+    
+    R --> V[Logs de diagnóstico]
+    V --> U
+    
+    N --> U
+    
+    U --> W[Resposta final com status e resultados]
+    
+    X[Cliente GET /jobs/{job_id}/report] --> Y[Retorna relatório específico]
+    Z[Cliente GET /analyses/by-name/{name}] --> AA[Busca análise por nome]
+    BB[Cliente POST /start-code-generation-from-report/{name}] --> CC[Cria novo job baseado em relatório existente]
 
 
 ## Endpoints da API
 
-### 1. POST `/start-analysis`
+### 1. POST /start-analysis
+**Descrição**: Inicia uma nova análise de código
 
-**Descrição**: Inicia uma nova análise de repositório.
+**Parâmetros**:
+- `repo_name`: Nome do repositório
+- `projeto`: Nome do projeto para agrupamento
+- `analysis_type`: Tipo de análise (validado dinamicamente)
+- `branch_name`: Branch específica (opcional)
+- `instrucoes_extras`: Instruções adicionais (opcional)
+- `usar_rag`: Usar RAG (Retrieval-Augmented Generation)
+- `gerar_relatorio_apenas`: Apenas gerar relatório
+- `gerar_novo_relatorio`: Forçar novo relatório
+- `model_name`: Modelo LLM específico (opcional)
+- `arquivos_especificos`: Lista de arquivos específicos (opcional)
+- `analysis_name`: Nome personalizado da análise (opcional)
+- `repository_type`: Tipo do repositório (`github`, `gitlab`, `azure`)
 
-**Payload**:
+**Resposta**: `{"job_id": "uuid"}`
 
-{
-  "repo_name": "string",
-  "projeto": "string",
-  "analysis_type": "enum",
-  "branch_name": "string (opcional)",
-  "instrucoes_extras": "string (opcional)",
-  "usar_rag": "boolean",
-  "gerar_relatorio_apenas": "boolean",
-  "gerar_novo_relatorio": "boolean",
-  "model_name": "string (opcional)",
-  "arquivos_especificos": "array (opcional)",
-  "analysis_name": "string (opcional)",
-  "repository_type": "github|gitlab|azure"
-}
+### 2. POST /update-job-status
+**Descrição**: Aprova ou rejeita um job pendente
 
+**Parâmetros**:
+- `job_id`: ID do job
+- `action`: `"approve"` ou `"reject"`
+- `instrucoes_extras`: Instruções adicionais para aprovação (opcional)
 
-**Resposta**:
-
-{
-  "job_id": "uuid"
-}
-
-
-### 2. POST `/update-job-status`
-
-**Descrição**: Aprova ou rejeita um job que está aguardando aprovação.
-
-**Payload**:
-
-{
-  "job_id": "string",
-  "action": "approve|reject",
-  "instrucoes_extras": "string (opcional)"
-}
-
-
-### 3. GET `/jobs/{job_id}/report`
-
-**Descrição**: Obtém o relatório de análise de um job específico.
+### 3. GET /status/{job_id}
+**Descrição**: Consulta o status completo de um job
 
 **Resposta**:
+- Status atual
+- Lista de Pull Requests criados (se aplicável)
+- Relatório de análise
+- Logs de diagnóstico
+- URL do relatório no Blob Storage
 
-{
-  "job_id": "string",
-  "analysis_report": "string",
-  "report_blob_url": "string (opcional)"
-}
+### 4. GET /jobs/{job_id}/report
+**Descrição**: Obtém apenas o relatório de um job específico
 
+### 5. GET /analyses/by-name/{analysis_name}
+**Descrição**: Busca uma análise pelo nome personalizado
 
-### 4. GET `/analyses/by-name/{analysis_name}`
-
-**Descrição**: Busca um relatório de análise pelo nome da análise.
-
-**Resposta**:
-
-{
-  "job_id": "string",
-  "analysis_name": "string",
-  "analysis_report": "string",
-  "report_blob_url": "string (opcional)"
-}
-
-
-### 5. POST `/start-code-generation-from-report/{analysis_name}`
-
-**Descrição**: Inicia a geração de código baseada em um relatório de análise existente.
-
-**Resposta**:
-
-{
-  "job_id": "uuid"
-}
-
-
-### 6. GET `/status/{job_id}`
-
-**Descrição**: Consulta o status final e detalhes de um job.
-
-**Resposta**:
-
-{
-  "job_id": "string",
-  "status": "string",
-  "summary": [
-    {
-      "pull_request_url": "string",
-      "branch_name": "string",
-      "arquivos_modificados": ["string"]
-    }
-  ],
-  "error_details": "string (opcional)",
-  "analysis_report": "string (opcional)",
-  "diagnostic_logs": "object (opcional)",
-  "report_blob_url": "string (opcional)"
-}
-
-
-## Tipos de Repositório Suportados
-
-### GitHub
-- Formato: `owner/repository`
-- Exemplo: `microsoft/vscode`
-
-### GitLab
-- **Recomendado**: Project ID numérico (ex: `123456`)
-- **Alternativo**: Path completo `namespace/projeto` (ex: `meugrupo/meuprojeto`)
-- **Validação**: O sistema normaliza automaticamente o formato GitLab
-
-### Azure DevOps
-- Formato padrão do Azure DevOps
+### 6. POST /start-code-generation-from-report/{analysis_name}
+**Descrição**: Cria um novo job de implementação baseado no relatório de uma análise existente
 
 ## Funcionalidades Especiais
 
 ### Normalização de Repositórios GitLab
-
 O sistema possui validação especial para repositórios GitLab:
-- Aceita Project ID numérico (mais robusto)
-- Valida formato de path `namespace/projeto`
-- Rejeita formatos inválidos com mensagens de erro claras
+- Aceita Project ID numérico (recomendado)
+- Aceita formato `namespace/projeto`
+- Valida e normaliza automaticamente
 
-### Geração Automática de Nomes de Análise
+### Geração Automática de Nomes
+Se não fornecido, o sistema gera automaticamente um nome único para a análise no formato `analysis-{uuid8}`.
 
-Quando não fornecido, o sistema gera automaticamente um nome único:
+### Tratamento de Respostas por Tipo
+O endpoint `/status/{job_id}` retorna diferentes estruturas baseadas no tipo de job:
+- **Relatório apenas**: Retorna apenas o relatório e URL do blob
+- **Implementação completa**: Retorna lista de PRs criados, arquivos modificados e logs
 
-analysis-{uuid-8-chars}
+### Recuperação de Pull Requests
+O sistema busca informações de PRs em múltiplas fontes:
+1. `commit_details` (fonte primária)
+2. `diagnostic_logs.final_result` (fonte secundária)
+3. `diagnostic_logs.penultimate_result` (fallback)
 
+## Dependências Principais
 
-### Modo Relatório Apenas
-
-Quando `gerar_relatorio_apenas: true`, o job:
-- Executa apenas a análise
-- Não gera código
-- Retorna resposta simplificada no status
-
-### Derivação de Jobs
-
-O endpoint `/start-code-generation-from-report` cria um novo job derivado:
-- Usa o relatório do job original como instrução
-- Configura automaticamente para `analysis_type: 'implementacao'`
-- Gera nome de análise derivado: `{original-name}-implementation`
-
-## Estrutura de Dados
-
-### JobFields (Campos do Job)
-
-python
-class JobFields:
-    STATUS = 'status'
-    DATA = 'data'
-    ERROR_DETAILS = 'error_details'
-    REPO_NAME = 'repo_name'
-    ORIGINAL_REPO_NAME = 'original_repo_name'
-    PROJETO = 'projeto'
-    BRANCH_NAME = 'branch_name'
-    ORIGINAL_ANALYSIS_TYPE = 'original_analysis_type'
-    INSTRUCOES_EXTRAS = 'instrucoes_extras'
-    MODEL_NAME = 'model_name'
-    USAR_RAG = 'usar_rag'
-    GERAR_RELATORIO_APENAS = 'gerar_relatorio_apenas'
-    GERAR_NOVO_RELATORIO = 'gerar_novo_relatorio'
-    ARQUIVOS_ESPECIFICOS = 'arquivos_especificos'
-    ANALYSIS_NAME = 'analysis_name'
-    REPOSITORY_TYPE = 'repository_type'
-    ANALYSIS_REPORT = 'analysis_report'
-    REPORT_BLOB_URL = 'report_blob_url'
-    COMMIT_DETAILS = 'commit_details'
-    DIAGNOSTIC_LOGS = 'diagnostic_logs'
-    INSTRUCOES_EXTRAS_APROVACAO = 'instrucoes_extras_aprovacao'
-    PAUSED_AT_STEP = 'paused_at_step'
-    SUCCESS = 'success'
-    PR_URL = 'pr_url'
-    ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
-
+- **FastAPI**: Framework web principal
+- **Pydantic**: Validação de dados
+- **Redis**: Armazenamento de jobs (via DependencyContainer)
+- **UUID**: Geração de IDs únicos
+- **CORS**: Middleware para requisições cross-origin
 
 ## Tratamento de Erros
 
-### Validações Principais
+O sistema possui validação robusta com mensagens de erro específicas:
+- Validação de formato de repositório
+- Verificação de existência de jobs
+- Validação de estados para aprovação
+- Tratamento de erros de validação Pydantic
 
-1. **Job não encontrado**: HTTP 404
-2. **Job não aguardando aprovação**: HTTP 400
-3. **Formato de repositório GitLab inválido**: HTTP 400
-4. **Análise não encontrada**: HTTP 404
-5. **Relatório não encontrado**: HTTP 404
+## Logs e Diagnóstico
 
-### Logs de Diagnóstico
-
-O sistema mantém logs detalhados em `diagnostic_logs` para:
-- Debugging de problemas
-- Rastreamento de execução
-- Análise de performance
-
-## Middleware e Configurações
-
-### CORS
-- Configurado para aceitar todas as origens (`*`)
-- Permite todos os métodos e headers
-- Credentials habilitado
-
-### Versioning
-- Versão atual: `9.0.0`
-- Título: "MCP Server - Multi-Agent Code Platform"
-
-## Background Tasks
-
-O sistema utiliza FastAPI Background Tasks para:
-- Execução assíncrona de workflows
-- Não bloquear requisições HTTP
-- Permitir processamento paralelo de múltiplos jobs
-
-## Integração com Serviços
-
-### Dependency Container
-- `WorkflowOrchestrator`: Execução de workflows
-- `JobStore`: Persistência de jobs
-- `AnalysisNameService`: Gerenciamento de nomes
-- `WorkflowRegistryService`: Registro de tipos de análise
-
-### Redis
-- Armazenamento de jobs
-- Persistência de estado
-- Suporte a TTL para limpeza automática
+Todos os jobs mantêm logs detalhados em `diagnostic_logs` para facilitar debugging e auditoria das operações realizadas.
