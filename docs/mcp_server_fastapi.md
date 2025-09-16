@@ -75,53 +75,53 @@ Utiliza o `DependencyContainer` para gerenciar:
 
 ```mermaid
 flowchart TD
-    A[Usuário faz requisição] -->|POST /start-analysis| B[Validação e Normalização]
-    B --> C[Criação do Job ID]
-    C --> D[Geração do Analysis Name]
-    D --> E[Criação dos Dados Iniciais]
-    E --> F[Armazenamento no Job Store]
-    F --> G[Registro no Analysis Service]
-    G --> H[Disparo do Workflow Background]
+    A[Usuário faz requisição] -->|POST /start-analysis| B[Validação e Normalização];
+    B --> C[Criação do Job ID];
+    C --> D[Geração do Analysis Name];
+    D --> E[Criação dos Dados Iniciais];
+    E --> F[Armazenamento no Job Store];
+    F --> G[Registro no Analysis Service];
+    G --> H[Disparo do Workflow Background];
     
-    H --> I[Execução do Workflow]
-    I --> J{Requer Aprovação?}
+    H --> I[Execução do Workflow];
+    I --> J{Requer Aprovação?};
     
-    J -->|Sim| K[Status: PENDING_APPROVAL]
-    K --> L[Aguarda Aprovação]
-    L -->|POST /update-job-status| M{Ação?}
+    J -->|Sim| K[Status: PENDING_APPROVAL];
+    K --> L[Aguarda Aprovação];
+    L -->|POST /update-job-status| M{Ação?};
     
-    M -->|approve| N[Status: WORKFLOW_STARTED]
-    M -->|reject| O[Status: REJECTED]
+    M -->|approve| N[Status: WORKFLOW_STARTED];
+    M -->|reject| O[Status: REJECTED];
     
-    N --> P[Continuação do Workflow]
-    J -->|Não| P
+    N --> P[Continuação do Workflow];
+    J -->|Não| P;
     
-    P --> Q{Sucesso?}
-    Q -->|Sim| R[Status: COMPLETED]
-    Q -->|Não| S[Status: FAILED]
+    P --> Q{Sucesso?};
+    Q -->|Sim| R[Status: COMPLETED];
+    Q -->|Não| S[Status: FAILED];
     
-    R --> T[Construção da Resposta Final]
-    T --> U{Tipo de Job?}
+    R --> T[Construção da Resposta Final];
+    T --> U{Tipo de Job?};
     
-    U -->|Relatório Apenas| V[Retorna Relatório + Blob URL]
-    U -->|Implementação| W[Extrai PRs dos Commit Details]
-    W --> X[Extrai PRs dos Diagnostic Logs]
-    X --> Y[Constrói Summary com PRs]
+    U -->|Relatório Apenas| V[Retorna Relatório + Blob URL];
+    U -->|Implementação| W[Extrai PRs dos Commit Details];
+    W --> X[Extrai PRs dos Diagnostic Logs];
+    X --> Y[Constrói Summary com PRs];
+
+    V --> Z[GET /status/{job_id}];
+    Y --> Z;
+    S --> Z;
+    O --> Z;
     
-    V --> Z[GET /status/{job_id}]
-    Y --> Z
-    S --> Z
-    O --> Z
+    Z --> AA[GET /jobs/{job_id}/report];
+    Z --> BB[GET /analyses/by-name/{name}];
     
-    Z --> AA[GET /jobs/{job_id}/report]
-    Z --> BB[GET /analyses/by-name/{name}]
-    
-    R --> CC[POST /start-code-generation-from-report]
-    CC --> DD[Busca Job Original]
-    DD --> EE[Extrai Relatório]
-    EE --> FF[Cria Job Derivado]
-    FF --> GG[Novo Workflow de Implementação]
-    GG --> H
+    R --> CC[POST /start-code-generation-from-report];
+    CC --> DD[Busca Job Original];
+    DD --> EE[Extrai Relatório];
+    EE --> FF[Cria Job Derivado];
+    FF --> GG[Novo Workflow de Implementação];
+    GG --> H;
 ```
 
 ## Fluxo de Estados do Job
