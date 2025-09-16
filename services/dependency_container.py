@@ -22,6 +22,7 @@ class DependencyContainer:
         self._commit_manager = None
         self._approval_handler = None
         self._rag_retriever = None
+        self._blob_storage_service = None
 
     def get_report_manager(self):
         if self._report_manager is None:
@@ -64,6 +65,11 @@ class DependencyContainer:
         if self._workflow_registry_service is None:
             self._workflow_registry_service = WorkflowRegistryService()
         return self._workflow_registry_service
+
+    def get_blob_storage_service(self):
+        if self._blob_storage_service is None:
+            self._blob_storage_service = BlobStorageService()
+        return self._blob_storage_service
     
     def get_workflow_orchestrator(self):
         if self._workflow_orchestrator is None:
