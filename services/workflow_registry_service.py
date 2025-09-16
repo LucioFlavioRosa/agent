@@ -31,15 +31,15 @@ class WorkflowRegistryService:
 
     def _load(self) -> Dict[str, Any]:
         """Carrega e retorna o conteúdo do arquivo YAML de workflows."""
-        print(f"Carregando workflows do arquivo: {self.filepath}")
+        print(f"Carregando workflows do arquivo: {self.workflow_file_path}")
         try:
-            with open(self.filepath, 'r', encoding='utf-8') as f:
+            with open(self.workflow_file_path, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
         except FileNotFoundError:
-            print(f"ERRO: Arquivo de workflow '{self.filepath}' não encontrado.")
+            print(f"ERRO: Arquivo de workflow '{self.workflow_file_path}' não encontrado.")
             return {}
         except Exception as e:
-            print(f"ERRO: Falha ao carregar ou parsear o arquivo '{self.filepath}': {e}")
+            print(f"ERRO: Falha ao carregar ou parsear o arquivo '{self.workflow_file_path}': {e}")
             return {}
     
     def get_valid_analysis_types(self):
