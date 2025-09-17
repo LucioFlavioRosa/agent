@@ -8,7 +8,7 @@ from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
 from services.commit_handler import CommitHandler
 from services.data_formatter import DataFormatter
-from services.step_executors.step_executor_factory import StepExecutorFactory
+from services.step_strategies.step_strategy_factory import StepStrategyFactory
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
@@ -57,12 +57,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         job_info['data']['analysis_report'] = report_text
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
 
-                        if self.job_handler.should_generate_report_only(job_info, current_step_index):
+                        strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                        
+                        if strategy.should_finalize_workflow(job_info, current_step_index):
                             print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
                             self.job_handler.update_job_status(job_id, 'completed')
                             return
 
-                        if step.get('requires_approval'):
+                        if strategy.should_pause_for_approval(step):
                             print(f"[{job_id}] Relatório existente carregado. Pausando para aprovação do usuário.")
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
@@ -72,18 +74,20 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     else:
                         print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
 
-                step_result = self._execute_step(job_id, job_info, step, current_step_index, 
-                                               previous_step_result, repo_reader, i, start_from_step)
+                step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
+                                                             previous_step_result, repo_reader, i, start_from_step)
 
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
 
-                if self.job_handler.should_generate_report_only(job_info, current_step_index):
+                strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                
+                if strategy.should_finalize_workflow(job_info, current_step_index):
                     self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
                     self.job_handler.update_job_status(job_id, 'completed')
                     return
 
-                if step.get('requires_approval'):
+                if strategy.should_pause_for_approval(step):
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
 
@@ -92,9 +96,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
 
-    def _execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
-                     current_step_index: int, previous_step_result: Dict[str, Any], 
-                     repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
+    def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
+                                   current_step_index: int, previous_step_result: Dict[str, Any], 
+                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
 
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
@@ -105,10 +109,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'repository_type': job_info['data']['repository_type']
         })
 
-        agent_type = step.get("agent_type")
-        step_executor = StepExecutorFactory.create_executor(agent_type, self.job_handler)
+        strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         
-        return step_executor.execute(
+        return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
