@@ -76,8 +76,8 @@ class GitHubConnector:
             token_prefix = 'github-token'
         elif 'gitlab' in provider_type:
             token_prefix = 'gitlab-token'
-        elif 'azure' in provider_type:
-            token_prefix = 'azure-token'
+        elif 'bitbucket' in provider_type:
+            token_prefix = 'bitbucket-token'
         else:
             token_prefix = 'repo-token'  # Fallback genérico
         
