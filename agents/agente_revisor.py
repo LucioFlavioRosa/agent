@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 
@@ -16,7 +16,6 @@ class AgenteRevisor:
     - Processamento de código via provedores de LLM
     - Tratamento robusto de erros de leitura de repositório
     - Suporte a diferentes tipos de análise configuráveis
-    - Suporte à leitura filtrada de arquivos específicos
     
     Attributes:
         repository_reader (IRepositoryReader): Interface para leitura de repositórios
@@ -31,8 +30,7 @@ class AgenteRevisor:
         >>> resultado = agente.main(
         ...     tipo_analise="refatoracao",
         ...     repositorio="org/projeto",
-        ...     nome_branch="main",
-        ...     arquivos_especificos=["src/main.py", "tests/test_main.py"]
+        ...     nome_branch="main"
         ... )
     """
     
@@ -60,25 +58,20 @@ class AgenteRevisor:
         self,
         repositorio: str,
         nome_branch: Optional[str],
-        tipo_analise: str,
-        arquivos_especificos: Optional[List[str]] = None
+        tipo_analise: str
     ) -> Dict[str, str]:
         """
         Obtém código-fonte de um repositório usando a interface injetada.
         
         Este método privado encapsula a lógica de leitura de repositório,
         fornecendo tratamento de erro consistente e logging para debugging.
-        Agora suporta leitura filtrada de arquivos específicos.
         
         Args:
             repositorio (str): Nome do repositório no formato 'org/repo'
             nome_branch (Optional[str]): Nome da branch a ser lida. Se None,
                 usa a branch padrão do repositório
             tipo_analise (str): Tipo de análise que determina quais arquivos
-                serão filtrados durante a leitura (ignorado se arquivos_especificos fornecido)
-            arquivos_especificos (Optional[List[str]], optional): Lista de caminhos
-                específicos de arquivos para ler. Se fornecido, ignora filtro por
-                extensão e lê apenas os arquivos listados. Defaults to None
+                serão filtrados durante a leitura
         
         Returns:
             Dict[str, str]: Dicionário mapeando caminhos de arquivo para seu conteúdo.
@@ -89,23 +82,17 @@ class AgenteRevisor:
                 a exceção original para contexto adicional
         
         Note:
-            - Se arquivos_especificos for fornecido, o tipo_analise é usado apenas para logs
+            - O tipo_analise é usado pelo repository_reader para filtrar arquivos relevantes
             - Logging é feito para facilitar debugging de problemas de conectividade
-            - Modo de leitura (completa vs filtrada) é determinado automaticamente
         """
         try:
-            if arquivos_especificos and len(arquivos_especificos) > 0:
-                print(f"Iniciando a leitura filtrada do repositório: {repositorio}, branch: {nome_branch}")
-                print(f"Arquivos específicos solicitados: {len(arquivos_especificos)} arquivos")
-            else:
-                print(f"Iniciando a leitura completa do repositório: {repositorio}, branch: {nome_branch}")
+            print(f"Iniciando a leitura do repositório: {repositorio}, branch: {nome_branch}")
             
-            # Delega a leitura para a implementação injetada com suporte a arquivos específicos
+            # Delega a leitura para a implementação injetada
             codigo_para_analise = self.repository_reader.read_repository(
                 nome_repo=repositorio,
                 tipo_analise=tipo_analise,
-                nome_branch=nome_branch,
-                arquivos_especificos=arquivos_especificos
+                nome_branch=nome_branch
             )
             
             return codigo_para_analise
@@ -122,8 +109,7 @@ class AgenteRevisor:
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000,
-        arquivos_especificos: Optional[List[str]] = None
+        max_token_out: int = 15000
     ) -> Dict[str, Any]:
         """
         Orquestra a obtenção de código de repositório e análise via IA.
@@ -134,8 +120,6 @@ class AgenteRevisor:
         3. Serializa código em formato JSON
         4. Envia para análise via llm_provider
         5. Retorna resultado estruturado
-        
-        Agora suporta leitura filtrada de arquivos específicos quando solicitado.
         
         Args:
             tipo_analise (str): Tipo de análise a ser executada. Deve corresponder
@@ -151,9 +135,6 @@ class AgenteRevisor:
                 Se None, usa o modelo padrão do provedor. Defaults to None
             max_token_out (int, optional): Limite máximo de tokens na resposta
                 do LLM. Defaults to 15000
-            arquivos_especificos (Optional[List[str]], optional): Lista de caminhos
-                específicos de arquivos para ler. Se fornecido, ignora filtro por
-                extensão e lê apenas os arquivos listados. Defaults to None
         
         Returns:
             Dict[str, Any]: Resultado estruturado da análise contendo:
@@ -170,22 +151,17 @@ class AgenteRevisor:
             - Se nenhum código for encontrado, retorna resultado vazio sem erro
             - O código é serializado em JSON com formatação legível
             - Avisos são impressos para facilitar debugging
-            - Modo de leitura (completa vs filtrada) é determinado pelos parâmetros
         """
-        # Etapa 1: Obter código do repositório (com suporte a leitura filtrada)
+        # Etapa 1: Obter código do repositório
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,
-            tipo_analise=tipo_analise,
-            arquivos_especificos=arquivos_especificos
+            tipo_analise=tipo_analise
         )
 
         # Etapa 2: Validar se código foi encontrado
         if not codigo_para_analise:
-            if arquivos_especificos and len(arquivos_especificos) > 0:
-                print(f"AVISO: Nenhum dos arquivos específicos foi encontrado no repositório para a análise '{tipo_analise}'.")
-            else:
-                print(f"AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
+            print(f"AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
             return {"resultado": {"reposta_final": {}}}
 
         # Etapa 3: Serializar código em formato JSON legível
