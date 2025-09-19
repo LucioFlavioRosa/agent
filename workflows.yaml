@@ -23,7 +23,7 @@ relatorio_avaliacao_terraform:
 
 relatorio_cleancode:
   description: "Analisar o código-fonte fornecido e identificar violações claras dos 5 princípios SOLID"
-  extensions: [".cs"]
+  extensions: [".cs", ".js"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
@@ -46,7 +46,7 @@ relatorio_cleancode:
 
 relatorio_conformidades:
   description: "Analisar o código-fonte fornecido e identificar apenas inconsistências funcionais"
-  extensions: [".cs"]
+  extensions: [".cs", ".js"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
@@ -207,7 +207,7 @@ relatorio_pentest:
 
 relatorio_performance_eficiencia:
   description: "Analisar o código-fonte fornecido, independentemente da linguagem, para identificar gargalos de performance e ineficiências computacionais"
-  extensions: [".cs"]
+  extensions: [".cs", ".js"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
