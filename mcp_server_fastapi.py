@@ -45,6 +45,11 @@ class JobFields:
     SUCCESS = 'success'
     PR_URL = 'pr_url'
     ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
+    CODIGO_ORIGINAL_BRANCH = 'codigo_original_branch'
+    CODIGO_ORIGINAL_ARQUIVOS = 'codigo_original_arquivos'
+    CODIGO_MODERNIZADO_BRANCH = 'codigo_modernizado_branch'
+    CODIGO_MODERNIZADO_ARQUIVOS = 'codigo_modernizado_arquivos'
+    INSTRUCOES_COMPARACAO_MARKDOWN = 'instrucoes_comparacao_markdown'
 
 class JobActions:
     APPROVE = 'approve'
@@ -67,6 +72,11 @@ class StartAnalysisPayload(BaseModel):
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
     repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    codigo_original_branch: Optional[str] = Field(None, description="Branch do código original para comparação.")
+    codigo_original_arquivos: Optional[List[str]] = Field(None, description="Lista de caminhos dos arquivos do código original para comparação.")
+    codigo_modernizado_branch: Optional[str] = Field(None, description="Branch do código modernizado para comparação.")
+    codigo_modernizado_arquivos: Optional[List[str]] = Field(None, description="Lista de caminhos dos arquivos do código modernizado para comparação.")
+    instrucoes_comparacao_markdown: Optional[str] = Field(None, description="Instruções em markdown sobre como realizar a comparação entre os códigos.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -166,7 +176,12 @@ def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name
             JobFields.GERAR_NOVO_RELATORIO: payload.gerar_novo_relatorio,
             JobFields.ARQUIVOS_ESPECIFICOS: payload.arquivos_especificos,
             JobFields.ANALYSIS_NAME: analysis_name,
-            JobFields.REPOSITORY_TYPE: payload.repository_type
+            JobFields.REPOSITORY_TYPE: payload.repository_type,
+            JobFields.CODIGO_ORIGINAL_BRANCH: payload.codigo_original_branch,
+            JobFields.CODIGO_ORIGINAL_ARQUIVOS: payload.codigo_original_arquivos,
+            JobFields.CODIGO_MODERNIZADO_BRANCH: payload.codigo_modernizado_branch,
+            JobFields.CODIGO_MODERNIZADO_ARQUIVOS: payload.codigo_modernizado_arquivos,
+            JobFields.INSTRUCOES_COMPARACAO_MARKDOWN: payload.instrucoes_comparacao_markdown
         },
         JobFields.ERROR_DETAILS: None
     }
