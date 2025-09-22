@@ -23,7 +23,7 @@ relatorio_avaliacao_terraform:
 
 relatorio_cleancode:
   description: "Analisar o código-fonte fornecido e identificar violações claras dos 5 princípios SOLID"
-  extensions: [".cs", ".js", ".aspx", "".py"]
+  extensions: [".cs", ".js", ".aspx", ".py"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
