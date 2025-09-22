@@ -37,15 +37,17 @@ class AgenteComparador:
             return codigo_para_analise
             
         except Exception as e:
-            print(f"[Agente Comparador] ERRO durante leitura do repositório {repositorio}: {e}")
-            raise RuntimeError(f"Falha ao ler o repositório {repositorio}: {e}") from e
+            print(f"[Agente Comparador] ERRO durante leitura do repositório: {e}")
+            raise RuntimeError(f"Falha ao ler o repositório: {e}") from e
 
     def main(
         self,
         tipo_analise: str,
-        repositorio: str,
+        repositorio_modernizado: str,
+        repositorio_original: str,
         repository_type: str,
-        nome_branch: Optional[str] = None,
+        branch_modernizado: Optional[str] = None,
+        branch_original: Optional[str] = None,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
@@ -53,56 +55,51 @@ class AgenteComparador:
         arquivos_especificos: Optional[List[str]] = None,
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
-        status_update: Optional[str] = None,
-        repo_name_modernizado: Optional[str] = None,
-        branch_name_modernizado: Optional[str] = None,
-        repo_name_original: Optional[str] = None,
-        branch_name_original: Optional[str] = None
+        status_update: Optional[str] = None
     ) -> Dict[str, Any]:
 
         log_custom_data(
             job_id=job_id,
             projeto=projeto,
             data_hora=datetime.now(timezone.utc).isoformat(),
-            status="INICIADO",
+            status="INICIADO_COMPARACAO",
             tipo_repositorio=repository_type,
-            nome_repositorio=repositorio,
+            nome_repositorio_modernizado=repositorio_modernizado,
+            nome_repositorio_original=repositorio_original,
             tipo_analise=tipo_analise,
-            model_name=model_name,
-            repo_modernizado=repo_name_modernizado,
-            repo_original=repo_name_original
+            model_name=model_name
         )
 
         codigo_modernizado = {}
         codigo_original = {}
 
-        if repo_name_modernizado:
-            print(f"[Agente Comparador] Lendo repositório modernizado: {repo_name_modernizado}")
+        if repositorio_modernizado:
             codigo_modernizado = self._get_code(
-                repositorio=repo_name_modernizado,
-                nome_branch=branch_name_modernizado,
+                repositorio=repositorio_modernizado,
+                nome_branch=branch_modernizado,
                 tipo_analise=tipo_analise,
                 repository_type=repository_type,
                 arquivos_especificos=arquivos_especificos
             )
 
-        if repo_name_original:
-            print(f"[Agente Comparador] Lendo repositório original: {repo_name_original}")
+        if repositorio_original:
             codigo_original = self._get_code(
-                repositorio=repo_name_original,
-                nome_branch=branch_name_original,
+                repositorio=repositorio_original,
+                nome_branch=branch_original,
                 tipo_analise=tipo_analise,
                 repository_type=repository_type,
                 arquivos_especificos=arquivos_especificos
             )
 
         if not codigo_modernizado and not codigo_original:
-            print(f"[Agente Comparador] AVISO: Nenhum código encontrado em ambos os repositórios para a análise '{tipo_analise}'.")
+            print(f"[Agente Comparador] AVISO: Nenhum código encontrado em ambos os repositórios para comparação.")
             
             log_custom_data(
                 job_id=job_id,
                 projeto=projeto,
                 status="ERRO_SEM_CODIGO",
+                repositorio_modernizado=repositorio_modernizado,
+                repositorio_original=repositorio_original,
                 tipo_analise=tipo_analise,
                 data_hora=datetime.now(timezone.utc).isoformat()
             )
@@ -112,16 +109,16 @@ class AgenteComparador:
         dados_comparacao = {
             "codigo_modernizado": codigo_modernizado,
             "codigo_original": codigo_original,
-            "repositorio_modernizado": repo_name_modernizado,
-            "repositorio_original": repo_name_original,
-            "branch_modernizada": branch_name_modernizado,
-            "branch_original": branch_name_original
+            "repositorio_modernizado": repositorio_modernizado,
+            "repositorio_original": repositorio_original,
+            "branch_modernizado": branch_modernizado,
+            "branch_original": branch_original
         }
 
         codigo_str = json.dumps(dados_comparacao, indent=2, ensure_ascii=False)
 
         resultado_da_ia = self.llm_provider.executar_prompt(
-            tipo_tarefa=tipo_analise,
+            tipo_tarefa="comparacao_funcionalidades",
             prompt_principal=codigo_str,
             instrucoes_extras=instrucoes_extras,
             usar_rag=usar_rag,
@@ -135,13 +132,12 @@ class AgenteComparador:
             data_hora=datetime.now(timezone.utc).isoformat(),
             tokens_in=resultado_da_ia['tokens_entrada'],
             tokens_out=resultado_da_ia['tokens_saida'],
-            status='FINALIZADO',
+            status='FINALIZADO_COMPARACAO',
             tipo_repositorio=repository_type,
-            nome_repositorio=repositorio,
+            nome_repositorio_modernizado=repositorio_modernizado,
+            nome_repositorio_original=repositorio_original,
             tipo_analise=tipo_analise,
             model_name=model_name,
-            repo_modernizado=repo_name_modernizado,
-            repo_original=repo_name_original
         )
 
         return {
