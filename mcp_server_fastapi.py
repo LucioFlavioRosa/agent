@@ -45,6 +45,10 @@ class JobFields:
     SUCCESS = 'success'
     PR_URL = 'pr_url'
     ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
+    REPO_NAME_MODERNIZADO = 'repo_name_modernizado'
+    BRANCH_NAME_MODERNIZADO = 'branch_name_modernizado'
+    REPO_NAME_ORIGINAL = 'repo_name_original'
+    BRANCH_NAME_ORIGINAL = 'branch_name_original'
 
 class JobActions:
     APPROVE = 'approve'
@@ -67,6 +71,10 @@ class StartAnalysisPayload(BaseModel):
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
     repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    repo_name_modernizado: Optional[str] = Field(None, description="Nome do repositório modernizado para comparação")
+    branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
+    repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
+    branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -166,7 +174,11 @@ def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name
             JobFields.GERAR_NOVO_RELATORIO: payload.gerar_novo_relatorio,
             JobFields.ARQUIVOS_ESPECIFICOS: payload.arquivos_especificos,
             JobFields.ANALYSIS_NAME: analysis_name,
-            JobFields.REPOSITORY_TYPE: payload.repository_type
+            JobFields.REPOSITORY_TYPE: payload.repository_type,
+            JobFields.REPO_NAME_MODERNIZADO: payload.repo_name_modernizado,
+            JobFields.BRANCH_NAME_MODERNIZADO: payload.branch_name_modernizado,
+            JobFields.REPO_NAME_ORIGINAL: payload.repo_name_original,
+            JobFields.BRANCH_NAME_ORIGINAL: payload.branch_name_original
         },
         JobFields.ERROR_DETAILS: None
     }
