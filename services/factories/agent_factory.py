@@ -19,12 +19,10 @@ class AgentFactory:
         if not agent_class:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
         
-        if agent_type == "revisor":
+        if agent_type in ["revisor", "comparador"]:
             return agent_class(repository_reader=repository_reader, llm_provider=llm_provider)
         elif agent_type == "processador":
             return agent_class(llm_provider=llm_provider)
-        elif agent_type == "comparador":
-            return agent_class(repository_reader=repository_reader, llm_provider=llm_provider)
         
         return agent_class()
     
