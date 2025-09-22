@@ -43,11 +43,11 @@ class AgenteComparador:
     def main(
         self,
         tipo_analise: str,
-        repositorio_modernizado: str,
-        repositorio_original: str,
+        repo_name_modernizado: str,
+        branch_name_modernizado: Optional[str],
+        repo_name_original: str,
+        branch_name_original: Optional[str],
         repository_type: str,
-        branch_modernizado: Optional[str] = None,
-        branch_original: Optional[str] = None,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
@@ -62,44 +62,37 @@ class AgenteComparador:
             job_id=job_id,
             projeto=projeto,
             data_hora=datetime.now(timezone.utc).isoformat(),
-            status="INICIADO_COMPARACAO",
+            status="INICIADO",
             tipo_repositorio=repository_type,
-            nome_repositorio_modernizado=repositorio_modernizado,
-            nome_repositorio_original=repositorio_original,
+            nome_repositorio=f"{repo_name_modernizado} vs {repo_name_original}",
             tipo_analise=tipo_analise,
             model_name=model_name
         )
 
-        codigo_modernizado = {}
-        codigo_original = {}
+        codigo_modernizado = self._get_code(
+            repositorio=repo_name_modernizado,
+            nome_branch=branch_name_modernizado,
+            tipo_analise=tipo_analise,
+            repository_type=repository_type,
+            arquivos_especificos=arquivos_especificos
+        )
 
-        if repositorio_modernizado:
-            codigo_modernizado = self._get_code(
-                repositorio=repositorio_modernizado,
-                nome_branch=branch_modernizado,
-                tipo_analise=tipo_analise,
-                repository_type=repository_type,
-                arquivos_especificos=arquivos_especificos
-            )
-
-        if repositorio_original:
-            codigo_original = self._get_code(
-                repositorio=repositorio_original,
-                nome_branch=branch_original,
-                tipo_analise=tipo_analise,
-                repository_type=repository_type,
-                arquivos_especificos=arquivos_especificos
-            )
+        codigo_original = self._get_code(
+            repositorio=repo_name_original,
+            nome_branch=branch_name_original,
+            tipo_analise=tipo_analise,
+            repository_type=repository_type,
+            arquivos_especificos=arquivos_especificos
+        )
 
         if not codigo_modernizado and not codigo_original:
-            print(f"[Agente Comparador] AVISO: Nenhum código encontrado em ambos os repositórios para comparação.")
+            print(f"[Agente Comparador] AVISO: Nenhum código encontrado em ambos os repositórios para a análise '{tipo_analise}'.")
             
             log_custom_data(
                 job_id=job_id,
                 projeto=projeto,
                 status="ERRO_SEM_CODIGO",
-                repositorio_modernizado=repositorio_modernizado,
-                repositorio_original=repositorio_original,
+                repositorio=f"{repo_name_modernizado} vs {repo_name_original}",
                 tipo_analise=tipo_analise,
                 data_hora=datetime.now(timezone.utc).isoformat()
             )
@@ -109,16 +102,16 @@ class AgenteComparador:
         dados_comparacao = {
             "codigo_modernizado": codigo_modernizado,
             "codigo_original": codigo_original,
-            "repositorio_modernizado": repositorio_modernizado,
-            "repositorio_original": repositorio_original,
-            "branch_modernizado": branch_modernizado,
-            "branch_original": branch_original
+            "repositorio_modernizado": repo_name_modernizado,
+            "branch_modernizado": branch_name_modernizado,
+            "repositorio_original": repo_name_original,
+            "branch_original": branch_name_original
         }
 
         codigo_str = json.dumps(dados_comparacao, indent=2, ensure_ascii=False)
 
         resultado_da_ia = self.llm_provider.executar_prompt(
-            tipo_tarefa="comparacao_funcionalidades",
+            tipo_tarefa=tipo_analise,
             prompt_principal=codigo_str,
             instrucoes_extras=instrucoes_extras,
             usar_rag=usar_rag,
@@ -132,10 +125,9 @@ class AgenteComparador:
             data_hora=datetime.now(timezone.utc).isoformat(),
             tokens_in=resultado_da_ia['tokens_entrada'],
             tokens_out=resultado_da_ia['tokens_saida'],
-            status='FINALIZADO_COMPARACAO',
+            status='FINALIZADO',
             tipo_repositorio=repository_type,
-            nome_repositorio_modernizado=repositorio_modernizado,
-            nome_repositorio_original=repositorio_original,
+            nome_repositorio=f"{repo_name_modernizado} vs {repo_name_original}",
             tipo_analise=tipo_analise,
             model_name=model_name,
         )
