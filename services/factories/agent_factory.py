@@ -1,13 +1,15 @@
 from typing import Dict, Type, Any
 from agents.agente_revisor import AgenteRevisor
 from agents.agente_processador import AgenteProcessador
+from agents.agente_comparador import AgenteComparador
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from tools.readers.reader_geral import ReaderGeral
 
 class AgentFactory:
     _agents: Dict[str, Type] = {
         'revisor': AgenteRevisor,
-        'processador': AgenteProcessador
+        'processador': AgenteProcessador,
+        'comparador': AgenteComparador
     }
     
     @classmethod
@@ -21,6 +23,8 @@ class AgentFactory:
             return agent_class(repository_reader=repository_reader, llm_provider=llm_provider)
         elif agent_type == "processador":
             return agent_class(llm_provider=llm_provider)
+        elif agent_type == "comparador":
+            return agent_class(repository_reader=repository_reader, llm_provider=llm_provider)
         
         return agent_class()
     
