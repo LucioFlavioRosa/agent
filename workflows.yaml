@@ -23,7 +23,7 @@ relatorio_avaliacao_terraform:
 
 relatorio_cleancode:
   description: "Analisar o código-fonte fornecido e identificar violações claras dos 5 princípios SOLID"
-  extensions: [".cs", ".js", ".aspx"]
+  extensions: [".cs", ".js", ".aspx", "".py"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
@@ -46,7 +46,7 @@ relatorio_cleancode:
 
 relatorio_conformidades:
   description: "Analisar o código-fonte fornecido e identificar apenas inconsistências funcionais"
-  extensions: [".cs", ".js", ".aspx"]
+  extensions: [".cs", ".js", ".aspx", ".py"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
@@ -342,3 +342,26 @@ geracao_codigo_a_partir_de_reuniao:
       params:
         tipo_analise: "agrupamento_commits"
         max_token_out: 32000
+
+relatorio_modernizacao_asp_net:
+  description: "Analisar o código legado ASP.NET e o objetivo da modernização para gerar um plano de migração detalhado e sequenciado para atualizar a aplicação para ASP.NET Core 8"
+  extensions: [".py", ".cs", ".js", ".aspx", ".csproj", ".config", ".aspx.cs", "Global.asax", "Web.config"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_modernizacao_asp_net"
+      requires_approval: true
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "claude-sonnet-4-20250514"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits"
+        max_token_out: 30000
