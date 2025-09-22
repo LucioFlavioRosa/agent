@@ -12,7 +12,7 @@ class AgentFactory:
     
     @classmethod
     def create_agent(cls, agent_type: str, repository_reader: ReaderGeral = None, 
-                    llm_provider: ILLMProvider = None):
+                    llm_provider: ILLMProvider = None, **kwargs):
         agent_class = cls._agents.get(agent_type)
         if not agent_class:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
