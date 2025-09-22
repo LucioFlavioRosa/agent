@@ -4,7 +4,7 @@ from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
 from tools.readers.reader_geral import ReaderGeral
 
-class ProcessadorStepExecutor(BaseStepExecutor):
+class ComparadorStepExecutor(BaseStepExecutor):
     def __init__(self, job_handler):
         self.job_handler = job_handler
     
@@ -25,13 +25,17 @@ class ProcessadorStepExecutor(BaseStepExecutor):
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
         agent_params.update({
-            'codigo': previous_step_result,
-            'repositorio': job_info['data']['repo_name'],
-            'nome_branch': job_info['data']['branch_name'],
-            'repository_type': job_info['data']['repository_type']
+            'repositorio_modernizado': job_info['data'].get('repo_name_modernizado'),
+            'branch_modernizado': job_info['data'].get('branch_name_modernizado'),
+            'repositorio_original': job_info['data'].get('repo_name_original'),
+            'branch_original': job_info['data'].get('branch_name_original'),
+            'repository_type': job_info['data']['repository_type'],
+            'job_id': job_id,
+            'projeto': job_info['data']['projeto'],
+            'status_update': step['status_update']
         })
         
-        agente = AgentFactory.create_agent("processador", None, llm_provider)
+        agente = AgentFactory.create_agent("comparador", repo_reader, llm_provider)
         agent_response = agente.main(**agent_params)
         
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
