@@ -25,10 +25,10 @@ class ComparadorStepExecutor(BaseStepExecutor):
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
         agent_params.update({
-            'repositorio_modernizado': job_info['data'].get('repo_name_modernizado'),
-            'branch_modernizado': job_info['data'].get('branch_name_modernizado'),
-            'repositorio_original': job_info['data'].get('repo_name_original'),
-            'branch_original': job_info['data'].get('branch_name_original'),
+            'repo_name_modernizado': job_info['data']['repo_name_modernizado'],
+            'branch_name_modernizado': job_info['data']['branch_name_modernizado'],
+            'repo_name_original': job_info['data']['repo_name_original'],
+            'branch_name_original': job_info['data']['branch_name_original'],
             'repository_type': job_info['data']['repository_type'],
             'job_id': job_id,
             'projeto': job_info['data']['projeto'],
@@ -39,7 +39,7 @@ class ComparadorStepExecutor(BaseStepExecutor):
         agent_response = agente.main(**agent_params)
         
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
