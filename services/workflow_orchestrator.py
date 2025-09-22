@@ -106,7 +106,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa,
-            'repository_type': job_info['data']['repository_type']
+            'repository_type': job_info['data']['repository_type'],
+            'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
+            'branch_name_modernizado': job_info['data'].get('branch_name_modernizado'),
+            'repo_name_original': job_info['data'].get('repo_name_original'),
+            'branch_name_original': job_info['data'].get('branch_name_original')
         })
 
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
