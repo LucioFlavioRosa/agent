@@ -59,10 +59,8 @@ workflow_registry_service = container.get_workflow_registry_service()
 ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
 
 class StartAnalysisPayload(BaseModel):
-    repo_name: str
     projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
     analysis_type: ValidAnalysisTypes
-    branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
@@ -71,7 +69,7 @@ class StartAnalysisPayload(BaseModel):
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
     repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
-    repo_name_modernizado: Optional[str] = Field(None, description="Nome do repositório modernizado para comparação")
+    repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
     branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
     repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
     branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
@@ -159,13 +157,17 @@ def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
     return analysis_name
 
 def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
+    # Para agentes não-comparadores, usar repo_name_modernizado como repo_name principal
+    repo_name = payload.repo_name_modernizado
+    branch_name = payload.branch_name_modernizado
+    
     return {
         JobFields.STATUS: JobStatus.STARTING,
         JobFields.DATA: {
             JobFields.REPO_NAME: normalized_repo_name,
-            JobFields.ORIGINAL_REPO_NAME: payload.repo_name,
+            JobFields.ORIGINAL_REPO_NAME: repo_name,
             JobFields.PROJETO: payload.projeto,
-            JobFields.BRANCH_NAME: payload.branch_name,
+            JobFields.BRANCH_NAME: branch_name,
             JobFields.ORIGINAL_ANALYSIS_TYPE: payload.analysis_type.value,
             JobFields.INSTRUCOES_EXTRAS: payload.instrucoes_extras,
             JobFields.MODEL_NAME: payload.model_name,
@@ -336,7 +338,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     
-    normalized_repo_name = _normalize_repo_name_by_type(payload.repo_name, payload.repository_type)
+    # Para compatibilidade com agentes não-comparadores, usar repo_name_modernizado como repo_name principal
+    normalized_repo_name = _normalize_repo_name_by_type(payload.repo_name_modernizado, payload.repository_type)
 
     job_id = str(uuid.uuid4())
     analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
