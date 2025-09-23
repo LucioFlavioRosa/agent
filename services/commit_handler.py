@@ -37,18 +37,24 @@ class CommitHandler:
                 repository_type=repository_type
             )
             
-            print(f"[{job_id}] Resultado do processamento: success={resultado_branch.get('success')}, pr_url={resultado_branch.get('pr_url')}")
+            print(f"[{job_id}] DIAGNÓSTICO - Resultado do processamento: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}'")
+            print(f"[{job_id}] DIAGNÓSTICO - Resultado completo: {resultado_branch}")
             
-            if resultado_branch.get('success') and resultado_branch.get('pr_url'):
-                print(f"[{job_id}] PR criado com sucesso: {resultado_branch.get('pr_url')}")
+            if resultado_branch.get('success'):
+                if resultado_branch.get('pr_url'):
+                    print(f"[{job_id}] PR criado com sucesso: {resultado_branch.get('pr_url')}")
+                else:
+                    print(f"[{job_id}] AVISO - PR criado com sucesso mas pr_url está vazio ou None")
+            else:
+                print(f"[{job_id}] ERRO - Falha ao criar PR: {resultado_branch.get('message', 'Erro desconhecido')}")
             
             commit_results.append(resultado_branch)
 
         print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
-        print(f"[{job_id}] Detalhes dos commits: {[{'success': r.get('success'), 'pr_url': r.get('pr_url'), 'branch': r.get('branch_name')} for r in commit_results]}")
+        print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {commit_results}")
         
         job_info['data']['commit_details'] = commit_results
         
-        print(f"[{job_id}] VALIDAÇÃO - commit_details salvo: {job_info['data']['commit_details']}")
+        print(f"[{job_id}] DIAGNÓSTICO - commit_details salvo no job_info: {job_info['data']['commit_details']}")
         for i, result in enumerate(commit_results):
-            print(f"[{job_id}] VALIDAÇÃO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []))}")
+            print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []))}")
