@@ -172,6 +172,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.update_job_status(job_id, 'committing_to_github')
 
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+        
+        print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info['data'].get('commit_details', [])}")
+        self.job_handler.update_job(job_id, job_info)
+        print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
 
         self.job_handler.update_job_status(job_id, 'completed')
         print(f"[{job_id}] Processo concluído com sucesso!")
