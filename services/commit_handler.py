@@ -48,3 +48,7 @@ class CommitHandler:
         print(f"[{job_id}] Detalhes dos commits: {[{'success': r.get('success'), 'pr_url': r.get('pr_url'), 'branch': r.get('branch_name')} for r in commit_results]}")
         
         job_info['data']['commit_details'] = commit_results
+        
+        print(f"[{job_id}] VALIDAÇÃO - commit_details salvo: {job_info['data']['commit_details']}")
+        for i, result in enumerate(commit_results):
+            print(f"[{job_id}] VALIDAÇÃO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []))}")
