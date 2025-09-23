@@ -43,7 +43,13 @@ class BaseCommitter:
             "pr_url": pr_url,
             "message": message
         })
+        
+        if pr_url:
+            print(f"  [SUCESSO] PR criado: {pr_url}")
+        else:
+            print(f"  [AVISO] PR criado mas URL não foi retornada")
     
     @staticmethod
     def _finalizar_resultado_erro(resultado_branch: Dict[str, Any], error_message: str) -> None:
         resultado_branch["message"] = error_message
+        print(f"  [ERRO] {error_message}")
