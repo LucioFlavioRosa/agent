@@ -240,14 +240,30 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         print(f"[{job_id}] Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
         
         for pr_info in commit_details:
-            if pr_info.get(JobFields.SUCCESS) and pr_info.get(JobFields.PR_URL):
-                summary_list.append(
-                    PullRequestSummary(
-                        pull_request_url=pr_info.get(JobFields.PR_URL),
-                        branch_name=pr_info.get(JobFields.BRANCH_NAME),
-                        arquivos_modificados=pr_info.get(JobFields.ARQUIVOS_MODIFICADOS, [])
+            if isinstance(pr_info, dict):
+                pr_url = pr_info.get(JobFields.PR_URL)
+                branch_name = pr_info.get(JobFields.BRANCH_NAME, pr_info.get('branch_name'))
+                arquivos_modificados = pr_info.get(JobFields.ARQUIVOS_MODIFICADOS, pr_info.get('arquivos_modificados', []))
+                success = pr_info.get(JobFields.SUCCESS, pr_info.get('success', False))
+                
+                if success and pr_url and branch_name:
+                    print(f"[{job_id}] PR encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=pr_url,
+                            branch_name=branch_name,
+                            arquivos_modificados=arquivos_modificados
+                        )
                     )
-                )
+                elif pr_info.get('message') and branch_name:
+                    print(f"[{job_id}] Branch processada: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=pr_info.get('message', f"Branch processada: {branch_name}"),
+                            branch_name=branch_name,
+                            arquivos_modificados=arquivos_modificados
+                        )
+                    )
         
         if not summary_list:
             print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
