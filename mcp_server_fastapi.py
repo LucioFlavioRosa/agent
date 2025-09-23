@@ -237,17 +237,20 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         summary_list = []
         
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        print(f"[{job_id}] Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
+        print(f"[{job_id}] VALIDAÇÃO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
+        print(f"[{job_id}] VALIDAÇÃO - commit_details completo: {commit_details}")
         
-        for pr_info in commit_details:
+        for i, pr_info in enumerate(commit_details):
             if isinstance(pr_info, dict):
-                pr_url = pr_info.get(JobFields.PR_URL)
-                branch_name = pr_info.get(JobFields.BRANCH_NAME, pr_info.get('branch_name'))
-                arquivos_modificados = pr_info.get(JobFields.ARQUIVOS_MODIFICADOS, pr_info.get('arquivos_modificados', []))
-                success = pr_info.get(JobFields.SUCCESS, pr_info.get('success', False))
+                pr_url = pr_info.get('pr_url')
+                branch_name = pr_info.get('branch_name')
+                arquivos_modificados = pr_info.get('arquivos_modificados', [])
+                success = pr_info.get('success', False)
+                
+                print(f"[{job_id}] VALIDAÇÃO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
                 
                 if success and pr_url and branch_name:
-                    print(f"[{job_id}] PR encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                    print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
                     summary_list.append(
                         PullRequestSummary(
                             pull_request_url=pr_url,
@@ -264,6 +267,8 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                             arquivos_modificados=arquivos_modificados
                         )
                     )
+                else:
+                    print(f"[{job_id}] AVISO - PR {i+1} não atende critérios: success={success}, pr_url='{pr_url}', branch_name='{branch_name}'")
         
         if not summary_list:
             print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
@@ -317,7 +322,9 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
             print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
         
-        print(f"[{job_id}] Resposta final construída - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        print(f"[{job_id}] VALIDAÇÃO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        for i, pr_summary in enumerate(summary_list):
+            print(f"[{job_id}] VALIDAÇÃO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         return FinalStatusResponse(
