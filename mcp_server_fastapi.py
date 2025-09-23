@@ -237,8 +237,8 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         summary_list = []
         
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        print(f"[{job_id}] VALIDAÇÃO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
-        print(f"[{job_id}] VALIDAÇÃO - commit_details completo: {commit_details}")
+        print(f"[{job_id}] DIAGNÓSTICO - commit_details lido do job: {commit_details}")
+        print(f"[{job_id}] DIAGNÓSTICO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
         
         for i, pr_info in enumerate(commit_details):
             if isinstance(pr_info, dict):
@@ -247,17 +247,27 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                 arquivos_modificados = pr_info.get('arquivos_modificados', [])
                 success = pr_info.get('success', False)
                 
-                print(f"[{job_id}] VALIDAÇÃO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
+                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
                 
-                if success and pr_url and branch_name:
-                    print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
-                    summary_list.append(
-                        PullRequestSummary(
-                            pull_request_url=pr_url,
-                            branch_name=branch_name,
-                            arquivos_modificados=arquivos_modificados
+                if success and branch_name:
+                    if pr_url:
+                        print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=pr_url,
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
                         )
-                    )
+                    else:
+                        print(f"[{job_id}] Branch processada sem PR URL: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=f"Branch processada: {branch_name}",
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
                 elif pr_info.get('message') and branch_name:
                     print(f"[{job_id}] Branch processada: {branch_name} - Arquivos: {len(arquivos_modificados)}")
                     summary_list.append(
@@ -322,9 +332,9 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
             print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
         
-        print(f"[{job_id}] VALIDAÇÃO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
         for i, pr_summary in enumerate(summary_list):
-            print(f"[{job_id}] VALIDAÇÃO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
+            print(f"[{job_id}] DIAGNÓSTICO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         return FinalStatusResponse(
