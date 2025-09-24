@@ -39,5 +39,18 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
         "justificativa": "..."
       }
     ]
-  }
+  },
+"pr_grupo_2...": {
+    "resumo_do_pr": "...",
+    "descricao_do_pr": "...",
+    "conjunto_de_mudancas": [
+      {
+        "caminho_do_arquivo": "...",
+        "status": "...",
+        "conteudo": "...",
+        "justificativa": "..."
+      }
+    ]
+  },
+...
 }
