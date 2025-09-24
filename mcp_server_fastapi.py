@@ -491,13 +491,16 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
 
     status = job.get(JobFields.STATUS)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
+    error_details = job.get(JobFields.ERROR_DETAILS)
 
     try:
         if status == JobStatus.COMPLETED:
             return _build_completed_response(job_id, job, blob_url)
         elif status == JobStatus.FAILED:
             logs = job.get(JobFields.DATA, {}).get(JobFields.DIAGNOSTIC_LOGS)
-            error_details = job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado.")
+            
+            if not error_details:
+                error_details = "Nenhum detalhe de erro encontrado."
             
             return FinalStatusResponse(
                 job_id=job_id,
@@ -507,7 +510,12 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 report_blob_url=blob_url
             )
         else:
-            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url)
+            return FinalStatusResponse(
+                job_id=job_id, 
+                status=status, 
+                error_details=error_details,
+                report_blob_url=blob_url
+            )
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
