@@ -38,18 +38,24 @@ class BaseCommitter:
     
     @staticmethod
     def _finalizar_resultado_sucesso(resultado_branch: Dict[str, Any], pr_url: str = None, message: str = "PR criado.") -> None:
-        resultado_branch.update({
-            "success": True,
-            "pr_url": pr_url,
-            "message": message
-        })
+        resultado_branch["success"] = True
+        resultado_branch["message"] = message
         
-        if pr_url:
+        if pr_url and isinstance(pr_url, str) and pr_url.strip():
+            resultado_branch["pr_url"] = pr_url.strip()
             print(f"  [SUCESSO] PR criado: {pr_url}")
         else:
-            print(f"  [AVISO] PR criado mas URL não foi retornada")
+            branch_name = resultado_branch.get("branch_name", "branch-desconhecida")
+            resultado_branch["pr_url"] = f"PR criado para branch: {branch_name}"
+            print(f"  [AVISO] PR criado mas URL não foi retornada. Branch: {branch_name}")
     
     @staticmethod
     def _finalizar_resultado_erro(resultado_branch: Dict[str, Any], error_message: str) -> None:
+        resultado_branch["success"] = False
         resultado_branch["message"] = error_message
+        
+        if not resultado_branch.get("pr_url"):
+            branch_name = resultado_branch.get("branch_name", "branch-desconhecida")
+            resultado_branch["pr_url"] = f"ERRO: PR não criado para branch {branch_name}. {error_message}"
+        
         print(f"  [ERRO] {error_message}")
