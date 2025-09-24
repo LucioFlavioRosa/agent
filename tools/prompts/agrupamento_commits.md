@@ -15,7 +15,7 @@ Analisar o `Changeset JSON` e **agrupar** as mudanças de código em **Pull Requ
 -   [ ] **Agrupamento por Tema:** O critério principal para agrupar as mudanças é a **coesão**. Todas as mudanças em um PR devem estar relacionadas a uma única funcionalidade, correção ou refatoração. Use o campo `"justificativa"` para entender o propósito de cada mudança.
 -   [ ] **Títulos e Descrições:** Crie um `titulo_pr` (curto e informativo) e uma `descricao_pr` para cada PR.
 -   [ ] **Nome do Branch:** Sugira um `branch_sugerida` para cada PR (ex: `feature/user-login`, `fix/payment-bug`).
--   [ ] **Conteúdo Completo:** Reescreva o conteúdo completo dos arquivos modificados.
+-   [ ] **Conteúdo:** Não é necessário Reescrever o conteúdo completo dos arquivos modificados. tendo o caminho_do_arquivo correto e completo conseguimos preencher o conteúdo posteriormente
 -   [ ] **Foco no Agrupamento:** Você **NÃO PRECISA** se preocupar com a ordem de merge, prioridade de revisão ou sugestão de revisores.
 
 
