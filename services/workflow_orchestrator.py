@@ -91,9 +91,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
 
-            self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
+            print(f"[{job_id}] BLINDAGEM: Iniciando finalização obrigatória do workflow")
+            self._finalize_workflow_with_validation(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
 
         except Exception as e:
+            print(f"[{job_id}] ERRO CRÍTICO no workflow: {str(e)}")
             self.job_handler.handle_job_error(job_id, e, 'workflow')
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
@@ -149,6 +151,18 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
 
+    def _finalize_workflow_with_validation(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
+                                         final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+        print(f"[{job_id}] BLINDAGEM: Validando se deve executar commit")
+        
+        if job_info['data'].get('gerar_relatorio_apenas', False):
+            print(f"[{job_id}] BLINDAGEM: Modo relatório apenas - pulando commit")
+            self.job_handler.update_job_status(job_id, 'completed')
+            return
+        
+        print(f"[{job_id}] BLINDAGEM: Executando commit obrigatoriamente")
+        self._finalize_workflow(job_id, job_info, workflow, final_result, repository_type, repo_name)
+
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                           final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
 
@@ -169,13 +183,27 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         dados_finais_formatados = self.data_formatter.format_final_data(dados_preenchidos)
 
+        print(f"[{job_id}] BLINDAGEM: Forçando status committing_to_github")
         self.job_handler.update_job_status(job_id, 'committing_to_github')
 
-        self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+        print(f"[{job_id}] BLINDAGEM: Executando commit_handler.execute_commits")
+        try:
+            self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+            print(f"[{job_id}] BLINDAGEM: commit_handler.execute_commits executado com sucesso")
+        except Exception as e:
+            print(f"[{job_id}] ERRO CRÍTICO no commit_handler: {str(e)}")
+            job_info['data']['commit_details'] = [{
+                "branch_name": "erro-commit",
+                "success": False,
+                "pr_url": f"ERRO: Falha no commit. {str(e)}",
+                "message": f"Erro durante commit: {str(e)}",
+                "arquivos_modificados": []
+            }]
         
         print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info['data'].get('commit_details', [])}")
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
 
+        print(f"[{job_id}] BLINDAGEM: Finalizando com status completed")
         self.job_handler.update_job_status(job_id, 'completed')
         print(f"[{job_id}] Processo concluído com sucesso!")

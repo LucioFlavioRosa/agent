@@ -220,6 +220,12 @@ def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_
         JobFields.ERROR_DETAILS: None
     }
 
+def _is_valid_pr_url(url: str) -> bool:
+    if not url or not isinstance(url, str):
+        return False
+    url_lower = url.lower()
+    return (url.startswith('http://') or url.startswith('https://')) and not url_lower.startswith('erro:')
+
 def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
     job_data = job.get(JobFields.DATA, {})
     
@@ -240,6 +246,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         print(f"[{job_id}] DIAGNÓSTICO - commit_details lido do job: {commit_details}")
         print(f"[{job_id}] DIAGNÓSTICO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
         
+        valid_prs_found = 0
         for i, pr_info in enumerate(commit_details):
             if isinstance(pr_info, dict):
                 pr_url = pr_info.get('pr_url')
@@ -249,39 +256,25 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                 
                 print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
                 
-                if success and branch_name:
-                    if pr_url:
+                if branch_name and pr_url:
+                    if _is_valid_pr_url(pr_url):
                         print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
-                        summary_list.append(
-                            PullRequestSummary(
-                                pull_request_url=pr_url,
-                                branch_name=branch_name,
-                                arquivos_modificados=arquivos_modificados
-                            )
-                        )
+                        valid_prs_found += 1
                     else:
-                        print(f"[{job_id}] Branch processada sem PR URL: {branch_name} - Arquivos: {len(arquivos_modificados)}")
-                        summary_list.append(
-                            PullRequestSummary(
-                                pull_request_url=f"Branch processada: {branch_name}",
-                                branch_name=branch_name,
-                                arquivos_modificados=arquivos_modificados
-                            )
-                        )
-                elif pr_info.get('message') and branch_name:
-                    print(f"[{job_id}] Branch processada: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        print(f"[{job_id}] PR com URL inválida ou erro: {pr_url} - Branch: {branch_name}")
+                    
                     summary_list.append(
                         PullRequestSummary(
-                            pull_request_url=pr_info.get('message', f"Branch processada: {branch_name}"),
+                            pull_request_url=pr_url,
                             branch_name=branch_name,
                             arquivos_modificados=arquivos_modificados
                         )
                     )
                 else:
-                    print(f"[{job_id}] AVISO - PR {i+1} não atende critérios: success={success}, pr_url='{pr_url}', branch_name='{branch_name}'")
+                    print(f"[{job_id}] AVISO - PR {i+1} não tem branch_name ou pr_url válidos")
         
         if not summary_list:
-            print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
+            print(f"[{job_id}] AVISO: Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
             diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
             
             final_result = diagnostic_logs.get('final_result', {})
@@ -298,7 +291,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                             if mudanca.get('caminho_do_arquivo'):
                                 arquivos_modificados.append(mudanca['caminho_do_arquivo'])
                         
-                        pr_url = f"PR criado para branch: {branch_name}"
+                        pr_url = f"AVISO: PR processado mas URL não disponível (Branch: {branch_name})"
                         
                         summary_list.append(
                             PullRequestSummary(
@@ -322,7 +315,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                         if arquivos_modificados:
                             summary_list.append(
                                 PullRequestSummary(
-                                    pull_request_url="PR criado com base no resultado da análise",
+                                    pull_request_url="AVISO: Mudanças processadas mas PR não criado. Verifique logs.",
                                     branch_name="branch-implementacao",
                                     arquivos_modificados=arquivos_modificados
                                 )
@@ -332,9 +325,12 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
             print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
         
-        print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, PRs válidos: {valid_prs_found}, URL do blob: {blob_url}")
         for i, pr_summary in enumerate(summary_list):
             print(f"[{job_id}] DIAGNÓSTICO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
+        
+        if not summary_list:
+            print(f"[{job_id}] AVISO CRÍTICO: Nenhum PR encontrado para retornar no summary")
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         return FinalStatusResponse(
