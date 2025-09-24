@@ -49,7 +49,7 @@ async def monitor_job_timeouts(job_store, job_handler):
                     try:
                         job_handler.abort_job_due_to_timeout(job_id, job_data)
                         jobs_aborted += 1
-                        print(f"[TIMEOUT_MONITOR] Job {job_id} abortado com sucesso")
+                        print(f"[TIMEOUT_MONITOR] Job {job_id} abortado com sucesso por timeout")
                     except Exception as e:
                         print(f"[TIMEOUT_MONITOR] ERRO ao abortar job {job_id}: {str(e)}")
             
