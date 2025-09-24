@@ -27,76 +27,97 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.data_formatter = data_formatter or DataFormatter()
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
-        job_info = self.job_handler.get_job_info(job_id)
-
-        workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
-        if not workflow:
-            raise ValueError("Workflow não encontrado.")
-            
+        job_info = None
         try:
-            repository_type = job_info['data']['repository_type']
-            repo_name = job_info['data']['repo_name']
-            repository_provider = get_repository_provider_explicit(repository_type)
-            repo_reader = ReaderGeral(repository_provider=repository_provider)
+            job_info = self.job_handler.get_job_info(job_id)
 
-            previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
-            steps_to_run = workflow.get('steps', [])[start_from_step:]
-
-            for i, step in enumerate(steps_to_run):
-                current_step_index = start_from_step + i
-                self.job_handler.update_job_status(job_id, step['status_update'])
-
-                if current_step_index == 0:
-                    existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
-                    if existing_report_result:
-                        print(f"[{job_id}] Relatório existente encontrado no Blob Storage")
-
-                        report_data = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
-                        report_text = report_data.get('relatorio', '')
-
-                        job_info['data']['analysis_report'] = report_text
-                        self.job_handler.save_step_result(job_info, current_step_index, report_data)
-
-                        strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                        
-                        if strategy.should_finalize_workflow(job_info, current_step_index):
-                            print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
-                            self.job_handler.update_job_status(job_id, 'completed')
-                            return
-
-                        if strategy.should_pause_for_approval(step):
-                            print(f"[{job_id}] Relatório existente carregado. Pausando para aprovação do usuário.")
-                            self.handle_approval_step(job_id, job_info, current_step_index, report_data)
-                            return
-
-                        previous_step_result = report_data
-                        continue
-                    else:
-                        print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
-
-                step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
-                                                             previous_step_result, repo_reader, i, start_from_step)
-
-                self.job_handler.save_step_result(job_info, current_step_index, step_result)
-                previous_step_result = step_result
-
-                strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+            workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
+            if not workflow:
+                raise ValueError("Workflow não encontrado.")
                 
-                if strategy.should_finalize_workflow(job_info, current_step_index):
-                    self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
-                    self.job_handler.update_job_status(job_id, 'completed')
-                    return
+            try:
+                repository_type = job_info['data']['repository_type']
+                repo_name = job_info['data']['repo_name']
+                repository_provider = get_repository_provider_explicit(repository_type)
+                repo_reader = ReaderGeral(repository_provider=repository_provider)
 
-                if strategy.should_pause_for_approval(step):
-                    self.handle_approval_step(job_id, job_info, current_step_index, step_result)
-                    return
+                previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
+                steps_to_run = workflow.get('steps', [])[start_from_step:]
 
-            print(f"[{job_id}] BLINDAGEM: Iniciando finalização obrigatória do workflow")
-            self._finalize_workflow_with_validation(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
+                for i, step in enumerate(steps_to_run):
+                    current_step_index = start_from_step + i
+                    self.job_handler.update_job_status(job_id, step['status_update'])
 
+                    if current_step_index == 0:
+                        existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
+                        if existing_report_result:
+                            print(f"[{job_id}] Relatório existente encontrado no Blob Storage")
+
+                            report_data = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
+                            report_text = report_data.get('relatorio', '')
+
+                            job_info['data']['analysis_report'] = report_text
+                            self.job_handler.save_step_result(job_info, current_step_index, report_data)
+
+                            strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                            
+                            if strategy.should_finalize_workflow(job_info, current_step_index):
+                                print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
+                                self.job_handler.update_job_status(job_id, 'completed')
+                                return
+
+                            if strategy.should_pause_for_approval(step):
+                                print(f"[{job_id}] Relatório existente carregado. Pausando para aprovação do usuário.")
+                                self.handle_approval_step(job_id, job_info, current_step_index, report_data)
+                                return
+
+                            previous_step_result = report_data
+                            continue
+                        else:
+                            print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
+
+                    step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
+                                                                 previous_step_result, repo_reader, i, start_from_step)
+
+                    self.job_handler.save_step_result(job_info, current_step_index, step_result)
+                    previous_step_result = step_result
+
+                    strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                    
+                    if strategy.should_finalize_workflow(job_info, current_step_index):
+                        self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
+                        self.job_handler.update_job_status(job_id, 'completed')
+                        return
+
+                    if strategy.should_pause_for_approval(step):
+                        self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                        return
+
+                print(f"[{job_id}] BLINDAGEM: Iniciando finalização obrigatória do workflow")
+                self._finalize_workflow_with_validation(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
+
+            except Exception as e:
+                print(f"[{job_id}] ERRO CRÍTICO no workflow: {str(e)}")
+                self.job_handler.handle_job_error(job_id, e, 'workflow')
+                
         except Exception as e:
-            print(f"[{job_id}] ERRO CRÍTICO no workflow: {str(e)}")
-            self.job_handler.handle_job_error(job_id, e, 'workflow')
+            print(f"[{job_id}] ERRO CRÍTICO no execute_workflow: {str(e)}")
+            if job_info:
+                self.job_handler.handle_job_error(job_id, e, 'workflow')
+            else:
+                print(f"[{job_id}] Não foi possível recuperar job_info para tratamento de erro")
+        finally:
+            print(f"[{job_id}] BLINDAGEM FINAL: Garantindo status final correto")
+            try:
+                if job_info:
+                    current_status = job_info.get('status')
+                    if current_status not in ['completed', 'failed', 'rejected', 'pending_approval']:
+                        print(f"[{job_id}] BLINDAGEM: Status intermediário detectado '{current_status}', forçando 'completed'")
+                        self.job_handler.update_job_status(job_id, 'completed')
+                    else:
+                        print(f"[{job_id}] BLINDAGEM: Status final já correto: {current_status}")
+            except Exception as final_e:
+                print(f"[{job_id}] ERRO na blindagem final: {str(final_e)}")
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
@@ -155,13 +176,24 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                          final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         print(f"[{job_id}] BLINDAGEM: Validando se deve executar commit")
         
-        if job_info['data'].get('gerar_relatorio_apenas', False):
-            print(f"[{job_id}] BLINDAGEM: Modo relatório apenas - pulando commit")
-            self.job_handler.update_job_status(job_id, 'completed')
-            return
-        
-        print(f"[{job_id}] BLINDAGEM: Executando commit obrigatoriamente")
-        self._finalize_workflow(job_id, job_info, workflow, final_result, repository_type, repo_name)
+        try:
+            if job_info['data'].get('gerar_relatorio_apenas', False):
+                print(f"[{job_id}] BLINDAGEM: Modo relatório apenas - pulando commit")
+                return
+            
+            print(f"[{job_id}] BLINDAGEM: Executando commit obrigatoriamente")
+            self._finalize_workflow(job_id, job_info, workflow, final_result, repository_type, repo_name)
+            
+        except Exception as e:
+            print(f"[{job_id}] ERRO na finalização do workflow: {str(e)}")
+            raise e
+        finally:
+            print(f"[{job_id}] BLINDAGEM: Garantindo status 'completed' após finalização")
+            try:
+                self.job_handler.update_job_status(job_id, 'completed')
+                print(f"[{job_id}] BLINDAGEM: Status 'completed' definido com sucesso")
+            except Exception as status_e:
+                print(f"[{job_id}] ERRO CRÍTICO ao definir status 'completed': {str(status_e)}")
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                           final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
@@ -204,6 +236,4 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
 
-        print(f"[{job_id}] BLINDAGEM: Finalizando com status completed")
-        self.job_handler.update_job_status(job_id, 'completed')
-        print(f"[{job_id}] Processo concluído com sucesso!")
+        print(f"[{job_id}] BLINDAGEM: Status será definido como 'completed' na função pai")
