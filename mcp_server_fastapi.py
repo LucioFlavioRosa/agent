@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
+from services.job_timeout_monitor import monitor_job_timeouts
 
 class JobStatus:
     STARTING = 'starting'
@@ -49,6 +50,7 @@ class JobFields:
     BRANCH_NAME_MODERNIZADO = 'branch_name_modernizado'
     REPO_NAME_ORIGINAL = 'repo_name_original'
     BRANCH_NAME_ORIGINAL = 'branch_name_original'
+    LAST_STATUS_UPDATE = 'last_status_update'
 
 class JobActions:
     APPROVE = 'approve'
@@ -151,8 +153,10 @@ def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
     return analysis_name
 
 def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
+    current_time = time.time()
     return {
         JobFields.STATUS: JobStatus.STARTING,
+        JobFields.LAST_STATUS_UPDATE: current_time,
         JobFields.DATA: {
             JobFields.REPO_NAME: normalized_repo_name,
             JobFields.ORIGINAL_REPO_NAME: payload.repo_name_modernizado,
@@ -200,8 +204,10 @@ def _get_report_from_job(job: dict, job_id: str) -> str:
 
 def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
     original_data = original_job[JobFields.DATA]
+    current_time = time.time()
     return {
         JobFields.STATUS: JobStatus.STARTING,
+        JobFields.LAST_STATUS_UPDATE: current_time,
         JobFields.DATA: {
             JobFields.REPO_NAME: normalized_repo_name,
             JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
@@ -352,6 +358,11 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
 
+@app.on_event("startup")
+async def startup_event():
+    import asyncio
+    asyncio.create_task(monitor_job_timeouts(container.get_job_store(), container.get_job_handler()))
+
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
@@ -391,6 +402,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
             print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
         
         job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
+        job[JobFields.LAST_STATUS_UPDATE] = time.time()
 
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
         start_from_step = paused_step + 1
@@ -403,6 +415,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 
     if payload.action == JobActions.REJECT:
         job[JobFields.STATUS] = JobStatus.REJECTED
+        job[JobFields.LAST_STATUS_UPDATE] = time.time()
         job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
 
@@ -484,10 +497,12 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             return _build_completed_response(job_id, job, blob_url)
         elif status == JobStatus.FAILED:
             logs = job.get(JobFields.DATA, {}).get(JobFields.DIAGNOSTIC_LOGS)
+            error_details = job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado.")
+            
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
-                error_details=job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado."),
+                error_details=error_details,
                 diagnostic_logs=logs,
                 report_blob_url=blob_url
             )
