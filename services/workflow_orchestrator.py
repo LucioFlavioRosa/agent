@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Dict, Any, Optional
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
 from domain.interfaces.job_manager_interface import IJobManager
@@ -169,6 +170,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
 
         job_info['status'] = 'pending_approval'
+        job_info['last_status_update'] = time.time()
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
 
