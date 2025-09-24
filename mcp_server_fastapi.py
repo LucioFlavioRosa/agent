@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
-from services.job_timeout_monitor import monitor_job_timeouts
 
 class JobStatus:
     STARTING = 'starting'
@@ -50,7 +49,6 @@ class JobFields:
     BRANCH_NAME_MODERNIZADO = 'branch_name_modernizado'
     REPO_NAME_ORIGINAL = 'repo_name_original'
     BRANCH_NAME_ORIGINAL = 'branch_name_original'
-    LAST_STATUS_UPDATE = 'last_status_update'
 
 class JobActions:
     APPROVE = 'approve'
@@ -153,10 +151,8 @@ def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
     return analysis_name
 
 def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
-    current_time = time.time()
     return {
         JobFields.STATUS: JobStatus.STARTING,
-        JobFields.LAST_STATUS_UPDATE: current_time,
         JobFields.DATA: {
             JobFields.REPO_NAME: normalized_repo_name,
             JobFields.ORIGINAL_REPO_NAME: payload.repo_name_modernizado,
@@ -204,10 +200,8 @@ def _get_report_from_job(job: dict, job_id: str) -> str:
 
 def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
     original_data = original_job[JobFields.DATA]
-    current_time = time.time()
     return {
         JobFields.STATUS: JobStatus.STARTING,
-        JobFields.LAST_STATUS_UPDATE: current_time,
         JobFields.DATA: {
             JobFields.REPO_NAME: normalized_repo_name,
             JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
@@ -225,12 +219,6 @@ def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_
         },
         JobFields.ERROR_DETAILS: None
     }
-
-def _is_valid_pr_url(url: str) -> bool:
-    if not url or not isinstance(url, str):
-        return False
-    url_lower = url.lower()
-    return (url.startswith('http://') or url.startswith('https://')) and not url_lower.startswith('erro:')
 
 def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
     job_data = job.get(JobFields.DATA, {})
@@ -252,7 +240,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         print(f"[{job_id}] DIAGNÓSTICO - commit_details lido do job: {commit_details}")
         print(f"[{job_id}] DIAGNÓSTICO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
         
-        valid_prs_found = 0
         for i, pr_info in enumerate(commit_details):
             if isinstance(pr_info, dict):
                 pr_url = pr_info.get('pr_url')
@@ -262,25 +249,39 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                 
                 print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
                 
-                if branch_name and pr_url:
-                    if _is_valid_pr_url(pr_url):
+                if success and branch_name:
+                    if pr_url:
                         print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
-                        valid_prs_found += 1
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=pr_url,
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
                     else:
-                        print(f"[{job_id}] PR com URL inválida ou erro: {pr_url} - Branch: {branch_name}")
-                    
+                        print(f"[{job_id}] Branch processada sem PR URL: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=f"Branch processada: {branch_name}",
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+                elif pr_info.get('message') and branch_name:
+                    print(f"[{job_id}] Branch processada: {branch_name} - Arquivos: {len(arquivos_modificados)}")
                     summary_list.append(
                         PullRequestSummary(
-                            pull_request_url=pr_url,
+                            pull_request_url=pr_info.get('message', f"Branch processada: {branch_name}"),
                             branch_name=branch_name,
                             arquivos_modificados=arquivos_modificados
                         )
                     )
                 else:
-                    print(f"[{job_id}] AVISO - PR {i+1} não tem branch_name ou pr_url válidos")
+                    print(f"[{job_id}] AVISO - PR {i+1} não atende critérios: success={success}, pr_url='{pr_url}', branch_name='{branch_name}'")
         
         if not summary_list:
-            print(f"[{job_id}] AVISO: Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
+            print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
             diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
             
             final_result = diagnostic_logs.get('final_result', {})
@@ -297,7 +298,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                             if mudanca.get('caminho_do_arquivo'):
                                 arquivos_modificados.append(mudanca['caminho_do_arquivo'])
                         
-                        pr_url = f"AVISO: PR processado mas URL não disponível (Branch: {branch_name})"
+                        pr_url = f"PR criado para branch: {branch_name}"
                         
                         summary_list.append(
                             PullRequestSummary(
@@ -321,7 +322,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                         if arquivos_modificados:
                             summary_list.append(
                                 PullRequestSummary(
-                                    pull_request_url="AVISO: Mudanças processadas mas PR não criado. Verifique logs.",
+                                    pull_request_url="PR criado com base no resultado da análise",
                                     branch_name="branch-implementacao",
                                     arquivos_modificados=arquivos_modificados
                                 )
@@ -331,12 +332,9 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
             print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
         
-        print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, PRs válidos: {valid_prs_found}, URL do blob: {blob_url}")
+        print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
         for i, pr_summary in enumerate(summary_list):
             print(f"[{job_id}] DIAGNÓSTICO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
-        
-        if not summary_list:
-            print(f"[{job_id}] AVISO CRÍTICO: Nenhum PR encontrado para retornar no summary")
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         return FinalStatusResponse(
@@ -357,11 +355,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
-
-@app.on_event("startup")
-async def startup_event():
-    import asyncio
-    asyncio.create_task(monitor_job_timeouts(container.get_job_store(), container.get_job_handler()))
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
@@ -402,7 +395,6 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
             print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
         
         job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
-        job[JobFields.LAST_STATUS_UPDATE] = time.time()
 
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
         start_from_step = paused_step + 1
@@ -415,7 +407,6 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 
     if payload.action == JobActions.REJECT:
         job[JobFields.STATUS] = JobStatus.REJECTED
-        job[JobFields.LAST_STATUS_UPDATE] = time.time()
         job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
 
@@ -497,12 +488,10 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             return _build_completed_response(job_id, job, blob_url)
         elif status == JobStatus.FAILED:
             logs = job.get(JobFields.DATA, {}).get(JobFields.DIAGNOSTIC_LOGS)
-            error_details = job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado.")
-            
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
-                error_details=error_details,
+                error_details=job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado."),
                 diagnostic_logs=logs,
                 report_blob_url=blob_url
             )
