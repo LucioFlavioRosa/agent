@@ -20,6 +20,7 @@ Seu plano DEVE seguir estes princípios:
 -   [ ] **Otimizado para Nuvem e Performance (Cloud-Native):** O plano deve considerar as novas otimizações de performance do .NET 9. Sugira o uso de compilação **AOT (Ahead-of-Time)** se a aplicação for um bom candidato (ex: APIs com pouca reflexão) para reduzir o tempo de startup e o consumo de memória em containers.
 -   [ ] **Adotar o Modelo Blazor Híbrido:** Ao migrar de Web Forms, a sugestão padrão deve ser o modelo **Blazor Híbrido (Modo Automático)**, que oferece o melhor dos dois mundos (renderização no servidor e no cliente via WebAssembly), proporcionando a experiência mais rápida para o usuário.
 -   [ ] **Integrar Inteligência Artificial (Quando Aplicável):** Avalie se a funcionalidade sendo migrada pode ser aprimorada com as novas bibliotecas de IA do .NET 9 (ex: `System.AI`). Por exemplo, um cadastro de produtos poderia ser enriquecido com uma descrição gerada por IA.
+-   [ ] **Detalhamento das mudanças:** Traga uma seção no relatório chamada Plano de Ação Detalhado, com as ações que vão ser feitas, as ações devem ser isoladas entre si, pois vou precisar em alguns casos executar as mudanças aos poucos. Nao traga nada a mais depois da seçao Plano de Ação Detalhado
 
 ## 5. FORMATO DA SAÍDA (JSON OBRIGATÓRIO)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto fora dele, contendo a chave principal `"relatorio"`.
