@@ -16,7 +16,7 @@ O **MCP Server** é uma plataforma robusta para orquestração de agentes de IA 
 
 ### Componentes Principais
 
-
+```text
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   FastAPI       │    │   Redis         │    │   GitHub        │
 │   (API Layer)   │◄──►│   (Job Store)   │    │   (Repository)  │
@@ -28,7 +28,7 @@ O **MCP Server** é uma plataforma robusta para orquestração de agentes de IA 
 │   - Revisor     │◄──►│   - OpenAI      │    │   - Connectors  │
 │   - Processador │    │   - Claude      │    │   - Fillers     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-
+```
 
 ### Agentes Disponíveis
 
