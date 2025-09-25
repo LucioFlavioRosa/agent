@@ -226,11 +226,19 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
     print(f"[{job_id}] Construindo resposta final - gerar_relatorio_apenas: {job_data.get(JobFields.GERAR_RELATORIO_APENAS)}")
     
     if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
-        print(f"[{job_id}] Modo relatório apenas - retornando resposta simples")
+        print(f"[{job_id}] Modo relatório apenas - retornando resposta com relatório")
+        
+        analysis_report = job_data.get(JobFields.ANALYSIS_REPORT)
+        if not blob_url:
+            blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
+        
+        if not analysis_report and blob_url:
+            print(f"[{job_id}] Relatório não encontrado em memória, mas blob_url disponível: {blob_url}")
+        
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.COMPLETED,
-            analysis_report=job_data.get(JobFields.ANALYSIS_REPORT),
+            analysis_report=analysis_report,
             report_blob_url=blob_url
         )
     else:
