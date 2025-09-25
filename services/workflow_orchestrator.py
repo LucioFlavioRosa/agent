@@ -61,6 +61,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         
                         if strategy.should_finalize_workflow(job_info, current_step_index):
                             print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
+                            self.report_handler.handle_report_only_mode(job_id, job_info, report_data)
                             self.job_handler.update_job_status(job_id, 'completed')
                             return
 
@@ -83,6 +84,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                 
                 if strategy.should_finalize_workflow(job_info, current_step_index):
+                    print(f"[{job_id}] Finalizando workflow em modo 'gerar_relatorio_apenas'")
                     self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
                     self.job_handler.update_job_status(job_id, 'completed')
                     return
