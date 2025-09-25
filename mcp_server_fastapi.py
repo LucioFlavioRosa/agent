@@ -45,6 +45,10 @@ class JobFields:
     SUCCESS = 'success'
     PR_URL = 'pr_url'
     ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
+    REPO_NAME_MODERNIZADO = 'repo_name_modernizado'
+    BRANCH_NAME_MODERNIZADO = 'branch_name_modernizado'
+    REPO_NAME_ORIGINAL = 'repo_name_original'
+    BRANCH_NAME_ORIGINAL = 'branch_name_original'
 
 class JobActions:
     APPROVE = 'approve'
@@ -55,10 +59,10 @@ workflow_registry_service = container.get_workflow_registry_service()
 ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
 
 class StartAnalysisPayload(BaseModel):
-    repo_name: str
+    repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
+    branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
     projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
     analysis_type: ValidAnalysisTypes
-    branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
@@ -67,6 +71,8 @@ class StartAnalysisPayload(BaseModel):
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
     repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
+    branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -104,7 +110,6 @@ class AnalysisByNameResponse(BaseModel):
 def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     repo_name = repo_name.strip()
 
-    # Etapa 1: Verifica se é um Project ID numérico (esta parte está correta)
     try:
         project_id = int(repo_name)
         print(f"GitLab Project ID detectado: {project_id}. Usando formato numérico para máxima robustez.")
@@ -112,24 +117,19 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
     except ValueError:
         pass
 
-    # Etapa 2: Valida o formato de path 'namespace/projeto'
     if '/' in repo_name:
         parts = [p for p in repo_name.split('/') if p]
 
-        # A verificação agora é feita na lista de partes não vazias.
         if len(parts) >= 2:
-            # Reconstrói o path para garantir que não haja barras extras.
             normalized_path = '/'.join(parts)
             print(f"GitLab path completo detectado: {normalized_path}. RECOMENDAÇÃO: Use o Project ID numérico para máxima robustez contra renomeações.")
             return normalized_path
         else:
-            # Esta exceção agora será corretamente lançada para inputs como "apenas/".
             raise HTTPException(
                 status_code=400,
                 detail=f"Path GitLab inválido: '{repo_name}'. Esperado pelo menos 'namespace/projeto'. Exemplo: 'meugrupo/meuprojeto' ou use o Project ID numérico (recomendado)."
             )
 
-    # Etapa 3: Se não for um ID e não contiver '/', o formato é inválido.
     raise HTTPException(
         status_code=400,
         detail=f"Formato de repositório GitLab inválido: '{repo_name}'. Use o Project ID numérico (RECOMENDADO para máxima robustez) ou o path completo 'namespace/projeto'. Exemplos: Project ID: '123456', Path: 'meugrupo/meuprojeto'"
@@ -155,9 +155,9 @@ def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name
         JobFields.STATUS: JobStatus.STARTING,
         JobFields.DATA: {
             JobFields.REPO_NAME: normalized_repo_name,
-            JobFields.ORIGINAL_REPO_NAME: payload.repo_name,
+            JobFields.ORIGINAL_REPO_NAME: payload.repo_name_modernizado,
             JobFields.PROJETO: payload.projeto,
-            JobFields.BRANCH_NAME: payload.branch_name,
+            JobFields.BRANCH_NAME: payload.branch_name_modernizado,
             JobFields.ORIGINAL_ANALYSIS_TYPE: payload.analysis_type.value,
             JobFields.INSTRUCOES_EXTRAS: payload.instrucoes_extras,
             JobFields.MODEL_NAME: payload.model_name,
@@ -166,7 +166,11 @@ def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name
             JobFields.GERAR_NOVO_RELATORIO: payload.gerar_novo_relatorio,
             JobFields.ARQUIVOS_ESPECIFICOS: payload.arquivos_especificos,
             JobFields.ANALYSIS_NAME: analysis_name,
-            JobFields.REPOSITORY_TYPE: payload.repository_type
+            JobFields.REPOSITORY_TYPE: payload.repository_type,
+            JobFields.REPO_NAME_MODERNIZADO: payload.repo_name_modernizado,
+            JobFields.BRANCH_NAME_MODERNIZADO: payload.branch_name_modernizado,
+            JobFields.REPO_NAME_ORIGINAL: payload.repo_name_original,
+            JobFields.BRANCH_NAME_ORIGINAL: payload.branch_name_original
         },
         JobFields.ERROR_DETAILS: None
     }
@@ -233,17 +237,48 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         summary_list = []
         
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        print(f"[{job_id}] Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
+        print(f"[{job_id}] DIAGNÓSTICO - commit_details lido do job: {commit_details}")
+        print(f"[{job_id}] DIAGNÓSTICO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
         
-        for pr_info in commit_details:
-            if pr_info.get(JobFields.SUCCESS) and pr_info.get(JobFields.PR_URL):
-                summary_list.append(
-                    PullRequestSummary(
-                        pull_request_url=pr_info.get(JobFields.PR_URL),
-                        branch_name=pr_info.get(JobFields.BRANCH_NAME),
-                        arquivos_modificados=pr_info.get(JobFields.ARQUIVOS_MODIFICADOS, [])
+        for i, pr_info in enumerate(commit_details):
+            if isinstance(pr_info, dict):
+                pr_url = pr_info.get('pr_url')
+                branch_name = pr_info.get('branch_name')
+                arquivos_modificados = pr_info.get('arquivos_modificados', [])
+                success = pr_info.get('success', False)
+                
+                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
+                
+                if success and branch_name:
+                    if pr_url:
+                        print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=pr_url,
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+                    else:
+                        print(f"[{job_id}] Branch processada sem PR URL: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=f"Branch processada: {branch_name}",
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+                elif pr_info.get('message') and branch_name:
+                    print(f"[{job_id}] Branch processada: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=pr_info.get('message', f"Branch processada: {branch_name}"),
+                            branch_name=branch_name,
+                            arquivos_modificados=arquivos_modificados
+                        )
                     )
-                )
+                else:
+                    print(f"[{job_id}] AVISO - PR {i+1} não atende critérios: success={success}, pr_url='{pr_url}', branch_name='{branch_name}'")
         
         if not summary_list:
             print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
@@ -297,7 +332,9 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
             print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
         
-        print(f"[{job_id}] Resposta final construída - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        for i, pr_summary in enumerate(summary_list):
+            print(f"[{job_id}] DIAGNÓSTICO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         return FinalStatusResponse(
@@ -324,7 +361,10 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     
-    normalized_repo_name = _normalize_repo_name_by_type(payload.repo_name, payload.repository_type)
+    repo_name = payload.repo_name_modernizado
+    branch_name = payload.branch_name_modernizado
+    
+    normalized_repo_name = _normalize_repo_name_by_type(repo_name, payload.repository_type)
 
     job_id = str(uuid.uuid4())
     analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
