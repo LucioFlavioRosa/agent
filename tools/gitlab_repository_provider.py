@@ -4,131 +4,194 @@ from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from typing import Any
 
 class GitLabRepositoryProvider(IRepositoryProvider):
-    """
-    Implementação do provedor de repositório para GitLab.
-    Responsabilidade única: interagir com a API do GitLab.
     
-    Esta classe implementa a interface IRepositoryProvider para GitLab,
-    permitindo integração transparente com o sistema existente através
-    de injeção de dependências, seguindo o mesmo padrão do GitHub.
-    
-    Características:
-    - Suporte a projetos pessoais e de grupos
-    - Criação automática de projetos quando necessário
-    - Tratamento robusto de erros da API GitLab
-    - Compatibilidade total com o sistema de conectores existente
-    
-    Example:
-        >>> gitlab_provider = GitLabRepositoryProvider()
-        >>> connector = GitHubConnector(repository_provider=gitlab_provider)
-        >>> repo = connector.connection("grupo/projeto")
-    """
-    
-    def get_repository(self, repository_name: str, token: str) -> Project:
-        """
-        Obtém um projeto existente do GitLab.
+    def _parse_repository_name(self, repository_name: str) -> tuple:
+        parts = repository_name.split('/')
+        if len(parts) < 2:
+            raise ValueError(f"Nome do repositório '{repository_name}' tem formato inválido. Esperado 'namespace/projeto' ou 'grupo/subgrupo/projeto'.")
         
-        Args:
-            repository_name (str): Nome do repositório no formato 'grupo/projeto' ou 'usuario/projeto'
-            token (str): Token de acesso pessoal do GitLab com permissões apropriadas
-            
-        Returns:
-            Project: Objeto do projeto GitLab pronto para operações de commit e leitura
-            
-        Raises:
-            ValueError: Se o projeto não for encontrado ou houver erro de acesso
-        
-        Note:
-            - Suporta tanto projetos de grupos quanto pessoais
-            - O token deve ter permissões de leitura no mínimo
-            - Utiliza a API v4 do GitLab por padrão
-        """
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        else:
+            namespace = '/'.join(parts[:-1])
+            project = parts[-1]
+            return namespace, project
+    
+    def _is_project_id(self, repository_name: str) -> bool:
         try:
-            # Inicializa cliente GitLab com token de autenticação
-            gl = gitlab.Gitlab(url="https://gitlab.com", private_token=token)
-            
-            # Busca o projeto pelo nome completo (namespace/project)
-            project = gl.projects.get(repository_name, lazy=True)
-            
-            # Verifica se o projeto existe fazendo uma chamada mínima
-            _ = project.name  # Força carregamento dos dados básicos
-            
-            return project
-            
-        except gitlab.exceptions.GitlabGetError as e:
-            if e.response_code == 404:
-                raise ValueError(f"Projeto '{repository_name}' não encontrado no GitLab.")
-            elif e.response_code == 403:
-                raise ValueError(f"Acesso negado ao projeto '{repository_name}'. Verifique as permissões do token.")
-            else:
-                raise ValueError(f"Erro ao acessar projeto '{repository_name}': {e}")
-        except gitlab.exceptions.GitlabAuthenticationError:
-            raise ValueError(f"Token de autenticação inválido para acessar '{repository_name}'.")
-        except Exception as e:
-            raise ValueError(f"Erro inesperado ao acessar projeto '{repository_name}': {e}") from e
-    
-    def create_repository(self, repository_name: str, token: str, description: str = "", private: bool = True) -> Project:
-        """
-        Cria um novo projeto no GitLab.
-        
-        Args:
-            repository_name (str): Nome do repositório no formato 'namespace/projeto'
-            token (str): Token de acesso pessoal com permissões de criação
-            description (str, optional): Descrição do projeto. Defaults to ""
-            private (bool, optional): Se o projeto deve ser privado. Defaults to True
-            
-        Returns:
-            Project: Objeto do projeto GitLab criado
-            
-        Raises:
-            ValueError: Se houver erro na criação ou formato inválido do nome
-        
-        Note:
-            - Tenta criar no namespace especificado (grupo ou usuário)
-            - Se o namespace for um grupo, o token deve ter permissões de criação no grupo
-            - Projetos são inicializados com README por padrão
-        """
-        try:
-            namespace_name, project_name_only = repository_name.split('/')
+            int(repository_name)
+            return True
         except ValueError:
-            raise ValueError(f"Nome do repositório '{repository_name}' tem formato inválido. Esperado 'namespace/projeto'.")
+            return False
+    
+    def _normalize_project_identifier(self, repository_name: str) -> str:
+        if self._is_project_id(repository_name):
+            return str(repository_name).strip()
+        else:
+            return repository_name.strip()
+    
+    def _find_namespace_id(self, gl, namespace: str) -> int:
+        print(f"[GitLab Provider] Buscando namespace '{namespace}'...")
+        
+        # 1. Tenta encontrar como grupo
+        try:
+            print(f"[GitLab Provider] Tentando encontrar '{namespace}' como grupo...")
+            group = gl.groups.get(namespace)
+            print(f"[GitLab Provider] Namespace é um grupo. ID: {group.id}")
+            return group.id
+        except gitlab.exceptions.GitlabGetError:
+            print(f"[GitLab Provider] '{namespace}' não é um grupo.")
+        
+        # 2. Tenta encontrar como usuário
+        try:
+            print(f"[GitLab Provider] Tentando encontrar '{namespace}' como usuário...")
+            users = gl.users.list(username=namespace)
+            if users:
+                user = users[0]
+                print(f"[GitLab Provider] Namespace é um usuário. ID: {user.id}")
+                return user.id
+            else:
+                print(f"[GitLab Provider] Usuário '{namespace}' não encontrado.")
+        except Exception as e:
+            print(f"[GitLab Provider] Erro ao buscar usuário '{namespace}': {e}")
+        
+        # 3. Verifica se é o usuário autenticado
+        try:
+            user = gl.user
+            if user.username == namespace:
+                print(f"[GitLab Provider] Namespace corresponde ao usuário autenticado. ID: {user.id}")
+                return user.id
+        except Exception as e:
+            print(f"[GitLab Provider] Erro ao verificar usuário autenticado: {e}")
+        
+        raise ValueError(f"Namespace '{namespace}' não foi encontrado como grupo nem como usuário. Verifique se o namespace existe e se o token tem acesso a ele.")
+    
+    def get_repository(self, repository_name: str, token: str) -> any:
+        normalized_identifier = self._normalize_project_identifier(repository_name)
+        print(f"[GitLab Provider] Tentando acessar o projeto: '{normalized_identifier}'")
         
         try:
-            # Inicializa cliente GitLab
             gl = gitlab.Gitlab(url="https://gitlab.com", private_token=token)
-            
-            # Configuração do projeto a ser criado
-            project_data = {
-                'name': project_name_only,
-                'path': project_name_only,
-                'description': description or "Projeto criado automaticamente pela plataforma de agentes de IA.",
-                'visibility': 'private' if private else 'public',
-                'initialize_with_readme': True,  # Facilita operações iniciais
-                'default_branch': 'main'  # Padronização com convenções modernas
-            }
-            
-            # Tenta determinar se é um grupo ou usuário pessoal
-            try:
-                # Primeiro tenta como grupo
-                group = gl.groups.get(namespace_name, lazy=True)
-                project_data['namespace_id'] = group.id
-                project = gl.projects.create(project_data)
+            gl.auth()
+            print(f"[GitLab Provider] Autenticação GitLab bem-sucedida.")
+        except gitlab.exceptions.GitlabAuthenticationError as e:
+            print(f"[GitLab Provider] ERRO: Token de autenticação inválido.")
+            raise ValueError("Token de autenticação do GitLab é inválido.") from e
+        except Exception as e:
+            raise RuntimeError(f"Erro inesperado ao inicializar cliente GitLab: {e}")
+    
+        # Estratégia de fallback: tenta buscar por formato original e depois pelo alternativo
+        project = None
+        last_error = None
+        
+        try:
+            if self._is_project_id(normalized_identifier):
+                project_id = int(normalized_identifier)
+                print(f"[GitLab Provider] Detectado Project ID numérico: {project_id} (formato mais robusto)")
+                project = gl.projects.get(project_id)
+                print(f"[GitLab Provider] Projeto encontrado por ID: '{project.name_with_namespace}' (ID: {project.id}).")
+            else:
+                print(f"[GitLab Provider] Detectado path completo: {normalized_identifier}")
+                project = gl.projects.get(normalized_identifier)
+                print(f"[GitLab Provider] Projeto '{project.name_with_namespace}' encontrado com sucesso (ID: {project.id}).")
                 
-            except gitlab.exceptions.GitlabGetError:
-                # Se não for grupo, cria no namespace do usuário atual
-                # Remove namespace_id para criação no usuário atual
-                if 'namespace_id' in project_data:
-                    del project_data['namespace_id']
-                project = gl.projects.create(project_data)
+        except gitlab.exceptions.GitlabGetError as e:
+            last_error = e
+            print(f"[GitLab Provider] Primeira tentativa falhou: {e}")
             
+            # Fallback: se falhou com nome completo, tenta interpretar como ID se for numérico
+            if not self._is_project_id(normalized_identifier):
+                # Tenta extrair um possível ID do final do path
+                parts = normalized_identifier.split('/')
+                if len(parts) >= 2 and parts[-1].isdigit():
+                    try:
+                        fallback_id = int(parts[-1])
+                        print(f"[GitLab Provider] Tentando fallback com possível ID: {fallback_id}")
+                        project = gl.projects.get(fallback_id)
+                        print(f"[GitLab Provider] Projeto encontrado via fallback ID: '{project.name_with_namespace}' (ID: {project.id}).")
+                        last_error = None
+                    except Exception as fallback_e:
+                        print(f"[GitLab Provider] Fallback também falhou: {fallback_e}")
+        
+        except Exception as e:
+            last_error = e
+            print(f"[GitLab Provider] Erro inesperado na busca: {e}")
+        
+        # Se ainda não encontrou o projeto, processa o erro
+        if project is None and last_error:
+            if isinstance(last_error, gitlab.exceptions.GitlabGetError):
+                if last_error.response_code == 404:
+                    if self._is_project_id(normalized_identifier):
+                        print(f"[GitLab Provider] ERRO: Projeto com ID '{normalized_identifier}' não encontrado (404).")
+                        raise ValueError(f"Projeto GitLab com ID '{normalized_identifier}' não encontrado. Verifique se o ID está correto e se o token tem acesso a ele.")
+                    else:
+                        print(f"[GitLab Provider] ERRO: Projeto '{normalized_identifier}' não encontrado (404).")
+                        raise ValueError(f"Repositório GitLab '{normalized_identifier}' não encontrado. Verifique se o namespace/projeto existe e se o token tem acesso a ele. Formato esperado: 'namespace/projeto' ou Project ID numérico.")
+                elif last_error.response_code == 403:
+                    print(f"[GitLab Provider] ERRO: Acesso negado ao projeto '{normalized_identifier}' (403).")
+                    raise ValueError(f"Acesso negado ao repositório '{normalized_identifier}'. Verifique as permissões do token.")
+                else:
+                    raise RuntimeError(f"Erro da API do GitLab ao buscar repositório ({last_error.response_code}): {last_error}")
+            else:
+                raise RuntimeError(f"Erro inesperado ao buscar o projeto GitLab '{normalized_identifier}': {last_error}") from last_error
+        
+        if project is None:
+            raise RuntimeError(f"Falha inexplicável ao buscar projeto '{normalized_identifier}'")
+            
+        if not hasattr(project, 'default_branch'):
+            default_branch = project.attributes.get('default_branch', 'main')
+            project.default_branch = default_branch
+            print(f"[GitLab Provider] Branch padrão definida: {default_branch}")
+        
+        return project
+        
+    def create_repository(self, repository_name: str, token: str = None, description: str = "", private: bool = True) -> Project:
+        """Cria um novo repositório GitLab, tratando namespaces de usuário e de grupo."""
+        normalized_identifier = str(repository_name).strip()
+        print(f"[GitLab Provider] Tentando criar repositório: {normalized_identifier}")
+        
+        try:
+            namespace, project_name = self._parse_repository_name(normalized_identifier)
+        except ValueError as e:
+            raise ValueError(f"Nome de repositório inválido para criação: '{normalized_identifier}'. Use 'namespace/projeto'.") from e
+    
+        try:
+            # Pega as informações do usuário autenticado pelo token
+            user = self.client.user
+            print(f"[GitLab Provider] Usuário autenticado: {user.username}")
+            
+            project_data = {
+                'name': project_name,
+                'path': project_name,
+                'description': description or "Projeto criado automaticamente.",
+                'visibility': 'private' if private else 'public',
+                'initialize_with_readme': True
+            }
+    
+            # --- LÓGICA CORRIGIDA E DEFINITIVA ---
+            # Compara o namespace desejado (em minúsculas) com o username do usuário (em minúsculas)
+            if user.username.lower() != namespace.lower():
+                # Se o namespace NÃO for o do usuário, busca o ID do GRUPO
+                print(f"[GitLab Provider] Namespace '{namespace}' é um grupo. Buscando ID do grupo...")
+                try:
+                    group = self.client.groups.get(namespace)
+                    project_data['namespace_id'] = group.id
+                    print(f"[GitLab Provider] ID do grupo '{namespace}' encontrado: {group.id}")
+                except gitlab.exceptions.GitlabGetError:
+                     raise ValueError(f"O namespace '{namespace}' não foi encontrado como um grupo, e não é o seu namespace pessoal ({user.username}).")
+            else:
+                # Se o namespace é o do usuário, NÃO enviamos o namespace_id.
+                # A API do GitLab usará o usuário autenticado como padrão para criar no namespace pessoal.
+                print(f"[GitLab Provider] Criando projeto no namespace pessoal de '{user.username}'.")
+    
+            # Cria o projeto com os dados corretos
+            project = self.client.projects.create(project_data)
+            print(f"[GitLab Provider] Projeto criado com sucesso: {project.web_url}")
             return project
             
         except gitlab.exceptions.GitlabCreateError as e:
             if "has already been taken" in str(e):
-                raise ValueError(f"Projeto '{repository_name}' já existe no GitLab.")
-            else:
-                raise ValueError(f"Erro ao criar projeto '{repository_name}': {e}")
-        except gitlab.exceptions.GitlabAuthenticationError:
-            raise ValueError(f"Token de autenticação inválido para criar projeto '{repository_name}'.")
+                raise ValueError(f"Projeto '{normalized_identifier}' já existe.") from e
+            raise ConnectionError(f"Erro ao criar projeto '{normalized_identifier}': {e}") from e
         except Exception as e:
-            raise ValueError(f"Erro inesperado ao criar projeto '{repository_name}': {e}") from e
+            raise RuntimeError(f"Erro inesperado ao criar projeto '{normalized_identifier}': {e}") from e

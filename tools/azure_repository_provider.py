@@ -156,6 +156,7 @@ class AzureRepositoryProvider(IRepositoryProvider):
             repo_data['_organization'] = organization
             repo_data['_project'] = project
             repo_data['_repository'] = repo_name
+            repo_data['default_branch'] = repo_data.get('defaultBranch', 'refs/heads/main').replace('refs/heads/', '')
             
             return repo_data
             
@@ -250,6 +251,7 @@ class AzureRepositoryProvider(IRepositoryProvider):
             repo_data['_organization'] = organization
             repo_data['_project'] = project
             repo_data['_repository'] = repo_name
+            repo_data['default_branch'] = repo_data.get('defaultBranch', 'refs/heads/main').replace('refs/heads/', '')
             
             print(f"Repositório '{repository_name}' criado com sucesso no Azure DevOps.")
             return repo_data

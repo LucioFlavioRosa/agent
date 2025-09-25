@@ -1,5 +1,3 @@
-# Arquivo: tools/job_store.py (VERSÃO REVISADA E RECOMENDADA)
-
 import redis
 import os
 import json
@@ -7,9 +5,7 @@ from typing import Optional, Dict, Any
 from domain.interfaces.job_store_interface import JobStoreInterface
 
 class RedisJobStore(JobStoreInterface):
-    """
-    Implementação concreta de JobStoreInterface usando Redis.
-    """
+    
     def __init__(self):
         REDIS_URL = os.getenv("REDIS_URL")
         if not REDIS_URL:

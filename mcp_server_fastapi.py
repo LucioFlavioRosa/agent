@@ -1,46 +1,78 @@
 import json
 import uuid
-import yaml
 import time
 import traceback
-import enum
+
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 
-# --- Módulos do projeto ---
-from tools.job_store import RedisJobStore
-from tools import commit_multiplas_branchs
+from services.dependency_container import DependencyContainer
+from services.workflow_registry_service import WorkflowRegistryService
 
-# --- Classes e dependências ---
-from agents.agente_revisor import AgenteRevisor
-from agents.agente_processador import AgenteProcessador
-from tools.requisicao_openai import OpenAILLMProvider
-from tools.requisicao_claude import AnthropicClaudeProvider
-from tools.rag_retriever import AzureAISearchRAGRetriever
-from tools.preenchimento import ChangesetFiller
-from tools.github_reader import GitHubRepositoryReader
-from domain.interfaces.llm_provider_interface import ILLMProvider
+class JobStatus:
+    STARTING = 'starting'
+    PENDING_APPROVAL = 'pending_approval'
+    WORKFLOW_STARTED = 'workflow_started'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+    REJECTED = 'rejected'
 
-# --- WORKFLOW_REGISTRY ---
-def load_workflow_registry(filepath: str) -> dict:
-    print(f"Carregando workflows do arquivo: {filepath}")
-    with open(filepath, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
-WORKFLOW_REGISTRY = load_workflow_registry("workflows.yaml")
-valid_analysis_keys = {key: key for key in WORKFLOW_REGISTRY.keys()}
-ValidAnalysisTypes = enum.Enum('ValidAnalysisTypes', valid_analysis_keys)
+class JobFields:
+    STATUS = 'status'
+    DATA = 'data'
+    ERROR_DETAILS = 'error_details'
+    REPO_NAME = 'repo_name'
+    ORIGINAL_REPO_NAME = 'original_repo_name'
+    PROJETO = 'projeto'
+    BRANCH_NAME = 'branch_name'
+    ORIGINAL_ANALYSIS_TYPE = 'original_analysis_type'
+    INSTRUCOES_EXTRAS = 'instrucoes_extras'
+    MODEL_NAME = 'model_name'
+    USAR_RAG = 'usar_rag'
+    GERAR_RELATORIO_APENAS = 'gerar_relatorio_apenas'
+    GERAR_NOVO_RELATORIO = 'gerar_novo_relatorio'
+    ARQUIVOS_ESPECIFICOS = 'arquivos_especificos'
+    ANALYSIS_NAME = 'analysis_name'
+    REPOSITORY_TYPE = 'repository_type'
+    ANALYSIS_REPORT = 'analysis_report'
+    REPORT_BLOB_URL = 'report_blob_url'
+    COMMIT_DETAILS = 'commit_details'
+    DIAGNOSTIC_LOGS = 'diagnostic_logs'
+    INSTRUCOES_EXTRAS_APROVACAO = 'instrucoes_extras_aprovacao'
+    PAUSED_AT_STEP = 'paused_at_step'
+    SUCCESS = 'success'
+    PR_URL = 'pr_url'
+    ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
+    REPO_NAME_MODERNIZADO = 'repo_name_modernizado'
+    BRANCH_NAME_MODERNIZADO = 'branch_name_modernizado'
+    REPO_NAME_ORIGINAL = 'repo_name_original'
+    BRANCH_NAME_ORIGINAL = 'branch_name_original'
 
-# --- Modelos de Dados Pydantic ---
+class JobActions:
+    APPROVE = 'approve'
+    REJECT = 'reject'
+
+container = DependencyContainer()
+workflow_registry_service = container.get_workflow_registry_service()
+ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
+
 class StartAnalysisPayload(BaseModel):
-    repo_name: str
+    repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
+    branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
+    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
     analysis_type: ValidAnalysisTypes
-    branch_name: Optional[str] = None
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
+    gerar_novo_relatorio: bool = Field(True, description="Se False, tenta ler relatório existente do Blob Storage usando analysis_name")
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
+    analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
+    repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
+    branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -62,305 +94,409 @@ class FinalStatusResponse(BaseModel):
     error_details: Optional[str] = Field(None)
     analysis_report: Optional[str] = Field(None)
     diagnostic_logs: Optional[Dict[str, Any]] = Field(None)
+    report_blob_url: Optional[str] = Field(None)
 
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
+    report_blob_url: Optional[str] = Field(None)
 
-# --- Configuração do Servidor FastAPI ---
+class AnalysisByNameResponse(BaseModel):
+    job_id: str
+    analysis_name: str
+    analysis_report: Optional[str]
+    report_blob_url: Optional[str] = Field(None)
+
+def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
+    repo_name = repo_name.strip()
+
+    try:
+        project_id = int(repo_name)
+        print(f"GitLab Project ID detectado: {project_id}. Usando formato numérico para máxima robustez.")
+        return str(project_id)
+    except ValueError:
+        pass
+
+    if '/' in repo_name:
+        parts = [p for p in repo_name.split('/') if p]
+
+        if len(parts) >= 2:
+            normalized_path = '/'.join(parts)
+            print(f"GitLab path completo detectado: {normalized_path}. RECOMENDAÇÃO: Use o Project ID numérico para máxima robustez contra renomeações.")
+            return normalized_path
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Path GitLab inválido: '{repo_name}'. Esperado pelo menos 'namespace/projeto'. Exemplo: 'meugrupo/meuprojeto' ou use o Project ID numérico (recomendado)."
+            )
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Formato de repositório GitLab inválido: '{repo_name}'. Use o Project ID numérico (RECOMENDADO para máxima robustez) ou o path completo 'namespace/projeto'. Exemplos: Project ID: '123456', Path: 'meugrupo/meuprojeto'"
+    )
+
+def _normalize_repo_name_by_type(repo_name: str, repository_type: str) -> str:
+    if repository_type == 'gitlab':
+        normalized = _validate_and_normalize_gitlab_repo_name(repo_name)
+        print(f"GitLab - Repo original: '{repo_name}', normalizado: '{normalized}'")
+        return normalized
+    return repo_name
+
+def _generate_analysis_name(provided_name: Optional[str], job_id: str) -> str:
+    if provided_name:
+        return provided_name
+
+    analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
+    print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
+    return analysis_name
+
+def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name: str, analysis_name: str) -> dict:
+    return {
+        JobFields.STATUS: JobStatus.STARTING,
+        JobFields.DATA: {
+            JobFields.REPO_NAME: normalized_repo_name,
+            JobFields.ORIGINAL_REPO_NAME: payload.repo_name_modernizado,
+            JobFields.PROJETO: payload.projeto,
+            JobFields.BRANCH_NAME: payload.branch_name_modernizado,
+            JobFields.ORIGINAL_ANALYSIS_TYPE: payload.analysis_type.value,
+            JobFields.INSTRUCOES_EXTRAS: payload.instrucoes_extras,
+            JobFields.MODEL_NAME: payload.model_name,
+            JobFields.USAR_RAG: payload.usar_rag,
+            JobFields.GERAR_RELATORIO_APENAS: payload.gerar_relatorio_apenas,
+            JobFields.GERAR_NOVO_RELATORIO: payload.gerar_novo_relatorio,
+            JobFields.ARQUIVOS_ESPECIFICOS: payload.arquivos_especificos,
+            JobFields.ANALYSIS_NAME: analysis_name,
+            JobFields.REPOSITORY_TYPE: payload.repository_type,
+            JobFields.REPO_NAME_MODERNIZADO: payload.repo_name_modernizado,
+            JobFields.BRANCH_NAME_MODERNIZADO: payload.branch_name_modernizado,
+            JobFields.REPO_NAME_ORIGINAL: payload.repo_name_original,
+            JobFields.BRANCH_NAME_ORIGINAL: payload.branch_name_original
+        },
+        JobFields.ERROR_DETAILS: None
+    }
+
+def _validate_job_for_approval(job: dict, job_id: str) -> None:
+    if not job or job.get(JobFields.STATUS) != JobStatus.PENDING_APPROVAL:
+        raise HTTPException(status_code=400, detail="Job não encontrado ou não está aguardando aprovação.")
+
+def _validate_job_exists(job: dict, job_id: str) -> None:
+    if not job:
+        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+
+def _validate_analysis_exists(analysis_name: str, analysis_service) -> str:
+    job_id = analysis_service.find_job_by_analysis_name(analysis_name)
+    if not job_id:
+        raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
+    return job_id
+
+def _get_report_from_job(job: dict, job_id: str) -> str:
+    report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
+    if not report:
+        if job_id:
+            raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get(JobFields.STATUS)}")
+        else:
+            raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
+    return report
+
+def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
+    original_data = original_job[JobFields.DATA]
+    return {
+        JobFields.STATUS: JobStatus.STARTING,
+        JobFields.DATA: {
+            JobFields.REPO_NAME: normalized_repo_name,
+            JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
+            JobFields.PROJETO: original_data[JobFields.PROJETO],
+            JobFields.BRANCH_NAME: original_data[JobFields.BRANCH_NAME],
+            JobFields.ORIGINAL_ANALYSIS_TYPE: 'implementacao',
+            JobFields.INSTRUCOES_EXTRAS: f"Gerar código baseado no seguinte relatório:\n\n{report}",
+            JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
+            JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
+            JobFields.GERAR_RELATORIO_APENAS: False,
+            JobFields.GERAR_NOVO_RELATORIO: True,
+            JobFields.ARQUIVOS_ESPECIFICOS: original_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+            JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
+            JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE]
+        },
+        JobFields.ERROR_DETAILS: None
+    }
+
+def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
+    job_data = job.get(JobFields.DATA, {})
+    
+    print(f"[{job_id}] Construindo resposta final - gerar_relatorio_apenas: {job_data.get(JobFields.GERAR_RELATORIO_APENAS)}")
+    
+    if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
+        print(f"[{job_id}] Modo relatório apenas - retornando resposta simples")
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=JobStatus.COMPLETED,
+            analysis_report=job_data.get(JobFields.ANALYSIS_REPORT),
+            report_blob_url=blob_url
+        )
+    else:
+        summary_list = []
+        
+        commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
+        print(f"[{job_id}] DIAGNÓSTICO - commit_details lido do job: {commit_details}")
+        print(f"[{job_id}] DIAGNÓSTICO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
+        
+        for i, pr_info in enumerate(commit_details):
+            if isinstance(pr_info, dict):
+                pr_url = pr_info.get('pr_url')
+                branch_name = pr_info.get('branch_name')
+                arquivos_modificados = pr_info.get('arquivos_modificados', [])
+                success = pr_info.get('success', False)
+                
+                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
+                
+                if success and branch_name:
+                    if pr_url:
+                        print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=pr_url,
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+                    else:
+                        print(f"[{job_id}] Branch processada sem PR URL: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=f"Branch processada: {branch_name}",
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+                elif pr_info.get('message') and branch_name:
+                    print(f"[{job_id}] Branch processada: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=pr_info.get('message', f"Branch processada: {branch_name}"),
+                            branch_name=branch_name,
+                            arquivos_modificados=arquivos_modificados
+                        )
+                    )
+                else:
+                    print(f"[{job_id}] AVISO - PR {i+1} não atende critérios: success={success}, pr_url='{pr_url}', branch_name='{branch_name}'")
+        
+        if not summary_list:
+            print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
+            diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
+            
+            final_result = diagnostic_logs.get('final_result', {})
+            if final_result:
+                print(f"[{job_id}] Analisando final_result em diagnostic_logs")
+                for key, value in final_result.items():
+                    if key.startswith('pr_grupo_') and isinstance(value, dict):
+                        print(f"[{job_id}] Encontrado grupo de PR: {key}")
+                        branch_name = value.get('resumo_do_pr', key.replace('pr_grupo_', 'branch-'))
+                        arquivos_modificados = []
+                        
+                        conjunto_mudancas = value.get('conjunto_de_mudancas', [])
+                        for mudanca in conjunto_mudancas:
+                            if mudanca.get('caminho_do_arquivo'):
+                                arquivos_modificados.append(mudanca['caminho_do_arquivo'])
+                        
+                        pr_url = f"PR criado para branch: {branch_name}"
+                        
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url=pr_url,
+                                branch_name=branch_name,
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+            
+            if not summary_list:
+                penultimate_result = diagnostic_logs.get('penultimate_result', {})
+                if penultimate_result and isinstance(penultimate_result, dict):
+                    print(f"[{job_id}] Analisando penultimate_result em diagnostic_logs")
+                    conjunto_mudancas = penultimate_result.get('conjunto_de_mudancas', [])
+                    if conjunto_mudancas:
+                        arquivos_modificados = []
+                        for mudanca in conjunto_mudancas:
+                            if mudanca.get('caminho_do_arquivo'):
+                                arquivos_modificados.append(mudanca['caminho_do_arquivo'])
+                        
+                        if arquivos_modificados:
+                            summary_list.append(
+                                PullRequestSummary(
+                                    pull_request_url="PR criado com base no resultado da análise",
+                                    branch_name="branch-implementacao",
+                                    arquivos_modificados=arquivos_modificados
+                                )
+                            )
+        
+        if not blob_url:
+            blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
+            print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
+        
+        print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
+        for i, pr_summary in enumerate(summary_list):
+            print(f"[{job_id}] DIAGNÓSTICO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
+        
+        logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
+        return FinalStatusResponse(
+            job_id=job_id, 
+            status=JobStatus.COMPLETED, 
+            summary=summary_list,
+            diagnostic_logs=logs,
+            report_blob_url=blob_url
+        )
+
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA.",
     version="9.0.0" 
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-job_store = RedisJobStore()
-
-def create_llm_provider(model_name: Optional[str], rag_retriever: AzureAISearchRAGRetriever) -> ILLMProvider:
-    """
-    Analisa o nome do modelo e instancia a classe de provedor de LLM correta.
-    Esta função é o ponto central para adicionar ou alterar provedores.
-    """
-    model_lower = (model_name or "").lower()
-    
-    if "claude" in model_lower:
-        return AnthropicClaudeProvider(rag_retriever=rag_retriever)
-    
-    else:
-        return OpenAILLMProvider(rag_retriever=rag_retriever)
-
-
-# --- Funções de Tarefa (Tasks) ---
-def handle_task_exception(job_id: str, e: Exception, step: str):
-    error_message = f"Erro fatal durante a etapa '{step}': {str(e)}"
-    print(f"[{job_id}] {error_message}")
-    try:
-        job_info = job_store.get_job(job_id)
-        if job_info:
-            job_info['status'] = 'failed'
-            job_info['error_details'] = error_message
-            job_store.set_job(job_id, job_info)
-    except Exception as redis_e:
-        print(f"[{job_id}] ERRO CRÍTICO ADICIONAL: Falha ao registrar o erro no Redis. Erro: {redis_e}")
 
 def run_workflow_task(job_id: str, start_from_step: int = 0):
-    """
-    Orquestrador de workflow único e genérico.
-    - Executa os passos definidos no workflows.yaml.
-    - Pode começar de um passo específico (útil após aprovação).
-    - Pausa a execução se um passo tiver 'requires_approval: true'.
-    - Incorpora o feedback do usuário (observacoes) após uma aprovação.
-    """
-    job_info = None
-    try:
-        job_info = job_store.get_job(job_id)
-        if not job_info: raise ValueError("Job não encontrado.")
+    workflow_orchestrator = container.get_workflow_orchestrator()
+    workflow_orchestrator.execute_workflow(job_id, start_from_step)
 
-        rag_retriever = AzureAISearchRAGRetriever()
-        changeset_filler = ChangesetFiller()
-        repo_reader = GitHubRepositoryReader()
-        
-        workflow = WORKFLOW_REGISTRY.get(job_info['data']['original_analysis_type'])
-        if not workflow: raise ValueError("Workflow não encontrado.")
-
-        # O ponto de partida é o resultado da etapa anterior à etapa de início
-        previous_step_result = job_info['data'].get(f'step_{start_from_step - 1}_result', {})
-        
-        # O loop agora itera sobre os passos a partir do ponto de início
-        steps_to_run = workflow.get('steps', [])[start_from_step:]
-        
-        for i, step in enumerate(steps_to_run):
-            current_step_index = start_from_step + i
-            job_info['status'] = step['status_update']
-            job_store.set_job(job_id, job_info)
-            
-            model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
-            llm_provider = create_llm_provider(model_para_etapa, rag_retriever)
-            
-            agent_params = step.get('params', {}).copy()
-            agent_params.update({'usar_rag': job_info.get("data", {}).get("usar_rag", False), 'model_name': model_para_etapa})
-            
-            # --- LÓGICA DE CONTEXTO CORRIGIDA E FINAL ---
-            # Prepara o input principal para a etapa atual
-            input_para_etapa = previous_step_result
-            observacoes_humanas = job_info['data'].get('instrucoes_extras_aprovacao')
-
-            # Se esta é a primeira etapa a ser executada NESTA tarefa E a tarefa foi iniciada
-            # a partir de um passo > 0 (ou seja, foi retomada após aprovação) E existem observações...
-            if i == 0 and start_from_step > 0 and observacoes_humanas:
-                print(f"[{job_id}] Incorporando observações humanas da aprovação ao contexto.")
-                input_para_etapa = {
-                    "resultado_etapa_anterior": previous_step_result,
-                    "observacoes_prioritarias_do_usuario": observacoes_humanas
-                }
-
-            agent_type = step.get("agent_type")
-            if agent_type == "revisor":
-                agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
-                # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
-                instrucoes = job_info['data']['instrucoes_extras'] if current_step_index == 0 else json.dumps(input_para_etapa, indent=2, ensure_ascii=False)
-                agent_params.update({'repositorio': job_info['data']['repo_name'], 'nome_branch': job_info['data']['branch_name'], 'instrucoes_extras': instrucoes})
-                agent_response = agente.main(**agent_params)
-            elif agent_type == "processador":
-                agente = AgenteProcessador(llm_provider=llm_provider)
-                # O input para a primeira etapa do job vem do payload; para as seguintes, do contexto
-                agent_params['codigo'] = {"instrucoes_iniciais": job_info['data']['instrucoes_extras']} if current_step_index == 0 else input_para_etapa
-                agent_response = agente.main(**agent_params)
-            else:
-                raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
-
-            json_string = agent_response['resultado']['reposta_final'].get('reposta_final', '')
-            if not json_string.strip(): raise ValueError(f"IA retornou resposta vazia.")
-            
-            current_step_result = json.loads(json_string.replace("```json", "").replace("```", "").strip())
-
-            job_info['data'][f'step_{current_step_index}_result'] = current_step_result
-            previous_step_result = current_step_result
-            
-            if step.get('requires_approval'):
-                print(f"[{job_id}] Etapa requer aprovação. Extraindo relatório e pausando workflow.")
-
-                # Extrai o texto do relatório da chave "relatorio"
-                report_text = current_step_result.get("relatorio",
-                                                      json.dumps(current_step_result, indent=2, ensure_ascii=False))
-                job_info['data']['analysis_report'] = report_text
-                job_info['status'] = 'pending_approval'
-                job_info['data']['paused_at_step'] = current_step_index
-                job_store.set_job(job_id, job_info)
-                return
-
-        workflow_steps = workflow.get("steps", [])
-        num_total_steps = len(workflow_steps)
-
-        # 'previous_step_result' já contém o resultado da última etapa, como esperado.
-        resultado_agrupamento = previous_step_result
-        print(f"[{job_id}] Resultado final (última etapa) atribuído a 'resultado_agrupamento'.")
-
-        # Inicializa a variável para o caso de haver apenas uma etapa.
-        resultado_refatoracao = {}
-
-        # A penúltima etapa só existe se houver 2 ou mais etapas no workflow.
-        if num_total_steps >= 2:
-            # O índice da penúltima etapa é o total de etapas menos 2 (pois a contagem começa em 0).
-            penultimate_step_index = num_total_steps - 2
-            resultado_refatoracao = job_info['data'].get(f'step_{penultimate_step_index}_result', {})
-            print(
-                f"[{job_id}] Resultado da penúltima etapa (etapa {penultimate_step_index}) atribuído a 'resultado_refatoracao'.")
-        elif num_total_steps == 1:
-            # Se houver apenas uma etapa, podemos considerar que o 'resultado_refatoracao'
-            # (que geralmente contém o conteúdo completo dos arquivos) é o mesmo que o resultado final.
-            # Isso garante que a função de preenchimento ('changeset_filler') tenha os dados necessários.
-            resultado_refatoracao = previous_step_result
-            print(f"[{job_id}] Workflow com apenas uma etapa. 'resultado_refatoracao' usará o resultado final.")
-
-        # Agora, o resto do seu código funcionará de forma genérica
-        job_info['data']['diagnostic_logs'] = {"penultimate_result": resultado_refatoracao,
-                                               "final_result": resultado_agrupamento}
-
-        job_info['status'] = 'populating_data'
-        job_store.set_job(job_id, job_info)
-
-        dados_preenchidos = changeset_filler.main(json_agrupado=resultado_agrupamento,
-                                                  json_inicial=resultado_refatoracao)
-
-        dados_finais_formatados = {"resumo_geral": dados_preenchidos.get("resumo_geral", ""), "grupos": []}
-        for nome_grupo, detalhes_pr in dados_preenchidos.items():
-            if nome_grupo == "resumo_geral": continue
-            dados_finais_formatados["grupos"].append({"branch_sugerida": nome_grupo, "titulo_pr": detalhes_pr.get("resumo_do_pr", ""), "resumo_do_pr": detalhes_pr.get("descricao_do_pr", ""), "conjunto_de_mudancas": detalhes_pr.get("conjunto_de_mudancas", [])})
-
-        job_info['status'] = 'committing_to_github'
-        job_store.set_job(job_id, job_info)
-        
-        branch_base_para_pr = job_info['data'].get('branch_name', 'main')
-        
-        commit_results = commit_multiplas_branchs.processar_e_subir_mudancas_agrupadas(
-            nome_repo=job_info['data']['repo_name'], 
-            dados_agrupados=dados_finais_formatados,
-            base_branch=branch_base_para_pr
-        )
-        job_info['data']['commit_details'] = commit_results
-
-        job_info['status'] = 'completed'
-        job_store.set_job(job_id, job_info)
-        print(f"[{job_id}] Processo concluído com sucesso!")
-        # --- FIM DA LÓGICA DE COMMIT ---
-
-    except Exception as e:
-        traceback.print_exc()
-        handle_task_exception(job_id, e, job_info.get('status', 'workflow') if job_info else 'workflow', job_info)
-
-# --- Endpoints da API ---
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    job_store = container.get_job_store()
+    analysis_service = container.get_analysis_name_service()
+    
+    repo_name = payload.repo_name_modernizado
+    branch_name = payload.branch_name_modernizado
+    
+    normalized_repo_name = _normalize_repo_name_by_type(repo_name, payload.repository_type)
+
     job_id = str(uuid.uuid4())
-    analysis_type_str = payload.analysis_type.value
-    initial_job_data = {
-        'status': 'starting',
-        'data': {
-            'repo_name': payload.repo_name,
-            'branch_name': payload.branch_name,
-            'original_analysis_type': analysis_type_str,
-            'instrucoes_extras': payload.instrucoes_extras,
-            'model_name': payload.model_name,
-            'usar_rag': payload.usar_rag,
-            'gerar_relatorio_apenas': payload.gerar_relatorio_apenas # Mantido para consistência
-        },
-        'error_details': None
-    }
+    analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
+
+    initial_job_data = _create_initial_job_data(payload, normalized_repo_name, analysis_name)
+
     job_store.set_job(job_id, initial_job_data)
-    
-    # A chamada agora é sempre para a mesma função, começando do passo 0
+
+    if analysis_name:
+        analysis_service.register_analysis(analysis_name, job_id)
+
+    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
+
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
-    
+
     return StartAnalysisResponse(job_id=job_id)
-    
+
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
+    job_store = container.get_job_store()
+    
     job = job_store.get_job(payload.job_id)
-    if not job or job.get('status') != 'pending_approval':
-        raise HTTPException(status_code=400, detail="Job não encontrado ou não está aguardando aprovação.")
-    
-    if payload.action == 'approve':
-        job['data']['instrucoes_extras_aprovacao'] = payload.instrucoes_extras
-        job['status'] = 'workflow_started'
-        
-        # Descobre de qual passo continuar
-        paused_step = job['data'].get('paused_at_step', 0)
-        start_from_step = paused_step + 1
-        
-        job_store.set_job(payload.job_id, job)
-        
-        # A chamada agora continua o workflow a partir do passo seguinte ao da pausa
-        background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
-        
-        return {"job_id": payload.job_id, "status": "workflow_started", "message": "Aprovação recebida."}
-    
-    if payload.action == 'reject':
-        job['status'] = 'rejected'
-        job_store.set_job(payload.job_id, job)
-        return {"job_id": payload.job_id, "status": "rejected", "message": "Processo encerrado."}
+    _validate_job_for_approval(job, payload.job_id)
 
+    if payload.action == JobActions.APPROVE:
+        if payload.instrucoes_extras:
+            job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
+            print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
+        
+        job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
+
+        paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
+        start_from_step = paused_step + 1
+
+        job_store.set_job(payload.job_id, job)
+
+        background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
+
+        return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.WORKFLOW_STARTED, "message": "Aprovação recebida."}
+
+    if payload.action == JobActions.REJECT:
+        job[JobFields.STATUS] = JobStatus.REJECTED
+        job_store.set_job(payload.job_id, job)
+        return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
 
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
-    job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    job_store = container.get_job_store()
     
-    report = job.get("data", {}).get("analysis_report")
-    if not report:
-        raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get('status')}")
+    job = job_store.get_job(job_id)
+    _validate_job_exists(job, job_id)
 
-    return ReportResponse(job_id=job_id, analysis_report=report)
+    report = _get_report_from_job(job, job_id)
+    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
+
+    return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
+
+@app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
+def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
+    job_store = container.get_job_store()
+    analysis_service = container.get_analysis_name_service()
+    
+    job_id = _validate_analysis_exists(analysis_name, analysis_service)
+
+    job = job_store.get_job(job_id)
+    _validate_job_exists(job, job_id)
+
+    report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
+    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
+
+    return AnalysisByNameResponse(
+        job_id=job_id,
+        analysis_name=analysis_name,
+        analysis_report=report,
+        report_blob_url=blob_url
+    )
+
+@app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
+def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
+    job_store = container.get_job_store()
+    analysis_service = container.get_analysis_name_service()
+    
+    job_id = _validate_analysis_exists(analysis_name, analysis_service)
+
+    original_job = job_store.get_job(job_id)
+    _validate_job_exists(original_job, job_id)
+
+    report = _get_report_from_job(original_job, None)
+
+    original_data = original_job[JobFields.DATA]
+    original_repo_name = original_data[JobFields.REPO_NAME]
+    original_repository_type = original_data[JobFields.REPOSITORY_TYPE]
+
+    normalized_repo_name = _normalize_repo_name_by_type(original_repo_name, original_repository_type)
+
+    new_job_id = str(uuid.uuid4())
+
+    new_job_data = _create_derived_job_data(original_job, analysis_name, normalized_repo_name, report)
+
+    job_store.set_job(new_job_id, new_job_data)
+    analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
+
+    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
+
+    background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
+
+    return StartAnalysisResponse(job_id=new_job_id)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
+    job_store = container.get_job_store()
+    
     job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job ID não encontrado ou expirado")
+    _validate_job_exists(job, job_id)
 
-    status = job.get('status')
-    logs = job.get("data", {}).get("diagnostic_logs")
+    status = job.get(JobFields.STATUS)
+    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
 
     try:
-        if status == 'completed':
-            if job.get("data", {}).get("gerar_relatorio_apenas") is True:
-                return FinalStatusResponse(
-                    job_id=job_id,
-                    status=status,
-                    analysis_report=job.get("data", {}).get("analysis_report")
-                )
-            else:
-                summary_list = []
-                commit_details = job.get("data", {}).get("commit_details", [])
-                for pr_info in commit_details:
-                    if pr_info.get("success") and pr_info.get("pr_url"):
-                        summary_list.append(
-                            PullRequestSummary(
-                                pull_request_url=pr_info.get("pr_url"),
-                                branch_name=pr_info.get("branch_name"),
-                                arquivos_modificados=pr_info.get("arquivos_modificados", [])
-                            )
-                        )
-                return FinalStatusResponse(
-                    job_id=job_id, 
-                    status=status, 
-                    summary=summary_list,
-                    diagnostic_logs=logs
-                )
-        elif status == 'failed':
+        if status == JobStatus.COMPLETED:
+            return _build_completed_response(job_id, job, blob_url)
+        elif status == JobStatus.FAILED:
+            logs = job.get(JobFields.DATA, {}).get(JobFields.DIAGNOSTIC_LOGS)
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
-                error_details=job.get("error_details", "Nenhum detalhe de erro encontrado."),
-                diagnostic_logs=logs
+                error_details=job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado."),
+                diagnostic_logs=logs,
+                report_blob_url=blob_url
             )
         else:
-            return FinalStatusResponse(job_id=job_id, status=status)
+            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url)
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
-        raise HTTPException(status_code=500, detail="Erro interno ao formatar a resposta do status do job.")
-
-
-

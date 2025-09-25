@@ -1,4 +1,6 @@
 import os
+import uuid
+from datetime import datetime
 from openai import AzureOpenAI
 from typing import Optional, Dict, Any
 
@@ -8,10 +10,6 @@ from domain.interfaces.secret_manager_interface import ISecretManager
 from tools.azure_secret_manager import AzureSecretManager
 
 class OpenAILLMProvider(ILLMProviderComplete):
-    """
-    Implementação refatorada que implementa a interface completa de LLM,
-    seguindo o princípio da Inversão de Dependência.
-    """
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
         self.rag_retriever = rag_retriever
         self.secret_manager = secret_manager or AzureSecretManager()
@@ -48,10 +46,12 @@ class OpenAILLMProvider(ILLMProviderComplete):
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Implementação da interface completa com todas as funcionalidades."""
         modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
+        job_id_final = job_id or str(uuid.uuid4())
+        timestamp = datetime.utcnow().isoformat()
         
         prompt_sistema_base = self.carregar_prompt(tipo_tarefa)
         prompt_sistema_final = prompt_sistema_base
@@ -85,10 +85,15 @@ class OpenAILLMProvider(ILLMProviderComplete):
             tokens_entrada = response.usage.prompt_tokens
             tokens_saida = response.usage.completion_tokens
 
+            projeto = model_name or "openai"
+            data_atual = datetime.utcnow().strftime("%Y-%m-%d")
+            hora_atual = datetime.utcnow().strftime("%H:%M:%S")
+
             return {
                 'reposta_final': conteudo_resposta,
                 'tokens_entrada': tokens_entrada,
-                'tokens_saida': tokens_saida
+                'tokens_saida': tokens_saida,
+                'job_id': job_id_final
             }
             
         except Exception as e:
@@ -101,15 +106,16 @@ class OpenAILLMProvider(ILLMProviderComplete):
         prompt_principal: str,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Implementação específica para RAG."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
             instrucoes_extras=instrucoes_extras,
             usar_rag=usar_rag,
-            max_token_out=max_token_out
+            max_token_out=max_token_out,
+            job_id=job_id
         )
     
     def executar_prompt_com_modelo(
@@ -118,13 +124,14 @@ class OpenAILLMProvider(ILLMProviderComplete):
         prompt_principal: str,
         instrucoes_extras: str = "",
         model_name: Optional[str] = None,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Implementação específica para seleção de modelo."""
         return self.executar_prompt(
             tipo_tarefa=tipo_tarefa,
             prompt_principal=prompt_principal,
             instrucoes_extras=instrucoes_extras,
             model_name=model_name,
-            max_token_out=max_token_out
+            max_token_out=max_token_out,
+            job_id=job_id
         )

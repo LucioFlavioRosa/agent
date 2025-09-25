@@ -1,5 +1,3 @@
-# Arquivo: tools/rag_retriever.py (VERSÃO REVISADA)
-
 import os
 from openai import OpenAI
 from azure.core.credentials import AzureKeyCredential
@@ -8,25 +6,19 @@ from azure.keyvault.secrets import SecretClient
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
 
-# Importe a nova interface
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 
 class AzureAISearchRAGRetriever(IRAGRetriever):
-    """
-    Implementação concreta de IRAGRetriever usando Azure AI Search.
-    """
+    
     def __init__(self):
-        # A inicialização dos clientes agora acontece aqui, dentro do construtor!
         key_vault_url = os.environ["KEY_VAULT_URL"]
         credential = DefaultAzureCredential()
         secret_client = SecretClient(vault_url=key_vault_url, credential=credential)
 
-        # Cliente da OpenAI para embeddings
         openai_api_key = secret_client.get_secret("openaiapi").value
         self.openai_client = OpenAI(api_key=openai_api_key)
         self.embedding_model_name = os.environ["AZURE_OPENAI_EMBEDDING_MODEL_NAME"]
 
-        # Cliente do Azure AI Search
         ai_search_endpoint = os.environ["AI_SEARCH_ENDPOINT"]
         ai_search_api_key = secret_client.get_secret("aisearchapi").value
         ai_search_index_name = os.environ["AI_SEARCH_INDEX_NAME"]
@@ -38,9 +30,6 @@ class AzureAISearchRAGRetriever(IRAGRetriever):
         )
 
     def buscar_politicas(self, query: str, top_k: int = 5) -> str:
-        """
-        Implementação do método da interface.
-        """
         try:
             print(f"[RAG Retriever] Gerando embedding para a consulta: '{query}'")
             response = self.openai_client.embeddings.create(
