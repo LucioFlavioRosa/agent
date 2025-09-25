@@ -5,7 +5,7 @@ class ReportHandler:
     def __init__(self, blob_storage):
         self.blob_storage = blob_storage
     
-    def try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], step_index: int) -> Optional[Dict[str, Any]]:
+    def try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], current_step_index: int) -> Optional[Dict[str, Any]]:
         if not job_info['data'].get('gerar_novo_relatorio', True):
             analysis_name = job_info['data'].get('analysis_name')
             if analysis_name:
@@ -20,7 +20,7 @@ class ReportHandler:
     
     def extract_report_text(self, step_result: Dict[str, Any]) -> str:
         if isinstance(step_result, dict):
-            return step_result.get('relatorio', json.dumps(step_result, indent=2, ensure_ascii=False))
+            return step_result.get('relatorio', '')
         return str(step_result)
     
     def save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool = False) -> None:
@@ -40,12 +40,16 @@ class ReportHandler:
         
         if report_text:
             job_info['data']['analysis_report'] = report_text
-            print(f"[{job_id}] Campo analysis_report populado com {len(report_text)} caracteres")
             
-            if job_info['data'].get('gerar_novo_relatorio', True):
-                self.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+            analysis_name = job_info['data'].get('analysis_name')
+            if analysis_name:
+                try:
+                    blob_url = self.blob_storage.save_report(analysis_name, report_text)
+                    job_info['data']['report_blob_url'] = blob_url
+                    print(f"[{job_id}] Relatório salvo no Blob Storage em modo 'gerar_relatorio_apenas': {blob_url}")
+                except Exception as e:
+                    print(f"[{job_id}] Erro ao salvar relatório no Blob Storage em modo 'gerar_relatorio_apenas': {str(e)}")
             else:
-                print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
+                print(f"[{job_id}] AVISO: analysis_name não encontrado para salvar relatório no Blob Storage")
         else:
-            print(f"[{job_id}] AVISO: Relatório vazio ou inválido no modo 'gerar_relatorio_apenas'")
-            job_info['data']['analysis_report'] = "Relatório não gerado ou vazio"
+            print(f"[{job_id}] AVISO: Relatório vazio em modo 'gerar_relatorio_apenas'")
