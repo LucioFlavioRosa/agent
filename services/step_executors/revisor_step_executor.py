@@ -24,10 +24,13 @@ class RevisorStepExecutor(BaseStepExecutor):
             self.job_handler.update_job(job_id, job_info)
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
+        
+        if 'repositorio' not in agent_params:
+            agent_params['repositorio'] = job_info['data']['repo_name']
+        if 'nome_branch' not in agent_params:
+            agent_params['nome_branch'] = job_info['data']['branch_name']
+        
         agent_params.update({
-            'repositorio': job_info['data']['repo_name'],
-            'nome_branch': job_info['data']['branch_name'], 
-            'instrucoes_extras': instrucoes_formatadas,
             'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
             'repository_type': job_info['data']['repository_type'],
             'job_id': job_id,
