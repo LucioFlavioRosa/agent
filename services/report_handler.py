@@ -1,95 +1,51 @@
-import json
 from typing import Dict, Any, Optional
-from domain.interfaces.blob_storage_interface import IBlobStorageService
+import json
 
 class ReportHandler:
-    def __init__(self, blob_storage: IBlobStorageService):
+    def __init__(self, blob_storage):
         self.blob_storage = blob_storage
     
-    def try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], current_step_index: int) -> Optional[Dict[str, Any]]:
-        if current_step_index == 0:
-            gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
+    def try_read_existing_report(self, job_id: str, job_info: Dict[str, Any], step_index: int) -> Optional[Dict[str, Any]]:
+        if not job_info['data'].get('gerar_novo_relatorio', True):
             analysis_name = job_info['data'].get('analysis_name')
-
-            if not gerar_novo_relatorio and analysis_name:
-                print(f"[{job_id}] gerar_novo_relatorio=False detectado. Tentando ler relatório existente do Blob Storage: {analysis_name}")
+            if analysis_name:
                 try:
-                    existing_report = self.blob_storage.read_report(
-                        job_info['data']['projeto'],
-                        job_info['data']['original_analysis_type'],
-                        job_info['data']['repository_type'],
-                        job_info['data']['repo_name'],
-                        job_info['data'].get('branch_name', 'main'),
-                        analysis_name
-                    )
-
+                    existing_report = self.blob_storage.read_report(analysis_name)
                     if existing_report:
-                        print(f"[{job_id}] Relatório encontrado no Blob Storage, reutilizando relatório existente")
-                        try:
-                            blob_url = self.blob_storage.get_report_url(
-                                job_info['data']['projeto'],
-                                job_info['data']['original_analysis_type'],
-                                job_info['data']['repository_type'],
-                                job_info['data']['repo_name'],
-                                job_info['data'].get('branch_name', 'main'),
-                                analysis_name
-                            )
-                            job_info['data']['report_blob_url'] = blob_url
-                        except Exception as url_e:
-                            print(f"[{job_id}] Aviso: Não foi possível obter URL do blob: {url_e}")
-
-                        return {
-                            'resultado': {
-                                'reposta_final': {
-                                    'reposta_final': json.dumps({"relatorio": existing_report}, ensure_ascii=False)
-                                }
-                            }
-                        }
-                    else:
-                        print(f"[{job_id}] Relatório não encontrado no Blob Storage, será gerado novo relatório via agente")
-                        return None
-
+                        print(f"[{job_id}] Relatório existente encontrado para analysis_name: {analysis_name}")
+                        return existing_report
                 except Exception as e:
-                    print(f"[{job_id}] Erro ao tentar ler relatório do Blob Storage: {e}. Gerando novo relatório via agente")
-                    return None
-            elif gerar_novo_relatorio:
-                print(f"[{job_id}] gerar_novo_relatorio=True detectado. Gerando novo relatório via agente")
-            else:
-                print(f"[{job_id}] analysis_name não fornecido. Gerando novo relatório via agente")
-
+                    print(f"[{job_id}] Erro ao ler relatório existente: {str(e)}")
         return None
     
-    def save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool) -> None:
-        if not job_info['data'].get('gerar_novo_relatorio', True):
-            print(f"[{job_id}] gerar_novo_relatorio=False - Abortando salvamento no Blob Storage")
-            return
-
-        if job_info['data'].get('analysis_name') and report_text and report_generated_by_agent:
+    def extract_report_text(self, step_result: Dict[str, Any]) -> str:
+        if isinstance(step_result, dict):
+            return step_result.get('relatorio', json.dumps(step_result, indent=2, ensure_ascii=False))
+        return str(step_result)
+    
+    def save_report_to_blob(self, job_id: str, job_info: Dict[str, Any], report_text: str, report_generated_by_agent: bool = False) -> None:
+        analysis_name = job_info['data'].get('analysis_name')
+        if analysis_name and report_text:
             try:
-                blob_url = self.blob_storage.upload_report(
-                    report_text,
-                    job_info['data']['projeto'],
-                    job_info['data']['original_analysis_type'],
-                    job_info['data']['repository_type'],
-                    job_info['data']['repo_name'],
-                    job_info['data'].get('branch_name', 'main'),
-                    job_info['data']['analysis_name']
-                )
+                blob_url = self.blob_storage.save_report(analysis_name, report_text)
                 job_info['data']['report_blob_url'] = blob_url
                 print(f"[{job_id}] Relatório salvo no Blob Storage: {blob_url}")
             except Exception as e:
-                print(f"[{job_id}] Erro ao salvar relatório no Blob Storage: {e}")
-    
-    def extract_report_text(self, step_result: Dict[str, Any]) -> str:
-        return step_result.get("relatorio", json.dumps(step_result, indent=2, ensure_ascii=False))
+                print(f"[{job_id}] Erro ao salvar relatório no Blob Storage: {str(e)}")
     
     def handle_report_only_mode(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any]) -> None:
+        print(f"[{job_id}] Processando modo 'gerar_relatorio_apenas'")
+        
         report_text = self.extract_report_text(step_result)
-        job_info['data']['analysis_report'] = report_text
-
-        if job_info['data'].get('gerar_novo_relatorio', True):
-            self.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        
+        if report_text:
+            job_info['data']['analysis_report'] = report_text
+            print(f"[{job_id}] Campo analysis_report populado com {len(report_text)} caracteres")
+            
+            if job_info['data'].get('gerar_novo_relatorio', True):
+                self.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+            else:
+                print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
         else:
-            print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
-
-        print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo. Finalizando.")
+            print(f"[{job_id}] AVISO: Relatório vazio ou inválido no modo 'gerar_relatorio_apenas'")
+            job_info['data']['analysis_report'] = "Relatório não gerado ou vazio"
