@@ -140,7 +140,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa,
-            'repository_type': job_info['data']['repository_type']
+            'repository_type': job_info['data']['repository_type'],
+            'gerar_relatorio_apenas': job_info['data'].get('gerar_relatorio_apenas', False)
         })
 
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
