@@ -1,15 +1,13 @@
 from typing import Dict, Type, Any
 from agents.agente_revisor import AgenteRevisor
 from agents.agente_processador import AgenteProcessador
-from agents.agente_comparador import AgenteComparador
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from tools.readers.reader_geral import ReaderGeral
 
 class AgentFactory:
     _agents: Dict[str, Type] = {
         'revisor': AgenteRevisor,
-        'processador': AgenteProcessador,
-        'comparador': AgenteComparador
+        'processador': AgenteProcessador
     }
     
     @classmethod
@@ -19,7 +17,7 @@ class AgentFactory:
         if not agent_class:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
         
-        if agent_type in ["revisor", "comparador"]:
+        if agent_type == "revisor":
             return agent_class(repository_reader=repository_reader, llm_provider=llm_provider)
         elif agent_type == "processador":
             return agent_class(llm_provider=llm_provider)

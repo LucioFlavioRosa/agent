@@ -103,24 +103,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy()
-        
-        is_comparador_agent = step.get('agent') == 'comparador'
-        
-        if is_comparador_agent:
-            agent_params.update({
-                'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
-                'branch_name_modernizado': job_info['data'].get('branch_name_modernizado'),
-                'repo_name_original': job_info['data'].get('repo_name_original'),
-                'branch_name_original': job_info['data'].get('branch_name_original')
-            })
-        else:
-            repo_name = job_info['data'].get('repo_name_modernizado', job_info['data']['repo_name'])
-            branch_name = job_info['data'].get('branch_name_modernizado', job_info['data']['branch_name'])
-            agent_params.update({
-                'repositorio': repo_name,
-                'nome_branch': branch_name
-            })
-        
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa,
@@ -172,10 +154,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.update_job_status(job_id, 'committing_to_github')
 
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
-        
-        print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info['data'].get('commit_details', [])}")
-        self.job_handler.update_job(job_id, job_info)
-        print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
 
         self.job_handler.update_job_status(job_id, 'completed')
         print(f"[{job_id}] Processo concluído com sucesso!")

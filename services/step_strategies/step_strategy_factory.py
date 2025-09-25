@@ -1,17 +1,13 @@
 from typing import Dict, Any
+from services.step_strategies.step_strategy_interface import IStepStrategy
 from services.step_strategies.default_step_strategy import DefaultStepStrategy
 
 class StepStrategyFactory:
     @staticmethod
-    def create_strategy(step: Dict[str, Any], job_handler):
-        agent_type = step.get('agent_type', 'default')
+    def create_strategy(step: Dict[str, Any], job_handler) -> IStepStrategy:
+        strategy_type = step.get('strategy_type', 'default')
         
-        strategies = {
-            'revisor': DefaultStepStrategy,
-            'processador': DefaultStepStrategy,
-            'comparador': DefaultStepStrategy,
-            'default': DefaultStepStrategy
-        }
+        if strategy_type == 'default':
+            return DefaultStepStrategy(job_handler)
         
-        strategy_class = strategies.get(agent_type, DefaultStepStrategy)
-        return strategy_class(job_handler)
+        return DefaultStepStrategy(job_handler)
