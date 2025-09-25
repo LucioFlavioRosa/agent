@@ -24,7 +24,6 @@ class ComparadorStepExecutor(BaseStepExecutor):
             self.job_handler.update_job(job_id, job_info)
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
-        agent_params['gerar_relatorio_apenas'] = job_info['data'].get('gerar_relatorio_apenas', False)
         agent_params.update({
             'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
             'repository_type': job_info['data']['repository_type'],
