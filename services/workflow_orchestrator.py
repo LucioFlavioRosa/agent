@@ -85,6 +85,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Finalizando workflow em modo 'gerar_relatorio_apenas'")
+                    
+                    report_text = self.report_handler.extract_report_text(step_result)
+                    job_info['data']['analysis_report'] = report_text
+                    
+                    if job_info['data'].get('gerar_novo_relatorio', True):
+                        print(f"[{job_id}] Salvando relatório no Blob Storage em modo 'gerar_relatorio_apenas'")
+                        self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+                    else:
+                        print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
+                    
+                    self.job_handler.update_job(job_id, job_info)
                     self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
                     self.job_handler.update_job_status(job_id, 'completed')
                     return
