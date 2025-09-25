@@ -61,7 +61,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         
                         if strategy.should_finalize_workflow(job_info, current_step_index):
                             print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
-                            self._handle_report_only_finalization(job_id, job_info, report_data, report_text)
+                            self.job_handler.update_job_status(job_id, 'completed')
                             return
 
                         if strategy.should_pause_for_approval(step):
@@ -83,12 +83,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                 
                 if strategy.should_finalize_workflow(job_info, current_step_index):
-                    print(f"[{job_id}] Finalizando workflow em modo 'gerar_relatorio_apenas'")
-                    
-                    report_text = self.report_handler.extract_report_text(step_result)
-                    job_info['data']['analysis_report'] = report_text
-                    
-                    self._handle_report_only_finalization(job_id, job_info, step_result, report_text)
+                    self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
+                    self.job_handler.update_job_status(job_id, 'completed')
                     return
 
                 if strategy.should_pause_for_approval(step):
@@ -99,18 +95,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
-
-    def _handle_report_only_finalization(self, job_id: str, job_info: Dict[str, Any], 
-                                       step_result: Dict[str, Any], report_text: str) -> None:
-        if job_info['data'].get('gerar_novo_relatorio', True):
-            print(f"[{job_id}] Salvando relatório no Blob Storage em modo 'gerar_relatorio_apenas'")
-            self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-        else:
-            print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
-        
-        self.job_handler.update_job(job_id, job_info)
-        self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
-        self.job_handler.update_job_status(job_id, 'completed')
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
@@ -140,8 +124,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa,
-            'repository_type': job_info['data']['repository_type'],
-            'gerar_relatorio_apenas': job_info['data'].get('gerar_relatorio_apenas', False)
+            'repository_type': job_info['data']['repository_type']
         })
 
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
