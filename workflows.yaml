@@ -359,3 +359,9 @@ relatorio_modernizacao_asp_net:
       params:
         tipo_analise: "aplicacao_de_mudancas_direto"
         max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits_simplificado"
+        max_token_out: 32000
