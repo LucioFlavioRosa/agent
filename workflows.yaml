@@ -357,7 +357,7 @@ relatorio_modernizacao_asp_net:
       model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
-        tipo_analise: "aplicacao_de_mudancas_direto"
+        tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
       model_name: "gpt-4.1-mini"
