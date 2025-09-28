@@ -29,23 +29,30 @@ Nao incluir na resposta final casos com status INALTERADO
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 ```json
 {
-  "resumo_geral": aqui é uma descrição geral das mudanças contempladas,
-  "pr_grupo_1": {
-    "resumo_do_pr": resumo geral da estrutura modificada pelo pr,
-    "descricao_do_pr": descriçao detalhada em topicos das mudanças realizadas,
-    "conjunto_de_mudancas": [
-      {
-        "caminho_do_arquivo":"src/services/UserService.java",
-        "status": "CRIADO",
-        "conteudo": "package com.example.services;\n\nimport com.example.models.User;\n\n// Classe refatorada para seguir as melhores práticas\npublic class UserService {\n    public User getUserById(String userId) {\n        // Lógica de busca de usuário implementada\n        return new User(userId, \"Nome Padrão\");\n    }\n}",
-        "justificativa": "Aplicada a refatoração sugerida no plano, criando a classe UserService e o método `getUserById`."
+      "resumo_geral": "Refatoração completa dos agentes e ferramentas para seguir os princípios SOLID, com separação clara de responsabilidades, introdução de abstrações e extensibilidade. Foram criadas novas classes especializadas para validação, processamento de código, tratamento de erros e registro de tipos de análise. Interfaces e implementações para cliente LLM e provedor de credenciais foram adicionadas, tornando o sistema mais modular e preparado para evolução.",
+      "pr_grupo_1": {
+        "resumo_do_pr": "Refatoração dos agentes para SRP e introdução de classes especializadas",
+        "descricao_do_pr": "Este PR realiza a refatoração do agente revisor, separando responsabilidades em classes especializadas para validação de parâmetros, processamento de código e tratamento de erros. Garante maior coesão, facilita testes e manutenção, e prepara a base para extensibilidade futura.",
+        "branch_sugerida": "refactor/agents-solid-srp",
+        "conjunto_de_mudancas": [
+          {
+            "caminho_do_arquivo": "agents/agente_revisor.py",
+            "status": "MODIFICADO",
+            "conteudo": "from typing import Optional, Dict, Any, Union\nfrom tools import github_reader\nfrom tools.revisor_geral import executar_analise_llm\nfrom agents.validators.parameter_validator import ParameterValidator\nfrom agents.processors.code_processor import CodeProcessor\nfrom agents.handlers.error_handler import ErrorHandler\nimport logging\n\nMODELO_PADRAO_LLM = 'gpt-4.1'\nMAX_TOKENS_SAIDA = 3000\nTIPOS_ANALISE_VALIDOS = ",
+            "justificativa": "Refatorado para seguir SRP, separando responsabilidades em classes especializadas (validator, processor, error_handler) e mantendo compatibilidade com a interface existente."
+          },
+          {
+            "caminho_do_arquivo": "agents/validators/parameter_validator.py",
+            "status": "CRIADO",
+            "conteudo": "from typing import Optional, Dict, Any, Union, List\nimport logging\n\nclass ParameterValidator:\n    def __init__(self, tipos_analise_validos: List[str]):\n        self.tipos_analise_validos = tipos_analise_validos\n    \n    def validar_parametros_entrada .... ",
+            "justificativa": "Criada classe especializada para validação de parâmetros, seguindo o princípio SRP."
+          },
+          {
+            "caminho_do_arquivo": "agents/processors/code_processor.py",
+            "status": "CRIADO",
+            "conteudo": "from typing import Optional, Dict, Any, Union\nfrom tools import github_reader\nimport logging\n\nclass CodeProcessor:\n    def obter_codigo_repositorio(self, repositorio_nome: str, tipo_analise: str) -> Dict[str, str]:\n        try:\n            logging.info(f'Iniciando a leitura do repositório: {repositorio_nome}')\n            arquivos_codigo = github_reader.obter_arquivos_para_analise(repo_nome=repositorio_nome, tipo_analise=tipo_analise)\n            return arquivos_codigo\n        except (ValueError, RuntimeError) as e:\n            logging.error(f\"Falha ao executar a análise de '{tipo_analise}': {e}\")\n            raise\n        except KeyError as e:\n            logging.error(f\"Erro de chave ao obter código do repositório: {e}\")\n            raise\n        except TypeError as e:\n            logging.error(f\"Erro de tipo ao obter código do repositório: {e}\")\n            raise\n    \n    def preparar_codigo_para_analise(self, tipo_analise: str, repositorio_nome: Optional[str], codigo_entrada: Optional[Union[str, Dict[str, str]]]):\n        if codigo_entrada is not None:\n            return codigo_entrada\n        return self.obter_codigo_repositorio(repositorio_nome=repositorio_nome, tipo_analise=tipo_analise)\n    \n    def montar_codigo_para_llm(self, codigo_entrada: Union[str, Dict[str, str]]) -> str:\n        if isinstance(codigo_entrada, dict):\n            return '\\n\\n'.join(f\"# Arquivo: {k}\\n{v}\" for k, v in codigo_entrada.items())\n        return str(codigo_entrada)",
+            "justificativa": "Criada classe especializada para processamento de código, separando a lógica de manipulação de código da orquestração principal."
+          },
+        ]
       },
-      {
-      "caminho_do_arquivo": "api/controllers/authController.js",
-      "status": "MODIFICADO",
-      "conteudo": "const jwt = require('jsonwebtoken');\n\n// Função de login com validação de input aprimorada\nfunction login(req, res) {\n    const { email, password } = req.body;\n    if (!email || !password) {\n        return res.status(400).send({ error: 'Email e senha são obrigatórios.' });\n    }\n    // Lógica de autenticação... e geração de token\n    const token = jwt.sign({ id: 'user_id' }, process.env.JWT_SECRET, { expiresIn: '1h' });\n    res.status(200).send({ token });\n}",
-      "justificativa": "Refatorado o método de login para adicionar validação de input (email e senha), conforme observação prioritária do usuário."
-    },
-    ]
-  }
 }
