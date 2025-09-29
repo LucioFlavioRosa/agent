@@ -299,7 +299,7 @@ relatorio_teste_integracao:
 
 relatorio_teste_unitario:
   description: "Analisar o código-fonte e a suíte de testes fornecidos para identificar os pontos mais críticos de cobertura e qualidade"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".razor", ".razor.cs"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "gpt-4.1"
