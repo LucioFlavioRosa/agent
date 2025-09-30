@@ -141,7 +141,7 @@ relatorio_implentacao_feature_azure:
   extensions: [".py", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "melhorias_azure"
