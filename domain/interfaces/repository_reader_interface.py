@@ -17,7 +17,7 @@ class IRepositoryReader(ABC):
         repository_type: str,
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None,
-        incluir_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         """
         Lê os arquivos do repositório e retorna um dicionário {caminho: conteudo}.
@@ -30,18 +30,18 @@ class IRepositoryReader(ABC):
             arquivos_especificos (Optional[List[str]], optional): Lista de caminhos
                 específicos de arquivos para ler. Se fornecido, ignora filtro por
                 extensão e lê apenas os arquivos listados. Defaults to None
-            incluir_lista_arquivos (bool, optional): Se True, retorna também lista
+            retornar_lista_arquivos (bool, optional): Se True, retorna também lista
                 de todos os arquivos do repositório. Defaults to False
         
         Returns:
             Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]: 
-                Se incluir_lista_arquivos=False: Dicionário mapeando caminhos para conteúdo
-                Se incluir_lista_arquivos=True: {'arquivos': Dict[caminho, conteudo], 'lista_arquivos': List[str]}
+                Se retornar_lista_arquivos=False: Dicionário mapeando caminhos para conteúdo
+                Se retornar_lista_arquivos=True: {'codigo': Dict[caminho, conteudo], 'lista_arquivos': List[str]}
         
         Note:
             - Quando arquivos_especificos é fornecido, o filtro por extensão é ignorado
             - Arquivos não encontrados são tratados com warning, não erro fatal
             - Modo padrão (arquivos_especificos=None) mantém comportamento original
-            - incluir_lista_arquivos permite obter lista completa de arquivos do repositório
+            - retornar_lista_arquivos permite obter lista completa de arquivos do repositório
         """
         pass
