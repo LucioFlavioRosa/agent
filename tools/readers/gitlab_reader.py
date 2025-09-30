@@ -154,7 +154,7 @@ class GitLabReader(BaseReader):
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None,
-        incluir_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         try:
             branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "GitLab")
@@ -167,11 +167,11 @@ class GitLabReader(BaseReader):
                 extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
                 arquivos_lidos = self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
             
-            if incluir_lista_arquivos:
-                print("Flag incluir_lista_arquivos ativada - obtendo lista completa de arquivos GitLab.")
+            if retornar_lista_arquivos:
+                print("Flag retornar_lista_arquivos ativada - obtendo lista completa de arquivos GitLab.")
                 lista_todos_arquivos = self._obter_lista_todos_arquivos(repositorio, branch_a_ler)
                 return {
-                    'arquivos': arquivos_lidos,
+                    'codigo': arquivos_lidos,
                     'lista_arquivos': lista_todos_arquivos
                 }
             else:
