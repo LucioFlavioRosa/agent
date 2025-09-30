@@ -38,11 +38,14 @@ class RevisorStepExecutor(BaseStepExecutor):
             'status_update': step['status_update']
         })
         
+        # Passo 10: Propagar retornar_lista_arquivos
+        agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
+        
         agente = AgentFactory.create_agent("revisor", repo_reader, llm_provider)
         agent_response = agente.main(**agent_params)
         
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
