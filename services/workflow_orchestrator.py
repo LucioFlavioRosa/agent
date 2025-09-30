@@ -42,10 +42,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
 
-
-
-
-
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 self.job_handler.update_job_status(job_id, step['status_update'])
