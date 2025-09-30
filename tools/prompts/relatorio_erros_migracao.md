@@ -20,6 +20,7 @@ Sua resposta DEVE seguir estes princípios:
 -   [ ] **Explicação Detalhada da Mudança:** Justifique cada alteração feita no código corrigido, explicando o que cada nova classe ou método faz e por que é a abordagem correta agora.
 -   [ ] **Foco Cirúrgico:** Sua solução deve se concentrar em resolver o erro apresentado. Não sugira refatorações em partes do código que não estão relacionadas ao erro de compilação em questão.
 -   [ ] **Segurança e Performance:** Se a correção introduzir considerações importantes de segurança (ex: gestão de `secrets`) ou performance (ex: registro de serviço como Singleton vs. Scoped), mencione-as brevemente.
+-   [ ] **Resultado Final:** Traga uma tabela resumindo as ações necessárias, não é necessário trazer exemplos.
 
 ## 5. FORMATO DA SAÍDA (JSON OBRIGATÓRIO)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto fora dele, contendo a chave principal `"relatorio"`. O valor desta chave deve ser uma **única string contendo o relatório completo em Markdown**, com as quebras de linha e caracteres especiais devidamente escapados.
