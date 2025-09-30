@@ -365,3 +365,26 @@ relatorio_modernizacao_asp_net:
       params:
         tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 32000
+
+relatorio_erros_migracao:
+  description: "correcao de erro de migracao"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_erros_migracao"
+      requires_approval: true
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits_simplificado"
+        max_token_out: 32000
