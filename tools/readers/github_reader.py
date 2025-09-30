@@ -1,5 +1,5 @@
 import base64
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 from github import GithubException, UnknownObjectException
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
@@ -18,6 +18,31 @@ class GitHubReader(BaseReader):
         return self._ler_arquivos_especificos_base(
             repositorio, branch_a_ler, arquivos_especificos, "GitHub", self._read_github_file
         )
+
+    def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
+        try:
+            print(f"Obtendo lista completa de arquivos GitHub da branch '{branch_a_ler}'...")
+            
+            try:
+                ref = repositorio.get_git_ref(f"heads/{branch_a_ler}")
+                tree_sha = ref.object.sha
+            except UnknownObjectException:
+                raise ValueError(f"Branch '{branch_a_ler}' não encontrada.")
+
+            tree_response = repositorio.get_git_tree(tree_sha, recursive=True)
+            tree_elements = tree_response.tree
+            
+            lista_arquivos = [
+                element.path for element in tree_elements
+                if element.type == 'blob'
+            ]
+            
+            print(f"Lista completa GitHub obtida: {len(lista_arquivos)} arquivos encontrados.")
+            return lista_arquivos
+            
+        except GithubException as e:
+            print(f"ERRO ao obter lista completa de arquivos GitHub: {e}")
+            raise
 
     def _ler_repositorio_completo(self, repositorio, branch_a_ler: str, tipo_analise: str, extensoes_alvo: List[str]) -> Dict[str, str]:
         arquivos_do_repo = {}
@@ -69,14 +94,25 @@ class GitHubReader(BaseReader):
         tipo_analise: str, 
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None,
-        mapeamento_tipo_extensoes: Dict = None
-    ) -> Dict[str, str]:
+        mapeamento_tipo_extensoes: Dict = None,
+        incluir_lista_arquivos: bool = False
+    ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "GitHub")
         
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitHub ativado para {len(arquivos_especificos)} arquivos específicos.")
-            return self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
+            arquivos_lidos = self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
         else:
             print("Modo de leitura completa GitHub ativado (filtro por extensão).")
             extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
-            return self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
+            arquivos_lidos = self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
+        
+        if incluir_lista_arquivos:
+            print("Flag incluir_lista_arquivos ativada - obtendo lista completa de arquivos GitHub.")
+            lista_todos_arquivos = self._obter_lista_todos_arquivos(repositorio, branch_a_ler)
+            return {
+                'arquivos': arquivos_lidos,
+                'lista_arquivos': lista_todos_arquivos
+            }
+        else:
+            return arquivos_lidos
