@@ -22,7 +22,6 @@ class AgenteProcessador:
         lista_arquivos: Optional[List[str]] = None,
         retornar_lista_arquivos: bool = False
     ) -> Dict[str, Any]:
-        
         if lista_arquivos:
             print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
             codigo_str = json.dumps({
