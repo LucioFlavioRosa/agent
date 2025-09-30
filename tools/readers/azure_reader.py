@@ -1,5 +1,5 @@
 import requests
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_repository_provider import AzureRepositoryProvider
 from tools.conectores.azure_conector import AzureConector
@@ -21,6 +21,35 @@ class AzureReader(BaseReader):
             "Content-Type": "application/json",
             "Authorization": f"Basic {credentials}"
         }
+
+    def _obter_lista_todos_arquivos(self, repositorio_dict: dict, branch_a_ler: str) -> List[str]:
+        organization = repositorio_dict.get('_organization')
+        project = repositorio_dict.get('_project')
+        repository = repositorio_dict.get('_repository')
+        
+        print(f"[Azure Reader] Obtendo lista completa de arquivos: {organization}/{project}/{repository}")
+        
+        headers = self._get_azure_auth_headers(repositorio_dict)
+        base_url = f"https://dev.azure.com/{organization}/{project}/_apis/git/repositories/{repository}"
+        
+        try:
+            items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
+            response = requests.get(items_url, headers=headers, timeout=60)
+            response.raise_for_status()
+            
+            all_items = response.json().get('value', [])
+            
+            lista_arquivos = [
+                item.get('path') for item in all_items
+                if not item.get('isFolder') and item.get('path')
+            ]
+            
+            print(f"[Azure Reader] Lista completa obtida: {len(lista_arquivos)} arquivos encontrados.")
+            return lista_arquivos
+            
+        except Exception as e:
+            print(f"[Azure Reader] ERRO ao obter lista completa de arquivos Azure DevOps: {e}")
+            raise
 
     def _ler_repositorio_completo(self, repositorio_dict: dict, branch_a_ler: str, extensoes_alvo: List[str], arquivos_especificos: Optional[List[str]] = None) -> Dict[str, str]:
         arquivos_do_repo = {}
@@ -90,8 +119,9 @@ class AzureReader(BaseReader):
         tipo_analise: str, 
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None,
-        mapeamento_tipo_extensoes: Dict = None
-    ) -> Dict[str, str]:
+        mapeamento_tipo_extensoes: Dict = None,
+        incluir_lista_arquivos: bool = False
+    ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         
         branch_a_ler = nome_branch or repositorio.get('default_branch', 'main')
         
@@ -101,9 +131,19 @@ class AzureReader(BaseReader):
             if extensoes_alvo is None:
                 raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado no mapeamento")
         
-        return self._ler_repositorio_completo(
+        arquivos_lidos = self._ler_repositorio_completo(
             repositorio_dict=repositorio,
             branch_a_ler=branch_a_ler,
             extensoes_alvo=extensoes_alvo,
             arquivos_especificos=arquivos_especificos
         )
+        
+        if incluir_lista_arquivos:
+            print("Flag incluir_lista_arquivos ativada - obtendo lista completa de arquivos Azure.")
+            lista_todos_arquivos = self._obter_lista_todos_arquivos(repositorio, branch_a_ler)
+            return {
+                'arquivos': arquivos_lidos,
+                'lista_arquivos': lista_todos_arquivos
+            }
+        else:
+            return arquivos_lidos
