@@ -22,24 +22,19 @@ class GitHubReader(BaseReader):
     def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
         try:
             print(f"Obtendo lista completa de arquivos GitHub da branch '{branch_a_ler}'...")
-            
             try:
                 ref = repositorio.get_git_ref(f"heads/{branch_a_ler}")
                 tree_sha = ref.object.sha
             except UnknownObjectException:
                 raise ValueError(f"Branch '{branch_a_ler}' não encontrada.")
-
             tree_response = repositorio.get_git_tree(tree_sha, recursive=True)
             tree_elements = tree_response.tree
-            
             lista_arquivos = [
                 element.path for element in tree_elements
                 if element.type == 'blob'
             ]
-            
             print(f"Lista completa GitHub obtida: {len(lista_arquivos)} arquivos encontrados.")
             return lista_arquivos
-            
         except GithubException as e:
             print(f"ERRO ao obter lista completa de arquivos GitHub: {e}")
             raise
@@ -48,43 +43,33 @@ class GitHubReader(BaseReader):
         arquivos_do_repo = {}
         try:
             print(f"Obtendo a árvore de arquivos GitHub completa da branch '{branch_a_ler}'...")
-            
             try:
                 ref = repositorio.get_git_ref(f"heads/{branch_a_ler}")
                 tree_sha = ref.object.sha
             except UnknownObjectException:
                 raise ValueError(f"Branch '{branch_a_ler}' não encontrada.")
-
             tree_response = repositorio.get_git_tree(tree_sha, recursive=True)
             tree_elements = tree_response.tree
             print(f"Árvore GitHub obtida. {len(tree_elements)} itens totais encontrados.")
-
             if tree_response.truncated:
                 print(f"AVISO: A lista de arquivos do repositório foi truncada pela API.")
-
             arquivos_para_ler = [
                 element for element in tree_elements
                 if element.type == 'blob' and any(element.path.endswith(ext) for ext in extensoes_alvo)
             ]
-            
             print(f"Filtragem GitHub concluída. {len(arquivos_para_ler)} arquivos com as extensões {extensoes_alvo} serão lidos.")
-            
             for i, element in enumerate(arquivos_para_ler):
                 if (i + 1) % 50 == 0:
                     print(f"  ...lendo arquivo {i + 1} de {len(arquivos_para_ler)} ({element.path})")
-                
                 try:
                     blob_content = repositorio.get_git_blob(element.sha).content
                     decoded_content = base64.b64decode(blob_content).decode('utf-8')
                     arquivos_do_repo[element.path] = decoded_content
-                    
                 except Exception as e:
                     print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{element.path}'. Pulando. Erro: {e}")
-
         except GithubException as e:
             print(f"ERRO CRÍTICO durante a comunicação com a API GitHub: {e}")
             raise
-        
         print(f"\nLeitura completa GitHub concluída. Total de {len(arquivos_do_repo)} arquivos lidos e processados.")
         return arquivos_do_repo
 
@@ -98,7 +83,6 @@ class GitHubReader(BaseReader):
         retornar_lista_arquivos: bool = False
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "GitHub")
-        
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitHub ativado para {len(arquivos_especificos)} arquivos específicos.")
             arquivos_lidos = self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
@@ -106,7 +90,6 @@ class GitHubReader(BaseReader):
             print("Modo de leitura completa GitHub ativado (filtro por extensão).")
             extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
             arquivos_lidos = self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
-        
         if retornar_lista_arquivos:
             print("Flag retornar_lista_arquivos ativada - obtendo lista completa de arquivos GitHub.")
             lista_todos_arquivos = self._obter_lista_todos_arquivos(repositorio, branch_a_ler)
