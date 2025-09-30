@@ -1,5 +1,5 @@
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from domain.interfaces.llm_provider_interface import ILLMProvider
 
@@ -18,9 +18,17 @@ class AgenteProcessador:
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000
+        max_token_out: int = 15000,
+        lista_arquivos: Optional[List[str]] = None
     ) -> Dict[str, Any]:
-        codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
+        if lista_arquivos:
+            print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
+            codigo_str = json.dumps({
+                'arquivos_codigo': codigo,
+                'lista_todos_arquivos': lista_arquivos
+            }, indent=2, ensure_ascii=False)
+        else:
+            codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
 
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,

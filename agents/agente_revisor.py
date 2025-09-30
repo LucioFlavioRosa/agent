@@ -23,18 +23,26 @@ class AgenteRevisor:
         nome_branch: Optional[str],
         tipo_analise: str,
         repository_type: str,
-        arquivos_especificos: Optional[List[str]] = None
-    ) -> Dict[str, str]:
+        arquivos_especificos: Optional[List[str]] = None,
+        retornar_lista_arquivos: bool = False
+    ) -> Dict[str, Any]:
         try:
-            codigo_para_analise = self.repository_reader.read_repository(
+            resultado = self.repository_reader.read_repository(
                 nome_repo=repositorio,
                 tipo_analise=tipo_analise,
                 repository_type=repository_type,
                 nome_branch=nome_branch,
-                arquivos_especificos=arquivos_especificos
+                arquivos_especificos=arquivos_especificos,
+                retornar_lista_arquivos=retornar_lista_arquivos
             )
-                
-            return codigo_para_analise
+            
+            if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
+                return {
+                    'codigo': resultado['codigo'],
+                    'lista_arquivos': resultado.get('lista_arquivos', [])
+                }
+            else:
+                return {'codigo': resultado, 'lista_arquivos': []}
             
         except Exception as e:
             print(f"[Agente Revisor] ERRO durante leitura do repositório: {e}")
@@ -53,7 +61,8 @@ class AgenteRevisor:
         arquivos_especificos: Optional[List[str]] = None,
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
-        status_update: Optional[str] = None
+        status_update: Optional[str] = None,
+        retornar_lista_arquivos: bool = False
     ) -> Dict[str, Any]:
 
         log_custom_data(
@@ -67,13 +76,17 @@ class AgenteRevisor:
             model_name=model_name
         )
 
-        codigo_para_analise = self._get_code(
+        resultado_leitura = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,
             tipo_analise=tipo_analise,
             repository_type=repository_type,
-            arquivos_especificos=arquivos_especificos
+            arquivos_especificos=arquivos_especificos,
+            retornar_lista_arquivos=retornar_lista_arquivos
         )
+        
+        codigo_para_analise = resultado_leitura.get('codigo', {})
+        lista_arquivos = resultado_leitura.get('lista_arquivos', [])
 
         if not codigo_para_analise:
             if arquivos_especificos and len(arquivos_especificos) > 0:
@@ -94,7 +107,14 @@ class AgenteRevisor:
             
             return {"resultado": {"reposta_final": {}}}
 
-        codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
+        if lista_arquivos:
+            print(f"[Agente Revisor] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
+            codigo_str = json.dumps({
+                'arquivos_codigo': codigo_para_analise,
+                'lista_todos_arquivos': lista_arquivos
+            }, indent=2, ensure_ascii=False)
+        else:
+            codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
 
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
