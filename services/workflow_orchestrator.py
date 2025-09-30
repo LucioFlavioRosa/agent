@@ -42,6 +42,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
 
+            # Passo 10: Propagar a flag retornar_lista_arquivos
+            retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
+            print(f"[{job_id}] Flag retornar_lista_arquivos: {retornar_lista_arquivos}")
+
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 self.job_handler.update_job_status(job_id, step['status_update'])
@@ -75,7 +79,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
 
                 step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
-                                                             previous_step_result, repo_reader, i, start_from_step)
+                                                             previous_step_result, repo_reader, i, start_from_step, retornar_lista_arquivos)
 
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
@@ -98,7 +102,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
-                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
+                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, retornar_lista_arquivos: bool = False) -> Dict[str, Any]:
 
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
@@ -121,9 +125,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 'nome_branch': branch_name
             })
         
-        retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
-        print(f"[{job_id}] Flag retornar_lista_arquivos: {retornar_lista_arquivos}")
-        
+        # Passo 10: Propagar a flag para os agentes
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa,
