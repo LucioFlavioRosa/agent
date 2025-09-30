@@ -1,7 +1,7 @@
 import time
 import yaml
 import os
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
@@ -55,11 +55,13 @@ class ReaderGeral(IRepositoryReader):
         tipo_analise: str,
         repository_type: str,
         nome_branch: str = None,
-        arquivos_especificos: Optional[List[str]] = None
-    ) -> Dict[str, str]:
+        arquivos_especificos: Optional[List[str]] = None,
+        retornar_lista_arquivos: bool = False
+    ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         provider_name = type(self.repository_provider).__name__
         print(f"[Reader Geral] Iniciando leitura do repositório: {nome_repo} via {provider_name}")
         print(f"[Reader Geral] Tipo de repositório explícito: {repository_type}")
+        print(f"[Reader Geral] Flag retornar_lista_arquivos: {retornar_lista_arquivos}")
 
         conexao_geral = ConexaoGeral.create_with_defaults()
         
@@ -74,25 +76,32 @@ class ReaderGeral(IRepositoryReader):
         if repository_type == 'azure':
             print(f"[Reader Geral] Delegando para Azure Reader")
             resultado = self.azure_reader.read_repository_internal(
-                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes
+                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
             )
         elif repository_type == 'gitlab':
             print(f"[Reader Geral] Delegando para GitLab Reader")
             resultado = self.gitlab_reader.read_repository_internal(
-                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes
+                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
             )
         else:
             print(f"[Reader Geral] Delegando para GitHub Reader")
             resultado = self.github_reader.read_repository_internal(
-                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes
+                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
             )
         
-        print(f"[Reader Geral] Resultado da leitura: {len(resultado) if resultado else 0} arquivos")
+        if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
+            print(f"[Reader Geral] Resultado da leitura: {len(resultado['codigo']) if resultado['codigo'] else 0} arquivos de código, {len(resultado['lista_arquivos']) if resultado.get('lista_arquivos') else 0} arquivos totais")
+        else:
+            print(f"[Reader Geral] Resultado da leitura: {len(resultado) if resultado else 0} arquivos")
         
         if not resultado:
             print(f"[Reader Geral] AVISO CRÍTICO: Leitura retornou vazia para repositório {nome_repo} (tipo: {repository_type})")
             print(f"[Reader Geral] Parâmetros: tipo_analise={tipo_analise}, branch={nome_branch}, arquivos_especificos={arquivos_especificos}")
         else:
-            print(f"[Reader Geral] Arquivos lidos com sucesso: {list(resultado.keys())[:5]}{'...' if len(resultado) > 5 else ''}")
+            if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
+                arquivos_lidos = resultado['codigo']
+                print(f"[Reader Geral] Arquivos lidos com sucesso: {list(arquivos_lidos.keys())[:5]}{'...' if len(arquivos_lidos) > 5 else ''}")
+            else:
+                print(f"[Reader Geral] Arquivos lidos com sucesso: {list(resultado.keys())[:5]}{'...' if len(resultado) > 5 else ''}")
         
         return resultado
