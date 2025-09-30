@@ -1,38 +1,53 @@
-from agents.agente_revisor import AgenteRevisor
-from domain.interfaces.repository_reader_interface import IRepositoryReader
-from domain.interfaces.llm_provider_interface import ILLMProvider
+import json
+from typing import Dict, Any
+from services.step_executors.base_step_executor import BaseStepExecutor
+from services.factories.agent_factory import AgentFactory
+from tools.readers.reader_geral import ReaderGeral
 
-class RevisorStepExecutor:
-    def __init__(self, repository_reader: IRepositoryReader, llm_provider: ILLMProvider):
-        self.agent = AgenteRevisor(repository_reader, llm_provider)
+class RevisorStepExecutor(BaseStepExecutor):
+    def __init__(self, job_handler):
+        self.job_handler = job_handler
+    
+    def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
+                current_step_index: int, previous_step_result: Dict[str, Any], 
+                repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
+        
+        instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
+        instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
+        instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
 
-    def execute(self, job_id, job_info, step, current_step_index, previous_step_result, repo_reader, llm_provider, agent_params):
-        tipo_analise = agent_params.get('tipo_analise')
-        repositorio = agent_params.get('repositorio')
-        repository_type = agent_params.get('repository_type')
-        nome_branch = agent_params.get('nome_branch')
-        instrucoes_extras = agent_params.get('instrucoes_extras', "")
-        usar_rag = agent_params.get('usar_rag', False)
-        model_name = agent_params.get('model_name')
-        max_token_out = agent_params.get('max_token_out', 15000)
-        arquivos_especificos = agent_params.get('arquivos_especificos')
-        projeto = agent_params.get('projeto')
-        status_update = agent_params.get('status_update')
-        retornar_lista_arquivos = agent_params.get('retornar_lista_arquivos', False)
-
-        resultado = self.agent.main(
-            tipo_analise=tipo_analise,
-            repositorio=repositorio,
-            repository_type=repository_type,
-            nome_branch=nome_branch,
-            instrucoes_extras=instrucoes_extras,
-            usar_rag=usar_rag,
-            model_name=model_name,
-            max_token_out=max_token_out,
-            arquivos_especificos=arquivos_especificos,
-            job_id=job_id,
-            projeto=projeto,
-            status_update=status_update,
-            retornar_lista_arquivos=retornar_lista_arquivos
-        )
-        return resultado
+        observacoes_humanas = self.job_handler.get_approval_instructions(job_info)
+        if observacoes_humanas:
+            instrucoes_formatadas += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
+            print(f"[{job_id}] Aplicando instruções extras de aprovação na etapa {current_step_index}: {observacoes_humanas[:100]}...")
+            self.job_handler.clear_approval_instructions(job_info)
+            self.job_handler.update_job(job_id, job_info)
+            
+        agent_params['instrucoes_extras'] = instrucoes_formatadas
+        
+        if 'repositorio' not in agent_params:
+            agent_params['repositorio'] = job_info['data']['repo_name']
+        if 'nome_branch' not in agent_params:
+            agent_params['nome_branch'] = job_info['data']['branch_name']
+        
+        agent_params.update({
+            'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
+            'repository_type': job_info['data']['repository_type'],
+            'job_id': job_id,
+            'projeto': job_info['data']['projeto'],
+            'status_update': step['status_update']
+        })
+        
+        agente = AgentFactory.create_agent("revisor", repo_reader, llm_provider)
+        agent_response = agente.main(**agent_params)
+        
+        json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
+        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        
+        if not cleaned_string:
+            if previous_step_result and isinstance(previous_step_result, dict):
+                print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
+                return previous_step_result
+            raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
+        
+        return json.loads(cleaned_string)
