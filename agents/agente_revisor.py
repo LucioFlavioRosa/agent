@@ -35,7 +35,6 @@ class AgenteRevisor:
                 arquivos_especificos=arquivos_especificos,
                 retornar_lista_arquivos=retornar_lista_arquivos
             )
-            
             if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
                 return {
                     'codigo': resultado['codigo'],
@@ -43,7 +42,6 @@ class AgenteRevisor:
                 }
             else:
                 return {'codigo': resultado, 'lista_arquivos': []}
-            
         except Exception as e:
             print(f"[Agente Revisor] ERRO durante leitura do repositório: {e}")
             raise RuntimeError(f"Falha ao ler o repositório: {e}") from e
@@ -93,9 +91,7 @@ class AgenteRevisor:
                 print(f"[Agente Revisor] AVISO: Nenhum dos arquivos específicos foi encontrado no repositório para a análise '{tipo_analise}'.")
             else:
                 print(f"[Agente Revisor] AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
-            
             print(f"[Agente Revisor] Retornando resposta vazia devido à ausência de código")
-            
             log_custom_data(
                 job_id=job_id,
                 projeto=projeto,
@@ -104,7 +100,6 @@ class AgenteRevisor:
                 tipo_analise=tipo_analise,
                 data_hora=datetime.now(timezone.utc).isoformat()
             )
-            
             return {"resultado": {"reposta_final": {}}}
 
         if lista_arquivos:
