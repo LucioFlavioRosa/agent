@@ -1,5 +1,5 @@
 from github import GithubException, UnknownObjectException
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from tools.repo_committers.base_committer import BaseCommitter
 
 def processar_branch_github(
@@ -9,7 +9,8 @@ def processar_branch_github(
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
-    conjunto_de_mudancas: list
+    conjunto_de_mudancas: list,
+    modo_adicao_incremental: bool = False
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote GitHub para a Branch: '{nome_branch}' ---")
     
@@ -38,19 +39,21 @@ def processar_branch_github(
 
         try:
             sha_arquivo_existente = None
+            conteudo_existente_str = None
             try:
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
+                conteudo_existente_str = arquivo_existente.decoded_content.decode('utf-8')
             except UnknownObjectException:
                 pass
             
             if status in ("ADICIONADO", "CRIADO"):
                 if sha_arquivo_existente:
-                    print(f"  [AVISO] Arquivo '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
-                    repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
+                    print(f"  [AVISO] Arquivo '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO ou incremental.")
+                    conteudo_final = BaseCommitter._mesclar_conteudo_se_necessario(conteudo, conteudo_existente_str, modo_adicao_incremental, caminho)
+                    repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo_final or "", sha=sha_arquivo_existente, branch=nome_branch)
                 else:
                     repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo or "", branch=nome_branch)
-                    
                 print(f"  [CRIADO/MODIFICADO] {caminho}")
                 commits_realizados += 1
 
@@ -58,8 +61,8 @@ def processar_branch_github(
                 if not sha_arquivo_existente:
                     print(f"  [ERRO] Arquivo '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
                     continue
-                    
-                repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
+                conteudo_final = BaseCommitter._mesclar_conteudo_se_necessario(conteudo, conteudo_existente_str, modo_adicao_incremental, caminho)
+                repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo_final or "", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [MODIFICADO] {caminho}")
                 commits_realizados += 1
 
@@ -67,7 +70,6 @@ def processar_branch_github(
                 if not sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
                     continue
-                    
                 repo.delete_file(path=caminho, message=f"refactor: remove {caminho}", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [REMOVIDO] {caminho}")
                 commits_realizados += 1
