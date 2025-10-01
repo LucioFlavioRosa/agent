@@ -1,6 +1,7 @@
 from github import GithubException, UnknownObjectException
 from typing import Dict, Any, List
 from tools.repo_committers.base_committer import BaseCommitter
+from tools.repo_committers.content_merger import merge_file_content
 
 def processar_branch_github(
     repo,
@@ -38,6 +39,7 @@ def processar_branch_github(
 
         try:
             sha_arquivo_existente = None
+            arquivo_existente = None
             try:
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
@@ -47,7 +49,14 @@ def processar_branch_github(
             if status in ("ADICIONADO", "CRIADO"):
                 if sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
-                    repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
+                    # Merge incremental: lê conteúdo atual e adiciona novo conteúdo ao final
+                    try:
+                        conteudo_atual = arquivo_existente.decoded_content.decode('utf-8')
+                    except Exception as e:
+                        print(f"  [ERRO] Falha ao ler conteúdo atual de '{caminho}': {e}")
+                        conteudo_atual = ''
+                    conteudo_mesclado = merge_file_content(conteudo_atual, conteudo)
+                    repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo_mesclado, sha=sha_arquivo_existente, branch=nome_branch)
                 else:
                     repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo or "", branch=nome_branch)
                     
@@ -58,8 +67,13 @@ def processar_branch_github(
                 if not sha_arquivo_existente:
                     print(f"  [ERRO] Arquivo '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
                     continue
-                    
-                repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
+                try:
+                    conteudo_atual = arquivo_existente.decoded_content.decode('utf-8')
+                except Exception as e:
+                    print(f"  [ERRO] Falha ao ler conteúdo atual de '{caminho}': {e}")
+                    conteudo_atual = ''
+                conteudo_mesclado = merge_file_content(conteudo_atual, conteudo)
+                repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo_mesclado, sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [MODIFICADO] {caminho}")
                 commits_realizados += 1
 
