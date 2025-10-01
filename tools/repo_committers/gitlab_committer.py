@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
 from tools.repo_committers.base_committer import BaseCommitter
+from tools.repo_committers.content_merger import merge_file_content
 
 def processar_branch_gitlab(
     repo,
@@ -44,33 +45,44 @@ def processar_branch_gitlab(
 
             try:
                 if status in ("ADICIONADO", "CRIADO"):
-                    print(f"[DEBUG][GITLAB] Chamando repo.files.create para {caminho}")
-                    dados_criacao = {
-                        'file_path': caminho,
-                        'branch': nome_branch,
-                        'content': conteudo or "",
-                        'commit_message': f"feat: Cria {caminho}"
-                    }
-                    repo.files.create(dados_criacao)
-                    print(f"  [CRIADO] GitLab {caminho}")
-                    commits_realizados += 1
-
+                    try:
+                        arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
+                        conteudo_atual = arquivo.decode() if hasattr(arquivo, 'decode') else arquivo.content
+                        conteudo_mesclado = merge_file_content(conteudo_atual, conteudo)
+                        arquivo.content = conteudo_mesclado
+                        arquivo.save(branch=nome_branch, commit_message=f"feat: Cria {caminho}")
+                        print(f"  [CRIADO/MODIFICADO] GitLab {caminho}")
+                        commits_realizados += 1
+                    except Exception as e:
+                        if "404" in str(e) or "not found" in str(e).lower():
+                            repo.files.create({
+                                'file_path': caminho,
+                                'branch': nome_branch,
+                                'content': conteudo or "",
+                                'commit_message': f"feat: Cria {caminho}"
+                            })
+                            print(f"  [CRIADO] GitLab {caminho}")
+                            commits_realizados += 1
+                        else:
+                            print(f"[ERRO][GITLAB] Falha ao acessar arquivo existente '{caminho}': {e}")
                 elif status == "MODIFICADO":
-                    print(f"[DEBUG][GITLAB] Buscando arquivo para modificar: {caminho}")
-                    arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
-                    arquivo.content = conteudo or ""
+                    try:
+                        arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
+                        conteudo_atual = arquivo.decode() if hasattr(arquivo, 'decode') else arquivo.content
+                    except Exception as e:
+                        print(f"[ERRO][GITLAB] Falha ao obter conteúdo atual de '{caminho}': {e}")
+                        conteudo_atual = ''
+                    conteudo_mesclado = merge_file_content(conteudo_atual, conteudo)
+                    arquivo.content = conteudo_mesclado
                     arquivo.save(branch=nome_branch, commit_message=f"refactor: Modifica {caminho}")
                     print(f"  [MODIFICADO] GitLab {caminho}")
                     commits_realizados += 1
-
                 elif status == "REMOVIDO":
-                    print(f"[DEBUG][GITLAB] Chamando repo.files.delete para {caminho}")
                     repo.files.delete(file_path=caminho,
                                       branch=nome_branch,
                                       commit_message=f"refactor: Remove {caminho}")
                     print(f"  [REMOVIDO] GitLab {caminho}")
                     commits_realizados += 1
-                
                 else:
                     print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo GitLab '{caminho}'. Ignorando.")
 
