@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 class BaseCommitter:
     
@@ -59,3 +59,12 @@ class BaseCommitter:
             resultado_branch["pr_url"] = f"ERRO: PR não criado para branch {branch_name}. {error_message}"
         
         print(f"  [ERRO] {error_message}")
+
+    @staticmethod
+    def _mesclar_conteudo_se_necessario(conteudo_novo: str, conteudo_existente: Optional[str], modo_adicao_incremental: bool, caminho_arquivo: str) -> str:
+        if not modo_adicao_incremental or not conteudo_existente:
+            return conteudo_novo
+        delimitador_inicio = f"# --- INÍCIO DO CONTEÚDO ADICIONADO AUTOMATICAMENTE ({caminho_arquivo}) ---"
+        delimitador_fim = "# --- FIM DO CONTEÚDO ADICIONADO AUTOMATICAMENTE ---"
+        print(f"[BaseCommitter] Modo adição incremental ativado para '{caminho_arquivo}'. Mesclando conteúdo ao final do arquivo.")
+        return f"{conteudo_existente}\n\n{delimitador_inicio}\n{conteudo_novo}\n{delimitador_fim}\n"
