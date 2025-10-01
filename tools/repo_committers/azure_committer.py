@@ -4,6 +4,7 @@ import base64
 import traceback
 from tools.repo_committers.base_committer import BaseCommitter
 from tools.conectores.azure_conector import AzureConector
+from tools.repo_committers.content_merger import merge_file_content
 
 def processar_branch_azure(
     repo: Dict[str, Any],
@@ -85,11 +86,43 @@ def processar_branch_azure(
             }
             
             if status in ("ADICIONADO", "CRIAR", "CRIADO"):
-                change_item["changeType"] = "add"
-                change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
+                # Tenta buscar o arquivo para ver se já existe
+                file_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho}&versionDescriptor.version={nome_branch}&includeContent=true&api-version=7.0"
+                try:
+                    file_resp = requests.get(file_url, headers=headers, timeout=30)
+                    if file_resp.status_code == 200:
+                        file_data = file_resp.json()
+                        conteudo_atual = file_data.get('content', '')
+                        conteudo_mesclado = merge_file_content(conteudo_atual, conteudo)
+                        change_item["changeType"] = "edit"
+                        change_item["newContent"] = {"content": conteudo_mesclado or "", "contentType": "rawtext"}
+                        print(f"  [CRIADO/MODIFICADO] Azure {caminho} (merge incremental)")
+                    else:
+                        change_item["changeType"] = "add"
+                        change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
+                        print(f"  [CRIADO] Azure {caminho}")
+                except Exception as e:
+                    print(f"  [ERRO] Falha ao buscar arquivo existente '{caminho}': {e}")
+                    change_item["changeType"] = "add"
+                    change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
+                    print(f"  [CRIADO] Azure {caminho}")
             elif status == "MODIFICADO":
+                file_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho}&versionDescriptor.version={nome_branch}&includeContent=true&api-version=7.0"
+                try:
+                    file_resp = requests.get(file_url, headers=headers, timeout=30)
+                    if file_resp.status_code == 200:
+                        file_data = file_resp.json()
+                        conteudo_atual = file_data.get('content', '')
+                    else:
+                        print(f"  [ERRO] Não foi possível obter conteúdo atual de '{caminho}' (status {file_resp.status_code})")
+                        conteudo_atual = ''
+                except Exception as e:
+                    print(f"  [ERRO] Falha ao buscar conteúdo atual de '{caminho}': {e}")
+                    conteudo_atual = ''
+                conteudo_mesclado = merge_file_content(conteudo_atual, conteudo)
                 change_item["changeType"] = "edit"
-                change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
+                change_item["newContent"] = {"content": conteudo_mesclado or "", "contentType": "rawtext"}
+                print(f"  [MODIFICADO] Azure {caminho}")
             elif status == "REMOVIDO":
                 change_item["changeType"] = "delete"
             
