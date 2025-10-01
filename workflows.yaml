@@ -371,7 +371,7 @@ relatorio_erros_migracao:
   extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "claude-sonnet-4-5"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_erros_migracao"
