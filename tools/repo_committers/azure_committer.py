@@ -12,7 +12,8 @@ def processar_branch_azure(
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
-    conjunto_de_mudancas: list
+    conjunto_de_mudancas: list,
+    modo_adicao_incremental: bool = False
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote Azure DevOps para a Branch: '{nome_branch}' ---")
     
@@ -88,6 +89,12 @@ def processar_branch_azure(
                 change_item["changeType"] = "add"
                 change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
             elif status == "MODIFICADO":
+                if modo_adicao_incremental:
+                    get_item_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho}&api-version=7.0"
+                    item_response = requests.get(get_item_url, headers=headers, timeout=30)
+                    if item_response.status_code == 200:
+                        conteudo_existente = item_response.text
+                        conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                 change_item["changeType"] = "edit"
                 change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
             elif status == "REMOVIDO":
