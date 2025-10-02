@@ -59,3 +59,11 @@ class BaseCommitter:
             resultado_branch["pr_url"] = f"ERRO: PR não criado para branch {branch_name}. {error_message}"
         
         print(f"  [ERRO] {error_message}")
+    
+    @staticmethod
+    def _mesclar_conteudo(conteudo_existente: str, novo_conteudo: str) -> str:
+        if conteudo_existente is None:
+            conteudo_existente = ""
+        if novo_conteudo is None:
+            novo_conteudo = ""
+        return conteudo_existente + "\n\n" + novo_conteudo
