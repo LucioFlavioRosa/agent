@@ -134,3 +134,33 @@ class CommitHandler:
         if not url or not isinstance(url, str):
             return False
         return url.startswith('http://') or url.startswith('https://') or "Branch processada" in url or "PR criado" in url
+
+from typing import Dict, Any
+from domain.interfaces.job_manager_interface import JobManagerInterface
+from domain.interfaces.job_store_interface import JobStoreInterface
+from domain.interfaces.workflow_orchestrator_interface import WorkflowOrchestratorInterface
+from services.workflow_registry_service import WorkflowRegistryService
+from tools.repo_committers.orchestrator import processar_branch_por_provedor
+from services.analysis_type_provider import AnalysisTypeProvider
+
+class CommitHandler:
+    def __init__(self, job_store: JobStoreInterface, job_manager: JobManagerInterface, workflow_orchestrator: WorkflowOrchestratorInterface, workflow_registry_service: WorkflowRegistryService):
+        self.job_store = job_store
+        self.job_manager = job_manager
+        self.workflow_orchestrator = workflow_orchestrator
+        self.workflow_registry_service = workflow_registry_service
+
+    def executar_commit(self, job_id: str, job_data: Dict[str, Any], repo, branch_de_origem: str, branch_alvo_do_pr: str, mensagem_pr: str, descricao_pr: str, conjunto_de_mudancas: list, repository_type: str):
+        modo_adicao_incremental = job_data.get('modo_adicao_incremental', False)
+        resultado_commit = processar_branch_por_provedor(
+            repo=repo,
+            nome_branch=job_data.get('branch_name_modernizado', ''),
+            branch_de_origem=branch_de_origem,
+            branch_alvo_do_pr=branch_alvo_do_pr,
+            mensagem_pr=mensagem_pr,
+            descricao_pr=descricao_pr,
+            conjunto_de_mudancas=conjunto_de_mudancas,
+            repository_type=repository_type,
+            modo_adicao_incremental=modo_adicao_incremental
+        )
+        return resultado_commit
