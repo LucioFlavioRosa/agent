@@ -10,6 +10,7 @@ class IRepositoryReader(ABC):
         repository_type: str,
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None,
-        retornar_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False,
+        modo_adicao_incremental: bool = False
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         pass

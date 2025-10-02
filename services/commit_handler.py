@@ -52,6 +52,8 @@ class CommitHandler:
                 print(f"[{job_id}] BLINDAGEM: Sem grupos para commit, commit_details definido")
                 return
             
+            modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
+            
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
@@ -65,7 +67,8 @@ class CommitHandler:
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
                         descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
                         conjunto_de_mudancas=grupo.get("conjunto_de_mudancas", []),
-                        repository_type=repository_type
+                        repository_type=repository_type,
+                        modo_adicao_incremental=modo_adicao_incremental
                     )
                     
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
