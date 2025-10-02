@@ -8,7 +8,8 @@ def processar_branch_gitlab(
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
-    conjunto_de_mudancas: list
+    conjunto_de_mudancas: list,
+    modo_adicao_incremental: bool = False
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote GitLab para a Branch: '{nome_branch}' ---")
     print(f"[DEBUG][GITLAB] Tipo do objeto repo: {type(repo)}")
@@ -58,6 +59,9 @@ def processar_branch_gitlab(
                 elif status == "MODIFICADO":
                     print(f"[DEBUG][GITLAB] Buscando arquivo para modificar: {caminho}")
                     arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
+                    conteudo_existente = arquivo.decode().decode('utf-8') if hasattr(arquivo, 'decode') else arquivo.content
+                    if modo_adicao_incremental:
+                        conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                     arquivo.content = conteudo or ""
                     arquivo.save(branch=nome_branch, commit_message=f"refactor: Modifica {caminho}")
                     print(f"  [MODIFICADO] GitLab {caminho}")
