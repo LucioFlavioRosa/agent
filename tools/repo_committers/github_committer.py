@@ -9,7 +9,8 @@ def processar_branch_github(
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
-    conjunto_de_mudancas: list
+    conjunto_de_mudancas: list,
+    modo_adicao_incremental: bool = False
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote GitHub para a Branch: '{nome_branch}' ---")
     
@@ -38,6 +39,7 @@ def processar_branch_github(
 
         try:
             sha_arquivo_existente = None
+            arquivo_existente = None
             try:
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
@@ -55,10 +57,12 @@ def processar_branch_github(
                 commits_realizados += 1
 
             elif status == "MODIFICADO":
-                if not sha_arquivo_existente:
+                if not sha_arquivo_existente or not arquivo_existente:
                     print(f"  [ERRO] Arquivo '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
                     continue
-                    
+                if modo_adicao_incremental:
+                    conteudo_existente = arquivo_existente.decoded_content.decode('utf-8')
+                    conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                 repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [MODIFICADO] {caminho}")
                 commits_realizados += 1
@@ -67,7 +71,6 @@ def processar_branch_github(
                 if not sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
                     continue
-                    
                 repo.delete_file(path=caminho, message=f"refactor: remove {caminho}", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [REMOVIDO] {caminho}")
                 commits_realizados += 1
