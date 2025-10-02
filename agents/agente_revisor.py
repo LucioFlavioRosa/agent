@@ -60,7 +60,8 @@ class AgenteRevisor:
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
         status_update: Optional[str] = None,
-        retornar_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False,
+        modo_adicao_incremental: bool = False
     ) -> Dict[str, Any]:
 
         log_custom_data(
@@ -71,7 +72,8 @@ class AgenteRevisor:
             tipo_repositorio=repository_type,
             nome_repositorio=repositorio,
             tipo_analise=tipo_analise,
-            model_name=model_name
+            model_name=model_name,
+            modo_adicao_incremental=modo_adicao_incremental
         )
 
         resultado_leitura = self._get_code(
@@ -98,7 +100,8 @@ class AgenteRevisor:
                 status="ERRO_SEM_CODIGO",
                 repositorio=repositorio,
                 tipo_analise=tipo_analise,
-                data_hora=datetime.now(timezone.utc).isoformat()
+                data_hora=datetime.now(timezone.utc).isoformat(),
+                modo_adicao_incremental=modo_adicao_incremental
             )
             return {"resultado": {"reposta_final": {}}}
 
@@ -131,6 +134,7 @@ class AgenteRevisor:
             nome_repositorio=repositorio,
             tipo_analise=tipo_analise,
             model_name=model_name,
+            modo_adicao_incremental=modo_adicao_incremental
         )
 
         return {
