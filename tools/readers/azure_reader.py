@@ -14,7 +14,7 @@ class AzureReader(BaseReader):
     def _get_azure_auth_headers(self, repositorio_dict: dict) -> dict:
         connector = AzureConector.create_with_defaults()
         organization = repositorio_dict.get('_organization')
-        token = connector._get_token_for_org(organization)
+        token = connector._get_token_for_org(organization, platform='azure')
         credentials = base64.b64encode(f":{token}".encode()).decode()
         return {
             "Content-Type": "application/json",
