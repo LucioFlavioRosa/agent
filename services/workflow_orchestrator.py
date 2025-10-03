@@ -72,7 +72,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         previous_step_result = report_data
                         continue
                     else:
-                        print(f"[{job_id}] Relatório não encontrado no Blob Storage, gerando novo relatório via agente")
+                        print(f"[{job_id}] gerar_novo_relatorio={job_info['data'].get('gerar_novo_relatorio', True)}, mas relatório não encontrado no Blob Storage. Gerando novo relatório via agente e salvando.")
 
                 step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
                                                              previous_step_result, repo_reader, i, start_from_step)
@@ -146,10 +146,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         report_text = self.report_handler.extract_report_text(step_result)
         job_info['data']['analysis_report'] = report_text
 
-        if job_info['data'].get('gerar_novo_relatorio', True):
-            self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-        else:
-            print(f"[{job_id}] gerar_novo_relatorio=False - Não salvando relatório no Blob Storage")
+        self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        if not job_info['data'].get('gerar_novo_relatorio', True):
+            print(f"[{job_id}] gerar_novo_relatorio=False, mas relatório foi gerado pelo agente e salvo no Blob Storage (comportamento correto).")
 
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
