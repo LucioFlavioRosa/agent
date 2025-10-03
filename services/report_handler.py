@@ -38,3 +38,13 @@ class ReportHandler:
         report_text = self.extract_report_text(step_result)
         job_info['data']['analysis_report'] = report_text
         self.save_report_to_blob(job_id, job_info, report_text)
+
+    def validate_and_parse_blob_report(self, report_text, job_id):
+        if not report_text or not isinstance(report_text, str):
+            print(f"[{job_id}] ERRO: Relatório lido do Blob é inválido. Tipo: {type(report_text)}")
+            return None
+        if len(report_text.strip()) == 0:
+            print(f"[{job_id}] ERRO: Relatório lido do Blob está vazio.")
+            return None
+        print(f"[{job_id}] Relatório válido lido do Blob Storage ({len(report_text)} chars).")
+        return report_text.strip()
