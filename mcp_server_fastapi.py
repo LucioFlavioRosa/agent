@@ -51,6 +51,7 @@ class JobFields:
     BRANCH_NAME_ORIGINAL = 'branch_name_original'
     RETORNAR_LISTA_ARQUIVOS = 'retornar_lista_arquivos'
     MODO_ADICAO_INCREMENTAL = 'modo_adicao_incremental'
+    USUARIO_EXECUTOR = 'usuario_executor'
 
 class JobActions:
     APPROVE = 'approve'
@@ -77,6 +78,7 @@ class StartAnalysisPayload(BaseModel):
     branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
     retornar_lista_arquivos: bool = Field(False, description="Se True, além do código filtrado, retorna lista completa de todos os arquivos do repositório")
     modo_adicao_incremental: bool = Field(False, description="Se True, o novo conteúdo será ADICIONADO ao final dos arquivos existentes, ao invés de substituí-los. Útil para migrações de frameworks.")
+    usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -176,7 +178,8 @@ def _create_initial_job_data(payload: StartAnalysisPayload, normalized_repo_name
             JobFields.REPO_NAME_ORIGINAL: payload.repo_name_original,
             JobFields.BRANCH_NAME_ORIGINAL: payload.branch_name_original,
             JobFields.RETORNAR_LISTA_ARQUIVOS: payload.retornar_lista_arquivos,
-            JobFields.MODO_ADICAO_INCREMENTAL: payload.modo_adicao_incremental
+            JobFields.MODO_ADICAO_INCREMENTAL: payload.modo_adicao_incremental,
+            JobFields.USUARIO_EXECUTOR: payload.usuario_executor
         },
         JobFields.ERROR_DETAILS: None
     }
@@ -223,7 +226,8 @@ def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_
             JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
             JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE],
             JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
-            JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False)
+            JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
+            JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR)
         },
         JobFields.ERROR_DETAILS: None
     }
