@@ -1,7 +1,10 @@
 import json
 from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
 
 from domain.interfaces.llm_provider_interface import ILLMProvider
+from agents.logging_utils import init_logger, log_custom_data
+
 
 class AgenteProcessador:
     
@@ -22,7 +25,9 @@ class AgenteProcessador:
         lista_arquivos: Optional[List[str]] = None,
         retornar_lista_arquivos: bool = False,
         modo_adicao_incremental: bool = False,
-        usuario_executor: Optional[str] = None
+        usuario_executor: Optional[str] = None,
+        job_id: Optional[str] = None,
+        projeto: Optional[str] = None,
     ) -> Dict[str, Any]:
         if lista_arquivos:
             print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
@@ -40,6 +45,20 @@ class AgenteProcessador:
             usar_rag=usar_rag,
             model_name=model_name,
             max_token_out=max_token_out
+        )
+
+        log_custom_data(
+            job_id=job_id,
+            projeto=projeto,
+            data_hora=datetime.now(timezone.utc).isoformat(),
+            tokens_in=resultado_da_ia['tokens_entrada'],
+            tokens_out=resultado_da_ia['tokens_saida'],
+            tipo_repositorio=repository_type,
+            nome_repositorio=repositorio,
+            tipo_analise=tipo_analise,
+            model_name=model_name,
+            modo_adicao_incremental=modo_adicao_incremental,
+            usuario_executor=usuario_executor
         )
 
         return {"resultado": {"reposta_final": resultado_da_ia}}
