@@ -50,12 +50,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                 if current_step_index == 0:
                     existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
-                    if existing_report_result:
-                        report_data = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
-                        report_text = report_data.get('relatorio', '')
-                        job_info['data']['analysis_report'] = report_text
+                    existing_report_text = self.report_handler.validate_and_parse_blob_report(existing_report_result, job_id)
+                    if existing_report_text:
+                        job_info['data']['analysis_report'] = existing_report_text
+                        report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
-                        # Relatório carregado do Blob, não foi gerado pelo agente. Não salvar novamente.
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         if strategy.should_finalize_workflow(job_info, current_step_index):
                             self.job_handler.update_job_status(job_id, 'completed')
@@ -66,8 +65,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         previous_step_result = report_data
                         continue
                     else:
-                        print(f"[{job_id}] gerar_novo_relatorio={job_info['data'].get('gerar_novo_relatorio', True)}, mas relatório não encontrado no Blob Storage. Gerando novo relatório via agente.")
-                        report_generated_by_agent = True  # Flag para indicar que o relatório será gerado pelo agente e deve ser salvo
+                        print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
+                        report_generated_by_agent = True
 
                 step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
                                                              previous_step_result, repo_reader, i, start_from_step)
