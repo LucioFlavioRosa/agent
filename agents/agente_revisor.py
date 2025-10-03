@@ -61,7 +61,8 @@ class AgenteRevisor:
         projeto: Optional[str] = None,
         status_update: Optional[str] = None,
         retornar_lista_arquivos: bool = False,
-        modo_adicao_incremental: bool = False
+        modo_adicao_incremental: bool = False,
+        usuario_executor: Optional[str] = None
     ) -> Dict[str, Any]:
 
         log_custom_data(
@@ -73,7 +74,8 @@ class AgenteRevisor:
             nome_repositorio=repositorio,
             tipo_analise=tipo_analise,
             model_name=model_name,
-            modo_adicao_incremental=modo_adicao_incremental
+            modo_adicao_incremental=modo_adicao_incremental,
+            usuario_executor=usuario_executor
         )
 
         resultado_leitura = self._get_code(
@@ -101,7 +103,8 @@ class AgenteRevisor:
                 repositorio=repositorio,
                 tipo_analise=tipo_analise,
                 data_hora=datetime.now(timezone.utc).isoformat(),
-                modo_adicao_incremental=modo_adicao_incremental
+                modo_adicao_incremental=modo_adicao_incremental,
+                usuario_executor=usuario_executor
             )
             return {"resultado": {"reposta_final": {}}}
 
@@ -134,7 +137,8 @@ class AgenteRevisor:
             nome_repositorio=repositorio,
             tipo_analise=tipo_analise,
             model_name=model_name,
-            modo_adicao_incremental=modo_adicao_incremental
+            modo_adicao_incremental=modo_adicao_incremental,
+            usuario_executor=usuario_executor
         )
 
         return {
