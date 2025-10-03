@@ -129,7 +129,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'model_name': model_para_etapa,
             'repository_type': job_info['data']['repository_type'],
             'retornar_lista_arquivos': retornar_lista_arquivos,
-            'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False)
+            'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False),
+            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
         })
 
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
