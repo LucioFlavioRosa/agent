@@ -46,7 +46,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 self.job_handler.update_job_status(job_id, step['status_update'])
 
-                report_was_generated_by_agent = False
                 if current_step_index == 0:
                     existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
                     if existing_report_result:
@@ -67,19 +66,26 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         previous_step_result = report_data
                         continue
                     else:
+                        # Relatório não encontrado no Blob Storage. Será gerado pelo agente e salvo após a execução do step.
                         print(f"[{job_id}] gerar_novo_relatorio={job_info['data'].get('gerar_novo_relatorio', True)}, mas relatório não encontrado no Blob Storage. Gerando novo relatório via agente.")
-                        report_was_generated_by_agent = True
 
                 step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
                                                              previous_step_result, repo_reader, i, start_from_step)
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
 
-                if current_step_index == 0 and report_was_generated_by_agent:
-                    report_text = self.report_handler.extract_report_text(step_result)
-                    job_info['data']['analysis_report'] = report_text
-                    self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-                    print(f"[{job_id}] Relatório gerado pelo agente salvo no Blob Storage.")
+                # Salvar relatório se foi gerado no step 0
+                if current_step_index == 0:
+                    try:
+                        report_text = self.report_handler.extract_report_text(step_result)
+                        if report_text:
+                            job_info['data']['analysis_report'] = report_text
+                            self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+                            print(f"[{job_id}] Relatório gerado pelo agente salvo no Blob Storage.")
+                        else:
+                            print(f"[{job_id}] AVISO: Step 0 executado, mas nenhum relatório foi extraído do resultado.")
+                    except Exception as e:
+                        print(f"[{job_id}] ERRO ao salvar relatório gerado pelo agente: {e}")
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
