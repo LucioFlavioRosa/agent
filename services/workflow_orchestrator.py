@@ -46,39 +46,40 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 self.job_handler.update_job_status(job_id, step['status_update'])
 
+                report_was_generated_by_agent = False
                 if current_step_index == 0:
                     existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
                     if existing_report_result:
                         print(f"[{job_id}] Relatório existente encontrado no Blob Storage")
-
                         report_data = json.loads(existing_report_result['resultado']['reposta_final']['reposta_final'])
                         report_text = report_data.get('relatorio', '')
-
                         job_info['data']['analysis_report'] = report_text
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
-
+                        print(f"[{job_id}] Relatório carregado do Blob Storage. Salvamento não necessário.")
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-
                         if strategy.should_finalize_workflow(job_info, current_step_index):
                             print(f"[{job_id}] Modo 'gerar_relatorio_apenas' ativo com relatório existente. Finalizando.")
                             self.job_handler.update_job_status(job_id, 'completed')
                             return
-
                         if strategy.should_pause_for_approval(step):
-                            print(f"[{job_id}] Relatório existente carregado. Pausando para aprovação do usuário.")
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
-
                         previous_step_result = report_data
                         continue
                     else:
-                        print(f"[{job_id}] gerar_novo_relatorio={job_info['data'].get('gerar_novo_relatorio', True)}, mas relatório não encontrado no Blob Storage. Gerando novo relatório via agente e salvando.")
+                        print(f"[{job_id}] gerar_novo_relatorio={job_info['data'].get('gerar_novo_relatorio', True)}, mas relatório não encontrado no Blob Storage. Gerando novo relatório via agente.")
+                        report_was_generated_by_agent = True
 
                 step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
                                                              previous_step_result, repo_reader, i, start_from_step)
-
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
+
+                if current_step_index == 0 and report_was_generated_by_agent:
+                    report_text = self.report_handler.extract_report_text(step_result)
+                    job_info['data']['analysis_report'] = report_text
+                    self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+                    print(f"[{job_id}] Relatório gerado pelo agente salvo no Blob Storage.")
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
@@ -142,14 +143,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
-
         report_text = self.report_handler.extract_report_text(step_result)
         job_info['data']['analysis_report'] = report_text
-
-        self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-        if not job_info['data'].get('gerar_novo_relatorio', True):
-            print(f"[{job_id}] gerar_novo_relatorio=False, mas relatório foi gerado pelo agente e salvo no Blob Storage (comportamento correto).")
-
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
