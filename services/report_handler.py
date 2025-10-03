@@ -9,7 +9,8 @@ class ReportHandler:
         repo_name = job_info['data'].get('repo_name')
         branch_name = job_info['data'].get('branch_name')
         analysis_name = job_info['data'].get('analysis_name')
-        return self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        usuario_executor = job_info['data'].get('usuario_executor')
+        return self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name, usuario_executor=usuario_executor)
 
     def extract_report_text(self, step_result):
         if not step_result:
@@ -29,9 +30,10 @@ class ReportHandler:
         repo_name = job_info['data'].get('repo_name')
         branch_name = job_info['data'].get('branch_name')
         analysis_name = job_info['data'].get('analysis_name')
+        usuario_executor = job_info['data'].get('usuario_executor')
         if report_generated_by_agent:
             print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
-        url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name, usuario_executor=usuario_executor)
         job_info['data']['report_blob_url'] = url
 
     def handle_report_only_mode(self, job_id, job_info, step_result):
