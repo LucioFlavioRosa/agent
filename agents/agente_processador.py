@@ -21,7 +21,8 @@ class AgenteProcessador:
         max_token_out: int = 15000,
         lista_arquivos: Optional[List[str]] = None,
         retornar_lista_arquivos: bool = False,
-        modo_adicao_incremental: bool = False
+        modo_adicao_incremental: bool = False,
+        usuario_executor: Optional[str] = None
     ) -> Dict[str, Any]:
         if lista_arquivos:
             print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
