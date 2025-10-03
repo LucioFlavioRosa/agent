@@ -6,18 +6,18 @@ from tools.blob_report_reader import read_report_from_blob
 class BlobStorageService(IBlobStorageService):
     def upload_report(self, report_text: str, projeto: str, analysis_type: str, 
                      repository_type: str, repo_name: str, branch_name: str, 
-                     analysis_name: str) -> str:
+                     analysis_name: str, usuario_executor: Optional[str] = None) -> str:
         return upload_report_to_blob(
             report_text, projeto, analysis_type, repository_type, 
-            repo_name, branch_name, analysis_name
+            repo_name, branch_name, analysis_name, usuario_executor
         )
     
     def read_report(self, projeto: str, analysis_type: str, repository_type: str, 
-                   repo_name: str, branch_name: str, analysis_name: str) -> Optional[str]:
+                   repo_name: str, branch_name: str, analysis_name: str, usuario_executor: Optional[str] = None) -> Optional[str]:
         try:
             return read_report_from_blob(
                 projeto, analysis_type, repository_type, 
-                repo_name, branch_name, analysis_name
+                repo_name, branch_name, analysis_name, usuario_executor
             )
         except FileNotFoundError:
             return None
