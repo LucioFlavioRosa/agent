@@ -100,7 +100,7 @@ class AgenteRevisor:
                 job_id=job_id,
                 projeto=projeto,
                 status="ERRO_SEM_CODIGO",
-                repositorio=repositorio,
+                nome_repositorio=repositorio,
                 tipo_analise=tipo_analise,
                 data_hora=datetime.now(timezone.utc).isoformat(),
                 modo_adicao_incremental=modo_adicao_incremental,
