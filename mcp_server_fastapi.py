@@ -238,6 +238,10 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
     
     print(f"[{job_id}] Construindo resposta final - gerar_relatorio_apenas: {job_data.get(JobFields.GERAR_RELATORIO_APENAS)}")
     
+    blob_path = job_data.get('report_blob_path')
+    print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
+    print(f"[{job_id}] Blob path extraído do job_data: {blob_path}")
+
     if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
         print(f"[{job_id}] Modo relatório apenas - retornando resposta simples")
         return FinalStatusResponse(
@@ -368,7 +372,8 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                 arquivos_modificados=pr_summary.arquivos_modificados,
                 retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
                 modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
-                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR)
+                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+                blob_file_name=blob_path
             )
         return FinalStatusResponse(
             job_id=job_id, 
@@ -539,6 +544,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         elif status == JobStatus.FAILED:
             job_data = job.get(JobFields.DATA, {})
             logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
+            blob_path = job_data.get('report_blob_path')
             # Logging de falha do job
             log_custom_data(
                 job_id=job_id,
@@ -553,7 +559,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
                 retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
                 modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
-                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR)
+                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+                blob_file_name=blob_path
             )
             return FinalStatusResponse(
                 job_id=job_id,
