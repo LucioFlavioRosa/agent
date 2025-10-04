@@ -399,7 +399,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                 tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
                 nome_repositorio=job_data.get(JobFields.REPO_NAME),
                 tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
-                branch_name=pr_summary.branch_name,
+                branch_name=payload.branch_name_modernizado,
                 analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
                 arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
                 pr_url=pr_summary.pull_request_url,
