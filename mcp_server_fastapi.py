@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
+from agents.logging_utils import log_custom_data
 
 class JobStatus:
     STARTING = 'starting'
@@ -349,6 +350,26 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             print(f"[{job_id}] DIAGNÓSTICO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
+
+        # Logging de cada PR criado
+        for pr_summary in summary_list:
+            log_custom_data(
+                job_id=job_id,
+                projeto=job_data.get(JobFields.PROJETO),
+                data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+                status=JobStatus.COMPLETED,
+                tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
+                nome_repositorio=job_data.get(JobFields.REPO_NAME),
+                tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
+                branch_name=pr_summary.branch_name,
+                analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
+                arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+                pr_url=pr_summary.pull_request_url,
+                arquivos_modificados=pr_summary.arquivos_modificados,
+                retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
+                modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
+                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR)
+            )
         return FinalStatusResponse(
             job_id=job_id, 
             status=JobStatus.COMPLETED, 
@@ -384,6 +405,23 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     initial_job_data = _create_initial_job_data(payload, normalized_repo_name, analysis_name)
 
     job_store.set_job(job_id, initial_job_data)
+
+    # Logging do início da análise
+    log_custom_data(
+        job_id=job_id,
+        projeto=payload.projeto,
+        data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+        status=JobStatus.STARTING,
+        tipo_repositorio=payload.repository_type,
+        nome_repositorio=normalized_repo_name,
+        tipo_analise=payload.analysis_type.value,
+        branch_name=payload.branch_name_modernizado,
+        analysis_name=analysis_name,
+        arquivos_especificos=payload.arquivos_especificos,
+        retornar_lista_arquivos=payload.retornar_lista_arquivos,
+        modo_adicao_incremental=payload.modo_adicao_incremental,
+        usuario_executor=payload.usuario_executor
+    )
 
     if analysis_name:
         analysis_service.register_analysis(analysis_name, job_id)
@@ -499,7 +537,24 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         if status == JobStatus.COMPLETED:
             return _build_completed_response(job_id, job, blob_url)
         elif status == JobStatus.FAILED:
-            logs = job.get(JobFields.DATA, {}).get(JobFields.DIAGNOSTIC_LOGS)
+            job_data = job.get(JobFields.DATA, {})
+            logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
+            # Logging de falha do job
+            log_custom_data(
+                job_id=job_id,
+                projeto=job_data.get(JobFields.PROJETO),
+                data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+                status=JobStatus.FAILED,
+                tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
+                nome_repositorio=job_data.get(JobFields.REPO_NAME),
+                tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
+                branch_name=job_data.get(JobFields.BRANCH_NAME),
+                analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
+                arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+                retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
+                modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
+                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR)
+            )
             return FinalStatusResponse(
                 job_id=job_id,
                 status=status,
