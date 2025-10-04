@@ -12,6 +12,8 @@ from services.step_strategies.step_strategy_factory import StepStrategyFactory
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
+from agents.logging_utils import log_custom_data
+import time
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -78,8 +80,21 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         report_text = self.report_handler.extract_report_text(step_result)
                         if report_text:
                             job_info['data']['analysis_report'] = report_text
-                            self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+                            blob_url, blob_path = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
                             print(f"[{job_id}] Relatório gerado pelo agente salvo no Blob Storage.")
+                            # LOGGING COM BLOB PATH
+                            log_custom_data(
+                                job_id=job_id,
+                                projeto=job_info['data']['projeto'],
+                                data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+                                status='report_saved',
+                                tipo_repositorio=job_info['data']['repository_type'],
+                                nome_repositorio=job_info['data']['repo_name'],
+                                tipo_analise=job_info['data']['original_analysis_type'],
+                                branch_name=job_info['data']['branch_name'],
+                                analysis_name=job_info['data']['analysis_name'],
+                                blob_file_name=blob_path
+                            )
                         else:
                             print(f"[{job_id}] AVISO: Step 0 executado, mas nenhum relatório foi extraído do resultado.")
                     except Exception as e:
