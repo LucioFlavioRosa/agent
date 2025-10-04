@@ -1,6 +1,6 @@
 import logging
 import json
-from typing import Optional
+from typing import Optional, List
 
 logger = logging.getLogger("agente_logger")
 logger.setLevel(logging.INFO)
@@ -25,7 +25,14 @@ def log_custom_data(
     tokens_in: Optional[int] = None,
     tokens_out: Optional[int] = None,
     modo_adicao_incremental: Optional[bool] = None,
-    usuario_executor: Optional[str] = None
+    usuario_executor: Optional[str] = None,
+    analysis_type: Optional[str] = None,
+    branch_name: Optional[str] = None,
+    analysis_name: Optional[str] = None,
+    arquivos_especificos: Optional[List[str]] = None,
+    pr_url: Optional[str] = None,
+    arquivos_modificados: Optional[List[str]] = None,
+    retornar_lista_arquivos: Optional[bool] = None
 ):
     log_entry = {
         "job_id": job_id,
@@ -39,6 +46,13 @@ def log_custom_data(
         "tokens_entrada": tokens_in,
         "tokens_saida": tokens_out,
         "modo_adicao_incremental": modo_adicao_incremental,
-        "usuario_executor": usuario_executor
+        "usuario_executor": usuario_executor,
+        "analysis_type": analysis_type,
+        "branch_name": branch_name,
+        "analysis_name": analysis_name,
+        "arquivos_especificos": arquivos_especificos,
+        "pr_url": pr_url,
+        "arquivos_modificados": arquivos_modificados,
+        "retornar_lista_arquivos": retornar_lista_arquivos
     }
     logger.info(json.dumps(log_entry))
