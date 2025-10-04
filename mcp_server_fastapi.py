@@ -2,6 +2,8 @@ import json
 import uuid
 import time
 import traceback
+import os
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
@@ -233,6 +235,23 @@ def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_
         JobFields.ERROR_DETAILS: None
     }
 
+def _extract_blob_filename(blob_url: Optional[str]) -> Optional[str]:
+    if not blob_url:
+        return None
+    try:
+        parsed = urlparse(blob_url)
+        path = parsed.path
+        filename = os.path.basename(path)
+        if filename:
+            return filename
+        else:
+            return blob_url
+    except Exception:
+        try:
+            return blob_url.split('/')[-1]
+        except Exception:
+            return blob_url
+
 def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
     job_data = job.get(JobFields.DATA, {})
     
@@ -351,6 +370,25 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
 
+        # Logging do nome do arquivo salvo no blob storage (logging global da conclusão do job)
+        blob_filename = _extract_blob_filename(blob_url)
+        log_custom_data(
+            job_id=job_id,
+            projeto=job_data.get(JobFields.PROJETO),
+            data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+            status=JobStatus.COMPLETED,
+            tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
+            nome_repositorio=job_data.get(JobFields.REPO_NAME),
+            tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
+            branch_name=job_data.get(JobFields.BRANCH_NAME),
+            analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
+            arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+            retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
+            modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
+            usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+            blob_filename=blob_filename
+        )
+
         # Logging de cada PR criado
         for pr_summary in summary_list:
             log_custom_data(
@@ -368,7 +406,8 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                 arquivos_modificados=pr_summary.arquivos_modificados,
                 retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
                 modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
-                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR)
+                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+                blob_filename=blob_filename
             )
         return FinalStatusResponse(
             job_id=job_id, 
@@ -406,7 +445,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
 
     job_store.set_job(job_id, initial_job_data)
 
-    # Logging do início da análise
+    # Logging do início da análise (NÃO inclui blob_filename, pois ainda não existe)
     log_custom_data(
         job_id=job_id,
         projeto=payload.projeto,
@@ -540,6 +579,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             job_data = job.get(JobFields.DATA, {})
             logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
             # Logging de falha do job
+            blob_filename = _extract_blob_filename(job_data.get(JobFields.REPORT_BLOB_URL))
             log_custom_data(
                 job_id=job_id,
                 projeto=job_data.get(JobFields.PROJETO),
@@ -553,7 +593,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
                 arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
                 retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
                 modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
-                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR)
+                usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+                blob_filename=blob_filename
             )
             return FinalStatusResponse(
                 job_id=job_id,
