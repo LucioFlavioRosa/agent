@@ -32,7 +32,8 @@ def log_custom_data(
     arquivos_especificos: Optional[List[str]] = None,
     pr_url: Optional[str] = None,
     arquivos_modificados: Optional[List[str]] = None,
-    retornar_lista_arquivos: Optional[bool] = None
+    retornar_lista_arquivos: Optional[bool] = None,
+    blob_file_name: Optional[str] = None  # NOVO PARÂMETRO
 ):
     log_entry = {
         "job_id": job_id,
@@ -53,6 +54,7 @@ def log_custom_data(
         "arquivos_especificos": arquivos_especificos,
         "pr_url": pr_url,
         "arquivos_modificados": arquivos_modificados,
-        "retornar_lista_arquivos": retornar_lista_arquivos
+        "retornar_lista_arquivos": retornar_lista_arquivos,
+        "blob_file_name": blob_file_name  # NOVA CHAVE
     }
     logger.info(json.dumps(log_entry))
