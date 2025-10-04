@@ -28,7 +28,7 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
 ```json
 {
   "resumo_geral": "...",
-  "pr_grupo_1...": {
+  "pr_grupo_1_mais_um_nome_representativo": {
     "resumo_do_pr": "...",
     "descricao_do_pr": "...",
     "conjunto_de_mudancas": [
@@ -40,7 +40,7 @@ Sua resposta final deve ser **um único bloco de código JSON válido**, sem nen
       }
     ]
   },
-"pr_grupo_2...": {
+"pr_grupo_2_mais_um_nome_representativo": {
     "resumo_do_pr": "...",
     "descricao_do_pr": "...",
     "conjunto_de_mudancas": [
