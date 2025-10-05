@@ -41,20 +41,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] [STEP_0] Iniciando - gerar_novo_relatorio={gerar_novo}, gerar_relatorio_apenas={report_only}")
         report_text = None
         step_result = None
-        report_source = None
-        # ETAPA 1: Tentar ler do blob (se aplicável)
+        # 1. Tentar ler relatório existente (se permitido)
         if not gerar_novo:
             print(f"[{job_id}] [STEP_0] Tentando ler relatório existente do blob")
             existing_report = self.report_handler.try_read_existing_report(job_id, job_info, 0)
-            if existing_report and self.report_handler.is_valid_report(existing_report):
-                report_text = existing_report
-                report_source = 'blob'
-                print(f"[{job_id}] Relatório válido lido do blob")
-            else:
-                print(f"[{job_id}] Blob não encontrado ou inválido, gerando via agente")
-        # ETAPA 2: Gerar via agente (se necessário)
-        if report_text is None:
-            print(f"[{job_id}] Executando agente para gerar relatório")
+            report_text = self.report_handler.validate_and_parse_blob_report(existing_report, job_id, gerar_novo)
+        # 2. Executar agente se necessário
+        if not report_text:
+            print(f"[{job_id}] [STEP_0] Executando agente para gerar relatório - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
             step_result = strategy.execute_step(
                 job_id, job_info, step, 0, None, repo_reader, llm_provider, agent_params
@@ -65,20 +59,16 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             report_source = 'agent'
         else:
             step_result = {'relatorio': report_text}
-        # ETAPA 3: Salvar no job e blob
+        # 3. Salvar relatório no job e blob
         job_info['data'][JobFields.ANALYSIS_REPORT] = report_text
-        url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=(report_source == 'agent'))
+        url = self.report_handler.save_report_to_blob(job_id, job_info, report_text)
+        print(f"[{job_id}] [STEP_0] Relatório salvo: {url} - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
+        # 4. Validar artefatos
         self._validate_report_artifacts(job_id, job_info)
-        # ETAPA 4: DECISÃO DE FLUXO (Tabela de Verdade)
-        if report_only:
-            should_stop = True
-            requires_approval = False
-            print(f"[{job_id}] Finalizando (gerar_relatorio_apenas=True, fonte={report_source})")
-        else:
-            should_stop = False
-            requires_approval = True
-            print(f"[{job_id}] Pausando para aprovação (gerar_relatorio_apenas=False, fonte={report_source})")
-        return {'should_stop': should_stop, 'step_result': step_result, 'requires_approval': requires_approval}
+        # 5. Decidir se deve parar
+        should_stop = report_only
+        print(f"[{job_id}] [STEP_0] Decisão: should_stop={should_stop} - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
+        return {'should_stop': should_stop, 'step_result': step_result}
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
