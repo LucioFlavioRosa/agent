@@ -46,12 +46,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not workflow:
             raise ValueError("Workflow não encontrado.")
 
-        steps = workflow.get('steps', [])
-        gerar_relatorio_apenas = job_info['data'].get('gerar_relatorio_apenas', False)
-        gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', False)
-        if gerar_relatorio_apenas and len(steps) > 1:
-            print(f"[{job_id}] AVISO: gerar_relatorio_apenas=True mas workflow tem {len(steps)} steps. Apenas step 0 será executado.")
-
         try:
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data']['repo_name']
@@ -59,12 +53,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repo_reader = ReaderGeral(repository_provider=repository_provider)
 
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
-            steps_to_run = steps[start_from_step:]
+            steps_to_run = workflow.get('steps', [])[start_from_step:]
 
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
-                print(f"[{job_id}] Executando step {current_step_index}/{len(steps)-1}")
-                print(f"[{job_id}] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
+                print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
+                print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get('data', {}).get('gerar_relatorio_apenas')}")
 
                 print(f"[{job_id}] Status atual: {step['status_update']}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
@@ -74,28 +68,25 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if current_step_index == 0:
                     existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
                     existing_report_text = self.report_handler.validate_and_parse_blob_report(existing_report_result, job_id)
-                    should_generate_new = self.report_handler.should_generate_new_report(job_info, existing_report_text)
-                    print(f"[{job_id}] DECISÃO: should_generate_new_report={should_generate_new} - gerar_relatorio_apenas={gerar_relatorio_apenas}, gerar_novo_relatorio={gerar_novo_relatorio}, tem_relatorio={bool(existing_report_text)}")
-                    if not should_generate_new:
+                    if existing_report_text:
                         job_info['data']['analysis_report'] = existing_report_text
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         if strategy.should_finalize_workflow(job_info, current_step_index):
-                            print(f"[{job_id}] Workflow finalizado no step {current_step_index} (relatório existente)")
+                            print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
                             print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                             print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                             self.job_handler.update_job_status(job_id, 'completed')
-                            print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only, relatório existente)")
+                            print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                             return
                         if strategy.should_pause_for_approval(step):
-                            print(f"[{job_id}] DECISÃO: Pausando para aprovação após relatório existente.")
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
                         previous_step_result = report_data
                         continue
                     else:
-                        print(f"[{job_id}] DECISÃO: Gerando novo relatório via agente.")
+                        print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
                         report_generated_by_agent = True
 
                 step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
@@ -111,14 +102,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     if not job_info['data'].get('report_blob_url'):
                         raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
                     print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
-                    strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                    if strategy.should_finalize_workflow(job_info, current_step_index):
-                        print(f"[{job_id}] Workflow finalizado no step {current_step_index} (relatório novo)")
-                        print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
-                        print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
-                        self.job_handler.update_job_status(job_id, 'completed')
-                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only, relatório novo)")
-                        return
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
@@ -131,7 +114,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     return
 
                 if strategy.should_pause_for_approval(step):
-                    print(f"[{job_id}] DECISÃO: Pausando para aprovação após relatório novo.")
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
 
@@ -143,13 +125,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
                                    repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
-
-        if current_step_index == 0:
-            analysis_report = job_info['data'].get('analysis_report')
-            gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', False)
-            if analysis_report and not gerar_novo_relatorio:
-                print(f"[{job_id}] Pulando execução do agente: relatório já existe e não deve gerar novo.")
-                return {'relatorio': analysis_report}
 
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
