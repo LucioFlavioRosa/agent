@@ -13,7 +13,52 @@ from fastapi.middleware.cors import CORSMiddleware
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
 from agents.logging_utils import log_custom_data
-from models import JobStatus, JobFields, JobActions
+
+class JobStatus:
+    STARTING = 'starting'
+    PENDING_APPROVAL = 'pending_approval'
+    WORKFLOW_STARTED = 'workflow_started'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+    REJECTED = 'rejected'
+
+class JobFields:
+    STATUS = 'status'
+    DATA = 'data'
+    ERROR_DETAILS = 'error_details'
+    REPO_NAME = 'repo_name'
+    ORIGINAL_REPO_NAME = 'original_repo_name'
+    PROJETO = 'projeto'
+    BRANCH_NAME = 'branch_name'
+    ORIGINAL_ANALYSIS_TYPE = 'original_analysis_type'
+    INSTRUCOES_EXTRAS = 'instrucoes_extras'
+    MODEL_NAME = 'model_name'
+    USAR_RAG = 'usar_rag'
+    GERAR_RELATORIO_APENAS = 'gerar_relatorio_apenas'
+    GERAR_NOVO_RELATORIO = 'gerar_novo_relatorio'
+    ARQUIVOS_ESPECIFICOS = 'arquivos_especificos'
+    ANALYSIS_NAME = 'analysis_name'
+    REPOSITORY_TYPE = 'repository_type'
+    ANALYSIS_REPORT = 'analysis_report'
+    REPORT_BLOB_URL = 'report_blob_url'
+    COMMIT_DETAILS = 'commit_details'
+    DIAGNOSTIC_LOGS = 'diagnostic_logs'
+    INSTRUCOES_EXTRAS_APROVACAO = 'instrucoes_extras_aprovacao'
+    PAUSED_AT_STEP = 'paused_at_step'
+    SUCCESS = 'success'
+    PR_URL = 'pr_url'
+    ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
+    REPO_NAME_MODERNIZADO = 'repo_name_modernizado'
+    BRANCH_NAME_MODERNIZADO = 'branch_name_modernizado'
+    REPO_NAME_ORIGINAL = 'repo_name_original'
+    BRANCH_NAME_ORIGINAL = 'branch_name_original'
+    RETORNAR_LISTA_ARQUIVOS = 'retornar_lista_arquivos'
+    MODO_ADICAO_INCREMENTAL = 'modo_adicao_incremental'
+    USUARIO_EXECUTOR = 'usuario_executor'
+
+class JobActions:
+    APPROVE = 'approve'
+    REJECT = 'reject'
 
 container = DependencyContainer()
 workflow_registry_service = container.get_workflow_registry_service()
@@ -327,6 +372,22 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
 
         blob_filename = _extract_blob_filename(blob_url)
+        log_custom_data(
+            job_id=job_id,
+            projeto=job_data.get(JobFields.PROJETO),
+            data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+            status=JobStatus.COMPLETED,
+            tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
+            nome_repositorio=job_data.get(JobFields.REPO_NAME),
+            tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
+            branch_name=job_data.get(JobFields.BRANCH_NAME),
+            analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
+            arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+            retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
+            modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
+            usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+            blob_filename=blob_filename
+        )
 
         for pr_summary in summary_list:
             log_custom_data(
@@ -376,12 +437,15 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     
     normalized_repo_name = _normalize_repo_name_by_type(repo_name, payload.repository_type)
 
-    # Removida a validação restritiva de flags para permitir todas as combinações válidas
+    # Passo 9: validação de flags gerar_relatorio_apenas e gerar_novo_relatorio
+    if payload.gerar_relatorio_apenas and not payload.gerar_novo_relatorio:
+        raise HTTPException(
+            status_code=400,
+            detail="Configuração inválida: gerar_relatorio_apenas=True requer gerar_novo_relatorio=True"
+        )
 
     job_id = str(uuid.uuid4())
     analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
-
-    print(f"[{job_id}] Configuração validada - gerar_relatorio_apenas: {payload.gerar_relatorio_apenas}, gerar_novo_relatorio: {payload.gerar_novo_relatorio}, analysis_type: {payload.analysis_type.value}")
 
     initial_job_data = _create_initial_job_data(payload, normalized_repo_name, analysis_name)
 
