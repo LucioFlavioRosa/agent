@@ -43,7 +43,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         step_result = None
         # 1. Tentar ler relatório existente (se permitido)
         if not gerar_novo:
-            print(f"[{job_id}] [STEP_0] Tentando ler relatório existente do blob - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
+            print(f"[{job_id}] [STEP_0] Tentando ler relatório existente do blob")
             existing_report = self.report_handler.try_read_existing_report(job_id, job_info, 0)
             report_text = self.report_handler.validate_and_parse_blob_report(existing_report, job_id, gerar_novo)
         # 2. Executar agente se necessário
@@ -54,10 +54,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 job_id, job_info, step, 0, None, repo_reader, llm_provider, agent_params
             )
             report_text = self.report_handler.extract_report_text(step_result)
-            if not report_text:
+            if not self.report_handler.is_valid_report(report_text):
                 raise ValueError(f"[{job_id}] Agente não gerou relatório válido")
+            report_source = 'agent'
         else:
-            print(f"[{job_id}] [STEP_0] Usando relatório existente do blob - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             step_result = {'relatorio': report_text}
         # 3. Salvar relatório no job e blob
         job_info['data'][JobFields.ANALYSIS_REPORT] = report_text
@@ -125,6 +125,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     )
                     self.job_handler.save_step_result(job_info, current_step_index, result_step_zero['step_result'])
                     previous_step_result = result_step_zero['step_result']
+                    if result_step_zero['requires_approval']:
+                        self.handle_approval_step(job_id, job_info, current_step_index, result_step_zero['step_result'])
+                        return
                     if result_step_zero['should_stop']:
                         self.job_handler.update_job_status(job_id, 'completed')
                         print(f"[{job_id}] [DECISAO] Workflow finalizado após step 0 - Flags: gerar_relatorio_apenas={gerar_relatorio_apenas}, gerar_novo_relatorio={gerar_novo_relatorio}")
