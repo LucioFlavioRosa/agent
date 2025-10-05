@@ -327,22 +327,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
 
         blob_filename = _extract_blob_filename(blob_url)
-        log_custom_data(
-            job_id=job_id,
-            projeto=job_data.get(JobFields.PROJETO),
-            data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
-            status=JobStatus.COMPLETED,
-            tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
-            nome_repositorio=job_data.get(JobFields.REPO_NAME),
-            tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
-            branch_name=job_data.get(JobFields.BRANCH_NAME),
-            analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
-            arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
-            retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
-            modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
-            usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
-            blob_filename=blob_filename
-        )
 
         for pr_summary in summary_list:
             log_custom_data(
