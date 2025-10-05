@@ -41,10 +41,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] [STEP_0] Iniciando - gerar_novo_relatorio={gerar_novo}, gerar_relatorio_apenas={report_only}")
         report_text = None
         step_result = None
+        # 1. Tentar ler relatório existente (se permitido)
         if not gerar_novo:
             print(f"[{job_id}] [STEP_0] Tentando ler relatório existente do blob - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             existing_report = self.report_handler.try_read_existing_report(job_id, job_info, 0)
             report_text = self.report_handler.validate_and_parse_blob_report(existing_report, job_id, gerar_novo)
+        # 2. Executar agente se necessário
         if not report_text:
             print(f"[{job_id}] [STEP_0] Executando agente para gerar relatório - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
@@ -57,10 +59,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         else:
             print(f"[{job_id}] [STEP_0] Usando relatório existente do blob - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             step_result = {'relatorio': report_text}
+        # 3. Salvar relatório no job e blob
         job_info['data'][JobFields.ANALYSIS_REPORT] = report_text
         url = self.report_handler.save_report_to_blob(job_id, job_info, report_text)
         print(f"[{job_id}] [STEP_0] Relatório salvo: {url} - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
+        # 4. Validar artefatos
         self._validate_report_artifacts(job_id, job_info)
+        # 5. Decidir se deve parar
         should_stop = report_only
         print(f"[{job_id}] [STEP_0] Decisão: should_stop={should_stop} - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
         return {'should_stop': should_stop, 'step_result': step_result}
