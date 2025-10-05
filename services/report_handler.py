@@ -32,12 +32,20 @@ class ReportHandler:
         if report_generated_by_agent:
             print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
         url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        if not url:
+            raise ValueError(f"[{job_id}] ERRO: Blob Storage não retornou URL válida")
         job_info['data']['report_blob_url'] = url
+        print(f"[{job_id}] Relatório salvo no Blob Storage: {url}")
+        return url
 
     def handle_report_only_mode(self, job_id, job_info, step_result):
         report_text = self.extract_report_text(step_result)
+        if not report_text or len(report_text.strip()) == 0:
+            raise ValueError(f"[{job_id}] ERRO: Tentativa de salvar relatório vazio no modo report_only")
         job_info['data']['analysis_report'] = report_text
-        self.save_report_to_blob(job_id, job_info, report_text)
+        url = self.save_report_to_blob(job_id, job_info, report_text)
+        print(f"[{job_id}] Modo report_only: Relatório salvo com sucesso ({len(report_text)} chars)")
+        return url
 
     def validate_and_parse_blob_report(self, report_text, job_id):
         if not report_text or not isinstance(report_text, str):
