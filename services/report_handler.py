@@ -1,4 +1,5 @@
-from mcp_server_fastapi import JobFields
+from models import JobFields
+
 
 class ReportHandler:
     def __init__(self, blob_storage):
