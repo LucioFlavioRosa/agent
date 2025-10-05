@@ -392,12 +392,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     
     normalized_repo_name = _normalize_repo_name_by_type(repo_name, payload.repository_type)
 
-    # Passo 9: validação de flags gerar_relatorio_apenas e gerar_novo_relatorio
-    if payload.gerar_relatorio_apenas and not payload.gerar_novo_relatorio:
-        raise HTTPException(
-            status_code=400,
-            detail="Configuração inválida: gerar_relatorio_apenas=True requer gerar_novo_relatorio=True"
-        )
+    # Removida a validação restritiva de flags para permitir todas as combinações válidas
 
     job_id = str(uuid.uuid4())
     analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
