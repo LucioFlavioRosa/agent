@@ -1,6 +1,6 @@
 import json
 from typing import Dict, Any, Optional
-from mcp_server_fastapi import JobFields
+from models import JobFields
 
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
 from domain.interfaces.job_manager_interface import IJobManager
