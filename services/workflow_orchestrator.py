@@ -59,9 +59,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
-                if current_step_index == 0 and job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS):
+                # Passo 10: Validação no início de cada iteração
+                if current_step_index == 0 and job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS, False):
                     print(f"[{job_id}] MODO REPORT_ONLY ATIVO - Executando step 0 (análise) antes de finalizar")
-                if current_step_index > 0 and job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS):
+                if current_step_index > 0 and job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS, False):
                     raise ValueError(f"[{job_id}] ERRO DE LÓGICA: modo report_only não deve executar step {current_step_index}")
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS)}")
@@ -81,8 +82,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                        # NÃO FINALIZA ANTES DE EXECUTAR O STEP, MESMO NO MODO REPORT_ONLY
                         previous_step_result = report_data
+                        # Não finaliza aqui, deixa para depois do step
                         continue
                     else:
                         print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
@@ -107,7 +108,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
-                # FINALIZAÇÃO SÓ APÓS EXECUTAR O STEP E SALVAR O RELATÓRIO
+                # Passo 9: Log detalhado já está implementado na strategy
+                # Passo 3: Finalização só se relatório existir
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     if not job_info['data'].get(JobFields.REPORT_BLOB_URL) or not job_info['data'].get(JobFields.ANALYSIS_REPORT):
                         raise ValueError(f"[{job_id}] ERRO: Tentativa de finalizar sem relatório completo. Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}, Report exists: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
