@@ -1,14 +1,8 @@
-from models import JobFields
-
 class ReportHandler:
     def __init__(self, blob_storage):
         self.blob_storage = blob_storage
 
     def try_read_existing_report(self, job_id, job_info, current_step_index):
-        gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
-        if gerar_novo_relatorio:
-            print(f"[{job_id}] [REPORT_HANDLER] Leitura do blob pulada devido a gerar_novo_relatorio=True")
-            return None
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
@@ -53,18 +47,11 @@ class ReportHandler:
         print(f"[{job_id}] Modo report_only: Relatório salvo com sucesso ({len(report_text)} chars)")
         return url
 
-    def validate_and_parse_blob_report(self, report_text, job_id, gerar_novo_relatorio=False):
-        if gerar_novo_relatorio:
-            print(f"[{job_id}] [REPORT_HANDLER] Ignorando relatório do blob devido a gerar_novo_relatorio=True")
-            return None
+    def validate_and_parse_blob_report(self, report_text, job_id):
         if not report_text or not isinstance(report_text, str):
             print(f"[{job_id}] ERRO: Relatório lido do Blob é inválido. Tipo: {type(report_text)}")
             return None
         if len(report_text.strip()) == 0:
             print(f"[{job_id}] ERRO: Relatório lido do Blob está vazio.")
             return None
-        if len(report_text.strip()) < 50:
-            print(f"[{job_id}] AVISO: Relatório muito curto ({len(report_text)} chars), considerado inválido")
-            return None
         print(f"[{job_id}] Relatório válido lido do Blob Storage ({len(report_text)} chars).")
-        return report_text
