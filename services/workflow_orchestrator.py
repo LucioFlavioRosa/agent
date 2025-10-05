@@ -73,8 +73,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                        # Ordem correta: 1º finalizar, 2º aprovação
                         if strategy.should_finalize_workflow(job_info, current_step_index):
-                            print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
+                            print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                             print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                             print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                             self.job_handler.update_job_status(job_id, 'completed')
@@ -105,8 +106,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
+                # Ordem correta: 1º finalizar, 2º aprovação
                 if strategy.should_finalize_workflow(job_info, current_step_index):
-                    print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
+                    print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                     print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                     self.job_handler.update_job_status(job_id, 'completed')
