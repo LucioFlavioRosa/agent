@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from services.step_executors.step_executor_factory import StepExecutorFactory
 from tools.readers.reader_geral import ReaderGeral
+from mcp_server_fastapi import JobFields
 
 class DefaultStepStrategy:
     def __init__(self, job_handler):
@@ -22,7 +23,7 @@ class DefaultStepStrategy:
         )
     
     def should_finalize_workflow(self, job_info: Dict[str, Any], current_step_index: int) -> bool:
-        return job_info.get('data', {}).get('gerar_relatorio_apenas', False) and current_step_index == 0
+        return job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS, False) and current_step_index == 0
     
     def should_pause_for_approval(self, step: Dict[str, Any]) -> bool:
         return step.get('requires_approval', False)
