@@ -23,7 +23,17 @@ class DefaultStepStrategy:
         )
     
     def should_finalize_workflow(self, job_info: Dict[str, Any], current_step_index: int) -> bool:
-        return job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS, False) and current_step_index == 0
+        gerar_relatorio_apenas = job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS, False)
+        analysis_report = job_info.get('data', {}).get(JobFields.ANALYSIS_REPORT)
+        blob_url = job_info.get('data', {}).get(JobFields.REPORT_BLOB_URL)
+        print(f"[STRATEGY] Verificando finalização - gerar_relatorio_apenas: {gerar_relatorio_apenas}, current_step: {current_step_index}, report_exists: {bool(analysis_report)}, blob_url_exists: {bool(blob_url)}")
+        if gerar_relatorio_apenas and current_step_index == 0:
+            if analysis_report and blob_url:
+                return True
+            else:
+                print(f"[STRATEGY] Não pode finalizar: relatório não existe ainda")
+                return False
+        return False
     
     def should_pause_for_approval(self, step: Dict[str, Any]) -> bool:
         return step.get('requires_approval', False)

@@ -84,16 +84,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         previous_step_result = report_data
                         # Só finaliza se for report_only e relatório válido
-                        if job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS):
-                            if strategy.should_finalize_workflow(job_info, current_step_index):
-                                if not job_info['data'].get(JobFields.REPORT_BLOB_URL) or not job_info['data'].get(JobFields.ANALYSIS_REPORT):
-                                    raise ValueError(f"[{job_id}] ERRO: Tentativa de finalizar sem relatório completo. Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}, Report exists: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
-                                print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
-                                print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
-                                print(f"[{job_id}] Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}")
-                                self.job_handler.update_job_status(job_id, 'completed')
-                                print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                                return
+                        # Não deve finalizar aqui! A finalização deve ocorrer após a execução do step e salvamento do relatório
                         continue
                     else:
                         print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
@@ -121,6 +112,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 # Passo 9: Log detalhado já está implementado na strategy
                 # Passo 3: Finalização só se relatório existir
                 if strategy.should_finalize_workflow(job_info, current_step_index):
+                    print(f"[{job_id}] [FINALIZAÇÃO] Checando artefatos antes de finalizar...")
                     if not job_info['data'].get(JobFields.REPORT_BLOB_URL) or not job_info['data'].get(JobFields.ANALYSIS_REPORT):
                         raise ValueError(f"[{job_id}] ERRO: Tentativa de finalizar sem relatório completo. Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}, Report exists: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index}")

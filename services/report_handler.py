@@ -57,5 +57,8 @@ class ReportHandler:
         if len(report_text.strip()) == 0:
             print(f"[{job_id}] ERRO: Relatório lido do Blob está vazio.")
             return None
+        if len(report_text.strip()) < 50:
+            print(f"[{job_id}] AVISO: Relatório muito curto ({len(report_text)} chars), considerado inválido")
+            return None
         print(f"[{job_id}] Relatório válido lido do Blob Storage ({len(report_text)} chars).")
         return report_text
