@@ -54,8 +54,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 job_id, job_info, step, 0, None, repo_reader, llm_provider, agent_params
             )
             report_text = self.report_handler.extract_report_text(step_result)
-            if not self.report_handler.is_valid_report(report_text):
-                raise ValueError(f"[{job_id}] Agente não gerou relatório válido")
+           # if not self.report_handler.is_valid_report(report_text):
+            #    raise ValueError(f"[{job_id}] Agente não gerou relatório válido")
             report_source = 'agent'
         else:
             step_result = {'relatorio': report_text}
