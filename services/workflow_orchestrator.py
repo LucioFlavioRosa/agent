@@ -83,8 +83,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         previous_step_result = report_data
-                        # Não finaliza aqui, deixa para depois do step
-                        continue
+                        # Só finaliza depois do step, não aqui
                     else:
                         print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
                         report_generated_by_agent = True
@@ -109,8 +108,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
                 # Passo 9: Log detalhado já está implementado na strategy
-                # Passo 3: Finalização só se relatório existir
+                # Passo 3/7: Finalização só se relatório e blob_url existirem
                 if strategy.should_finalize_workflow(job_info, current_step_index):
+                    print(f"[{job_id}] Verificando finalização do workflow após execução do step {current_step_index}")
                     if not job_info['data'].get(JobFields.REPORT_BLOB_URL) or not job_info['data'].get(JobFields.ANALYSIS_REPORT):
                         raise ValueError(f"[{job_id}] ERRO: Tentativa de finalizar sem relatório completo. Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}, Report exists: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
