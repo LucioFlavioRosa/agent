@@ -402,6 +402,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_id = str(uuid.uuid4())
     analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
 
+    print(f"[{job_id}] Configuração validada - gerar_relatorio_apenas: {payload.gerar_relatorio_apenas}, gerar_novo_relatorio: {payload.gerar_novo_relatorio}, analysis_type: {payload.analysis_type.value}")
+
     initial_job_data = _create_initial_job_data(payload, normalized_repo_name, analysis_name)
 
     job_store.set_job(job_id, initial_job_data)
