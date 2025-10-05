@@ -83,7 +83,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         previous_step_result = report_data
-                        # Não finaliza aqui, deixa para depois do step
+                        # Só finaliza se for report_only e relatório válido
+                        if job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS):
+                            if strategy.should_finalize_workflow(job_info, current_step_index):
+                                if not job_info['data'].get(JobFields.REPORT_BLOB_URL) or not job_info['data'].get(JobFields.ANALYSIS_REPORT):
+                                    raise ValueError(f"[{job_id}] ERRO: Tentativa de finalizar sem relatório completo. Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}, Report exists: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
+                                print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
+                                print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
+                                print(f"[{job_id}] Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}")
+                                self.job_handler.update_job_status(job_id, 'completed')
+                                print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
+                                return
                         continue
                     else:
                         print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
@@ -104,7 +114,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         raise ValueError(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio e não pode ser salvo.")
                     if not job_info['data'].get(JobFields.REPORT_BLOB_URL):
                         raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
-                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data'][JobFields.REPORT_BLOB_URL]}")
+                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}")
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
