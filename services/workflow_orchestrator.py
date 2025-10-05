@@ -76,6 +76,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                             print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                             self.job_handler.update_job_status(job_id, 'completed')
+                            print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                             return
                         if strategy.should_pause_for_approval(step):
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
