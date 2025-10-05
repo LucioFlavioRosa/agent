@@ -28,18 +28,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
 
-    def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
-        report_text = self.report_handler.extract_report_text(step_result)
-        if not report_text or len(report_text.strip()) == 0:
-            print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
-            return False
-        job_info['data'][JobFields.ANALYSIS_REPORT] = report_text
-        url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-        if not url:
-            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
-        print(f"[{job_id}] Relatório salvo com sucesso: {url}")
-        return True
-
     def _validate_report_artifacts(self, job_id: str, job_info: Dict[str, Any]):
         analysis_report = job_info['data'].get(JobFields.ANALYSIS_REPORT)
         blob_url = job_info['data'].get(JobFields.REPORT_BLOB_URL)
@@ -56,7 +44,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not gerar_novo:
             print(f"[{job_id}] [STEP_0] Tentando ler relatório existente do blob - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             existing_report = self.report_handler.try_read_existing_report(job_id, job_info, 0)
-            report_text = self.report_handler.validate_and_parse_blob_report(existing_report, job_id)
+            report_text = self.report_handler.validate_and_parse_blob_report(existing_report, job_id, gerar_novo)
         if not report_text:
             print(f"[{job_id}] [STEP_0] Executando agente para gerar relatório - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
