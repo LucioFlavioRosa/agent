@@ -258,7 +258,8 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
     print(f"[{job_id}] Construindo resposta final - gerar_relatorio_apenas: {job_data.get(JobFields.GERAR_RELATORIO_APENAS)}")
     
     if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
-        print(f"[{job_id}] Modo relatório apenas - retornando resposta simples")
+        print(f"[{job_id}] Resposta para modo report_only - Blob URL: {blob_url}")
+        print(f"[{job_id}] Tamanho do relatório: {len(job_data.get(JobFields.ANALYSIS_REPORT, ''))} chars")
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.COMPLETED,
@@ -370,7 +371,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
 
-        # Logging do nome do arquivo salvo no blob storage (logging global da conclusão do job)
         blob_filename = _extract_blob_filename(blob_url)
         log_custom_data(
             job_id=job_id,
@@ -389,7 +389,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             blob_filename=blob_filename
         )
 
-        # Logging de cada PR criado
         for pr_summary in summary_list:
             log_custom_data(
                 job_id=job_id,
@@ -438,6 +437,13 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     
     normalized_repo_name = _normalize_repo_name_by_type(repo_name, payload.repository_type)
 
+    # Passo 9: validação de flags gerar_relatorio_apenas e gerar_novo_relatorio
+    if payload.gerar_relatorio_apenas and not payload.gerar_novo_relatorio:
+        raise HTTPException(
+            status_code=400,
+            detail="Configuração inválida: gerar_relatorio_apenas=True requer gerar_novo_relatorio=True"
+        )
+
     job_id = str(uuid.uuid4())
     analysis_name = _generate_analysis_name(payload.analysis_name, job_id)
 
@@ -445,7 +451,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
 
     job_store.set_job(job_id, initial_job_data)
 
-    # Logging do início da análise (NÃO inclui blob_filename, pois ainda não existe)
     log_custom_data(
         job_id=job_id,
         projeto=payload.projeto,
@@ -574,11 +579,14 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
 
     try:
         if status == JobStatus.COMPLETED:
+            job_data = job.get(JobFields.DATA, {})
+            if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
+                print(f"[{job_id}] Resposta para modo report_only - Blob URL: {blob_url}")
+                print(f"[{job_id}] Tamanho do relatório: {len(job_data.get(JobFields.ANALYSIS_REPORT, ''))} chars")
             return _build_completed_response(job_id, job, blob_url)
         elif status == JobStatus.FAILED:
             job_data = job.get(JobFields.DATA, {})
             logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
-            # Logging de falha do job
             blob_filename = _extract_blob_filename(job_data.get(JobFields.REPORT_BLOB_URL))
             log_custom_data(
                 job_id=job_id,
