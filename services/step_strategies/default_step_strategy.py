@@ -1,7 +1,7 @@
 from typing import Dict, Any
 from services.step_executors.step_executor_factory import StepExecutorFactory
 from tools.readers.reader_geral import ReaderGeral
-from mcp_server_fastapi import JobFields
+from models import JobFields
 
 class DefaultStepStrategy:
     def __init__(self, job_handler):
