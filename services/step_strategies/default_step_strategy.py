@@ -1,5 +1,8 @@
 from typing import Dict, Any
 
+from services.step_executors.step_executor_factory import StepExecutorFactory
+from tools.readers.reader_geral import ReaderGeral
+
 class DefaultStepStrategy:
     def __init__(self, job_handler):
         self.job_handler = job_handler
@@ -16,5 +19,17 @@ class DefaultStepStrategy:
         return step.get('requires_approval', False)
 
     def execute_step(self, job_id, job_info, step, current_step_index, previous_step_result, repo_reader, llm_provider, agent_params):
-        # Implementação real omitida, pois não faz parte do escopo da alteração
-        pass
+        def execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
+                    current_step_index: int, previous_step_result: Dict[str, Any], 
+                    repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
+        
+        agent_type = step.get('agent_type')
+        if not agent_type:
+            raise ValueError(f"Tipo de agente não especificado na etapa {current_step_index}")
+        
+        executor = StepExecutorFactory.create_executor(agent_type, self.job_handler)
+        
+        return executor.execute(
+            job_id, job_info, step, current_step_index, 
+            previous_step_result, repo_reader, llm_provider, agent_params
+        )
