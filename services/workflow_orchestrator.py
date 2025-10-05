@@ -56,7 +56,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not gerar_novo:
             print(f"[{job_id}] [STEP_0] Tentando ler relatório existente do blob - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             existing_report = self.report_handler.try_read_existing_report(job_id, job_info, 0)
-            report_text = self.report_handler.validate_and_parse_blob_report(existing_report, job_id, gerar_novo)
+            report_text = self.report_handler.validate_and_parse_blob_report(existing_report, job_id)
         if not report_text:
             print(f"[{job_id}] [STEP_0] Executando agente para gerar relatório - Flags: gerar_relatorio_apenas={report_only}, gerar_novo_relatorio={gerar_novo}")
             strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
