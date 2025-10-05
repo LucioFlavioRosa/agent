@@ -10,6 +10,7 @@ from services.commit_handler import CommitHandler
 from services.data_formatter import DataFormatter
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
+from mcp_server_fastapi import JobFields
 
 class DependencyContainer:
     def __init__(self):
