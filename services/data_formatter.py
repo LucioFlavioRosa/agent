@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from tools.preenchimento import ChangesetFiller
-from mcp_server_fastapi import JobFields
+from models import JobFields
 
 class DataFormatter:
     def __init__(self, changeset_filler: ChangesetFiller = None):
