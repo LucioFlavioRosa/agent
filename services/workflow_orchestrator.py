@@ -42,8 +42,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
-
+        print(f"[{job_id}] DIAGNÓSTICO INICIAL - gerar_relatorio_apenas: {job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS)}, gerar_novo_relatorio: {job_info.get('data', {}).get(JobFields.GERAR_NOVO_RELATORIO)}, start_from_step: {start_from_step}")
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
+        print(f"[{job_id}] Total de steps no workflow: {len(workflow.get('steps', []))}")
         if not workflow:
             raise ValueError("Workflow não encontrado.")
 
@@ -58,6 +59,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
+                if current_step_index == 0 and job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS):
+                    print(f"[{job_id}] MODO REPORT_ONLY ATIVO - Executando step 0 (análise) antes de finalizar")
+                if current_step_index > 0 and job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS):
+                    raise ValueError(f"[{job_id}] ERRO DE LÓGICA: modo report_only não deve executar step {current_step_index}")
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS)}")
 
@@ -69,21 +74,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if current_step_index == 0:
                     existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
                     existing_report_text = self.report_handler.validate_and_parse_blob_report(existing_report_result, job_id)
+                    if job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS):
+                        print(f"[{job_id}] Modo report_only: relatório existente {'encontrado' if existing_report_text else 'não encontrado'}, continuando para {'finalização' if existing_report_text else 'geração'}")
                     if existing_report_text:
                         job_info['data'][JobFields.ANALYSIS_REPORT] = existing_report_text
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                        if strategy.should_finalize_workflow(job_info, current_step_index):
-                            print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
-                            print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
-                            print(f"[{job_id}] Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}")
-                            self.job_handler.update_job_status(job_id, 'completed')
-                            print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                            return
-                        if strategy.should_pause_for_approval(step):
-                            self.handle_approval_step(job_id, job_info, current_step_index, report_data)
-                            return
+                        # NÃO FINALIZA ANTES DE EXECUTAR O STEP, MESMO NO MODO REPORT_ONLY
                         previous_step_result = report_data
                         continue
                     else:
@@ -92,6 +90,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                 step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
                                                              previous_step_result, repo_reader, i, start_from_step)
+                if current_step_index == 0 and report_generated_by_agent:
+                    if not step_result or not (isinstance(step_result, dict) and ('relatorio' in step_result or ('resultado' in step_result and isinstance(step_result['resultado'], dict) and 'relatorio' in step_result['resultado']))):
+                        raise ValueError(f"[{job_id}] ERRO: Step 0 não gerou resultado válido. step_result: {step_result}")
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
 
@@ -106,7 +107,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
+                # FINALIZAÇÃO SÓ APÓS EXECUTAR O STEP E SALVAR O RELATÓRIO
                 if strategy.should_finalize_workflow(job_info, current_step_index):
+                    if not job_info['data'].get(JobFields.REPORT_BLOB_URL) or not job_info['data'].get(JobFields.ANALYSIS_REPORT):
+                        raise ValueError(f"[{job_id}] ERRO: Tentativa de finalizar sem relatório completo. Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}, Report exists: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get(JobFields.ANALYSIS_REPORT))}")
                     print(f"[{job_id}] Blob URL: {job_info['data'].get(JobFields.REPORT_BLOB_URL)}")
