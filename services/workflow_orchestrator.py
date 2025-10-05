@@ -26,6 +26,18 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
 
+    def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
+        report_text = self.report_handler.extract_report_text(step_result)
+        if not report_text or len(report_text.strip()) == 0:
+            print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
+            return False
+        job_info['data']['analysis_report'] = report_text
+        url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        if not url:
+            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
+        print(f"[{job_id}] Relatório salvo com sucesso: {url}")
+        return True
+
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
 
@@ -44,6 +56,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
+                print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
+                print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get('data', {}).get('gerar_relatorio_apenas')}")
+                print(f"[{job_id}] Status atual: {step['status_update']}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
 
                 report_generated_by_agent = False
@@ -57,6 +72,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         if strategy.should_finalize_workflow(job_info, current_step_index):
+                            print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
+                            print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
+                            print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                             self.job_handler.update_job_status(job_id, 'completed')
                             return
                         if strategy.should_pause_for_approval(step):
@@ -74,22 +92,22 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 previous_step_result = step_result
 
                 if current_step_index == 0 and report_generated_by_agent:
-                    try:
-                        report_text = self.report_handler.extract_report_text(step_result)
-                        if report_text:
-                            job_info['data']['analysis_report'] = report_text
-                            self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-                            print(f"[{job_id}] Relatório gerado pelo agente salvo no Blob Storage.")
-                        else:
-                            print(f"[{job_id}] AVISO: Step 0 executado, mas nenhum relatório foi extraído do resultado.")
-                    except Exception as e:
-                        print(f"[{job_id}] ERRO ao salvar relatório gerado pelo agente: {e}")
+                    print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (step 0)")
+                    sucesso_salvar = self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                    if not sucesso_salvar:
+                        raise ValueError(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio e não pode ser salvo.")
+                    if not job_info['data'].get('report_blob_url'):
+                        raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
+                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
                 if strategy.should_finalize_workflow(job_info, current_step_index):
-                    self.report_handler.handle_report_only_mode(job_id, job_info, step_result)
+                    print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
+                    print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
+                    print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                     self.job_handler.update_job_status(job_id, 'completed')
+                    print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                     return
 
                 if strategy.should_pause_for_approval(step):
