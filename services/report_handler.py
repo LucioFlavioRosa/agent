@@ -58,3 +58,4 @@ class ReportHandler:
             print(f"[{job_id}] ERRO: Relatório lido do Blob está vazio.")
             return None
         print(f"[{job_id}] Relatório válido lido do Blob Storage ({len(report_text)} chars).")
+        return report_text
