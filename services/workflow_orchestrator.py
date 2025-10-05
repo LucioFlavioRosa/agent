@@ -1,6 +1,6 @@
 import json
 from typing import Dict, Any, Optional
-
+from mcp_server_fastapi import JobFields
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
 from domain.interfaces.job_manager_interface import IJobManager
 from domain.interfaces.blob_storage_interface import IBlobStorageService
@@ -32,7 +32,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not report_text or len(report_text.strip()) == 0:
             print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
             return False
-        job_info['data']['analysis_report'] = report_text
+        job_info[JobFields.DATA][JobFields.ANALYSIS_REPORT] = report_text
         url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
         if not url:
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
@@ -42,13 +42,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
 
-        workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
+        workflow = self.workflow_registry.get(job_info[JobFields.DATA][JobFields.ORIGINAL_ANALYSIS_TYPE])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
 
         try:
-            repository_type = job_info['data']['repository_type']
-            repo_name = job_info['data']['repo_name']
+            repository_type = job_info[JobFields.DATA][JobFields.REPOSITORY_TYPE]
+            repo_name = job_info[JobFields.DATA][JobFields.REPO_NAME]
             repository_provider = get_repository_provider_explicit(repository_type)
             repo_reader = ReaderGeral(repository_provider=repository_provider)
 
@@ -58,7 +58,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
-                print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get('data', {}).get('gerar_relatorio_apenas')}")
+                print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get(JobFields.DATA, {}).get(JobFields.GERAR_RELATORIO_APENAS)}")
+                print(f"[{job_id}] Verificando modo gerar_relatorio_apenas: {job_info.get(JobFields.DATA, {}).get(JobFields.GERAR_RELATORIO_APENAS)}")
                 print(f"[{job_id}] Status atual: {step['status_update']}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
 
@@ -68,14 +69,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
                     existing_report_text = self.report_handler.validate_and_parse_blob_report(existing_report_result, job_id)
                     if existing_report_text:
-                        job_info['data']['analysis_report'] = existing_report_text
+                        job_info[JobFields.DATA][JobFields.ANALYSIS_REPORT] = existing_report_text
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         if strategy.should_finalize_workflow(job_info, current_step_index):
                             print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
-                            print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
-                            print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
+                            print(f"[{job_id}] Relatório disponível: {bool(job_info[JobFields.DATA].get(JobFields.ANALYSIS_REPORT))}")
+                            print(f"[{job_id}] Blob URL: {job_info[JobFields.DATA].get(JobFields.REPORT_BLOB_URL)}")
                             self.job_handler.update_job_status(job_id, 'completed')
                             print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                             return
@@ -98,16 +99,16 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     sucesso_salvar = self._save_generated_report(job_id, job_info, step_result, current_step_index)
                     if not sucesso_salvar:
                         raise ValueError(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio e não pode ser salvo.")
-                    if not job_info['data'].get('report_blob_url'):
+                    if not job_info[JobFields.DATA].get(JobFields.REPORT_BLOB_URL):
                         raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
-                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
+                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info[JobFields.DATA][JobFields.REPORT_BLOB_URL]}")
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index}")
-                    print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
-                    print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
+                    print(f"[{job_id}] Relatório disponível: {bool(job_info[JobFields.DATA].get(JobFields.ANALYSIS_REPORT))}")
+                    print(f"[{job_id}] Blob URL: {job_info[JobFields.DATA].get(JobFields.REPORT_BLOB_URL)}")
                     self.job_handler.update_job_status(job_id, 'completed')
                     print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                     return
@@ -125,7 +126,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
                                    repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
 
-        model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
+        model_para_etapa = step.get('model_name', job_info.get(JobFields.DATA, {}).get(JobFields.MODEL_NAME))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy()
 
@@ -133,29 +134,29 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         if is_comparador_agent:
             agent_params.update({
-                'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
-                'branch_name_modernizado': job_info['data'].get('branch_name_modernizado'),
-                'repo_name_original': job_info['data'].get('repo_name_original'),
-                'branch_name_original': job_info['data'].get('branch_name_original')
+                'repo_name_modernizado': job_info[JobFields.DATA].get(JobFields.REPO_NAME_MODERNIZADO),
+                'branch_name_modernizado': job_info[JobFields.DATA].get(JobFields.BRANCH_NAME_MODERNIZADO),
+                'repo_name_original': job_info[JobFields.DATA].get(JobFields.REPO_NAME_ORIGINAL),
+                'branch_name_original': job_info[JobFields.DATA].get(JobFields.BRANCH_NAME_ORIGINAL)
             })
         else:
-            repo_name = job_info['data'].get('repo_name_modernizado', job_info['data']['repo_name'])
-            branch_name = job_info['data'].get('branch_name_modernizado', job_info['data']['branch_name'])
+            repo_name = job_info[JobFields.DATA].get(JobFields.REPO_NAME_MODERNIZADO, job_info[JobFields.DATA][JobFields.REPO_NAME])
+            branch_name = job_info[JobFields.DATA].get(JobFields.BRANCH_NAME_MODERNIZADO, job_info[JobFields.DATA][JobFields.BRANCH_NAME])
             agent_params.update({
                 'repositorio': repo_name,
                 'nome_branch': branch_name
             })
 
-        retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
+        retornar_lista_arquivos = job_info.get(JobFields.DATA, {}).get(JobFields.RETORNAR_LISTA_ARQUIVOS, False)
         print(f"[{job_id}] Flag retornar_lista_arquivos: {retornar_lista_arquivos}")
 
         agent_params.update({
-            'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
+            'usar_rag': job_info.get(JobFields.DATA, {}).get(JobFields.USAR_RAG, False), 
             'model_name': model_para_etapa,
-            'repository_type': job_info['data']['repository_type'],
+            'repository_type': job_info[JobFields.DATA][JobFields.REPOSITORY_TYPE],
             'retornar_lista_arquivos': retornar_lista_arquivos,
-            'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False),
-            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
+            'modo_adicao_incremental': job_info.get(JobFields.DATA, {}).get(JobFields.MODO_ADICAO_INCREMENTAL, False),
+            'usuario_executor': job_info.get(JobFields.DATA, {}).get(JobFields.USUARIO_EXECUTOR)
         })
 
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
@@ -168,8 +169,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         report_text = self.report_handler.extract_report_text(step_result)
-        job_info['data']['analysis_report'] = report_text
-        job_info['status'] = 'pending_approval'
+        job_info[JobFields.DATA][JobFields.ANALYSIS_REPORT] = report_text
+        job_info[JobFields.STATUS] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
 
@@ -180,7 +181,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_info, workflow, final_result
         )
 
-        job_info['data']['diagnostic_logs'] = {
+        job_info[JobFields.DATA][JobFields.DIAGNOSTIC_LOGS] = {
             "penultimate_result": resultado_refatoracao,
             "final_result": resultado_agrupamento
         }
@@ -197,7 +198,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
 
-        print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info['data'].get('commit_details', [])}")
+        print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info[JobFields.DATA].get(JobFields.COMMIT_DETAILS, [])}")
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
 
