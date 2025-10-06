@@ -59,10 +59,12 @@ def job_info():
 
 @pytest.fixture
 def orchestrator(job_manager, blob_storage, workflow_registry):
+    mock_rag_retriever = MagicMock()
     return WorkflowOrchestrator(
         job_manager=job_manager,
         blob_storage=blob_storage,
-        workflow_registry=workflow_registry
+        workflow_registry=workflow_registry,
+        rag_retriever=mock_rag_retriever
     )
 
 @patch('services.workflow_orchestrator.StepStrategyFactory')
