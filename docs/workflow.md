@@ -45,7 +45,7 @@ Esta documentação detalha o funcionamento do workflow principal, ilustrando o 
 
 ```mermaid
 flowchart TD
-    %% Definição de todos os Nós
+    %% Etapa 1: Definição de todos os Nós
     A[Início: Recebimento do Job via API]
     B[Registro do Job e Normalização]
     C[Carregamento do Workflow YAML]
@@ -61,21 +61,23 @@ flowchart TD
     M[Fim]
     N[Atualiza status para failed]
 
-    %% Definição de todas as Conexões
-    A --> B --> C --> D
+    %% Etapa 2: Definição de todas as Conexões
+    A --> B
+    B --> C
+    C --> D
     D -- Sim --> E
+    D -- Não --> L
+    D -- Erro --> N
     E --> F
     F -- Sim --> G
+    F -- Não --> I
     G --> H
     H --> D
-    F -- Não --> I
     I -- Sim --> J
     I -- Não --> D
     J -- Sim --> K
     J -- Não --> E
-    D -- Não --> L
     L --> M
-    D -- Erro --> N
     N --> M
 ```
 
