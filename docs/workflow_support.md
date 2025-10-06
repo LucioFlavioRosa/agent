@@ -9,6 +9,8 @@ Este documento complementa `docs/workflow.md`, fornecendo explicações técnica
 Os workflows são definidos em arquivos YAML (por padrão, `workflows.yaml`) e carregados pelo serviço `WorkflowRegistryLoader`. O carregamento suporta múltiplos documentos YAML no mesmo arquivo (streaming YAML), permitindo a definição de vários workflows.
 
 ### Código-chave
+
+```text
 python
 class WorkflowRegistryLoader:
     def __init__(self, workflow_file_path: str = "workflows.yaml"):
@@ -29,7 +31,7 @@ class WorkflowRegistryLoader:
                 workflows = yaml.safe_load(f)
         
         return workflows
-
+```
 
 - **Resiliência:** Se o carregamento em streaming falhar, faz fallback para leitura padrão.
 - **Extensibilidade:** Novos tipos de workflow podem ser adicionados facilmente ao YAML.
@@ -40,6 +42,7 @@ class WorkflowRegistryLoader:
 
 O serviço `WorkflowRegistryService` encapsula o loader e expõe métodos para acessar workflows e tipos válidos de análise:
 
+```text
 python
 class WorkflowRegistryService:
     def __init__(self, workflow_file_path: str = "workflows.yaml"):
@@ -59,7 +62,7 @@ class WorkflowRegistryService:
     
     def get_workflow_registry(self) -> Dict[str, Any]:
         return self.load_workflow_registry()
-
+```
 
 - **Cache:** O registro de workflows é carregado uma vez e mantido em cache na instância.
 - **Integração:** Fornece tipos válidos de análise para validação de payloads da API.
@@ -69,7 +72,7 @@ class WorkflowRegistryService:
 ## 3. Integração com a API FastAPI
 
 No arquivo `mcp_server_fastapi.py`, o serviço de workflow é inicializado e os tipos válidos de análise são usados para validar o payload da rota `/start-analysis`:
-
+```text
 python
 workflow_registry_service = container.get_workflow_registry_service()
 ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
@@ -78,7 +81,7 @@ class StartAnalysisPayload(BaseModel):
     ...
     analysis_type: ValidAnalysisTypes
     ...
-
+```
 
 - **Validação Dinâmica:** O campo `analysis_type` do payload só aceita valores definidos nos workflows carregados.
 
