@@ -78,7 +78,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                             print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                             print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
+                            print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                             self.job_handler.update_job_status(job_id, 'completed')
+                            print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                             print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                             return
                         if strategy.should_pause_for_approval(step):
@@ -111,7 +113,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                     print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
+                    print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                     self.job_handler.update_job_status(job_id, 'completed')
+                    print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                     print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                     return
 
