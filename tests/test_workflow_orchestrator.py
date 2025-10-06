@@ -73,7 +73,7 @@ def test_execute_workflow_saves_report_when_generated_by_agent(mock_strategy_fac
     job_id = 'job123'
     job_info['data']['gerar_novo_relatorio'] = True
     job_info['data']['gerar_relatorio_apenas'] = False
-    job_manager.get_job_info.return_value = job_info.copy()
+    job_manager.get_job.return_value = job_info.copy()
     job_manager.get_step_result.return_value = None
     # Mock report_handler
     orchestrator.report_handler = MagicMock()
@@ -96,7 +96,7 @@ def test_execute_workflow_finalizes_when_gerar_relatorio_apenas_is_true(mock_str
     job_id = 'job456'
     job_info['data']['gerar_novo_relatorio'] = True
     job_info['data']['gerar_relatorio_apenas'] = True
-    job_manager.get_job_info.return_value = job_info.copy()
+    job_manager.get_job.return_value = job_info.copy()
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
@@ -115,7 +115,7 @@ def test_execute_workflow_finalizes_when_gerar_relatorio_apenas_is_true(mock_str
 @patch('services.workflow_orchestrator.StepStrategyFactory')
 def test_execute_workflow_pauses_for_approval_when_strategy_requires(mock_strategy_factory, orchestrator, job_manager, blob_storage, workflow_registry, job_info):
     job_id = 'job789'
-    job_manager.get_job_info.return_value = job_info.copy()
+    job_manager.get_job.return_value = job_info.copy()
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
@@ -135,7 +135,7 @@ def test_execute_workflow_pauses_for_approval_when_strategy_requires(mock_strate
 @patch('services.workflow_orchestrator.StepStrategyFactory')
 def test_execute_workflow_handles_exception_and_updates_job_to_failed(mock_strategy_factory, orchestrator, job_manager, blob_storage, workflow_registry, job_info):
     job_id = 'job999'
-    job_manager.get_job_info.return_value = job_info.copy()
+    job_manager.get_job.return_value = job_info.copy()
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
@@ -150,7 +150,7 @@ def test_execute_workflow_handles_exception_and_updates_job_to_failed(mock_strat
 def test_execute_workflow_reads_existing_report_from_blob_when_gerar_novo_relatorio_is_false(mock_strategy_factory, orchestrator, job_manager, blob_storage, workflow_registry, job_info):
     job_id = 'jobblob'
     job_info['data']['gerar_novo_relatorio'] = False
-    job_manager.get_job_info.return_value = job_info.copy()
+    job_manager.get_job.return_value = job_info.copy()
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = 'relatorio do blob'
@@ -170,7 +170,7 @@ def test_execute_workflow_reads_existing_report_from_blob_when_gerar_novo_relato
 def test_execute_workflow_validates_report_before_finalizing_in_report_only_mode(mock_strategy_factory, orchestrator, job_manager, blob_storage, workflow_registry, job_info):
     job_id = 'jobempty'
     job_info['data']['gerar_relatorio_apenas'] = True
-    job_manager.get_job_info.return_value = job_info.copy()
+    job_manager.get_job.return_value = job_info.copy()
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
