@@ -1,5 +1,6 @@
 from azure.storage.blob import BlobServiceClient
 from tools.blob_job_tracker import BlobJobTracker
+from tools.azure_secret_manager import AzureSecretManager
 
 class BlobStorageService:
     def __init__(self):
@@ -9,10 +10,21 @@ class BlobStorageService:
 
     def _init_blob_service(self):
         import os
-        connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
         container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
-        if not connection_string or not container_name:
-            raise RuntimeError('Azure Blob Storage connection string or container name missing.')
+        if not container_name:
+            raise RuntimeError('Azure Blob Storage container name missing.')
+        
+        connection_string = None
+        secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
+        try:
+            secret_manager = AzureSecretManager()
+            connection_string = secret_manager.get_secret(secret_name)
+        except Exception as e:
+            print(f"Warning: Failed to get connection string from Key Vault: {e}")
+            connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
+        if not connection_string:
+            raise RuntimeError('Azure Blob Storage connection string not found in Key Vault or environment variables.')
+
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
 
