@@ -41,6 +41,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] Relatório salvo com sucesso: {url}")
         job_info['data']['report_blob_url'] = url
         self.job_handler.update_job(job_id, job_info)
+        # Redundância segura: atualiza o tracker explicitamente
+        try:
+            if job_info['data'].get('report_blob_url'):
+                self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
+        except Exception as e:
+            print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
         return True
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
@@ -72,6 +78,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         self.job_handler.update_job(job_id, job_info)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                        # Atualiza o tracker de jobs após leitura de relatório existente
+                        try:
+                            if job_info['data'].get('report_blob_url'):
+                                self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
+                        except Exception as e:
+                            print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after reading report: {e}")
                         if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
                             print(f"[{job_id}] [DEBUG] Validando relatório antes de finalizar workflow (modo report_only, lido do blob)")
                             analysis_report = job_info['data'].get('analysis_report')
@@ -114,6 +126,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
                     print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
                     strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                    try:
+                        if job_info['data'].get('report_blob_url'):
+                            self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
+                    except Exception as e:
+                        print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
                     if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
                         print(f"[{job_id}] [DEBUG] Validando relatório antes de finalizar workflow (modo report_only, gerado pelo agente)")
                         analysis_report = job_info['data'].get('analysis_report')
