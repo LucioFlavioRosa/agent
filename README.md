@@ -68,7 +68,7 @@ flowchart TD
 
 ### Fluxo de Aprovação Manual
 
-mermaid
+```mermaid
 flowchart TD
     A[Workflow Pausado] -->|Status: AWAITING_APPROVAL| B[Cliente Revisa Relatório]
     B --> C{Decisão}
@@ -88,11 +88,11 @@ flowchart TD
     style E fill:#F44336,color:#fff
     style J fill:#4CAF50,color:#fff
     style K fill:#F44336,color:#fff
-
+```
 
 ### Fluxo de Geração de Código a Partir de Relatório
 
-mermaid
+```mermaid
 flowchart TD
     A[Cliente] -->|POST /start-code-generation-from-report/{analysis_name}| B[Buscar Job Original]
     B --> C{Job Existe?}
@@ -112,7 +112,7 @@ flowchart TD
     style F fill:#FF9800,color:#fff
     style M fill:#9C27B0,color:#fff
     style N fill:#4CAF50,color:#fff
-
+```
 
 ## Explicação do Código Principal (`mcp_server_fastapi.py`)
 
