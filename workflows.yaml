@@ -210,7 +210,7 @@ relatorio_performance_eficiencia:
   extensions: [".cs", ".js", ".aspx", ".py"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "claude-sonnet-4.5"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_performance_eficiencia"
