@@ -36,7 +36,7 @@ class ReportHandler:
             raise ValueError(f"[{job_id}] ERRO: Blob Storage não retornou URL válida")
         job_info['data']['report_blob_url'] = url
         job_info['data']['analysis_report'] = report_text
-        print(f"[{job_id}] Relatório salvo no Blob Storage: {url}")
+        print(f"[{job_id}] Relatório salvo no Blob Storage: {url} (tamanho: {len(report_text)} chars)")
         return url
 
     def handle_report_only_mode(self, job_id, job_info, step_result):

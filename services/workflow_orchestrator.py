@@ -110,10 +110,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
                     if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
                         print(f"[{job_id}] [DEBUG] Finalizando workflow imediatamente após salvar relatório pois gerar_relatorio_apenas=True")
+                        print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         self.job_handler.update_job_status(job_id, 'completed')
+                        print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                         return
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-
 
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
