@@ -55,7 +55,7 @@ flowchart TD
     H --> D
     F -- Não --> I{Modo gerar_relatorio_apenas?}
     I -- Sim --> J{Relatório válido?}
-    J -- Sim --> K[Finaliza workflow (completed)]
+    J -- Sim --> K[Finaliza workflow (completed)];
     J -- Não --> E
     I -- Não --> D
     D -- Não --> L[Finaliza workflow: Salva relatório, realiza commits, status completed]
