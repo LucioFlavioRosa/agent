@@ -1,220 +1,183 @@
-# MCP Server - Multi-Agent Code Platform
+# Multi-Agent Code Platform (MCP)
 
-## 🚀 Visão Geral
+## Visão Geral
 
-O **MCP Server** é uma plataforma robusta para orquestração de agentes de IA especializados em análise e refatoração de código. O sistema utiliza arquitetura baseada em princípios SOLID, com injeção de dependências e interfaces bem definidas.
+O MCP é uma plataforma robusta para automação de análises e modernização de código, orquestrando agentes inteligentes via API REST construída com FastAPI. O sistema utiliza Redis para armazenamento de jobs e suporta integração com múltiplos provedores de repositório (GitHub, GitLab, Azure DevOps) e modelos LLM (Claude, OpenAI).
 
-### Principais Funcionalidades
+## Arquitetura do Sistema
 
-- **Análise Inteligente de Código**: Agentes especializados para diferentes tipos de análise
-- **Refatoração Automatizada**: Geração de Pull Requests com mudanças estruturadas
-- **Integração com GitHub**: Leitura de repositórios e criação automática de PRs
-- **Sistema RAG**: Busca contextual em políticas de desenvolvimento
-- **Arquitetura Modular**: Componentes intercambiáveis via interfaces
+A estrutura do MCP segue princípios de arquitetura limpa, com separação clara de responsabilidades entre agentes, serviços, ferramentas e domínio. Os principais diretórios são:
 
-## 🏗️ Arquitetura
+- `agents/`: Implementações dos agentes de processamento, revisão e comparação de código.
+- `services/`: Serviços de negócio e infraestrutura (ex: orquestração de workflow, manipulação de jobs, integração com LLMs).
+- `tools/`: Utilitários e integrações com provedores externos (repositórios, storage, secrets).
+- `domain/`: Interfaces e contratos para abstração de dependências.
 
-### Componentes Principais
+### Padrões de Design Utilizados
 
+- **Dependency Injection:** Centralizado no `DependencyContainer`, facilita testes e extensibilidade.
+- **Factory Pattern:** Utilizado para criação de serviços complexos e provedores.
+- **Service Layer:** Lógica de negócio isolada em serviços especializados.
+- **Background Tasks:** Execução assíncrona de workflows via FastAPI.
 
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   FastAPI       │    │   Redis         │    │   GitHub        │
-│   (API Layer)   │◄──►│   (Job Store)   │    │   (Repository)  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                                              ▲
-         ▼                                              │
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Agentes       │    │   LLM Providers │    │   Tools         │
-│   - Revisor     │◄──►│   - OpenAI      │    │   - Connectors  │
-│   - Processador │    │   - Claude      │    │   - Fillers     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+## Diagrama de Fluxo (Mermaid)
 
+### Funcionamento Principal do MCP
 
-### Agentes Disponíveis
-
-- **AgenteRevisor**: Lê repositórios GitHub e inicia análises de código
-- **AgenteProcessador**: Processa dados estruturados e aplica transformações
-
-## 🛠️ Configuração e Instalação
-
-### Pré-requisitos
-
-- Python 3.8+
-- Redis Server
-- Azure Key Vault (para gerenciamento de segredos)
-- Conta GitHub com token de acesso
-
-### Instalação
-
-1. **Clone o repositório:**
-   bash
-   git clone https://github.com/org/mcp-server.git
-   cd mcp-server
-   
-
-2. **Crie um ambiente virtual:**
-   bash
-   python -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   venv\Scripts\activate     # Windows
-   
-
-3. **Instale as dependências:**
-   bash
-   pip install -r requirements.txt
-   
-
-4. **Configure as variáveis de ambiente:**
-   bash
-   cp .env.example .env
-   # Edite o arquivo .env com suas configurações
-   
-
-5. **Inicie o Redis:**
-   bash
-   redis-server
-   
-
-6. **Execute o servidor:**
-   bash
-   uvicorn mcp_server_fastapi:app --reload --port 8000
-   
-
-## 🧪 Como Rodar os Testes
-
-### Executar Todos os Testes
-bash
-pytest -v
+mermaid
+flowchart TD
+    A[Cliente HTTP] -->|POST /start-analysis| B[FastAPI Endpoint]
+    B --> C{Validar Payload}
+    C -->|Inválido| D[Retornar Erro 422]
+    C -->|Válido| E[Normalizar Nome do Repositório]
+    E --> F[Gerar job_id e analysis_name]
+    F --> G[Criar Job no Redis]
+    G --> H[Registrar Análise]
+    H --> I[Disparar Workflow em Background]
+    I --> J[Retornar job_id ao Cliente]
+    
+    I --> K[WorkflowOrchestrator]
+    K --> L{Executar Step 1: Ler Código}
+    L --> M[RepositoryReader]
+    M --> N{Código Lido com Sucesso?}
+    N -->|Não| O[Atualizar Job: FAILED]
+    N -->|Sim| P{Executar Step 2: Analisar com LLM}
+    P --> Q[LLMProvider - Claude/OpenAI]
+    Q --> R{Análise Concluída?}
+    R -->|Não| O
+    R -->|Sim| S{Executar Step 3: Gerar Relatório}
+    S --> T[Salvar Relatório no Blob Storage]
+    T --> U{gerar_relatorio_apenas?}
+    U -->|Sim| V[Atualizar Job: COMPLETED]
+    U -->|Não| W{Executar Step 4: Criar PR}
+    W --> X[RepositoryCommitter]
+    X --> Y{PR Criado?}
+    Y -->|Não| O
+    Y -->|Sim| V
+    
+    V --> Z[Cliente Consulta Status]
+    Z -->|GET /status/{job_id}| AA[Retornar Resultado Final]
+    
+    style B fill:#4CAF50,color:#fff
+    style K fill:#2196F3,color:#fff
+    style Q fill:#FF9800,color:#fff
+    style X fill:#9C27B0,color:#fff
+    style V fill:#4CAF50,color:#fff
+    style O fill:#F44336,color:#fff
 
 
-### Executar Testes Específicos
-bash
-# Testes de nomeação de análises
-pytest backend/tests/test_analysis_naming.py -v
+### Fluxo de Aprovação Manual
 
-# Testes com padrão específico
-pytest -k "test_create_analysis" -v
-
-
-### Executar com Cobertura
-bash
-pytest --cov=. --cov-report=html --cov-report=term
-
-
-### Executar Testes de Integração
-bash
-# Certifique-se de que o Redis está rodando
-pytest backend/tests/ -k "integration" -v
-
-
-### Configuração para Testes
-
-Para executar os testes, certifique-se de:
-1. Redis está rodando na porta padrão (6379)
-2. Variáveis de ambiente de teste estão configuradas
-3. Azure Key Vault está acessível (ou use mocks para testes unitários)
-
-## 📚 Uso da API
-
-### Iniciar uma Análise
-
-bash
-curl -X POST "http://localhost:8000/start-analysis" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "repo_name": "org/repositorio",
-       "analysis_type": "refatoracao_completa",
-       "branch_name": "main",
-       "instrucoes_extras": "Foque em melhorias de performance",
-       "usar_rag": true,
-       "gerar_relatorio_apenas": false
-     }'
+mermaid
+flowchart TD
+    A[Workflow Pausado] -->|Status: AWAITING_APPROVAL| B[Cliente Revisa Relatório]
+    B --> C{Decisão}
+    C -->|Aprovar| D[POST /update-job-status - action: approve]
+    C -->|Rejeitar| E[POST /update-job-status - action: reject]
+    
+    D --> F[Atualizar Status: WORKFLOW_STARTED]
+    F --> G[Retomar Workflow no Step Pausado + 1]
+    G --> H[Executar Steps Restantes]
+    H --> I[Criar Pull Request]
+    I --> J[Status: COMPLETED]
+    
+    E --> K[Atualizar Status: REJECTED]
+    K --> L[Encerrar Processamento]
+    
+    style D fill:#4CAF50,color:#fff
+    style E fill:#F44336,color:#fff
+    style J fill:#4CAF50,color:#fff
+    style K fill:#F44336,color:#fff
 
 
-### Verificar Status
+### Fluxo de Geração de Código a Partir de Relatório
 
-bash
-curl "http://localhost:8000/status/{job_id}"
+mermaid
+flowchart TD
+    A[Cliente] -->|POST /start-code-generation-from-report/{analysis_name}| B[Buscar Job Original]
+    B --> C{Job Existe?}
+    C -->|Não| D[Retornar Erro 404]
+    C -->|Sim| E[Recuperar Relatório do Job Original]
+    E --> F[Criar Novo Job Derivado]
+    F --> G[Copiar Configurações do Job Original]
+    G --> H[Definir gerar_relatorio_apenas = False]
+    H --> I[Definir gerar_novo_relatorio = False]
+    I --> J[Salvar Novo Job no Redis]
+    J --> K[Disparar Workflow em Background]
+    K --> L[Executar Steps de Geração de Código]
+    L --> M[Criar Pull Request]
+    M --> N[Status: COMPLETED]
+    
+    style B fill:#2196F3,color:#fff
+    style F fill:#FF9800,color:#fff
+    style M fill:#9C27B0,color:#fff
+    style N fill:#4CAF50,color:#fff
 
 
-### Aprovar/Rejeitar Análise
+## Explicação do Código Principal (`mcp_server_fastapi.py`)
 
-bash
-curl -X POST "http://localhost:8000/update-job-status" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "job_id": "uuid-do-job",
-       "action": "approve",
-       "observacoes": "Aprovado para produção"
-     }'
+### Função
 
+O arquivo `mcp_server_fastapi.py` é o ponto de entrada da API REST do MCP. Ele expõe endpoints para:
 
-## 🔧 Workflows Disponíveis
+- Iniciar novas análises de código
+- Gerenciar aprovação/rejeição de jobs
+- Consultar status e relatórios
+- Gerar código a partir de relatórios existentes
 
-Os workflows são definidos no arquivo `workflows.yaml`:
+### Principais Componentes
 
-- **refatoracao_completa**: Análise completa com refatoração e agrupamento
-- **analise_seguranca**: Foco em vulnerabilidades de segurança
-- **otimizacao_performance**: Melhorias de performance
-- **documentacao**: Geração de documentação automática
+- **DependencyContainer:** Centraliza a criação e injeção de dependências (serviços, provedores, etc.).
+- **ApiServiceFactory:** Cria instâncias de serviços de negócio.
+- **WorkflowOrchestrator:** Executa workflows de análise em background, step a step.
+- **JobStore:** Gerencia o estado dos jobs no Redis.
+- **JobDataService, JobValidationService, ResponseBuilderService:** Serviços especializados para manipulação, validação e resposta de jobs.
 
-## 🏛️ Princípios Arquiteturais
+### Fluxo de Início de Análise (`/start-analysis`)
 
-### SOLID
-- **Single Responsibility**: Cada classe tem uma única responsabilidade
-- **Open/Closed**: Extensível via interfaces, fechado para modificação
-- **Liskov Substitution**: Implementações podem ser substituídas
-- **Interface Segregation**: Interfaces específicas e focadas
-- **Dependency Inversion**: Dependências injetadas via interfaces
+1. Recebe payload validado pelo Pydantic.
+2. Normaliza o nome do repositório.
+3. Gera identificadores (`job_id`, `analysis_name`).
+4. Cria o job inicial no Redis.
+5. Registra a análise para consultas futuras.
+6. Dispara o workflow em background.
+7. Retorna o `job_id` ao cliente.
 
-### Padrões Utilizados
-- **Dependency Injection**: Todas as dependências são injetadas
-- **Strategy Pattern**: Diferentes provedores de LLM
-- **Factory Pattern**: Criação de provedores baseada em configuração
-- **Repository Pattern**: Abstração de acesso a dados
+### Fluxo de Aprovação/Rejeição (`/update-job-status`)
 
-## 🔐 Segurança
+- Aprovação: Atualiza status, salva instruções extras e retoma o workflow.
+- Rejeição: Atualiza status para rejeitado e encerra o processamento.
 
-### Gerenciamento de Segredos
-- Todos os segredos são armazenados no Azure Key Vault
-- Autenticação via Azure Default Credential
-- Tokens GitHub com escopo mínimo necessário
+### Consulta de Status (`/status/{job_id}`)
 
-### Segredos Necessários
-- `github-token`: Token de acesso ao GitHub
-- `openaiapi`: Chave da API OpenAI
-- `azure-openai-modelos`: Chave do Azure OpenAI
-- `aisearchapi`: Chave do Azure AI Search
-- `ANTHROPICAPIKEY`: Chave da API Anthropic (opcional)
+- Retorna status atual, relatório e informações de Pull Request, se disponíveis.
 
-## 🤝 Contribuindo
+### Segurança e Performance
 
-Por favor, leia o [CONTRIBUTING.md](CONTRIBUTING.md) para detalhes sobre:
-- Configuração do ambiente de desenvolvimento
-- Padrões de código
-- Processo de Pull Request
-- Execução de testes
-
-## 📋 Roadmap
-
-- [ ] Suporte a mais provedores de LLM
-- [ ] Interface web para monitoramento
-- [ ] Métricas e observabilidade
-- [ ] Suporte a GitLab e Bitbucket
-- [ ] Análise de múltiplos repositórios
-- [ ] Integração com CI/CD
-
-## 📄 Licença
-
-Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## 🆘 Suporte
-
-Para suporte e dúvidas:
-- Abra uma issue no GitHub
-- Consulte a documentação em `/docs`
-- Revise os exemplos em `/examples`
+- **CORS:** Aberto por padrão (recomenda-se restringir em produção).
+- **Validação:** Pydantic previne dados inválidos.
+- **Execução Assíncrona:** Workflows não bloqueiam a API.
+- **Redis:** Armazenamento rápido para jobs.
 
 ---
 
-**Desenvolvido com ❤️ pela equipe de Engenharia de Software**
+## Troubleshooting (Resolução de Problemas)
+
+### Erros Comuns
+
+- **Erro de conexão com Redis:**
+  - Verifique se o serviço Redis está ativo e as variáveis de ambiente de conexão estão corretas.
+- **Falha de autenticação com provedores Git:**
+  - Confirme se os tokens/secrets estão configurados corretamente no Azure Key Vault ou variáveis de ambiente.
+- **Timeouts de LLM:**
+  - Ajuste o timeout no serviço de LLM ou aumente os recursos disponíveis.
+- **Job não avança de status:**
+  - Consulte os logs do WorkflowOrchestrator e verifique se há exceções não tratadas.
+
+---
+
+## Referências
+
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Mermaid Documentation](https://mermaid-js.github.io/mermaid/#/)
+- [Redis Documentation](https://redis.io/)
