@@ -33,4 +33,4 @@ class JobHandler:
         if job:
             job['status'] = 'failed'
             job['error_details'] = str(exception)
-            self.job_manager.set_job(job_id, job)
+            self.job_manager.get_job(job_id, job)
