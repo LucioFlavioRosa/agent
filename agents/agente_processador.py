@@ -47,6 +47,7 @@ class AgenteProcessador:
             max_token_out=max_token_out
         )
 
+        print(f"[Agente Processador] Logando dados com job_id: {job_id}")
         log_custom_data(
             job_id=job_id,
             projeto=projeto,
