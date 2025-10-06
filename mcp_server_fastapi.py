@@ -159,6 +159,9 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     job_store = container.get_job_store()
     
     job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
     print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
     job_validation_service.validate_job_exists(job, job_id)
 
