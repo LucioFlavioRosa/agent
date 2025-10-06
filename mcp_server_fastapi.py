@@ -214,7 +214,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
     print(f"[{job_id}] [_build_completed_response] INÍCIO - gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [_build_completed_response] blob_url (parâmetro): {blob_url}")
     print(f"[{job_id}] [_build_completed_response] report_blob_url (job_data): {job_data.get(JobFields.REPORT_BLOB_URL)}")
-    print(f"[{job_id}] [_build_completed_response] Tamanho analysis_report: {len(job_data.get(JobFields.ANALYSIS_REPORT, ''))} chars")
+    print(f"[{job_id}] [_build_completed_response] Tamanho analysis_report: {len(job_data.get(JobFields.ANALYSIS_REPORT, '') or '')} chars")
 
     # PRIORIDADE ABSOLUTA: Modo report_only
     if gerar_relatorio_apenas is True:
