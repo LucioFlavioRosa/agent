@@ -23,6 +23,10 @@ class DefaultStepStrategy:
     
     def should_finalize_workflow(self, job_info: Dict[str, Any], current_step_index: int) -> bool:
         return job_info.get('data', {}).get('gerar_relatorio_apenas', False) and current_step_index == 0
-    
-    def should_pause_for_approval(self, step: Dict[str, Any]) -> bool:
-        return step.get('requires_approval', False)
+
+    def should_pause_for_approval(self, job_info: Dict[str, Any], step: Dict[str, Any]) -> bool:
+        # Agora acessamos o 'job_info' diretamente
+        gerar_relatorio_apenas = job_info.get('data', {}).get('gerar_relatorio_apenas', False)
+        result = not gerar_relatorio_apenas and step.get('requires_approval', False)
+        print(f"[should_pause_for_approval] step_index=?, gerar_relatorio_apenas={gerar_relatorio_apenas}, requires_approval={step.get('requires_approval', False)}, result={result}")
+        return result
