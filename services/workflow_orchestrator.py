@@ -33,6 +33,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
             return False
         job_info['data']['analysis_report'] = report_text
+        self.job_handler.update_job(job_id, job_info)
         url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
         if not url:
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
@@ -73,16 +74,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                        # Ordem correta: 1º finalizar, 2º aprovação
-                        if strategy.should_finalize_workflow(job_info, current_step_index):
-                            print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
-                            print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
-                            print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
-                            print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                            self.job_handler.update_job_status(job_id, 'completed')
-                            print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                            print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                            return
                         if strategy.should_pause_for_approval(step):
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
@@ -108,13 +99,18 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
 
-                # Ordem correta: 1º finalizar, 2º aprovação
                 if strategy.should_finalize_workflow(job_info, current_step_index):
-                    print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
-                    print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
-                    print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
-                    print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+                    if not job_info['data'].get('analysis_report'):
+                        job_info['data']['analysis_report'] = self.report_handler.extract_report_text(step_result)
+                    if not job_info['data'].get('report_blob_url'):
+                        raise ValueError(f"[{job_id}] ERRO CRÍTICO: report_blob_url não está definido antes de finalizar o workflow")
+                    self.job_handler.update_job(job_id, job_info)
                     self.job_handler.update_job_status(job_id, 'completed')
+                    print(f"[{job_id}] DIAGNÓSTICO - Job finalizado. Dados finais:")
+                    print(f"[{job_id}]   - gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}")
+                    print(f"[{job_id}]   - analysis_report presente: {bool(job_info['data'].get('analysis_report'))}")
+                    print(f"[{job_id}]   - tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))} chars")
+                    print(f"[{job_id}]   - report_blob_url: {job_info['data'].get('report_blob_url')}")
                     print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('gerar_relatorio_apenas')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                     print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                     return
