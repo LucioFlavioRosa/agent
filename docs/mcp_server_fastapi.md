@@ -1,185 +1,138 @@
-# MCP Server FastAPI
+# Funcionamento do MCP Server FastAPI
 
-Este documento descreve o funcionamento macro do servidor FastAPI (`mcp_server_fastapi.py`) utilizado para orquestrar agentes de IA e gerenciar jobs de análise e geração de código.
+## 1. Diagrama de Fluxo (Mermaid)
 
-## Visão Geral
+### Fluxo Completo: Iniciar Análise → Executar Workflow → Retornar Resultado
 
-O MCP Server FastAPI é um servidor robusto que utiliza Redis para orquestrar agentes de IA, fornecendo uma API REST para gerenciar workflows de análise de código e geração automática de implementações.
-
-## Principais Componentes
-
-### Classes de Modelo
-
-- **JobStatus:** Define os estados possíveis de um job (`starting`, `pending_approval`, `workflow_started`, `completed`, `failed`, `rejected`)
-- **JobFields:** Constantes para os campos utilizados nos dados dos jobs
-- **JobActions:** Ações disponíveis para atualização de jobs (`approve`, `reject`)
-- **StartAnalysisPayload:** Modelo de dados para iniciar uma nova análise
-- **UpdateJobPayload:** Modelo para aprovação/rejeição de jobs
-- **FinalStatusResponse:** Resposta completa do status de um job
-- **PullRequestSummary:** Resumo dos Pull Requests criados
-
-### Funções Utilitárias
-
-- **_validate_and_normalize_gitlab_repo_name():** Valida e normaliza nomes de repositórios GitLab (Project ID ou path completo)
-- **_normalize_repo_name_by_type():** Normaliza nomes de repositório baseado no tipo (GitHub, GitLab, Azure)
-- **_generate_analysis_name():** Gera nome único para análise quando não fornecido
-- **_create_initial_job_data():** Cria estrutura inicial de dados do job
-- **_build_completed_response():** Constrói resposta final para jobs completados
-
-### Container de Dependências
-
-Utiliza o `DependencyContainer` para gerenciar:
-- **WorkflowRegistryService:** Registro de tipos de análise válidos
-- **JobStore:** Armazenamento e recuperação de jobs
-- **AnalysisNameService:** Mapeamento entre nomes de análise e job IDs
-- **WorkflowOrchestrator:** Execução de workflows
-
-## Endpoints da API
-
-### POST /start-analysis
-**Descrição:** Inicia uma nova análise, criando um job e disparando o workflow em background.
-
-**Parâmetros principais:**
-- `repo_name`: Nome do repositório
-- `projeto`: Nome do projeto para organização
-- `analysis_type`: Tipo de análise a ser executada
-- `repository_type`: Tipo do repositório (github, gitlab, azure)
-- `branch_name`: Branch específica (opcional)
-- `instrucoes_extras`: Instruções adicionais (opcional)
-- `usar_rag`: Utilizar RAG na análise
-- `gerar_relatorio_apenas`: Gerar apenas relatório sem implementação
-- `model_name`: Modelo de LLM específico (opcional)
-- `arquivos_especificos`: Lista de arquivos específicos (opcional)
-- `analysis_name`: Nome personalizado da análise (opcional)
-
-### POST /update-job-status
-**Descrição:** Aprova ou rejeita um job que está pendente de aprovação.
-
-**Ações disponíveis:**
-- `approve`: Aprova e continua o workflow
-- `reject`: Rejeita e encerra o processo
-
-### GET /status/{job_id}
-**Descrição:** Consulta o status atual do job, incluindo detalhes de conclusão, erros ou logs diagnósticos.
-
-### GET /jobs/{job_id}/report
-**Descrição:** Obtém o relatório de análise específico do job.
-
-### GET /analyses/by-name/{analysis_name}
-**Descrição:** Busca relatório por nome de análise personalizado.
-
-### POST /start-code-generation-from-report/{analysis_name}
-**Descrição:** Cria um novo job de implementação baseado em um relatório existente, derivando um job de análise para um job de geração de código.
-
-## Diagrama Macro do Processo
-
-```mermaid
+mermaid
 flowchart TD
-    A[Usuário faz requisição] -->|POST /start-analysis| B[Validação e Normalização];
-    B --> C[Criação do Job ID];
-    C --> D[Geração do Analysis Name];
-    D --> E[Criação dos Dados Iniciais];
-    E --> F[Armazenamento no Job Store];
-    F --> G[Registro no Analysis Service];
-    G --> H[Disparo do Workflow Background];
+    A[Cliente HTTP] -->|POST /start-analysis| B[FastAPI Endpoint]
+    B --> C{Validar Payload}
+    C -->|Inválido| D[Retornar Erro 422]
+    C -->|Válido| E[Normalizar Nome do Repositório]
+    E --> F[Gerar job_id e analysis_name]
+    F --> G[Criar Job no Redis]
+    G --> H[Registrar Análise]
+    H --> I[Disparar Workflow em Background]
+    I --> J[Retornar job_id ao Cliente]
     
-    H --> I[Execução do Workflow];
-    I --> J{Requer Aprovação?};
+    I --> K[WorkflowOrchestrator]
+    K --> L{Executar Step 1: Ler Código}
+    L --> M[RepositoryReader]
+    M --> N{Código Lido com Sucesso?}
+    N -->|Não| O[Atualizar Job: FAILED]
+    N -->|Sim| P{Executar Step 2: Analisar com LLM}
+    P --> Q[LLMProvider - Claude/OpenAI]
+    Q --> R{Análise Concluída?}
+    R -->|Não| O
+    R -->|Sim| S{Executar Step 3: Gerar Relatório}
+    S --> T[Salvar Relatório no Blob Storage]
+    T --> U{gerar_relatorio_apenas?}
+    U -->|Sim| V[Atualizar Job: COMPLETED]
+    U -->|Não| W{Executar Step 4: Criar PR}
+    W --> X[RepositoryCommitter]
+    X --> Y{PR Criado?}
+    Y -->|Não| O
+    Y -->|Sim| V
     
-    J -->|Sim| K[Status: PENDING_APPROVAL];
-    K --> L[Aguarda Aprovação];
-    L -->|POST /update-job-status| M{Ação?};
+    V --> Z[Cliente Consulta Status]
+    Z -->|GET /status/{job_id}| AA[Retornar Resultado Final]
     
-    M -->|approve| N[Status: WORKFLOW_STARTED];
-    M -->|reject| O[Status: REJECTED];
+    style B fill:#4CAF50,color:#fff
+    style K fill:#2196F3,color:#fff
+    style Q fill:#FF9800,color:#fff
+    style X fill:#9C27B0,color:#fff
+    style V fill:#4CAF50,color:#fff
+    style O fill:#F44336,color:#fff
+
+
+### Fluxo de Aprovação Manual
+
+mermaid
+flowchart TD
+    A[Workflow Pausado] -->|Status: AWAITING_APPROVAL| B[Cliente Revisa Relatório]
+    B --> C{Decisão}
+    C -->|Aprovar| D[POST /update-job-status - action: approve]
+    C -->|Rejeitar| E[POST /update-job-status - action: reject]
     
-    N --> P[Continuação do Workflow];
-    J -->|Não| P;
+    D --> F[Atualizar Status: WORKFLOW_STARTED]
+    F --> G[Retomar Workflow no Step Pausado + 1]
+    G --> H[Executar Steps Restantes]
+    H --> I[Criar Pull Request]
+    I --> J[Status: COMPLETED]
     
-    P --> Q{Sucesso?};
-    Q -->|Sim| R[Status: COMPLETED];
-    Q -->|Não| S[Status: FAILED];
+    E --> K[Atualizar Status: REJECTED]
+    K --> L[Encerrar Processamento]
     
-    R --> T[Construção da Resposta Final];
-    T --> U{Tipo de Job?};
+    style D fill:#4CAF50,color:#fff
+    style E fill:#F44336,color:#fff
+    style J fill:#4CAF50,color:#fff
+    style K fill:#F44336,color:#fff
+
+
+### Fluxo de Geração de Código a Partir de Relatório
+
+mermaid
+flowchart TD
+    A[Cliente] -->|POST /start-code-generation-from-report/{analysis_name}| B[Buscar Job Original]
+    B --> C{Job Existe?}
+    C -->|Não| D[Retornar Erro 404]
+    C -->|Sim| E[Recuperar Relatório do Job Original]
+    E --> F[Criar Novo Job Derivado]
+    F --> G[Copiar Configurações do Job Original]
+    G --> H[Definir gerar_relatorio_apenas = False]
+    H --> I[Definir gerar_novo_relatorio = False]
+    I --> J[Salvar Novo Job no Redis]
+    J --> K[Disparar Workflow em Background]
+    K --> L[Executar Steps de Geração de Código]
+    L --> M[Criar Pull Request]
+    M --> N[Status: COMPLETED]
     
-    U -->|Relatório Apenas| V[Retorna Relatório + Blob URL];
-    U -->|Implementação| W[Extrai PRs dos Commit Details];
-    W --> X[Extrai PRs dos Diagnostic Logs];
-    X --> Y[Constrói Summary com PRs];
+    style B fill:#2196F3,color:#fff
+    style F fill:#FF9800,color:#fff
+    style M fill:#9C27B0,color:#fff
+    style N fill:#4CAF50,color:#fff
 
-    V --> Z["GET /status/{job_id}"];
-    Y --> Z;
-    S --> Z;
-    O --> Z;
-    
-    Z --> AA["GET /jobs/{job_id}/report"];
-    Z --> BB["GET /analyses/by-name/{name}"];
-    
-    R --> CC["POST /start-code-generation-from-report"];
-    CC --> DD[Busca Job Original];
-    DD --> EE[Extrai Relatório];
-    EE --> FF[Cria Job Derivado];
-    FF --> GG[Novo Workflow de Implementação];
-    GG --> H;
-```
 
-## Fluxo de Estados do Job
+---
 
-```mermaid
-stateDiagram-v2
-    [*] --> STARTING: Job criado
-    STARTING --> PENDING_APPROVAL: Workflow pausado
-    STARTING --> WORKFLOW_STARTED: Workflow direto
-    PENDING_APPROVAL --> WORKFLOW_STARTED: Aprovado
-    PENDING_APPROVAL --> REJECTED: Rejeitado
-    WORKFLOW_STARTED --> COMPLETED: Sucesso
-    WORKFLOW_STARTED --> FAILED: Erro
-    REJECTED --> [*]
-    COMPLETED --> [*]
-    FAILED --> [*]
-```
+## 2. Explicação do Código `mcp_server_fastapi.py`
 
-## Tipos de Repositório Suportados
+O arquivo `mcp_server_fastapi.py` serve como ponto de entrada da API REST do MCP (Multi-Agent Code Platform). Ele expõe endpoints HTTP para iniciar e gerenciar análises de código, consultar status e relatórios, e acionar workflows de geração de código.
 
-### GitHub
-- Formato padrão: `owner/repository`
-- Sem validação especial
+### Componentes e Fluxos Principais
 
-### GitLab
-- **Project ID (Recomendado):** Número único do projeto (ex: `123456`)
-- **Path Completo:** Formato `namespace/projeto` (ex: `meugrupo/meuprojeto`)
-- Validação rigorosa para evitar formatos inválidos
+- **Dependency Injection:** O `DependencyContainer` centraliza a criação de serviços e suas dependências, facilitando manutenção e testes.
+- **Factory Pattern:** Serviços como `ApiServiceFactory` e `WorkflowRegistryService` encapsulam a lógica de criação de objetos complexos.
+- **Service Layer:** Lógica de negócio está isolada em serviços especializados (`JobDataService`, `JobValidationService`, `ResponseBuilderService`, etc.).
+- **Background Tasks:** Workflows são executados de forma assíncrona usando `BackgroundTasks` do FastAPI.
 
-### Azure DevOps
-- Formato padrão sem validação especial
+### Endpoints Principais
 
-## Características Técnicas
+- **POST /start-analysis**: Inicia uma nova análise de código. Valida o payload, normaliza o nome do repositório, gera identificadores, cria o job no Redis, registra a análise e dispara o workflow em background.
+- **POST /update-job-status**: Aprova ou rejeita um job pausado. Atualiza o status do job e pode retomar o workflow do ponto onde parou.
+- **GET /status/{job_id}**: Consulta o status atual de um job, podendo retornar relatório, URL do Blob Storage e informações de Pull Request.
+- **GET /jobs/{job_id}/report**: Recupera o relatório de análise de um job específico.
+- **GET /analyses/by-name/{analysis_name}**: Busca análise pelo nome, retornando relatório e informações associadas.
+- **POST /start-code-generation-from-report/{analysis_name}**: Cria um novo job de geração de código a partir de um relatório existente, copiando configurações do job original e disparando um novo workflow.
 
-### Processamento Assíncrono
-- Utiliza `BackgroundTasks` do FastAPI para execução não-bloqueante
-- Workflows executados em paralelo sem impactar a responsividade da API
+### Serviços e Utilitários
 
-### Armazenamento de Estado
-- Jobs armazenados no Redis via `JobStore`
-- Mapeamento de nomes de análise para job IDs
-- Persistência de logs diagnósticos e resultados
+- **JobStore:** Armazena o estado dos jobs (status, dados, resultados intermediários) em Redis.
+- **WorkflowOrchestrator:** Executa sequencialmente os steps de um workflow, delegando a execução de cada step para um StepExecutor específico.
+- **JobDataService:** Cria e manipula estruturas de dados de jobs.
+- **JobValidationService:** Valida estados e transições de jobs.
+- **ResponseBuilderService:** Constrói respostas HTTP padronizadas.
+- **RepositoryNormalizerService:** Normaliza nomes de repositórios.
+- **LoggingService:** Centraliza logs estruturados.
 
-### Tratamento de Erros
-- Validação rigorosa de payloads com Pydantic
-- HTTPExceptions específicas para diferentes cenários
-- Logs detalhados para debugging
+### Observações
 
-### Middleware CORS
-- Configurado para aceitar requisições de qualquer origem
-- Suporte completo a credenciais e métodos HTTP
+- O código utiliza validação automática de payloads via Pydantic.
+- O CORS está aberto para todas as origens (atenção em produção).
+- O uso de background tasks permite que a API seja responsiva mesmo para operações longas.
+- O design modular facilita a extensão para novos tipos de análise, steps e provedores de repositório.
 
-## Observações Importantes
+---
 
-1. **Fluxo de Aprovação:** Jobs podem pausar para aprovação humana antes de continuar
-2. **Derivação de Jobs:** Relatórios podem gerar novos jobs de implementação automaticamente
-3. **Flexibilidade de Modelos:** Suporte a diferentes modelos de LLM por job
-4. **Rastreabilidade:** Cada análise possui nome único e histórico completo
-5. **Robustez:** Tratamento específico para diferentes tipos de repositório e cenários de erro
-
-O servidor foi projetado para ser escalável, mantendo estado consistente e fornecendo feedback detalhado sobre o progresso e resultados dos workflows de análise e implementação.
+Para detalhes mais aprofundados sobre cada componente, consulte também o arquivo `docs/ARCHITECTURE.md`.
