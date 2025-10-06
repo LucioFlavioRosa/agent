@@ -43,7 +43,7 @@ Esta documentação detalha o funcionamento do workflow principal, ilustrando o 
 
 ## Diagrama de Fluxo (Mermaid)
 
-mermaid
+```mermaid
 flowchart TD
     A[Início: Recebimento do Job via API] --> B[Registro do Job e Normalização]
     B --> C[Carregamento do Workflow YAML]
@@ -62,7 +62,7 @@ flowchart TD
     L --> M[Fim]
     D -- Erro --> N[Atualiza status para failed]
     N --> M
-
+```
 
 ---
 
