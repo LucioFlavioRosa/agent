@@ -4,14 +4,17 @@ import time
 import traceback
 import os
 from urllib.parse import urlparse
+
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
+
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
 from agents.logging_utils import log_custom_data
 from models import JobStatus, JobFields, JobActions
+
 container = DependencyContainer()
 workflow_registry_service = container.get_workflow_registry_service()
 ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
@@ -206,23 +209,12 @@ def _extract_blob_filename(blob_url: Optional[str]) -> Optional[str]:
 
 def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
     job_data = job.get(JobFields.DATA, {})
-
+    
     print(f"[{job_id}] Construindo resposta final - gerar_relatorio_apenas: {job_data.get(JobFields.GERAR_RELATORIO_APENAS)}")
-
+    
     if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
         print(f"[{job_id}] Resposta para modo report_only - Blob URL: {blob_url}")
         print(f"[{job_id}] Tamanho do relatório: {len(job_data.get(JobFields.ANALYSIS_REPORT, ''))} chars")
-
-    
-        
-          
-    
-
-        
-        Expand All
-    
-    @@ -223,20 +37,16 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
-  
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.COMPLETED,
@@ -231,40 +223,23 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         )
     else:
         summary_list = []
-
+        
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
         print(f"[{job_id}] DIAGNÓSTICO - commit_details lido do job: {commit_details}")
         print(f"[{job_id}] DIAGNÓSTICO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
-
+        
         for i, pr_info in enumerate(commit_details):
             if isinstance(pr_info, dict):
                 pr_url = pr_info.get('pr_url')
                 branch_name = pr_info.get('branch_name')
                 arquivos_modificados = pr_info.get('arquivos_modificados', [])
                 success = pr_info.get('success', False)
-
+                
                 print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
-
+                
                 if success and branch_name:
                     if pr_url:
                         print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
-
-    
-          
-            
-    
-
-          
-          Expand Down
-          
-            
-    
-
-          
-          Expand Up
-    
-    @@ -267,11 +77,9 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
-  
                         summary_list.append(
                             PullRequestSummary(
                                 pull_request_url=pr_url,
@@ -292,38 +267,27 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                     )
                 else:
                     print(f"[{job_id}] AVISO - PR {i+1} não atende critérios: success={success}, pr_url='{pr_url}', branch_name='{branch_name}'")
-
+        
         if not summary_list:
             print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
             diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
-
+            
             final_result = diagnostic_logs.get('final_result', {})
             if final_result:
                 print(f"[{job_id}] Analisando final_result em diagnostic_logs")
-
-    
-        
-          
-    
-
-        
-        Expand All
-    
-    @@ -280,22 +88,18 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
-  
                 for key, value in final_result.items():
                     if key.startswith('pr_grupo_') and isinstance(value, dict):
                         print(f"[{job_id}] Encontrado grupo de PR: {key}")
                         branch_name = value.get('resumo_do_pr', key.replace('pr_grupo_', 'branch-'))
                         arquivos_modificados = []
-
+                        
                         conjunto_mudancas = value.get('conjunto_de_mudancas', [])
                         for mudanca in conjunto_mudancas:
                             if mudanca.get('caminho_do_arquivo'):
                                 arquivos_modificados.append(mudanca['caminho_do_arquivo'])
-
+                        
                         pr_url = f"PR criado para branch: {branch_name}"
-
+                        
                         summary_list.append(
                             PullRequestSummary(
                                 pull_request_url=pr_url,
@@ -331,21 +295,10 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                                 arquivos_modificados=arquivos_modificados
                             )
                         )
-
+            
             if not summary_list:
                 penultimate_result = diagnostic_logs.get('penultimate_result', {})
                 if penultimate_result and isinstance(penultimate_result, dict):
-
-    
-        
-          
-    
-
-        
-        Expand All
-    
-    @@ -306,7 +110,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
-  
                     print(f"[{job_id}] Analisando penultimate_result em diagnostic_logs")
                     conjunto_mudancas = penultimate_result.get('conjunto_de_mudancas', [])
                     if conjunto_mudancas:
@@ -353,51 +306,29 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
                         for mudanca in conjunto_mudancas:
                             if mudanca.get('caminho_do_arquivo'):
                                 arquivos_modificados.append(mudanca['caminho_do_arquivo'])
-
+                        
                         if arquivos_modificados:
                             summary_list.append(
                                 PullRequestSummary(
-
-    
-        
-          
-    
-
-        
-        Expand All
-    
-    @@ -315,17 +118,13 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
-  
                                     pull_request_url="PR criado com base no resultado da análise",
                                     branch_name="branch-implementacao",
                                     arquivos_modificados=arquivos_modificados
                                 )
                             )
-
+        
         if not blob_url:
             blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
             print(f"[{job_id}] URL do blob extraída do job_data: {blob_url}")
-
+        
         print(f"[{job_id}] DIAGNÓSTICO FINAL - PRs encontrados: {len(summary_list)}, URL do blob: {blob_url}")
         for i, pr_summary in enumerate(summary_list):
             print(f"[{job_id}] DIAGNÓSTICO FINAL - PR {i+1}: url='{pr_summary.pull_request_url}', branch='{pr_summary.branch_name}', arquivos={len(pr_summary.arquivos_modificados)}")
-
+        
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
 
         blob_filename = _extract_blob_filename(blob_url)
         log_custom_data(
             job_id=job_id,
-
-    
-        
-          
-    
-
-        
-        Expand All
-    
-    @@ -343,7 +142,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
-  
             projeto=job_data.get(JobFields.PROJETO),
             data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
             status=JobStatus.COMPLETED,
@@ -416,23 +347,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         for pr_summary in summary_list:
             log_custom_data(
                 job_id=job_id,
-
-    
-          
-            
-    
-
-          
-          Expand Down
-          
-            
-    
-
-          
-          Expand Up
-    
-    @@ -371,160 +169,15 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
-  
                 projeto=job_data.get(JobFields.PROJETO),
                 data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
                 status=JobStatus.COMPLETED,
@@ -472,10 +386,10 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
-
+    
     repo_name = payload.repo_name_modernizado
     branch_name = payload.branch_name_modernizado
-
+    
     normalized_repo_name = _normalize_repo_name_by_type(repo_name, payload.repository_type)
 
     job_id = str(uuid.uuid4())
@@ -513,7 +427,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
-
+    
     job = job_store.get_job(payload.job_id)
     _validate_job_for_approval(job, payload.job_id)
 
@@ -521,7 +435,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         if payload.instrucoes_extras:
             job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
             print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
-
+        
         job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
 
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
@@ -541,7 +455,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
     job_store = container.get_job_store()
-
+    
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
 
@@ -554,7 +468,7 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
-
+    
     job_id = _validate_analysis_exists(analysis_name, analysis_service)
 
     job = job_store.get_job(job_id)
@@ -574,7 +488,7 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
 def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
-
+    
     job_id = _validate_analysis_exists(analysis_name, analysis_service)
 
     original_job = job_store.get_job(job_id)
@@ -604,7 +518,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
-
+    
     job = job_store.get_job(job_id)
     _validate_job_exists(job, job_id)
 
@@ -614,17 +528,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     try:
         if status == JobStatus.COMPLETED:
             job_data = job.get(JobFields.DATA, {})
-
-    
-          
-            
-    
-
-          
-          Expand Down
-    
-    
-  
             if job_data.get(JobFields.GERAR_RELATORIO_APENAS) is True:
                 print(f"[{job_id}] Resposta para modo report_only - Blob URL: {blob_url}")
                 print(f"[{job_id}] Tamanho do relatório: {len(job_data.get(JobFields.ANALYSIS_REPORT, ''))} chars")
