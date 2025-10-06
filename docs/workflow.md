@@ -1,180 +1,109 @@
-# Documentação do Workflow Orchestrator
+# Documentação do Workflow Principal - MCP Server
 
 ## Visão Geral
 
-O `WorkflowOrchestrator` é o componente central responsável por gerenciar e executar workflows de análise e refatoração de código de forma automatizada. Ele coordena a execução de diferentes agentes (revisor e processador), gerencia aprovações humanas, integra com sistemas de armazenamento (Blob Storage) e repositórios de código.
+O MCP Server utiliza um sistema de orquestração de workflows para automatizar e controlar o processamento de jobs de análise e geração de código por agentes de IA. O componente central desse fluxo é o `WorkflowOrchestrator`, responsável por executar etapas (steps) definidas em arquivos de workflow YAML, gerenciar o estado dos jobs, lidar com relatórios e aprovações, e acionar serviços auxiliares.
 
-## Fluxo do Workflow
+Esta documentação detalha o funcionamento do workflow principal, ilustrando o fluxo de execução, os pontos de decisão e os principais componentes envolvidos.
 
-```mermaid
+---
+
+## Componentes Envolvidos
+
+- **WorkflowOrchestrator**: Classe principal que executa o workflow de acordo com o tipo de análise solicitado.
+- **WorkflowRegistryService/Loader**: Carrega e disponibiliza os workflows definidos em YAML.
+- **JobHandler**: Gerencia o estado e os dados dos jobs.
+- **ReportHandler**: Lê, valida e armazena relatórios de análise.
+- **CommitHandler**: Realiza commits das alterações geradas.
+- **StepStrategyFactory**: Cria estratégias para execução de cada etapa do workflow.
+- **Repository Providers/Readers**: Abstraem o acesso aos repositórios GitHub, GitLab ou Azure.
+
+---
+
+## Fluxo Geral do Workflow
+
+1. **Recebimento do Job**: O usuário inicia uma análise via API (`/start-analysis`), informando o tipo de análise, repositório, branch, etc.
+2. **Registro e Normalização**: O job é registrado, os nomes de repositório são normalizados e um identificador único é gerado.
+3. **Execução do Workflow**: O `WorkflowOrchestrator` é chamado para executar o workflow correspondente ao tipo de análise.
+4. **Execução dos Steps**: Cada etapa (step) do workflow é executada sequencialmente. Para cada step:
+   - O status do job é atualizado.
+   - Parâmetros específicos do step e do job são preparados.
+   - O agente apropriado é chamado (ex: processador, revisor, comparador).
+   - O resultado do step é salvo.
+   - Se for o primeiro step e houver relatório existente, ele pode ser lido do Blob Storage.
+   - Se o step exigir aprovação, o workflow é pausado até a aprovação manual.
+   - Se o workflow estiver em modo "gerar_relatorio_apenas", pode ser finalizado após o relatório.
+5. **Finalização**: Após todos os steps, o workflow pode:
+   - Salvar o relatório final no Blob Storage.
+   - Realizar commits das alterações no repositório.
+   - Atualizar o status do job para "completed".
+6. **Erros**: Qualquer exceção é capturada e o status do job é atualizado para "failed".
+
+---
+
+## Diagrama de Fluxo (Mermaid)
+
+mermaid
 flowchart TD
-    A["🚀 Início: execute_workflow(job_id, start_from_step)"] --> B["📋 Recupera job_info do JobManager"];
-    B --> C{"🔍 Workflow encontrado?"};
-    C -- Não --> Z["❌ Erro: Workflow não encontrado"];
-    C -- Sim --> D["🔧 Prepara RepositoryProvider e ReaderGeral"];
-    D --> E["🔄 Itera sobre steps do workflow"];
-    E --> F{"📊 É step 0 (geração de relatório)?"};
-    F -- Sim --> G{"🔄 gerar_novo_relatorio=False?"};
-    G -- Sim --> H["☁️ Tenta ler relatório do Blob Storage"];
-    H -- Encontrado --> I["📄 Carrega relatório existente"];
-    H -- Não encontrado --> J["🤖 Executa agente responsável pela tarefa"];
-    G -- Não --> J;
-    F -- Não --> J;
-    J --> K["💾 Salva resultado do step"];
-    I --> L{"📝 Modo apenas relatório?"};
-    K --> L;
-    L -- Sim --> M["☁️ Salva relatório no Blob Storage"];
-    M --> N["✅ Finaliza workflow"];
-    L -- Não --> O{"👤 Step requer aprovação?"};
-    O -- Sim --> P{"⏸️ Pausa para aprovação humana"};
-    P -- Reprovado --> V["❌  Finaliza workflow "];
-    P -- Aprovado --> Q;
-    O -- Não --> Q{"🔄 Há mais steps?"};
-    Q -- Sim --> E;
-    Q -- Não --> R["🔧 Finaliza workflow"];
-    R --> S["📝 Preenche dados com ChangesetFiller"];
-    S --> T["🔀 Executa commits nos repositórios"];
-    T --> U["✅ Workflow concluído"];
-    
-    style A fill:#e1f5fe;
-    style N fill:#c8e6c9;
-    style U fill:#c8e6c9;
-    style Z fill:#ffcdd2;
-    style V fill:#ffcdd2;
-    style P fill:#fff3e0;
-```
-## Componentes Principais
+    A[Início: Recebimento do Job via API] --> B[Registro do Job e Normalização]
+    B --> C[Carregamento do Workflow YAML]
+    C --> D{Step Atual < Steps Totais?}
+    D -- Sim --> E[Executa Step Atual]
+    E --> F{Step exige aprovação?}
+    F -- Sim --> G[Pausa workflow e aguarda aprovação]
+    G --> H[Recebe aprovação]
+    H --> D
+    F -- Não --> I{Modo gerar_relatorio_apenas?}
+    I -- Sim --> J{Relatório válido?}
+    J -- Sim --> K[Finaliza workflow (completed)]
+    J -- Não --> E
+    I -- Não --> D
+    D -- Não --> L[Finaliza workflow: Salva relatório, realiza commits, status completed]
+    L --> M[Fim]
+    D -- Erro --> N[Atualiza status para failed]
+    N --> M
 
-### 1. WorkflowOrchestrator
-**Responsabilidade:** Coordenação geral do workflow
-- Gerencia a execução sequencial de steps
-- Controla pausas para aprovação
-- Integra com JobManager para persistência de estado
-- Coordena salvamento de relatórios no Blob Storage
 
-### 2. Agentes
+---
 
-#### Agente Revisor
-- **Função:** Análise e geração de relatórios de código
-- **Input:** Instruções do usuário + contexto de etapas anteriores
-- **Output:** Relatório de análise estruturado
+## Pontos de Decisão Importantes
 
-#### Agente Processador
-- **Função:** Processamento e refatoração de código
-- **Input:** Resultado de etapas anteriores (geralmente relatórios)
-- **Output:** Plano de mudanças estruturado
+- **Aprovação Manual**: Alguns steps podem exigir aprovação manual para prosseguir. O workflow é pausado e só continua após aprovação via API.
+- **Modo "gerar_relatorio_apenas"**: Se ativado, o workflow finaliza após a geração e validação do relatório, sem executar etapas de commit.
+- **Leitura de Relatório Existente**: O sistema tenta reutilizar relatórios já gerados, evitando processamento desnecessário.
 
-### 3. Integrações
+---
 
-#### JobManager
-- Persistência de estado do workflow
-- Controle de status (running, pending_approval, completed)
-- Armazenamento de resultados intermediários
+## Exemplos de Payloads
 
-#### Blob Storage
-- Armazenamento de relatórios gerados
-- Cache de relatórios para reutilização
-- Controle via flag `gerar_novo_relatorio`
+### Início de Análise (`/start-analysis`)
 
-#### Repository Providers
-- Integração com diferentes tipos de repositório (GitHub, Azure DevOps, etc.)
-- Leitura de código-fonte
-- Execução de commits e criação de PRs
-
-## Fluxo de Execução Detalhado
-
-### Fase 1: Inicialização
-1. **Recuperação do Job:** Busca informações do job no JobManager
-2. **Validação:** Verifica se o workflow existe no registry
-3. **Preparação:** Configura RepositoryProvider e ReaderGeral
-
-### Fase 2: Execução de Steps
-
-#### Step 0 - Geração/Recuperação de Relatório
-- **Verificação de Cache:** Se `gerar_novo_relatorio=False`, tenta ler do Blob Storage
-- **Geração:** Se não encontrado ou `gerar_novo_relatorio=True`, executa agente revisor
-- **Modo Relatório Apenas:** Se `gerar_relatorio_apenas=True`, finaliza aqui
-
-#### Steps Subsequentes
-- **Execução de Agentes:** Processa resultado da etapa anterior
-- **Aplicação de Instruções:** Incorpora `instrucoes_extras` e `instrucoes_extras_aprovacao`
-- **Controle de Aprovação:** Pausa execução se `requires_approval=True`
-
-### Fase 3: Finalização
-1. **Preenchimento de Dados:** Usa ChangesetFiller para estruturar mudanças
-2. **Formatação:** Organiza dados em grupos de mudanças
-3. **Commits:** Executa commits nos repositórios via repository providers
-4. **Conclusão:** Atualiza status final no JobManager
-
-## Configuração de Workflow
-
-### Estrutura do Workflow Registry
-```
 {
-  "analysis_type": {
-    "steps": [
-      {
-        "agent_type": "revisor",
-        "status_update": "analyzing_code",
-        "requires_approval": true,
-        "model_name": "gpt-4",
-        "params": {}
-      },
-      {
-        "agent_type": "processador",
-        "status_update": "processing_changes",
-        "requires_approval": false,
-        "model_name": "gpt-4",
-        "params": {}
-      }
-    ]
-  }
+  "repo_name_modernizado": "org/projeto",
+  "branch_name_modernizado": "main",
+  "projeto": "MeuProjeto",
+  "analysis_type": "modernizacao",
+  "repository_type": "github"
 }
-```
-### Parâmetros de Job
-- `original_analysis_type`: Tipo de análise a ser executada
-- `repository_type`: Tipo do repositório (github, azure_devops)
-- `repo_name`: Nome do repositório
-- `branch_name`: Branch de trabalho
-- `instrucoes_extras`: Instruções adicionais do usuário
-- `gerar_novo_relatorio`: Flag para controle de cache de relatórios
-- `gerar_relatorio_apenas`: Flag para execução apenas do relatório
-- `analysis_name`: Nome para identificação do relatório no Blob Storage
 
-## Estados do Workflow
 
-- **running:** Execução em andamento
-- **pending_approval:** Pausado aguardando aprovação humana
-- **populating_data:** Preenchendo dados finais
-- **committing_to_github:** Executando commits
-- **completed:** Concluído com sucesso
-- **error:** Erro durante execução
+### Resposta
 
-## Tratamento de Erros
+{
+  "job_id": "uuid-gerado"
+}
 
-- **Job não encontrado:** Lança `ValueError`
-- **Workflow não encontrado:** Lança `ValueError`
-- **Resposta vazia da IA:** Reutiliza resultado anterior ou lança erro
-- **Erros de execução:** Capturados e tratados via `JobManager.handle_job_error`
 
-## Funcionalidades Especiais
+---
 
-### Reutilização de Relatórios
-- Controle via `gerar_novo_relatorio=False`
-- Busca automática no Blob Storage
-- Fallback para geração via agente se não encontrado
+## Observações
 
-### Aprovação Humana
-- Pausa automática em steps marcados com `requires_approval=True`
-- Suporte a `instrucoes_extras_aprovacao` para refinamentos
-- Continuação via `execute_workflow` com `start_from_step`
+- O fluxo é altamente configurável via arquivos de workflow YAML, permitindo adicionar, remover ou modificar steps sem alterar o código-fonte.
+- O uso de estratégias e handlers especializados torna o sistema modular e fácil de estender.
+- O diagrama acima representa o fluxo padrão; workflows customizados podem adicionar etapas ou decisões adicionais.
 
-### Modo Relatório Apenas
-- Execução limitada ao step 0
-- Ideal para análises exploratórias
-- Salvamento automático no Blob Storage
+---
 
-### Múltiplos Commits
-- Agrupamento inteligente de mudanças
-- Criação de branches e PRs separados
-- Suporte a diferentes repository providers
+## Referências
+- Código-fonte: `services/workflow_orchestrator.py`, `services/workflow_registry_loader.py`, `services/workflow_registry_service.py`
+- Definições de workflow: `workflows.yaml`
