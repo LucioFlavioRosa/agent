@@ -379,8 +379,8 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         status=JobStatus.COMPLETED, 
         summary=summary_list,
         diagnostic_logs=logs,
-        report_blob_url=final_blob_url
-        # NÃO incluir analysis_report aqui (modo normal)
+        report_blob_url=final_blob_url,
+        # analysis_report NÃO é incluído aqui no modo normal, mas está presente no modo report_only acima.
     )
     print(f"[{job_id}] [_build_completed_response] MODO NORMAL - Resposta construída com {len(summary_list)} PRs")
     return response
@@ -546,6 +546,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
     print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
+    print(f"[{job_id}] [get_status] ANTES _build_completed_response: gerar_relatorio_apenas={gerar_relatorio_apenas}, analysis_report_size={len(analysis_report) if analysis_report else 0}, blob_url={blob_url}")
 
     try:
         if status == JobStatus.COMPLETED:
