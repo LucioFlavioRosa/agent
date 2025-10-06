@@ -109,7 +109,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
                     strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                     # ORDEM CORRIGIDA: primeiro pausa para aprovação, depois finaliza workflow
-                    if strategy.should_pause_for_approval(step):
+                    if strategy.should_pause_for_approval(job_info, step):
                         self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                         return
                     if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
@@ -131,7 +131,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                     return
 
-                if strategy.should_pause_for_approval(step):
+                if strategy.should_pause_for_approval(job_info, step):
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
 
