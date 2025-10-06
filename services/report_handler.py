@@ -23,9 +23,6 @@ class ReportHandler:
         return None
 
     def save_report_to_blob(self, job_id, job_info, report_text, report_generated_by_agent=False):
-        if not report_text or len(report_text.strip()) == 0:
-            raise ValueError(f"[{job_id}] ERRO: Tentativa de salvar relatório vazio no Blob Storage")
-        print(f"[{job_id}] [DEBUG] Salvando relatório no blob. Tamanho do relatório: {len(report_text)}")
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
@@ -40,7 +37,6 @@ class ReportHandler:
         job_info['data']['report_blob_url'] = url
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] Relatório salvo no Blob Storage: {url}")
-        print(f"[{job_id}] [DEBUG] Após salvar relatório no blob. Tamanho do relatório: {len(report_text)}")
         return url
 
     def handle_report_only_mode(self, job_id, job_info, step_result):
