@@ -5,15 +5,20 @@ class DefaultStepStrategy:
     def __init__(self, job_handler):
         self.job_handler = job_handler
 
-    def execute_step(self, job_id, job_info, step, current_step_index, previous_step_result, repo_reader, llm_provider, agent_params):
-        return llm_provider.run_agent(
-            job_id=job_id,
-            job_info=job_info,
-            step=step,
-            current_step_index=current_step_index,
-            previous_step_result=previous_step_result,
-            repo_reader=repo_reader,
-            agent_params=agent_params
+    def execute_step(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
+                    current_step_index: int, previous_step_result: Dict[str, Any], 
+                    repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
+        
+        agent_type = step.get('agent_type')
+                        
+        if not agent_type:
+            raise ValueError(f"Tipo de agente não especificado na etapa {current_step_index}")
+        
+        executor = StepExecutorFactory.create_executor(agent_type, self.job_handler)
+        
+        return executor.execute(
+            job_id, job_info, step, current_step_index, 
+            previous_step_result, repo_reader, llm_provider, agent_params
         )
 
     def should_finalize_workflow(self, job_info, current_step_index):
