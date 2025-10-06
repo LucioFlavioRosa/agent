@@ -79,22 +79,13 @@ app = FastAPI(
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# --- Controle de concorrência para background tasks (implementação sugerida para Fase 2, não aplicada nesta Fase 1) ---
-
-# --- Funções auxiliares assíncronas ---
-
-def run_workflow_task_sync(job_id: str, start_from_step: int = 0):
-    """Executa workflow em background (compatível com BackgroundTasks síncrono)."""
+def run_workflow_task(job_id: str, start_from_step: int = 0):
+    """Executa workflow em background."""
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
 
-async def run_workflow_task_async(job_id: str, start_from_step: int = 0):
-    """Executa workflow em background (async)."""
-    workflow_orchestrator = container.get_workflow_orchestrator()
-    await workflow_orchestrator.execute_workflow(job_id, start_from_step)
-
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
-async def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     """Inicia uma nova análise."""
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
@@ -103,45 +94,43 @@ async def start_analysis(payload: StartAnalysisPayload, background_tasks: Backgr
     branch_name = payload.branch_name_modernizado
     
     # Normaliza nome do repositório usando serviço especializado
-    normalized_repo_name = await repository_normalizer_service.normalize_repo_name(
+    normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         repo_name, payload.repository_type
     )
 
     job_id = str(uuid.uuid4())
     
     # Gera nome de análise usando serviço especializado
-    analysis_name = await job_data_service.generate_analysis_name(payload.analysis_name, job_id)
+    analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
 
     # Cria dados iniciais do job usando serviço especializado
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
-    initial_job_data = await job_data_service.create_initial_job_data(
+    initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
 
-    await job_store.set_job(job_id, initial_job_data)
+    job_store.set_job(job_id, initial_job_data)
 
     # Realiza logging usando serviço especializado
-    await logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
+    logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
 
     if analysis_name:
-        await analysis_service.register_analysis(analysis_name, job_id)
+        analysis_service.register_analysis(analysis_name, job_id)
 
     print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
 
-    # BackgroundTasks só aceita funções sync, mas pode-se usar asyncio.create_task para disparar async
-    import asyncio
-    background_tasks.add_task(asyncio.create_task, run_workflow_task_async(job_id, start_from_step=0))
+    background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
 
     return StartAnalysisResponse(job_id=job_id)
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
-async def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
+def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
     """Atualiza status do job (aprovação/rejeição)."""
     job_store = container.get_job_store()
     
-    job = await job_store.get_job(payload.job_id)
-    await job_validation_service.validate_job_for_approval(job, payload.job_id)
+    job = job_store.get_job(payload.job_id)
+    job_validation_service.validate_job_for_approval(job, payload.job_id)
 
     if payload.action == JobActions.APPROVE:
         if payload.instrucoes_extras:
@@ -153,43 +142,41 @@ async def update_job_status(payload: UpdateJobPayload, background_tasks: Backgro
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
         start_from_step = paused_step + 1
 
-        await job_store.set_job(payload.job_id, job)
+        job_store.set_job(payload.job_id, job)
 
-        import asyncio
-        background_tasks.add_task(asyncio.create_task, run_workflow_task_async(payload.job_id, start_from_step=start_from_step))
+        background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
 
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.WORKFLOW_STARTED, "message": "Aprovação recebida."}
 
     if payload.action == JobActions.REJECT:
         job[JobFields.STATUS] = JobStatus.REJECTED
-        await job_store.set_job(payload.job_id, job)
+        job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
 
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
-async def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
+def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
     """Busca relatório de um job específico."""
     job_store = container.get_job_store()
     
-    job = await job_store.get_job(job_id)
+    job = job_store.get_job(job_id)
     print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
-    await job_validation_service.validate_job_exists(job, job_id)
+    job_validation_service.validate_job_exists(job, job_id)
 
-    report = await job_validation_service.get_report_from_job(job, job_id)
+    report = job_validation_service.get_report_from_job(job, job_id)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
 
     return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
-async def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
+def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
     """Busca análise pelo nome."""
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     
-    # Busca otimizada via índice hash O(1)
-    job_id = await job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
+    job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
 
-    job = await job_store.get_job(job_id)
-    await job_validation_service.validate_job_exists(job, job_id)
+    job = job_store.get_job(job_id)
+    job_validation_service.validate_job_exists(job, job_id)
 
     report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
@@ -202,51 +189,50 @@ async def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da an�
     )
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
-async def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
+def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
     """Inicia geração de código baseada em relatório existente."""
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     
-    job_id = await job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
+    job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
 
-    original_job = await job_store.get_job(job_id)
-    await job_validation_service.validate_job_exists(original_job, job_id)
+    original_job = job_store.get_job(job_id)
+    job_validation_service.validate_job_exists(original_job, job_id)
 
-    report = await job_validation_service.get_report_from_job(original_job, None)
+    report = job_validation_service.get_report_from_job(original_job, None)
 
     original_data = original_job[JobFields.DATA]
     original_repo_name = original_data[JobFields.REPO_NAME]
     original_repository_type = original_data[JobFields.REPOSITORY_TYPE]
 
     # Normaliza nome do repositório usando serviço especializado
-    normalized_repo_name = await repository_normalizer_service.normalize_repo_name(
+    normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         original_repo_name, original_repository_type
     )
 
     new_job_id = str(uuid.uuid4())
 
     # Cria dados do job derivado usando serviço especializado
-    new_job_data = await job_data_service.create_derived_job_data(
+    new_job_data = job_data_service.create_derived_job_data(
         original_job, analysis_name, normalized_repo_name, report
     )
 
-    await job_store.set_job(new_job_id, new_job_data)
-    await analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
+    job_store.set_job(new_job_id, new_job_data)
+    analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
 
     print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
 
-    import asyncio
-    background_tasks.add_task(asyncio.create_task, run_workflow_task_async(new_job_id, start_from_step=0))
+    background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
 
     return StartAnalysisResponse(job_id=new_job_id)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
-async def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
+def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """Verifica status de um job."""
     job_store = container.get_job_store()
     
-    job = await job_store.get_job(job_id)
-    await job_validation_service.validate_job_exists(job, job_id)
+    job = job_store.get_job(job_id)
+    job_validation_service.validate_job_exists(job, job_id)
 
     status = job.get(JobFields.STATUS)
     job_data = job.get(JobFields.DATA, {})
@@ -262,10 +248,10 @@ async def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado
     try:
         if status == JobStatus.COMPLETED:
             # Usa serviço especializado para construir resposta
-            return await response_builder_service.build_completed_response(job_id, job, blob_url)
+            return response_builder_service.build_completed_response(job_id, job, blob_url)
         elif status == JobStatus.FAILED:
             # Usa serviço especializado para construir resposta de falha
-            return await response_builder_service.build_failed_response(job_id, job)
+            return response_builder_service.build_failed_response(job_id, job)
         else:
             return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url)
     except ValidationError as e:
