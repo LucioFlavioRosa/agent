@@ -156,46 +156,8 @@ def _validate_analysis_exists(analysis_name: str, analysis_service) -> str:
         raise HTTPException(status_code=404, detail=f"Análise com nome '{analysis_name}' não encontrada")
     return job_id
 
-# Passo 3: Modificar _get_report_from_job para fallback ao blob storage
-from tools.blob_report_reader import read_report_from_blob
-
 def _get_report_from_job(job: dict, job_id: str) -> str:
     report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
-    status = job.get(JobFields.STATUS)
-    job_data = job.get(JobFields.DATA, {})
-    gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
-    blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
-    projeto = job_data.get(JobFields.PROJETO)
-    analysis_type = job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE)
-    repository_type = job_data.get(JobFields.REPOSITORY_TYPE)
-    repo_name = job_data.get(JobFields.REPO_NAME)
-    branch_name = job_data.get(JobFields.BRANCH_NAME)
-    analysis_name = job_data.get(JobFields.ANALYSIS_NAME)
-
-    if report:
-        return report
-    # Fallback: completed + gerar_relatorio_apenas, tenta blob storage
-    if status == JobStatus.COMPLETED and gerar_relatorio_apenas:
-        print(f"[{job_id}] [get_report_from_job] Fallback: tentando ler relatório do blob storage pois analysis_report está vazio.")
-        if blob_url:
-            try:
-                # Tenta ler diretamente do blob_url se possível (mas normalmente precisa dos metadados)
-                blob_report = read_report_from_blob(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-                if blob_report:
-                    print(f"[{job_id}] [get_report_from_job] Sucesso no fallback: relatório lido do blob storage, tamanho={len(blob_report)}")
-                    return blob_report
-            except Exception as e:
-                print(f"[{job_id}] [get_report_from_job] Erro ao tentar ler relatório do blob storage: {e}")
-        else:
-            print(f"[{job_id}] [get_report_from_job] Não há blob_url, tentando ler do blob storage por metadados.")
-            try:
-                blob_report = read_report_from_blob(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-                if blob_report:
-                    print(f"[{job_id}] [get_report_from_job] Sucesso no fallback: relatório lido do blob storage por metadados, tamanho={len(blob_report)}")
-                    return blob_report
-            except Exception as e:
-                print(f"[{job_id}] [get_report_from_job] Erro ao tentar ler relatório do blob storage por metadados: {e}")
-        raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {status}")
     if not report:
         if job_id:
             raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get(JobFields.STATUS)}")
@@ -203,22 +165,236 @@ def _get_report_from_job(job: dict, job_id: str) -> str:
             raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
     return report
 
-# Passo 4: Adicionar logs detalhados em get_job_report
-@app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
-def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
-    job_store = container.get_job_store()
-    job = job_store.get_job(job_id)
-    status = job.get('status')
-    analysis_report = job.get('data', {}).get('analysis_report', '')
-    blob_url = job.get('data', {}).get('report_blob_url')
-    gerar_relatorio_apenas = job.get('data', {}).get('gerar_relatorio_apenas')
-    print(f"[{job_id}] [get_job_report] status={status}, report_size={len(analysis_report)}, blob_url={blob_url}, report_only={gerar_relatorio_apenas}")
-    _validate_job_exists(job, job_id)
-    report = _get_report_from_job(job, job_id)
-    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
-    return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
+def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
+    original_data = original_job[JobFields.DATA]
+    return {
+        JobFields.STATUS: JobStatus.STARTING,
+        JobFields.DATA: {
+            JobFields.REPO_NAME: normalized_repo_name,
+            JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
+            JobFields.PROJETO: original_data[JobFields.PROJETO],
+            JobFields.BRANCH_NAME: original_data[JobFields.BRANCH_NAME],
+            JobFields.ORIGINAL_ANALYSIS_TYPE: 'implementacao',
+            JobFields.INSTRUCOES_EXTRAS: f"Gerar código baseado no seguinte relatório:\n\n{report}",
+            JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
+            JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
+            JobFields.GERAR_RELATORIO_APENAS: False,
+            JobFields.GERAR_NOVO_RELATORIO: True,
+            JobFields.ARQUIVOS_ESPECIFICOS: original_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+            JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
+            JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE],
+            JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
+            JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
+            JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR)
+        },
+        JobFields.ERROR_DETAILS: None
+    }
 
-# Demais endpoints permanecem inalterados
+def _extract_blob_filename(blob_url: Optional[str]) -> Optional[str]:
+    if not blob_url:
+        return None
+    try:
+        parsed = urlparse(blob_url)
+        path = parsed.path
+        filename = os.path.basename(path)
+        if filename:
+            return filename
+        else:
+            return blob_url
+    except Exception:
+        try:
+            return blob_url.split('/')[-1]
+        except Exception:
+            return blob_url
+
+def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
+    job_data = job.get(JobFields.DATA, {})
+    gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
+
+    print(f"[{job_id}] [_build_completed_response] INÍCIO - gerar_relatorio_apenas: {gerar_relatorio_apenas}")
+    print(f"[{job_id}] [_build_completed_response] blob_url (parâmetro): {blob_url}")
+    print(f"[{job_id}] [_build_completed_response] report_blob_url (job_data): {job_data.get(JobFields.REPORT_BLOB_URL)}")
+    print(f"[{job_id}] [_build_completed_response] Tamanho analysis_report: {len(job_data.get(JobFields.ANALYSIS_REPORT, ''))} chars")
+
+    # PRIORIDADE ABSOLUTA: Modo report_only
+    if gerar_relatorio_apenas is True:
+        analysis_report = job_data.get(JobFields.ANALYSIS_REPORT)
+        final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
+
+        print(f"[{job_id}] [_build_completed_response] MODO REPORT_ONLY - Construindo resposta")
+        print(f"[{job_id}] [_build_completed_response] analysis_report presente: {bool(analysis_report)}")
+        print(f"[{job_id}] [_build_completed_response] final_blob_url: {final_blob_url}")
+
+        if not analysis_report:
+            print(f"[{job_id}] [_build_completed_response] ERRO: analysis_report está vazio no modo report_only!")
+        if not final_blob_url:
+            print(f"[{job_id}] [_build_completed_response] AVISO: report_blob_url está vazio no modo report_only!")
+
+        response = FinalStatusResponse(
+            job_id=job_id,
+            status=JobStatus.COMPLETED,
+            analysis_report=analysis_report,
+            report_blob_url=final_blob_url
+        )
+        print(f"[{job_id}] [_build_completed_response] MODO REPORT_ONLY - Resposta construída com sucesso")
+        return response
+
+    # Modo normal: extração de PRs e summary
+    print(f"[{job_id}] [_build_completed_response] MODO NORMAL - Extraindo PRs")
+    summary_list = []
+    commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
+    print(f"[{job_id}] DIAGNÓSTICO - commit_details lido do job: {commit_details}")
+    print(f"[{job_id}] DIAGNÓSTICO - Buscando PRs em commit_details: {len(commit_details)} itens encontrados")
+
+    for i, pr_info in enumerate(commit_details):
+        if isinstance(pr_info, dict):
+            pr_url = pr_info.get('pr_url')
+            branch_name = pr_info.get('branch_name')
+            arquivos_modificados = pr_info.get('arquivos_modificados', [])
+            success = pr_info.get('success', False)
+
+            print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{pr_url}', branch_name='{branch_name}', success={success}, arquivos={len(arquivos_modificados)}")
+
+            if success and branch_name:
+                if pr_url:
+                    print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=pr_url,
+                            branch_name=branch_name,
+                            arquivos_modificados=arquivos_modificados
+                        )
+                    )
+                else:
+                    print(f"[{job_id}] Branch processada sem PR URL: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=f"Branch processada: {branch_name}",
+                            branch_name=branch_name,
+                            arquivos_modificados=arquivos_modificados
+                        )
+                    )
+            elif pr_info.get('message') and branch_name:
+                print(f"[{job_id}] Branch processada: {branch_name} - Arquivos: {len(arquivos_modificados)}")
+                summary_list.append(
+                    PullRequestSummary(
+                        pull_request_url=pr_info.get('message', f"Branch processada: {branch_name}"),
+                        branch_name=branch_name,
+                        arquivos_modificados=arquivos_modificados
+                    )
+                )
+            else:
+                print(f"[{job_id}] AVISO - PR {i+1} não atende critérios: success={success}, pr_url='{pr_url}', branch_name='{branch_name}'")
+
+    if not summary_list:
+        print(f"[{job_id}] Nenhum PR encontrado em commit_details, buscando em diagnostic_logs")
+        diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
+
+        final_result = diagnostic_logs.get('final_result', {})
+        if final_result:
+            print(f"[{job_id}] Analisando final_result em diagnostic_logs")
+            for key, value in final_result.items():
+                if key.startswith('pr_grupo_') and isinstance(value, dict):
+                    print(f"[{job_id}] Encontrado grupo de PR: {key}")
+                    branch_name = value.get('resumo_do_pr', key.replace('pr_grupo_', 'branch-'))
+                    arquivos_modificados = []
+
+                    conjunto_mudancas = value.get('conjunto_de_mudancas', [])
+                    for mudanca in conjunto_mudancas:
+                        if mudanca.get('caminho_do_arquivo'):
+                            arquivos_modificados.append(mudanca['caminho_do_arquivo'])
+
+                    pr_url = f"PR criado para branch: {branch_name}"
+
+                    summary_list.append(
+                        PullRequestSummary(
+                            pull_request_url=pr_url,
+                            branch_name=branch_name,
+                            arquivos_modificados=arquivos_modificados
+                        )
+                    )
+
+        if not summary_list:
+            penultimate_result = diagnostic_logs.get('penultimate_result', {})
+            if penultimate_result and isinstance(penultimate_result, dict):
+                print(f"[{job_id}] Analisando penultimate_result em diagnostic_logs")
+                conjunto_mudancas = penultimate_result.get('conjunto_de_mudancas', [])
+                if conjunto_mudancas:
+                    arquivos_modificados = []
+                    for mudanca in conjunto_mudancas:
+                        if mudanca.get('caminho_do_arquivo'):
+                            arquivos_modificados.append(mudanca['caminho_do_arquivo'])
+
+                    if arquivos_modificados:
+                        summary_list.append(
+                            PullRequestSummary(
+                                pull_request_url="PR criado com base no resultado da análise",
+                                branch_name="branch-implementacao",
+                                arquivos_modificados=arquivos_modificados
+                            )
+                        )
+
+    final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
+    logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
+
+    blob_filename = _extract_blob_filename(final_blob_url)
+    log_custom_data(
+        job_id=job_id,
+        projeto=job_data.get(JobFields.PROJETO),
+        data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+        status=JobStatus.COMPLETED,
+        tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
+        nome_repositorio=job_data.get(JobFields.REPO_NAME),
+        tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
+        branch_name=job_data.get(JobFields.BRANCH_NAME),
+        analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
+        arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+        retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
+        modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
+        usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+        blob_filename=blob_filename
+    )
+
+    for pr_summary in summary_list:
+        log_custom_data(
+            job_id=job_id,
+            projeto=job_data.get(JobFields.PROJETO),
+            data_hora=time.strftime('%Y-%m-%d %H:%M:%S'),
+            status=JobStatus.COMPLETED,
+            tipo_repositorio=job_data.get(JobFields.REPOSITORY_TYPE),
+            nome_repositorio=job_data.get(JobFields.REPO_NAME),
+            tipo_analise=job_data.get(JobFields.ORIGINAL_ANALYSIS_TYPE),
+            branch_name=job_data.get(JobFields.BRANCH_NAME_MODERNIZADO),
+            analysis_name=job_data.get(JobFields.ANALYSIS_NAME),
+            arquivos_especificos=job_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
+            pr_url=pr_summary.pull_request_url,
+            arquivos_modificados=pr_summary.arquivos_modificados,
+            retornar_lista_arquivos=job_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS),
+            modo_adicao_incremental=job_data.get(JobFields.MODO_ADICAO_INCREMENTAL),
+            usuario_executor=job_data.get(JobFields.USUARIO_EXECUTOR),
+            blob_filename=blob_filename
+        )
+    response = FinalStatusResponse(
+        job_id=job_id, 
+        status=JobStatus.COMPLETED, 
+        summary=summary_list,
+        diagnostic_logs=logs,
+        report_blob_url=final_blob_url,
+        # analysis_report NÃO é incluído aqui no modo normal, mas está presente no modo report_only acima.
+    )
+    print(f"[{job_id}] [_build_completed_response] MODO NORMAL - Resposta construída com {len(summary_list)} PRs")
+    return response
+
+app = FastAPI(
+    title="MCP Server - Multi-Agent Code Platform",
+    description="Servidor robusto com Redis para orquestrar agentes de IA.",
+    version="9.0.0" 
+)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+def run_workflow_task(job_id: str, start_from_step: int = 0):
+    workflow_orchestrator = container.get_workflow_orchestrator()
+    workflow_orchestrator.execute_workflow(job_id, start_from_step)
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
@@ -289,6 +465,18 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         job[JobFields.STATUS] = JobStatus.REJECTED
         job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
+
+@app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
+def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
+    job_store = container.get_job_store()
+    
+    job = job_store.get_job(job_id)
+    _validate_job_exists(job, job_id)
+
+    report = _get_report_from_job(job, job_id)
+    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
+
+    return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):

@@ -1,5 +1,4 @@
 import json
-import time
 from typing import Dict, Any, Optional
 
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
@@ -72,9 +71,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                            print(f"[{job_id}] [PRE-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
-                            self.job_handler.update_job(job_id, job_info)
-                            print(f"[{job_id}] [POST-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
                             print(f"[{job_id}] [DEBUG] Validando relatório antes de finalizar workflow (modo report_only, lido do blob)")
                             analysis_report = job_info['data'].get('analysis_report')
                             if not analysis_report or len(analysis_report.strip()) < 100:
@@ -90,9 +86,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                             print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                             print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                            print(f"[{job_id}] [PRE-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
-                            self.job_handler.update_job(job_id, job_info)
-                            print(f"[{job_id}] [POST-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
                             self.job_handler.update_job_status(job_id, 'completed')
                             print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                             print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
@@ -116,9 +109,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
                     strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                     if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        print(f"[{job_id}] [PRE-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
-                        self.job_handler.update_job(job_id, job_info)
-                        print(f"[{job_id}] [POST-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
                         print(f"[{job_id}] [DEBUG] Validando relatório antes de finalizar workflow (modo report_only, gerado pelo agente)")
                         analysis_report = job_info['data'].get('analysis_report')
                         if not analysis_report or len(analysis_report.strip()) < 100:
@@ -130,9 +120,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                         return
                     if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        print(f"[{job_id}] [PRE-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
-                        self.job_handler.update_job(job_id, job_info)
-                        print(f"[{job_id}] [POST-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
                         print(f"[{job_id}] [DEBUG] Finalizando workflow imediatamente após salvar relatório pois gerar_relatorio_apenas=True")
                         print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         self.job_handler.update_job_status(job_id, 'completed')
@@ -145,10 +132,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
                     print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
                     print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        print(f"[{job_id}] [PRE-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
-                        self.job_handler.update_job(job_id, job_info)
-                        print(f"[{job_id}] [POST-UPDATE] analysis_report size: {len(job_info['data'].get('analysis_report', ''))}, blob_url: {job_info['data'].get('report_blob_url')}, timestamp: {time.time()}")
                     # Validação final ANTES de finalizar
                     analysis_report = job_info['data'].get('analysis_report')
                     if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
