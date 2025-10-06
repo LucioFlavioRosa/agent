@@ -1,113 +1,107 @@
-# Suporte de Workflow: Arquitetura e Interação
+# Suporte e Detalhes Técnicos do Workflow - MCP Server
 
-Este documento explica como os arquivos `workflow_registry_service.py` e `workflow_orchestrator_interface.py` suportam o funcionamento do `workflow_orchestrator`, detalhando suas responsabilidades e o fluxo de interação entre eles.
-
-## 1. Descrição dos Componentes
-
-### workflow_registry_service.py
-
-O `WorkflowRegistryService` é responsável por:
-
-- **Carregamento de Workflows:** Lê e processa arquivos YAML contendo definições de workflows
-- **Cache Inteligente:** Mantém os workflows carregados em memória (`_workflow_registry`) para evitar recarregamentos desnecessários
-- **Validação de Tipos:** Gera dinamicamente um enum (`ValidAnalysisTypes`) com base nas chaves dos workflows disponíveis
-- **Tratamento de Erros:** Implementa fallback para diferentes formatos de YAML (streaming e carregamento único)
-- **Interface de Acesso:** Fornece métodos públicos para acessar o registro de workflows e tipos válidos
-
-**Principais Métodos:**
-- `load_workflow_registry()`: Carrega workflows do arquivo YAML
-- `get_valid_analysis_types()`: Retorna enum com tipos de análise válidos
-- `get_workflow_registry()`: Interface pública para acessar workflows
-
-### workflow_orchestrator_interface.py
-
-Define a interface (contrato) que qualquer implementação de orquestrador de workflow deve seguir:
-
-- **Padronização:** Estabelece métodos obrigatórios que implementações devem ter
-- **Abstração:** Permite diferentes implementações do orquestrador mantendo compatibilidade
-- **Documentação Implícita:** Serve como documentação viva dos métodos esperados
-- **Testabilidade:** Facilita criação de mocks e testes unitários
-
-### workflow_orchestrator.py
-
-Implementa a lógica principal de orquestração:
-
-- **Implementação da Interface:** Segue o contrato definido em `workflow_orchestrator_interface.py`
-- **Integração com Registry:** Utiliza `WorkflowRegistryService` para acessar workflows disponíveis
-- **Execução de Workflows:** Coordena a execução dos workflows conforme definições carregadas
-- **Gerenciamento de Estado:** Controla o ciclo de vida da execução dos workflows
-
-## 2. Fluxo de Interação
-
-```mermaid
-flowchart TD
-    subgraph "Configuração"
-        YAML[workflows.yaml]
-    end
-    
-    subgraph "Serviços de Suporte"
-        WRS[WorkflowRegistryService]
-        WOI[WorkflowOrchestratorInterface]
-    end
-    
-    subgraph "Orquestração"
-        WO[WorkflowOrchestrator]
-    end
-    
-    subgraph "Execução"
-        EXEC[Workflow Execution]
-    end
-    
-    YAML -->|Carrega Definições| WRS
-    WRS -->|Fornece Workflows| WO
-    WOI -->|Define Contrato| WO
-    WO -->|Executa| EXEC
-    
-    WRS -.->|Cache| WRS
-    WRS -.->|Valida Tipos| WRS
-```
-
-## 3. Processo Macro
-
-### Fase 1: Inicialização
-1. **Carregamento de Configuração:** O `WorkflowRegistryService` lê o arquivo `workflows.yaml`
-2. **Processamento YAML:** Tenta carregamento em streaming, com fallback para carregamento único
-3. **Cache de Workflows:** Armazena workflows em `_workflow_registry` para acesso rápido
-4. **Geração de Tipos:** Cria enum `ValidAnalysisTypes` baseado nas chaves dos workflows
-
-### Fase 2: Preparação
-1. **Instanciação do Orquestrador:** `WorkflowOrchestrator` é criado seguindo a interface definida
-2. **Integração com Registry:** Orquestrador obtém referência ao `WorkflowRegistryService`
-3. **Validação de Dependências:** Verifica se todos os componentes necessários estão disponíveis
-
-### Fase 3: Execução
-1. **Consulta de Workflows:** Orquestrador consulta workflows disponíveis via registry
-2. **Seleção de Workflow:** Escolhe workflow apropriado baseado no tipo de análise solicitado
-3. **Execução Coordenada:** Executa o workflow seguindo as definições carregadas
-4. **Gerenciamento de Estado:** Monitora e controla o progresso da execução
-
-## 4. Benefícios da Arquitetura
-
-### Separação de Responsabilidades
-- **Registry:** Focado apenas em carregar e disponibilizar workflows
-- **Interface:** Define contratos claros sem implementação
-- **Orchestrator:** Concentra-se na lógica de execução
-
-### Flexibilidade
-- Workflows podem ser modificados via YAML sem alteração de código
-- Diferentes implementações de orquestrador podem coexistir
-- Fácil extensão para novos tipos de análise
-
-### Manutenibilidade
-- Componentes independentes facilitam testes unitários
-- Cache inteligente melhora performance
-- Tratamento robusto de erros em carregamento de arquivos
-
-### Escalabilidade
-- Registry pode ser estendido para múltiplas fontes de workflow
-- Interface permite implementações otimizadas para diferentes cenários
-- Arquitetura suporta workflows complexos e aninhados
+Este documento complementa `docs/workflow.md`, fornecendo explicações técnicas adicionais sobre como os workflows são carregados, validados e utilizados pelo MCP Server.
 
 ---
 
-> **Nota:** Esta documentação deve ser mantida atualizada conforme novos componentes ou alterações forem introduzidas no fluxo de orquestração de workflows.
+## 1. Carregamento dos Workflows
+
+Os workflows são definidos em arquivos YAML (por padrão, `workflows.yaml`) e carregados pelo serviço `WorkflowRegistryLoader`. O carregamento suporta múltiplos documentos YAML no mesmo arquivo (streaming YAML), permitindo a definição de vários workflows.
+
+### Código-chave
+python
+class WorkflowRegistryLoader:
+    def __init__(self, workflow_file_path: str = "workflows.yaml"):
+        self.workflow_file_path = workflow_file_path
+    
+    def load_workflows(self) -> Dict[str, Any]:
+        print(f"Carregando workflows do arquivo: {self.workflow_file_path}")
+        workflows = {}
+        
+        try:
+            with open(self.workflow_file_path, 'r', encoding='utf-8') as f:
+                for document in yaml.safe_load_all(f):
+                    if document:
+                        workflows.update(document)
+        except yaml.YAMLError as e:
+            print(f"Erro ao processar YAML em streaming: {e}")
+            with open(self.workflow_file_path, 'r', encoding='utf-8') as f:
+                workflows = yaml.safe_load(f)
+        
+        return workflows
+
+
+- **Resiliência:** Se o carregamento em streaming falhar, faz fallback para leitura padrão.
+- **Extensibilidade:** Novos tipos de workflow podem ser adicionados facilmente ao YAML.
+
+---
+
+## 2. Serviço de Registro de Workflows
+
+O serviço `WorkflowRegistryService` encapsula o loader e expõe métodos para acessar workflows e tipos válidos de análise:
+
+python
+class WorkflowRegistryService:
+    def __init__(self, workflow_file_path: str = "workflows.yaml"):
+        self._workflow_registry = None
+        self._loader = WorkflowRegistryLoader(workflow_file_path)
+        self._analysis_type_provider = AnalysisTypeProvider()
+    
+    def load_workflow_registry(self) -> Dict[str, Any]:
+        if self._workflow_registry is None:
+            self._workflow_registry = self._loader.load_workflows()
+        
+        return self._workflow_registry
+    
+    def get_valid_analysis_types(self):
+        workflow_registry = self.load_workflow_registry()
+        return self._analysis_type_provider.get_valid_analysis_types(workflow_registry)
+    
+    def get_workflow_registry(self) -> Dict[str, Any]:
+        return self.load_workflow_registry()
+
+
+- **Cache:** O registro de workflows é carregado uma vez e mantido em cache na instância.
+- **Integração:** Fornece tipos válidos de análise para validação de payloads da API.
+
+---
+
+## 3. Integração com a API FastAPI
+
+No arquivo `mcp_server_fastapi.py`, o serviço de workflow é inicializado e os tipos válidos de análise são usados para validar o payload da rota `/start-analysis`:
+
+python
+workflow_registry_service = container.get_workflow_registry_service()
+ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
+
+class StartAnalysisPayload(BaseModel):
+    ...
+    analysis_type: ValidAnalysisTypes
+    ...
+
+
+- **Validação Dinâmica:** O campo `analysis_type` do payload só aceita valores definidos nos workflows carregados.
+
+---
+
+## 4. Pontos de Extensão
+
+- **Adicionar Novo Workflow:** Basta incluir um novo documento YAML em `workflows.yaml`.
+- **Novo Step:** Adicione um novo step na lista de steps do workflow desejado.
+- **Novo Agente:** Implemente um novo executor/estratégia e referencie no YAML.
+
+---
+
+## 5. Recomendações
+
+- Sempre valide o YAML antes de subir para evitar falhas de parsing.
+- Mantenha a documentação dos workflows atualizada para facilitar a colaboração.
+- Utilize o diagrama Mermaid em `docs/workflow.md` para alinhar entendimento entre desenvolvedores e stakeholders.
+
+---
+
+## Referências
+- `services/workflow_registry_loader.py`
+- `services/workflow_registry_service.py`
+- `mcp_server_fastapi.py`
+- `workflows.yaml`
