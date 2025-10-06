@@ -76,8 +76,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                        # ORDEM CORRIGIDA: primeiro pausa para aprovação, depois finaliza workflow
-                        if strategy.should_pause_for_approval(step):
+                        if strategy.should_pause_for_approval(job_info, step):
                             self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
                         if strategy.should_finalize_workflow(job_info, current_step_index):
