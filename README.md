@@ -94,7 +94,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A[Cliente] -->|POST /start-code-generation-from-report/{analysis_name}| B[Buscar Job Original]
+    A[Cliente] -->|"POST /start-code-generation-from-report/{analysis_name}"| B[Buscar Job Original]
     B --> C{Job Existe?}
     C -->|Não| D[Retornar Erro 404]
     C -->|Sim| E[Recuperar Relatório do Job Original]
