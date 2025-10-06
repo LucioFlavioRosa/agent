@@ -2,7 +2,7 @@ from typing import Dict, Any
 from models import JobFields
 
 from services.step_executors.step_executor_factory import StepExecutorFactory
-from tools.readers.reader_geral import ReaderGera
+from tools.readers.reader_geral import ReaderGeral
 
 class DefaultStepStrategy:
     def __init__(self, job_handler):
