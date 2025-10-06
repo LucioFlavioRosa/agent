@@ -58,17 +58,6 @@ class AgenteComparador:
         status_update: Optional[str] = None
     ) -> Dict[str, Any]:
 
-        log_custom_data(
-            job_id=job_id,
-            projeto=projeto,
-            data_hora=datetime.now(timezone.utc).isoformat(),
-            status="INICIADO",
-            tipo_repositorio=repository_type,
-            nome_repositorio=f"{repo_name_modernizado} vs {repo_name_original}",
-            tipo_analise=tipo_analise,
-            model_name=model_name
-        )
-
         codigo_modernizado = self._get_code(
             repositorio=repo_name_modernizado,
             nome_branch=branch_name_modernizado,
@@ -87,15 +76,6 @@ class AgenteComparador:
 
         if not codigo_modernizado and not codigo_original:
             print(f"[Agente Comparador] AVISO: Nenhum código encontrado em ambos os repositórios para a análise '{tipo_analise}'.")
-            
-            log_custom_data(
-                job_id=job_id,
-                projeto=projeto,
-                status="ERRO_SEM_CODIGO",
-                repositorio=f"{repo_name_modernizado} vs {repo_name_original}",
-                tipo_analise=tipo_analise,
-                data_hora=datetime.now(timezone.utc).isoformat()
-            )
             
             return {"resultado": {"reposta_final": {}}}
 
