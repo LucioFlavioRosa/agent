@@ -76,7 +76,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                        print(f"[{job_id}] [DEBUG] Após ler relatório do blob. gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)} tamanho: {len(existing_report_text)}")
+                        # ORDEM CORRIGIDA: primeiro pausa para aprovação, depois finaliza workflow
+                        if strategy.should_pause_for_approval(step):
+                            self.handle_approval_step(job_id, job_info, current_step_index, report_data)
+                            return
                         if strategy.should_finalize_workflow(job_info, current_step_index):
                             print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                             print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
@@ -85,9 +88,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             self.job_handler.update_job_status(job_id, 'completed')
                             print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                             print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                            return
-                        if strategy.should_pause_for_approval(step):
-                            self.handle_approval_step(job_id, job_info, current_step_index, report_data)
                             return
                         previous_step_result = report_data
                         continue
@@ -108,6 +108,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     if not job_info['data'].get('report_blob_url'):
                         raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
                     print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
+                    strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                    # ORDEM CORRIGIDA: primeiro pausa para aprovação, depois finaliza workflow
+                    if strategy.should_pause_for_approval(step):
+                        self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                        return
                     if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
                         print(f"[{job_id}] [DEBUG] Finalizando workflow imediatamente após salvar relatório pois gerar_relatorio_apenas=True")
                         print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
