@@ -45,24 +45,37 @@ Esta documentação detalha o funcionamento do workflow principal, ilustrando o 
 
 ```mermaid
 flowchart TD
-    A[Início: Recebimento do Job via API] --> B[Registro do Job e Normalização]
-    B --> C[Carregamento do Workflow YAML]
-    C --> D{Step Atual < Steps Totais?}
-    D -- Sim --> E[Executa Step Atual]
-    E --> F{Step exige aprovação?}
-    F -- Sim --> G[Pausa workflow e aguarda aprovação]
-    G --> H[Recebe aprovação]
-    H --> D
-    F -- Não --> I{Modo gerar_relatorio_apenas?}
-    
-    I -- Não --> D  
-    I -- Sim --> J{Relatório válido?}
-    J -- Não --> E
-    J -- Sim --> K[Finaliza workflow (completed)]
+    %% Definição de todos os Nós
+    A[Início: Recebimento do Job via API]
+    B[Registro do Job e Normalização]
+    C[Carregamento do Workflow YAML]
+    D{Step Atual < Steps Totais?}
+    E[Executa Step Atual]
+    F{Step exige aprovação?}
+    G[Pausa workflow e aguarda aprovação]
+    H[Recebe aprovação]
+    I{Modo gerar_relatorio_apenas?}
+    J{Relatório válido?}
+    K[Finaliza workflow (completed)]
+    L[Finaliza workflow: Salva relatório, realiza commits, status completed]
+    M[Fim]
+    N[Atualiza status para failed]
 
-    D -- Não --> L[Finaliza workflow: Salva relatório, realiza commits, status completed]
-    L --> M[Fim]
-    D -- Erro --> N[Atualiza status para failed]
+    %% Definição de todas as Conexões
+    A --> B --> C --> D
+    D -- Sim --> E
+    E --> F
+    F -- Sim --> G
+    G --> H
+    H --> D
+    F -- Não --> I
+    I -- Sim --> J
+    I -- Não --> D
+    J -- Sim --> K
+    J -- Não --> E
+    D -- Não --> L
+    L --> M
+    D -- Erro --> N
     N --> M
 ```
 
