@@ -37,6 +37,8 @@ class ReportHandler:
         job_info['data']['report_blob_url'] = url
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] Relatório salvo no Blob Storage: {url} (tamanho: {len(report_text)} chars)")
+        # Log de diagnóstico adicionado
+        print(f"[{job_id}] [save_report_to_blob] Diagnóstico: report_blob_url='{url}', tamanho report_text={len(report_text)}")
         return url
 
     def handle_report_only_mode(self, job_id, job_info, step_result):
