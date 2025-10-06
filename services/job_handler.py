@@ -19,11 +19,11 @@ class JobHandler:
         print(f"[DEBUG] update_job_status: job_id={job_id}, old_status={old_status}, new_status={new_status}")
         if job:
             job['status'] = new_status
-            self.job_manager.set_job(job_id, job)
+            self.job_manager.get_job(job_id, job)
             print(f"[DEBUG] Job {job_id} status atualizado para {new_status} no store.")
 
     def update_job(self, job_id, job_info):
-        self.job_manager.set_job(job_id, job_info)
+        self.job_manager.get_job(job_id, job_info)
 
     def set_paused_step(self, job_info, step_index):
         job_info['data']['paused_at_step'] = step_index
