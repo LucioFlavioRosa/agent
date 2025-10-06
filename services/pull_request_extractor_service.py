@@ -1,12 +1,5 @@
 from typing import List, Dict, Any
-from models import JobFields
-
-class PullRequestSummary:
-    """Representa um resumo de Pull Request."""
-    def __init__(self, pull_request_url: str, branch_name: str, arquivos_modificados: List[str]):
-        self.pull_request_url = pull_request_url
-        self.branch_name = branch_name
-        self.arquivos_modificados = arquivos_modificados
+from models import JobFields, PullRequestSummary
 
 class PullRequestExtractorService:
     """Serviço responsável por extrair informações de Pull Requests dos dados do job."""
