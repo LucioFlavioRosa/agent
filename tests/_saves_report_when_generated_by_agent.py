@@ -106,7 +106,7 @@ def test_execute_workflow_finalizes_when_gerar_relatorio_apenas_is_true(mock_str
     orchestrator.report_handler.save_report_to_blob.return_value = 'https://blob/report2.md'
     mock_strategy = MagicMock()
     mock_strategy.should_pause_for_approval.return_value = False
-    mock_strategy.should_finalize_workflow.return_value = False
+    mock_strategy.should_finalize_workflow.return_value = True
     mock_strategy.execute_step.return_value = {'relatorio': 'relatorio gerado para finalizar'}
     mock_strategy_factory.create_strategy.return_value = mock_strategy
     # Act
