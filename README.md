@@ -56,7 +56,7 @@ flowchart TD
     Y -->|Sim| V
     
     V --> Z[Cliente Consulta Status]
-    Z -->|GET /status/{job_id}| AA[Retornar Resultado Final]
+    Z -->|"GET /status/{job_id}"| AA[Retornar Resultado Final]
     
     style B fill:#4CAF50,color:#fff
     style K fill:#2196F3,color:#fff
