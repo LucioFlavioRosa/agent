@@ -55,18 +55,6 @@ class AgenteRevisor:
         projeto: Optional[str] = None,
         status_update: Optional[str] = None
     ) -> Dict[str, Any]:
-
-        log_custom_data(
-            job_id=job_id,
-            projeto=projeto,
-            data_hora=datetime.now(timezone.utc).isoformat(),
-            status="INICIADO",
-            tipo_repositorio=repository_type,
-            nome_repositorio=repositorio,
-            tipo_analise=tipo_analise,
-            model_name=model_name
-        )
-
         codigo_para_analise = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,
@@ -82,15 +70,6 @@ class AgenteRevisor:
                 print(f"[Agente Revisor] AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
             
             print(f"[Agente Revisor] Retornando resposta vazia devido à ausência de código")
-            
-            log_custom_data(
-                job_id=job_id,
-                projeto=projeto,
-                status="ERRO_SEM_CODIGO",
-                repositorio=repositorio,
-                tipo_analise=tipo_analise,
-                data_hora=datetime.now(timezone.utc).isoformat()
-            )
             
             return {"resultado": {"reposta_final": {}}}
 
