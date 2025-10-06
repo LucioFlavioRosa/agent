@@ -1,0 +1,94 @@
+from typing import List, Dict, Any, Optional
+from models import JobStatus, JobFields
+from fastapi import HTTPException
+from pydantic import BaseModel
+import time
+
+class PullRequestSummary(BaseModel):
+    pull_request_url: str
+    branch_name: str
+    arquivos_modificados: List[str]
+
+class FinalStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    summary: Optional[List[PullRequestSummary]] = None
+    error_details: Optional[str] = None
+    analysis_report: Optional[str] = None
+    diagnostic_logs: Optional[Dict[str, Any]] = None
+    report_blob_url: Optional[str] = None
+
+class ResponseBuilderService:
+    """Serviço responsável por construir respostas da API de forma estruturada."""
+    
+    def __init__(self, pr_extractor_service, logging_service):
+        self.pr_extractor_service = pr_extractor_service
+        self.logging_service = logging_service
+    
+    def build_completed_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
+        """Constrói resposta para jobs completados."""
+        job_data = job.get(JobFields.DATA, {})
+        gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
+        
+        print(f"[{job_id}] [ResponseBuilder] Construindo resposta - modo relatório: {gerar_relatorio_apenas}")
+        
+        if gerar_relatorio_apenas:
+            return self._build_report_only_response(job_id, job_data, blob_url)
+        
+        return self._build_standard_response(job_id, job, blob_url)
+    
+    def _build_report_only_response(self, job_id: str, job_data: dict, blob_url: Optional[str]) -> FinalStatusResponse:
+        """Constrói resposta para modo somente relatório."""
+        analysis_report = job_data.get(JobFields.ANALYSIS_REPORT)
+        final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
+        
+        if not analysis_report:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"[{job_id}] ERRO INTERNO: Relatório ausente no modo report_only após finalização do workflow."
+            )
+        
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=JobStatus.COMPLETED,
+            analysis_report=analysis_report,
+            report_blob_url=final_blob_url
+        )
+    
+    def _build_standard_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
+        """Constrói resposta padrão com PRs e logs."""
+        job_data = job.get(JobFields.DATA, {})
+        
+        # Extrai PRs usando serviço especializado
+        summary_list = self.pr_extractor_service.extract_pull_requests(job_id, job_data)
+        
+        # Realiza logging usando serviço especializado
+        self.logging_service.log_completed_job(job_id, job_data, summary_list, blob_url)
+        
+        final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
+        logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
+        
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=JobStatus.COMPLETED,
+            summary=summary_list,
+            diagnostic_logs=logs,
+            report_blob_url=final_blob_url
+        )
+    
+    def build_failed_response(self, job_id: str, job: dict) -> FinalStatusResponse:
+        """Constrói resposta para jobs que falharam."""
+        job_data = job.get(JobFields.DATA, {})
+        logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
+        blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
+        
+        # Log do job falhado
+        self.logging_service.log_failed_job(job_id, job_data, blob_url)
+        
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=JobStatus.FAILED,
+            error_details=job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado."),
+            diagnostic_logs=logs,
+            report_blob_url=blob_url
+        )
