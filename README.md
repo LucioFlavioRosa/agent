@@ -24,7 +24,7 @@ A estrutura do MCP segue princípios de arquitetura limpa, com separação clara
 
 ### Funcionamento Principal do MCP
 
-mermaid
+```mermaid
 flowchart TD
     A[Cliente HTTP] -->|POST /start-analysis| B[FastAPI Endpoint]
     B --> C{Validar Payload}
@@ -64,7 +64,7 @@ flowchart TD
     style X fill:#9C27B0,color:#fff
     style V fill:#4CAF50,color:#fff
     style O fill:#F44336,color:#fff
-
+```
 
 ### Fluxo de Aprovação Manual
 
