@@ -1,3 +1,20 @@
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+
+class PullRequestSummary(BaseModel):
+    pull_request_url: str
+    branch_name: str
+    arquivos_modificados: List[str]
+
+class FinalStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    summary: Optional[List[PullRequestSummary]] = None
+    error_details: Optional[str] = None
+    analysis_report: Optional[str] = None
+    diagnostic_logs: Optional[Dict[str, Any]] = None
+    report_blob_url: Optional[str] = None
+
 class JobStatus:
     STARTING = 'starting'
     PENDING_APPROVAL = 'pending_approval'
