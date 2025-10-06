@@ -78,6 +78,7 @@ def test_execute_workflow_saves_report_when_generated_by_agent(mock_strategy_fac
     # Mock report_handler
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
+    orchestrator.report_handler.validate_and_parse_blob_report.return_value = None
     orchestrator.report_handler.extract_report_text.return_value = 'relatorio gerado'
     orchestrator.report_handler.save_report_to_blob.return_value = 'https://blob/report.md'
     # Mock strategy
@@ -100,6 +101,7 @@ def test_execute_workflow_finalizes_when_gerar_relatorio_apenas_is_true(mock_str
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
+    orchestrator.report_handler.validate_and_parse_blob_report.return_value = None
     orchestrator.report_handler.extract_report_text.return_value = 'relatorio gerado para finalizar'
     orchestrator.report_handler.save_report_to_blob.return_value = 'https://blob/report2.md'
     mock_strategy = MagicMock()
@@ -119,6 +121,7 @@ def test_execute_workflow_pauses_for_approval_when_strategy_requires(mock_strate
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
+    orchestrator.report_handler.validate_and_parse_blob_report.return_value = None
     orchestrator.report_handler.extract_report_text.return_value = 'relatorio para aprovacao'
     orchestrator.report_handler.save_report_to_blob.return_value = 'https://blob/report3.md'
     mock_strategy = MagicMock()
@@ -139,6 +142,7 @@ def test_execute_workflow_handles_exception_and_updates_job_to_failed(mock_strat
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
+    orchestrator.report_handler.validate_and_parse_blob_report.return_value = None
     # Simula exceção no execute_step_with_strategy
     orchestrator._execute_step_with_strategy = MagicMock(side_effect=Exception('Erro simulado'))
     # Act
@@ -174,6 +178,7 @@ def test_execute_workflow_validates_report_before_finalizing_in_report_only_mode
     job_manager.get_step_result.return_value = None
     orchestrator.report_handler = MagicMock()
     orchestrator.report_handler.try_read_existing_report.return_value = None
+    orchestrator.report_handler.validate_and_parse_blob_report.return_value = None
     orchestrator.report_handler.extract_report_text.return_value = ''  # Relatório vazio
     orchestrator.report_handler.save_report_to_blob.return_value = 'https://blob/report4.md'
     mock_strategy = MagicMock()
