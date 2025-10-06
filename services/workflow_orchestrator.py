@@ -40,7 +40,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
         print(f"[{job_id}] Relatório salvo com sucesso: {url}")
         job_info['data']['report_blob_url'] = url
-        self.job_handler.ensure_report_persisted(job_id, job_info)
+        self.job_handler.update_job(job_id, job_info)
         return True
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
@@ -70,7 +70,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         job_info['data']['analysis_report'] = existing_report_text
                         report_data = {'relatorio': existing_report_text}
                         self.job_handler.save_step_result(job_info, current_step_index, report_data)
-                        self.job_handler.ensure_report_persisted(job_id, job_info)
+                        self.job_handler.update_job(job_id, job_info)
                         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                         if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
                             print(f"[{job_id}] [DEBUG] Validando relatório antes de finalizar workflow (modo report_only, lido do blob)")
