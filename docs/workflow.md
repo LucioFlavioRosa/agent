@@ -77,7 +77,7 @@ flowchart TD
 ## Exemplos de Payloads
 
 ### Início de Análise (`/start-analysis`)
-
+```json
 {
   "repo_name_modernizado": "org/projeto",
   "branch_name_modernizado": "main",
@@ -85,14 +85,14 @@ flowchart TD
   "analysis_type": "modernizacao",
   "repository_type": "github"
 }
-
+```
 
 ### Resposta
-
+```json
 {
   "job_id": "uuid-gerado"
 }
-
+```
 
 ---
 
