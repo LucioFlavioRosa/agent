@@ -102,7 +102,7 @@ def _validate_and_normalize_gitlab_repo_name(repo_name: str) -> str:
 def _normalize_repo_name_by_type(repo_name: str, repository_type: str) -> str:
     if repository_type == 'gitlab':
         normalized = _validate_and_normalize_gitlab_repo_name(repo_name)
-        print(f"GitLab - Repo original: '{repo_name}', normalizado: '{normalized}'")
+        print(f"GitLab - Repo original: '{repo_name}', normalizado: {normalized}")
         return normalized
     return repo_name
 
@@ -159,10 +159,7 @@ def _validate_analysis_exists(analysis_name: str, analysis_service) -> str:
 def _get_report_from_job(job: dict, job_id: str) -> str:
     report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
     if not report:
-        if job_id:
-            raise HTTPException(status_code=404, detail=f"Relatório não encontrado para este job. Status: {job.get(JobFields.STATUS)}")
-        else:
-            raise HTTPException(status_code=404, detail="Relatório não encontrado no job original")
+        raise HTTPException(status_code=404, detail=f"Relatório não encontrado para o job {job_id}. Status do job: {job.get('status')}. Verifique se o job foi executado com 'gerar_relatorio_apenas=True' ou se o relatório foi gerado com sucesso.")
     return report
 
 def _create_derived_job_data(original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
@@ -216,7 +213,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
     print(f"[{job_id}] [_build_completed_response] report_blob_url (job_data): {job_data.get(JobFields.REPORT_BLOB_URL)}")
     print(f"[{job_id}] [_build_completed_response] Tamanho analysis_report: {len(job_data.get(JobFields.ANALYSIS_REPORT, ''))} chars")
 
-    # PRIORIDADE ABSOLUTA: Modo report_only
     if gerar_relatorio_apenas is True:
         analysis_report = job_data.get(JobFields.ANALYSIS_REPORT)
         final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
@@ -226,7 +222,7 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         print(f"[{job_id}] [_build_completed_response] final_blob_url: {final_blob_url}")
 
         if not analysis_report:
-            print(f"[{job_id}] [_build_completed_response] ERRO: analysis_report está vazio no modo report_only!")
+            raise HTTPException(status_code=500, detail=f"[{job_id}] ERRO INTERNO: Relatório ausente no modo report_only após finalização do workflow.")
         if not final_blob_url:
             print(f"[{job_id}] [_build_completed_response] AVISO: report_blob_url está vazio no modo report_only!")
 
@@ -236,10 +232,9 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
             analysis_report=analysis_report,
             report_blob_url=final_blob_url
         )
-        print(f"[{job_id}] [_build_completed_response] MODO REPORT_ONLY - Resposta construída com sucesso")
+        print(f"[{job_id}] [_build_completed_response] MODO REPORT_ONLY - Resposta FINAL: analysis_report presente: {bool(response.analysis_report)}, tamanho: {len(response.analysis_report) if response.analysis_report else 0}, report_blob_url: {response.report_blob_url}")
         return response
 
-    # Modo normal: extração de PRs e summary
     print(f"[{job_id}] [_build_completed_response] MODO NORMAL - Extraindo PRs")
     summary_list = []
     commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
@@ -380,7 +375,6 @@ def _build_completed_response(job_id: str, job: dict, blob_url: Optional[str]) -
         summary=summary_list,
         diagnostic_logs=logs,
         report_blob_url=final_blob_url,
-        # analysis_report NÃO é incluído aqui no modo normal, mas está presente no modo report_only acima.
     )
     print(f"[{job_id}] [_build_completed_response] MODO NORMAL - Resposta construída com {len(summary_list)} PRs")
     return response
@@ -471,6 +465,7 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     job_store = container.get_job_store()
     
     job = job_store.get_job(job_id)
+    print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
     _validate_job_exists(job, job_id)
 
     report = _get_report_from_job(job, job_id)
@@ -546,7 +541,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
     print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
-    print(f"[{job_id}] [get_status] ANTES _build_completed_response: gerar_relatorio_apenas={gerar_relatorio_apenas}, analysis_report_size={len(analysis_report) if analysis_report else 0}, blob_url={blob_url}")
+    print(f"[{job_id}] [get_status] CHAMANDO _build_completed_response - gerar_relatorio_apenas: {gerar_relatorio_apenas}, analysis_report presente: {bool(analysis_report)}, tamanho: {len(analysis_report) if analysis_report else 0}, blob_url: {blob_url}")
 
     try:
         if status == JobStatus.COMPLETED:
