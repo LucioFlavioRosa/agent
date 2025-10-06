@@ -65,7 +65,7 @@ class RepositoryNormalizerService:
         """Registra uma nova estratégia de normalização."""
         self._strategies[repository_type] = strategy
     
-    def normalize_repo_name(self, repo_name: str, repository_type: str) -> str:
+    async def normalize_repo_name(self, repo_name: str, repository_type: str) -> str:
         """Normaliza o nome do repositório de acordo com seu tipo."""
         strategy = self._strategies.get(repository_type)
         
