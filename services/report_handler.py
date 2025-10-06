@@ -9,7 +9,30 @@ class ReportHandler:
         repo_name = job_info['data'].get('repo_name')
         branch_name = job_info['data'].get('branch_name')
         analysis_name = job_info['data'].get('analysis_name')
-        return self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        report_blob_url = None
+        try:
+            # Tenta ler o relatório
+            report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            # Se relatório existe, constrói a URL do blob
+            from tools.blob_report_path_builder import build_report_blob_path
+            from os import getenv
+            blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
+            account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
+            if account_url and container_name:
+                report_blob_url = f"{account_url}/{container_name}/{blob_path}"
+            elif container_name:
+                report_blob_url = f"/{container_name}/{blob_path}"
+            # Atualiza o tracker de jobs se a URL estiver disponível
+            if report_blob_url:
+                try:
+                    self.blob_storage.update_job_tracker(report_blob_url, job_id)
+                except Exception as e:
+                    print(f"[ReportHandler] Warning: Failed to update job tracker after reading report: {e}")
+            return report_text
+        except Exception as e:
+            print(f"[ReportHandler] Warning: Failed to read report or update tracker: {e}")
+            return None
 
     def extract_report_text(self, step_result):
         if not step_result:
@@ -37,6 +60,11 @@ class ReportHandler:
         job_info['data']['report_blob_url'] = url
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] Relatório salvo no Blob Storage: {url} (tamanho: {len(report_text)} chars)")
+        # Atualiza o tracker de jobs após salvar o relatório
+        try:
+            self.blob_storage.update_job_tracker(url, job_id)
+        except Exception as e:
+            print(f"[ReportHandler] Warning: Failed to update job tracker after saving report: {e}")
         return url
 
     def handle_report_only_mode(self, job_id, job_info, step_result):
