@@ -35,6 +35,7 @@ def log_custom_data(
     retornar_lista_arquivos: Optional[bool] = None,
     blob_filename: Optional[str] = None
 ):
+    print(f"[log_custom_data] Recebido job_id: {job_id}")
     log_entry = {
         "job_id": job_id,
         "projeto": projeto,
