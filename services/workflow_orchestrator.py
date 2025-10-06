@@ -132,7 +132,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         if not analysis_report or len(analysis_report.strip()) < 100:
                             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
                         self.job_handler.update_job_status(job_id, 'completed')
-                        print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+                        print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('GERAR_RELATORIO_APENAS')}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                         return
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
@@ -146,7 +146,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         if not analysis_report or len(analysis_report.strip()) < 100:
                             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
                     self.job_handler.update_job_status(job_id, 'completed')
-                    print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+                    print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                     print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                     return
                 if strategy.should_pause_for_approval(job_info, step):
@@ -185,8 +185,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'repository_type': job_info['data']['repository_type'],
             'retornar_lista_arquivos': retornar_lista_arquivos,
             'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False),
-            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
+            'usuario_executor': job_info.get('data', {}).get('usuario_executor'),
+            'projeto': job_info.get('data', {}).get('projeto')
         })
+        # Adiciona job_id explicitamente
+        agent_params['job_id'] = job_id
+        print(f"[WorkflowOrchestrator] agent_params para step {current_step_index}: job_id={agent_params.get('job_id')}")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
