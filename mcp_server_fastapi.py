@@ -85,7 +85,7 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
-def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+async def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     """Inicia uma nova análise."""
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
@@ -110,7 +110,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         payload_dict, normalized_repo_name, analysis_name
     )
 
-    job_store.set_job(job_id, initial_job_data)
+    await job_store.set_job(job_id, initial_job_data)
 
     # Realiza logging usando serviço especializado
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
@@ -125,11 +125,11 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     return StartAnalysisResponse(job_id=job_id)
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
-def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
+async def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
     """Atualiza status do job (aprovação/rejeição)."""
     job_store = container.get_job_store()
     
-    job = job_store.get_job(payload.job_id)
+    job = await job_store.get_job(payload.job_id)
     job_validation_service.validate_job_for_approval(job, payload.job_id)
 
     if payload.action == JobActions.APPROVE:
@@ -142,7 +142,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
         start_from_step = paused_step + 1
 
-        job_store.set_job(payload.job_id, job)
+        await job_store.set_job(payload.job_id, job)
 
         background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
 
@@ -150,15 +150,15 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 
     if payload.action == JobActions.REJECT:
         job[JobFields.STATUS] = JobStatus.REJECTED
-        job_store.set_job(payload.job_id, job)
+        await job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
 
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
-def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
+async def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
     """Busca relatório de um job específico."""
     job_store = container.get_job_store()
     
-    job = job_store.get_job(job_id)
+    job = await job_store.get_job(job_id)
     print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
     job_validation_service.validate_job_exists(job, job_id)
 
@@ -168,14 +168,14 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
-def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
+async def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
     """Busca análise pelo nome."""
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     
     job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
 
-    job = job_store.get_job(job_id)
+    job = await job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
 
     report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
@@ -189,14 +189,14 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
     )
 
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
-def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
+async def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
     """Inicia geração de código baseada em relatório existente."""
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     
     job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
 
-    original_job = job_store.get_job(job_id)
+    original_job = await job_store.get_job(job_id)
     job_validation_service.validate_job_exists(original_job, job_id)
 
     report = job_validation_service.get_report_from_job(original_job, None)
@@ -217,7 +217,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
         original_job, analysis_name, normalized_repo_name, report
     )
 
-    job_store.set_job(new_job_id, new_job_data)
+    await job_store.set_job(new_job_id, new_job_data)
     analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
 
     print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
@@ -227,11 +227,11 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     return StartAnalysisResponse(job_id=new_job_id)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
-def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
+async def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     """Verifica status de um job."""
     job_store = container.get_job_store()
     
-    job = job_store.get_job(job_id)
+    job = await job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
 
     status = job.get(JobFields.STATUS)
