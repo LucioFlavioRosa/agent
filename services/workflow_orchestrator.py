@@ -187,6 +187,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False),
             'usuario_executor': job_info.get('data', {}).get('usuario_executor')
         })
+        agent_params['job_id'] = job_id
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
