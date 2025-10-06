@@ -3,20 +3,7 @@ from models import JobStatus, JobFields
 from fastapi import HTTPException
 from pydantic import BaseModel
 import time
-
-class PullRequestSummary(BaseModel):
-    pull_request_url: str
-    branch_name: str
-    arquivos_modificados: List[str]
-
-class FinalStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    summary: Optional[List[PullRequestSummary]] = None
-    error_details: Optional[str] = None
-    analysis_report: Optional[str] = None
-    diagnostic_logs: Optional[Dict[str, Any]] = None
-    report_blob_url: Optional[str] = None
+from models import JobStatus, JobFields, FinalStatusResponse, PullRequestSummary
 
 class ResponseBuilderService:
     """Serviço responsável por construir respostas da API de forma estruturada."""
