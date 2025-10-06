@@ -258,3 +258,22 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise
+
+# Passo 10: Endpoint para consultar jobs associados a um relatório
+@app.get("/reports/{report_name}/jobs", response_model=List[str], tags=["Reports"])
+def get_jobs_for_report(report_name: str):
+    """Retorna a lista de job_ids associados a um relatório específico (por nome do relatório)."""
+    blob_storage = container.get_blob_storage()
+    # Monta a URL do blob do relatório
+    container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
+    account_url = os.getenv('AZURE_STORAGE_ACCOUNT_URL')
+    # O report_name deve ser o caminho relativo do relatório dentro do container (ex: projeto/analysis_type/repository_type/repo_name/branch_name/analysis_name.md)
+    if not container_name or not account_url:
+        raise HTTPException(status_code=500, detail="Configuração de Blob Storage ausente.")
+    report_blob_url = f"{account_url}/{container_name}/{report_name}"
+    try:
+        jobs = blob_storage.get_jobs_for_report(report_blob_url)
+        return jobs
+    except Exception as e:
+        print(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao buscar jobs associados ao relatório.")
