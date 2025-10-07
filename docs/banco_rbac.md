@@ -1,61 +1,90 @@
-# Documentação do Esquema de Banco de Dados para RBAC
+# Documentação do Esquema de Banco de Dados para RBAC (v2.0)
 
-Este documento detalha a estrutura do banco de dados projetada para implementar o sistema de **Controle de Acesso Baseado em Funções (RBAC)**. O modelo é centrado no conceito de **Grupos** (roles), aos quais são atribuídas **Permissões** específicas para acessar diferentes recursos. Os **Usuários**, por sua vez, são associados a esses grupos, herdando assim todas as permissões concedidas.
+Este documento detalha a versão 2.0 do esquema de banco de dados para o sistema de **Controle de Acesso Baseado em Funções (RBAC)**. Este é um modelo mais normalizado e robusto, projetado para oferecer maior integridade de dados, clareza nas permissões e capacidade de auditoria.
+
+O princípio central permanece: **Usuários** são membros de **Grupos**, e as permissões de acesso aos recursos (`Tokens`, `Repositories`, `BlobContainers`) são concedidas a esses **Grupos**.
 
 ## Diagrama de Relacionamento de Entidades (ER)
 
-O diagrama abaixo ilustra como as tabelas se conectam para formar o sistema RBAC. Plataformas como GitHub e GitLab renderizarão este diagrama automaticamente.
+O diagrama abaixo ilustra a nova estrutura, mostrando as tabelas de inventário de recursos e as tabelas de junção que as conectam aos grupos.
 
 ```mermaid
 erDiagram
-    Users ||--o{ UserGroupMembership : "pertence a"
-    Groups ||--o{ UserGroupMembership : "contém"
-    Groups ||--o{ RepositoryPermissions : "possui"
-    Groups ||--o{ TokenPermissions : "possui"
-    Groups ||--o{ BlobStoragePermissions : "possui"
+    Users ||--o{ UserGroups : "pertence a"
+    Groups ||--o{ UserGroups : "contém"
+
+    Groups ||--o{ GroupTokens : "pode usar"
+    Tokens ||--o{ GroupTokens : "é usado por"
+
+    Groups ||--o{ GroupRepositories : "pode acessar"
+    Repositories ||--o{ GroupRepositories : "é acessado por"
+
+    Groups ||--o{ GroupBlobContainers : "pode acessar"
+    BlobContainers ||--o{ GroupBlobContainers : "é acessado por"
+
+    Repositories }o--|| Tokens : "usa opcionalmente"
 
     Users {
         int id PK
         uniqueidentifier azure_ad_object_id "UNIQUE"
         nvarchar email "UNIQUE"
         nvarchar name
+        bit is_active
+        datetime2 created_at
     }
 
     Groups {
         int id PK
         nvarchar name "UNIQUE"
         nvarchar description
+        datetime2 created_at
     }
 
-    UserGroupMembership {
+    Tokens {
+        int id PK
+        nvarchar token_name
+        nvarchar key_vault_secret_name "UNIQUE"
+        nvarchar token_type
+        datetime2 created_at
+    }
+
+    Repositories {
+        int id PK
+        nvarchar repo_name
+        nvarchar repository_type
+        int token_id FK "Opcional"
+        datetime2 created_at
+    }
+
+    BlobContainers {
+        int id PK
+        nvarchar container_name "UNIQUE"
+        nvarchar storage_account_url
+        datetime2 created_at
+    }
+
+    UserGroups {
         int user_id FK
         int group_id FK
+        datetime2 assigned_at
     }
 
-    RepositoryPermissions {
-        int id PK
+    GroupTokens {
         int group_id FK
-        nvarchar repository_name
-        nvarchar repository_type
-        bit can_read
-        bit can_write
+        int token_id FK
+        datetime2 granted_at
     }
 
-    TokenPermissions {
-        int id PK
+    GroupRepositories {
         int group_id FK
-        nvarchar token_identifier
-        bit can_use
+        int repository_id FK
+        datetime2 granted_at
     }
 
-    BlobStoragePermissions {
-        int id PK
+    GroupBlobContainers {
         int group_id FK
-        nvarchar blob_container_name
-        nvarchar blob_path_prefix
-        bit can_read
-        bit can_write
-        bit can_delete
+        int container_id FK
+        datetime2 granted_at
     }
 ```
 
@@ -63,157 +92,208 @@ erDiagram
 
 ## Detalhamento das Tabelas
 
-### 1. Tabela `Groups`
-Esta é a tabela central do modelo, representando as "funções" (roles) do sistema. As permissões são atribuídas diretamente aos grupos.
+As tabelas são divididas em duas categorias: **Entidades Principais** (os "substantivos" do sistema) e **Tabelas de Junção** (onde as relações e permissões são definidas).
 
-**Propósito:** Armazenar os diferentes grupos de usuários, como "Administradores", "Desenvolvedores" ou "Auditores".
+### Tabelas de Entidades Principais
+
+#### 1. Tabela `Users`
+Mapeia um usuário do Azure AD para um registro interno na aplicação, controlando seu estado.
+
+**Propósito:** Representar os usuários e seu status no sistema.
 
 **Definição SQL:**
 ```sql
--- Armazena os grupos de permissões, como "Administrators", "Developers".
+CREATE TABLE Users (
+    id INT PRIMARY KEY IDENTITY(1,1),
+    azure_ad_object_id UNIQUEIDENTIFIER NOT NULL UNIQUE,
+    email NVARCHAR(255) NOT NULL UNIQUE,
+    name NVARCHAR(255) NOT NULL,
+    is_active BIT NOT NULL DEFAULT 1,
+    created_at DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+);
+```
+
+**Colunas:**
+* `id` (INT, PK): Identificador interno único.
+* `azure_ad_object_id` (UNIQUEIDENTIFIER, UNIQUE): O **ID do Objeto** (claim `oid`) do token JWT, usado para vincular o login ao usuário.
+* `email` (NVARCHAR, UNIQUE): E-mail do usuário.
+* `name` (NVARCHAR): Nome de exibição do usuário.
+* `is_active` (BIT): Flag para ativar ou desativar o acesso de um usuário sem excluí-lo.
+* `created_at` (DATETIME2): Data e hora de criação do registro.
+
+---
+
+#### 2. Tabela `Groups`
+Armazena os papéis/funções aos quais as permissões serão concedidas.
+
+**Propósito:** Agrupar usuários para facilitar o gerenciamento de permissões.
+
+**Definição SQL:**
+```sql
 CREATE TABLE Groups (
     id INT PRIMARY KEY IDENTITY(1,1),
     name NVARCHAR(100) NOT NULL UNIQUE,
-    description NVARCHAR(255) NULL
+    description NVARCHAR(255) NULL,
+    created_at DATETIME2 NOT NULL DEFAULT GETUTCDATE()
 );
 ```
-
-#### Colunas
-* `id` (INT, PK): Identificador único para cada grupo.
-* `name` (NVARCHAR, UNIQUE): O nome do grupo, que deve ser único (ex: "Administrators").
-* `description` (NVARCHAR): Uma breve descrição da finalidade do grupo.
+**Colunas:**
+* `id` (INT, PK): Identificador interno do grupo.
+* `name` (NVARCHAR, UNIQUE): Nome único do grupo (ex: `Administrators`, `Developers-ProjectX`).
+* `description` (NVARCHAR): Descrição da finalidade do grupo.
+* `created_at` (DATETIME2): Data e hora de criação do grupo.
 
 ---
 
-### 2. Tabela `Users`
-Esta tabela armazena as informações dos usuários, criando um vínculo entre a identidade do Azure AD e o sistema interno.
+#### 3. Tabela `Tokens`
+Funciona como um inventário de tokens e segredos gerenciados pela aplicação.
 
-**Propósito:** Mapear um usuário autenticado via Azure AD para um registro interno na aplicação.
+**Propósito:** Catalogar as credenciais que o sistema pode usar, armazenando uma referência segura a elas.
+
+⚠️ **Importante:** Esta tabela **NÃO** armazena o valor do token. Ela armazena o nome do segredo correspondente no **Azure Key Vault**.
 
 **Definição SQL:**
 ```sql
--- Mapeia o usuário do Azure AD para um ID interno na nossa aplicação.
-CREATE TABLE Users (
+CREATE TABLE Tokens (
     id INT PRIMARY KEY IDENTITY(1,1),
-    azure_ad_object_id UNIQUEIDENTIFIER NOT NULL UNIQUE, -- O Object ID (oid) do token JWT
-    email NVARCHAR(255) NOT NULL UNIQUE,
-    name NVARCHAR(255) NOT NULL
+    token_name NVARCHAR(255) NOT NULL,
+    key_vault_secret_name NVARCHAR(255) NOT NULL UNIQUE,
+    token_type NVARCHAR(50) NOT NULL,
+    created_at DATETIME2 NOT NULL DEFAULT GETUTCDATE()
 );
 ```
-
-#### Colunas
-* `id` (INT, PK): Identificador numérico único para o usuário no sistema.
-* `azure_ad_object_id` (UNIQUEIDENTIFIER, UNIQUE): O **ID do Objeto** (claim `oid`) extraído do token JWT do Azure AD. É a chave para vincular o login à nossa base de dados.
-* `email` (NVARCHAR, UNIQUE): O e-mail do usuário.
-* `name` (NVARCHAR): O nome de exibição do usuário.
+**Colunas:**
+* `id` (INT, PK): Identificador interno do token.
+* `token_name` (NVARCHAR): Nome amigável para o token (ex: "PAT do GitHub para o Projeto Alfa").
+* `key_vault_secret_name` (NVARCHAR, UNIQUE): O nome do segredo no Azure Key Vault onde o valor real está armazenado.
+* `token_type` (NVARCHAR): Tipo do token para uso na lógica da aplicação (ex: `github_pat`, `azure_devops_pat`).
+* `created_at` (DATETIME2): Data de registro do token.
 
 ---
 
-### 3. Tabela `UserGroupMembership`
-Esta é uma tabela de junção (ou "ponte") que estabelece a relação muitos-para-muitos entre usuários e grupos.
+#### 4. Tabela `Repositories`
+Inventário de todos os repositórios de código-fonte que são gerenciados pelo sistema.
 
-**Propósito:** Definir a quais grupos cada usuário pertence.
+**Propósito:** Criar uma lista canônica de repositórios para que as permissões possam ser vinculadas a um ID, em vez de um nome de string propenso a erros.
 
 **Definição SQL:**
 ```sql
--- Tabela de junção para mapear quais usuários pertencem a quais grupos (relação N:N).
-CREATE TABLE UserGroupMembership (
+CREATE TABLE Repositories (
+    id INT PRIMARY KEY IDENTITY(1,1),
+    repo_name NVARCHAR(255) NOT NULL,
+    repository_type NVARCHAR(50) NOT NULL,
+    token_id INT NULL,
+    created_at DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    FOREIGN KEY (token_id) REFERENCES Tokens(id) ON DELETE SET NULL,
+    CONSTRAINT UQ_Repository UNIQUE (repo_name, repository_type)
+);
+```
+**Colunas:**
+* `id` (INT, PK): Identificador interno do repositório.
+* `repo_name` (NVARCHAR): Nome completo do repositório (ex: "organizacao/nome-do-repo").
+* `repository_type` (NVARCHAR): Plataforma do repositório (ex: `github`, `azuredevops`).
+* `token_id` (INT, FK, Opcional): Vincula um token padrão para ser usado ao acessar este repositório.
+* `created_at` (DATETIME2): Data de registro do repositório.
+
+---
+
+#### 5. Tabela `BlobContainers`
+Inventário dos contêineres do Azure Blob Storage gerenciados pelo sistema.
+
+**Propósito:** Criar uma lista canônica de contêineres para associar permissões.
+
+**Definição SQL:**
+```sql
+CREATE TABLE BlobContainers (
+    id INT PRIMARY KEY IDENTITY(1,1),
+    container_name NVARCHAR(100) NOT NULL UNIQUE,
+    storage_account_url NVARCHAR(512) NOT NULL,
+    created_at DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+);
+```
+**Colunas:**
+* `id` (INT, PK): Identificador interno do contêiner.
+* `container_name` (NVARCHAR, UNIQUE): Nome do contêiner (ex: `relatorios`, `logs-auditoria`).
+* `storage_account_url` (NVARCHAR): URL base da conta de armazenamento (ex: "https://seustorage.blob.core.windows.net/").
+* `created_at` (DATETIME2): Data de registro do contêiner.
+
+---
+
+### Tabelas de Junção (Permissões)
+
+Estas tabelas conectam os grupos aos recursos. A **existência de uma linha** em qualquer uma dessas tabelas **concede a permissão**.
+
+#### 6. Tabela `UserGroups`
+Associa usuários a grupos.
+
+**Definição SQL:**
+```sql
+CREATE TABLE UserGroups (
     user_id INT NOT NULL,
     group_id INT NOT NULL,
-    PRIMARY KEY (user_id, group_id), -- Chave primária composta para evitar duplicatas
+    assigned_at DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    PRIMARY KEY (user_id, group_id),
     FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE,
     FOREIGN KEY (group_id) REFERENCES Groups(id) ON DELETE CASCADE
 );
 ```
 
-#### Colunas
-* `user_id` (INT, FK): Chave estrangeira que referencia `Users(id)`.
-* `group_id` (INT, FK): Chave estrangeira que referencia `Groups(id)`.
-* A **chave primária composta** `(user_id, group_id)` garante que um usuário não possa ser adicionado ao mesmo grupo mais de uma vez.
-
 ---
 
-### 4. Tabela `RepositoryPermissions`
-Define as permissões de acesso a repositórios de código-fonte (GitHub, Azure DevOps, etc.).
-
-**Propósito:** Controlar quais grupos podem realizar operações de leitura (`git pull`) ou escrita (`git push`, criar PRs) em repositórios específicos.
+#### 7. Tabela `GroupTokens`
+Concede a um grupo permissão para **usar** um token específico.
 
 **Definição SQL:**
 ```sql
--- Define quais grupos podem ler/escrever em quais repositórios.
-CREATE TABLE RepositoryPermissions (
-    id INT PRIMARY KEY IDENTITY(1,1),
+CREATE TABLE GroupTokens (
     group_id INT NOT NULL,
-    repository_name NVARCHAR(255) NOT NULL, -- Ex: "projeto-cliente/repo-principal"
-    repository_type NVARCHAR(50) NOT NULL,   -- Ex: "github", "azuredevops"
-    can_read BIT NOT NULL DEFAULT 0,
-    can_write BIT NOT NULL DEFAULT 0,
+    token_id INT NOT NULL,
+    granted_at DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    PRIMARY KEY (group_id, token_id),
     FOREIGN KEY (group_id) REFERENCES Groups(id) ON DELETE CASCADE,
-    -- Garante que não haja regras duplicadas para o mesmo grupo/repositório
-    CONSTRAINT UQ_RepositoryPermission UNIQUE (group_id, repository_name, repository_type)
+    FOREIGN KEY (token_id) REFERENCES Tokens(id) ON DELETE CASCADE
 );
 ```
-
-#### Colunas
-* `id` (INT, PK): Identificador único da regra de permissão.
-* `group_id` (INT, FK): O grupo ao qual esta permissão se aplica.
-* `repository_name` (NVARCHAR): O nome completo do repositório (ex: "organizacao/meu-projeto").
-* `repository_type` (NVARCHAR): A plataforma do repositório (ex: "github").
-* `can_read` (BIT): Flag `1` (true) ou `0` (false) que indica permissão de leitura.
-* `can_write` (BIT): Flag `1` (true) ou `0` (false) que indica permissão de escrita.
 
 ---
 
-### 5. Tabela `TokenPermissions`
-Gerencia o acesso a credenciais sensíveis, como tokens de API (PATs), que a aplicação usa para interagir com serviços externos.
-
-**Propósito:** Controlar quais grupos de usuários podem acionar operações que utilizam um token de API específico, garantindo o princípio do menor privilégio.
+#### 8. Tabela `GroupRepositories`
+Concede a um grupo permissão para **acessar** um repositório específico.
 
 **Definição SQL:**
 ```sql
--- Define quais grupos podem utilizar tokens de API específicos (ex: um PAT do GitHub).
-CREATE TABLE TokenPermissions (
-    id INT PRIMARY KEY IDENTITY(1,1),
+CREATE TABLE GroupRepositories (
     group_id INT NOT NULL,
-    token_identifier NVARCHAR(255) NOT NULL, -- Um nome lógico para o token, ex: "github-pat-projeto-x"
-    can_use BIT NOT NULL DEFAULT 0,
+    repository_id INT NOT NULL,
+    granted_at DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    PRIMARY KEY (group_id, repository_id),
     FOREIGN KEY (group_id) REFERENCES Groups(id) ON DELETE CASCADE,
-    CONSTRAINT UQ_TokenPermission UNIQUE (group_id, token_identifier)
+    FOREIGN KEY (repository_id) REFERENCES Repositories(id) ON DELETE CASCADE
 );
 ```
-
-#### Colunas
-* `id` (INT, PK): Identificador único da regra de permissão.
-* `group_id` (INT, FK): O grupo ao qual esta permissão se aplica.
-* `token_identifier` (NVARCHAR): Um nome lógico e único para o token (ex: "github-pat-projeto-x"), que pode corresponder ao nome de um segredo no Azure Key Vault.
-* `can_use` (BIT): Flag que indica se o grupo tem permissão para usar o token.
 
 ---
 
-### 6. Tabela `BlobStoragePermissions`
-Define regras de acesso granulares para arquivos e pastas dentro de um contêiner do Azure Blob Storage.
-
-**Propósito:** Permitir ou negar acesso de leitura, escrita ou exclusão a caminhos específicos no armazenamento de blobs, ideal para relatórios ou logs que diferentes equipes podem acessar.
+#### 9. Tabela `GroupBlobContainers`
+Concede a um grupo permissão para **acessar** um contêiner de blob específico.
 
 **Definição SQL:**
 ```sql
--- Define permissões granulares de acesso a pastas dentro de um container.
-CREATE TABLE BlobStoragePermissions (
-    id INT PRIMARY KEY IDENTITY(1,1),
+CREATE TABLE GroupBlobContainers (
     group_id INT NOT NULL,
-    blob_container_name NVARCHAR(100) NOT NULL,
-    blob_path_prefix NVARCHAR(512) NULL, -- NULL ou '' significa a raiz do container
-    can_read BIT NOT NULL DEFAULT 0,
-    can_write BIT NOT NULL DEFAULT 0,
-    can_delete BIT NOT NULL DEFAULT 0,
+    container_id INT NOT NULL,
+    granted_at DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    PRIMARY KEY (group_id, container_id),
     FOREIGN KEY (group_id) REFERENCES Groups(id) ON DELETE CASCADE,
-    CONSTRAINT UQ_BlobStoragePermission UNIQUE (group_id, blob_container_name, blob_path_prefix)
+    FOREIGN KEY (container_id) REFERENCES BlobContainers(id) ON DELETE CASCADE
 );
 ```
+---
 
-#### Colunas
-* `id` (INT, PK): Identificador único da regra de permissão.
-* `group_id` (INT, FK): O grupo ao qual esta permissão se aplica.
-* `blob_container_name` (NVARCHAR): O nome do contêiner no Azure Blob Storage.
-* `blob_path_prefix` (NVARCHAR): O "caminho" ou "pasta" dentro do contêiner. Um valor nulo ou vazio (`''`) aplica a permissão à raiz do contêiner.
-* `can
+## Índices e Otimização
+
+Para garantir que as consultas de verificação de permissão sejam rápidas e eficientes, foram criados índices em colunas frequentemente usadas em cláusulas `WHERE` e `JOIN`.
+
+* `IX_Users_AzureAdObjectId`: Essencial para encontrar rapidamente o usuário no banco de dados a partir do `oid` do token JWT em cada requisição.
+* `IX_UserGroups_GroupId` (e similares): Acelera a busca de todos os usuários em um grupo ou todas as permissões de um grupo.
+* `IX_Repositories_NameType`: Otimiza a busca por um repositório específico pelo seu nome e tipo, evitando a varredura completa da tabela (`table scan`).
