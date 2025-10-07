@@ -64,6 +64,7 @@ class BlobContainer(BaseModel):
     @field_validator('container_name')
     @classmethod
     def validate_container_name(cls, v: str) -> str:
+        # Azure: lowercase, números, hífens, 3-63 caracteres
         if not v.islower() or not v.replace('-', '').isalnum():
             raise ValueError('container_name deve conter apenas letras minúsculas, números e hífens')
         if not (3 <= len(v) <= 63):
