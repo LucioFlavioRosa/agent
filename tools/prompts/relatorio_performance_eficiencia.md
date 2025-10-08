@@ -13,6 +13,7 @@ Sua auditoria deve se restringir a encontrar os seguintes problemas de performan
 -   [ ] **Uso de Estruturas de Dados Inadequadas:** Uso de estruturas de dados de busca linear (ex: Arrays, Listas) para verificações de existência frequentes, onde uma estrutura de acesso O(1) (ex: **Hash Map, Hash Set, Dicionário**) seria mais apropriada.
 -   [ ] **Operações de I/O Bloqueantes:** Em contextos **assíncronos** (async/await, event loop, goroutines), a presença de chamadas de I/O (rede, disco, banco de dados) que são **síncronas/bloqueantes** e pausam a thread principal.
 -   [ ] **Gerenciamento de Memória Ineficiente:** Leitura de grandes volumes de dados (arquivos, consultas de banco de dados) para a memória de uma só vez, em vez de usar padrões como **iteradores, geradores ou processamento em streaming**.
+-   [ ]  **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **FOCO NO IMPACTO:** Ignore micro-otimizações. Relate apenas problemas com impacto real na performance ou no consumo de recursos.
