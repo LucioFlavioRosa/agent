@@ -1,3 +1,5 @@
+ import os
+
 from azure.storage.blob import BlobServiceClient
 from tools.blob_job_tracker import BlobJobTracker
 from tools.azure_secret_manager import AzureSecretManager
@@ -9,8 +11,8 @@ class BlobStorageService:
         self._init_blob_service()
 
     def _init_blob_service(self):
-        import os
-        container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
+       
+        container_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
         if not container_name:
             raise RuntimeError('Azure Blob Storage container name missing.')
         
