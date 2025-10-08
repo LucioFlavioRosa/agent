@@ -1,7 +1,7 @@
 import redis
 import json
 from typing import Optional
-from domain/models/incremental_change_models import TaskExecutionContext
+from domain.models.incremental_change_models import TaskExecutionContext
 
 class ContextCacheService:
     def __init__(self, redis_url: str):
