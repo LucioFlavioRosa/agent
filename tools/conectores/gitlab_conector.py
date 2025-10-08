@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_secret_manager import AzureSecretManager
@@ -43,12 +43,12 @@ class GitLabConector(BaseConector):
             print(f"[GitLab Conector] GitLab path normalizado: {normalized}")
             return normalized
     
-    def connection(self, repositorio: str) -> Union[object]:
+    def connection(self, repositorio: str, usuario_executor: Optional[str] = None) -> Union[object]:
         normalized_repo = self._normalize_repository_identifier(repositorio)
         org_name = self._extract_org_name(normalized_repo)
         
         try:
-            return self._handle_repository_connection(normalized_repo, "GitLab", org_name)
+            return self._handle_repository_connection(normalized_repo, "GitLab", org_name, usuario_executor)
         except ValueError as get_error:
             if self._is_gitlab_project_id(normalized_repo):
                 print(f"[GitLab Conector] AVISO: Project ID GitLab '{normalized_repo}' não encontrado ou inacessível.")
