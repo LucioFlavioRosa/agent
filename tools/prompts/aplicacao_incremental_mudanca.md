@@ -29,3 +29,5 @@ Retorne um JSON com a chave `arquivos_modificados` contendo um dicionário onde 
     "path/to/file.py": "conteúdo completo do arquivo modificado"
   }
 }
+
+Este prompt garante que o LLM aplique apenas a mudança específica solicitada, com contexto suficiente mas sem sobrecarregar.
