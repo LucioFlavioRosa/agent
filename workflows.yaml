@@ -3,19 +3,19 @@ relatorio_avaliacao_terraform:
   extensions: [".tf", ".tfvars"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_avaliacao_terraform"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -23,22 +23,22 @@ relatorio_avaliacao_terraform:
 
 relatorio_cleancode:
   description: "Analisar o código-fonte fornecido e identificar violações claras dos 5 princípios SOLID"
-  extensions: [".cs", ".js", ".aspx", ".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_cleancode"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mni"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -46,22 +46,22 @@ relatorio_cleancode:
 
 relatorio_conformidades:
   description: "Analisar o código-fonte fornecido e identificar apenas inconsistências funcionais"
-  extensions: [".cs", ".js", ".aspx", ".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_conformidades"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -69,22 +69,22 @@ relatorio_conformidades:
 
 relatorio_docstring:
   description: "Analisar o código-fonte fornecido, independentemente da linguagem de programação, para identificar a ausência ou a má qualidade de docstrings e comentários"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_docstring"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -92,7 +92,7 @@ relatorio_docstring:
 
 relatorio_documentacao:
   description: "nalisar os arquivos de documentação e configuração na raiz do repositório para identificar a ausência de arquivos essenciais e a falta de informações críticas que dificultam a colaboração"
-  extensions: [".py", ".yaml"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
@@ -115,7 +115,7 @@ relatorio_documentacao:
 
 relatorio_implentacao_feature:
   description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação técnico, detalhado e sequenciado"
-  extensions: [".py", ".txt", ".yaml"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
@@ -130,7 +130,7 @@ relatorio_implentacao_feature:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -138,7 +138,7 @@ relatorio_implentacao_feature:
 
 relatorio_implentacao_feature_azure:
   description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação na azure"
-  extensions: [".py", ".txt"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
@@ -147,13 +147,13 @@ relatorio_implentacao_feature_azure:
         tipo_analise: "melhorias_azure"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -161,22 +161,22 @@ relatorio_implentacao_feature_azure:
 
 relatorio_owasp:
   description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_owasp"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -184,22 +184,22 @@ relatorio_owasp:
         
 relatorio_pentest:
   description: "Analisar o código-fonte fornecido para simular um teste de invasão"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_pentest"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -207,7 +207,7 @@ relatorio_pentest:
 
 relatorio_performance_eficiencia:
   description: "Analisar o código-fonte fornecido, independentemente da linguagem, para identificar gargalos de performance e ineficiências computacionais"
-  extensions: [".cs", ".js", ".aspx", ".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
@@ -230,22 +230,22 @@ relatorio_performance_eficiencia:
 
 relatorio_sast:
   description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido, simulando a mentalidade de um atacante"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_sast"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -253,22 +253,22 @@ relatorio_sast:
 
 relatorio_simplicacao:
   description: "Analisar o código-fonte fornecido com o objetivo exclusivo de identificar violações dos princípios DRY (Don't Repeat Yourself), YAGNI (You Ain't Gonna Need It) e KISS (Keep It Simple, Stupid)"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_simplicacao"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -276,22 +276,22 @@ relatorio_simplicacao:
 
 relatorio_teste_integracao:
   description: "Realizar uma auditoria técnica aprofundada focada exclusivamente na suíte de Testes de Integração"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_teste_integracao"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
         tipo_analise: "aplicacao_de_mudancas"
         max_token_out: 30000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -299,7 +299,7 @@ relatorio_teste_integracao:
 
 relatorio_teste_unitario:
   description: "Analisar o código-fonte e a suíte de testes fornecidos para identificar os pontos mais críticos de cobertura e qualidade"
-  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".razor", ".razor.cs"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
@@ -322,22 +322,22 @@ relatorio_teste_unitario:
         
 geracao_codigo_a_partir_de_reuniao:
   description: "gerar código a partir de um descritivo de requisitos"
-  extensions: [".py"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o relatório de requisitos"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "processador"
       params:
         tipo_analise: "geracao_codigo_a_partir_de_reuniao"
       requires_approval: true
     - status_update: "escrita_codigo"
-      model_name: "claude-sonnet-4-20250514"
+      model_name: "gpt-4.1"
       agent_type: "processador"
       params:
         tipo_analise: "criando_codigos"
         max_token_out: 32000
     - status_update: "agrupando_commits"
-      model_name: "gpt-4.1"
+      model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
         tipo_analise: "agrupamento_commits"
@@ -345,7 +345,7 @@ geracao_codigo_a_partir_de_reuniao:
 
 relatorio_modernizacao_asp_net:
   description: "Analisar o código legado ASP.NET e o objetivo da modernização para gerar um plano de migração detalhado e sequenciado para atualizar a aplicação para ASP.NET Core 8"
-  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
@@ -368,10 +368,10 @@ relatorio_modernizacao_asp_net:
 
 relatorio_erros_migracao:
   description: "correcao de erro de migracao"
-  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "gpt-4.1"
+      model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_erros_migracao"
