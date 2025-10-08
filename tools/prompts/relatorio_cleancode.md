@@ -14,6 +14,7 @@ Sua auditoria deve se restringir a encontrar evidências concretas das seguintes
 -   [ ] **(L) Princípio da Substituição de Liskov (LSP):** Uma classe filha, quando usada no lugar da classe mãe, quebra o comportamento esperado ou lança exceções que a classe mãe não lançaria?
 -   [ ] **(I) Princípio da Segregação de Interface (ISP):** Classes são forçadas a implementar métodos de uma interface que elas não usam (interfaces "gordas")?
 -   [ ] **(D) Princípio da Inversão de Dependência (DIP):** Módulos de alto nível (lógica de negócio) dependem diretamente de módulos de baixo nível (detalhes de implementação, ex: `PostgreSQLConnector`, uma API específica) em vez de abstrações/interfaces?
+-   [ ]  **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **Foco no Impacto:** Ignore violações menores ou acadêmicas. Foque em problemas que claramente dificultam a manutenção, extensão ou teste do código.
