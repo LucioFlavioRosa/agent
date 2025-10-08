@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_secret_manager import AzureSecretManager
@@ -10,27 +10,46 @@ class BaseConector:
         self.repository_provider = repository_provider
         self.secret_manager = secret_manager or AzureSecretManager()
     
-    def _get_token_for_org(self, org_name: str, platform: str) -> str:
-        print(f"[{platform} Conector] Buscando token para organização: {org_name}")
-        
-        token_secret_name = f"{platform.lower()}-token-{org_name}"
-        print(f"[{platform} Conector] Tentando buscar token específico: {token_secret_name}")
-        
+    def _get_token_for_org(self, org_name: str, platform: str, usuario_executor: Optional[str] = None) -> str:
+        print(f"[{platform} Conector] Buscando token para organização: {org_name} (usuario_executor: {usuario_executor})")
+        tentativas = []
+        # Prioridade 1: Token específico do usuário
+        if usuario_executor:
+            token_secret_name_user = f"{platform.lower()}-token-{org_name}-{usuario_executor}"
+            tentativas.append(token_secret_name_user)
+            print(f"[{platform} Conector] Tentando buscar token específico do usuário: {token_secret_name_user}")
+            try:
+                token = self.secret_manager.get_secret(token_secret_name_user)
+                print(f"[{platform} Conector] Token específico encontrado para {org_name} e usuario_executor '{usuario_executor}'")
+                print(f"[{platform} Conector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
+                return token
+            except ValueError:
+                print(f"[{platform} Conector] Token específico '{token_secret_name_user}' não encontrado. Tentando próximo fallback.")
+        # Prioridade 2: Token da organização
+        token_secret_name_org = f"{platform.lower()}-token-{org_name}"
+        tentativas.append(token_secret_name_org)
+        print(f"[{platform} Conector] Tentando buscar token da organização: {token_secret_name_org}")
         try:
-            token = self.secret_manager.get_secret(token_secret_name)
-            print(f"[{platform} Conector] Token específico encontrado para {org_name}")
+            token = self.secret_manager.get_secret(token_secret_name_org)
+            print(f"[{platform} Conector] Token da organização encontrado para {org_name}")
+            print(f"[{platform} Conector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
             return token
         except ValueError:
-            print(f"[{platform} Conector] Token específico '{token_secret_name}' não encontrado. Tentando token padrão '{platform.lower()}-token'.")
-            try:
-                token = self.secret_manager.get_secret(f'{platform.lower()}-token')
-                print(f"[{platform} Conector] Token padrão '{platform.lower()}-token' encontrado")
-                return token
-            except ValueError as e:
-                print(f"[{platform} Conector] ERRO CRÍTICO: Nenhum token {platform} encontrado")
-                raise ValueError(f"ERRO CRÍTICO: Nenhum token {platform} encontrado. Verifique se existe '{token_secret_name}' ou '{platform.lower()}-token' no gerenciador de segredos.") from e
+            print(f"[{platform} Conector] Token da organização '{token_secret_name_org}' não encontrado. Tentando próximo fallback.")
+        # Prioridade 3: Token padrão
+        token_secret_name_default = f'{platform.lower()}-token'
+        tentativas.append(token_secret_name_default)
+        print(f"[{platform} Conector] Tentando buscar token padrão: {token_secret_name_default}")
+        try:
+            token = self.secret_manager.get_secret(token_secret_name_default)
+            print(f"[{platform} Conector] Token padrão '{token_secret_name_default}' encontrado")
+            print(f"[{platform} Conector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
+            return token
+        except ValueError as e:
+            print(f"[{platform} Conector] ERRO CRÍTICO: Nenhum token {platform} encontrado")
+            raise ValueError(f"ERRO CRÍTICO: Nenhum token {platform} encontrado. Tentativas: {tentativas}. Verifique se existe algum desses segredos no gerenciador de segredos.") from e
     
-    def _handle_repository_connection(self, repositorio: str, platform: str, org_name: str) -> Union[object]:
+    def _handle_repository_connection(self, repositorio: str, platform: str, org_name: str, usuario_executor: Optional[str] = None) -> Union[object]:
         print(f"[{platform} Conector] Iniciando conexão para repositório {platform}: {repositorio}")
         print(f"[{platform} Conector] Provider utilizado: {type(self.repository_provider).__name__}")
         
@@ -41,7 +60,7 @@ class BaseConector:
             print(f"[{platform} Conector] Retornando repositório '{normalized_repo}' do cache.")
             return self._cached_repos[cache_key]
         
-        token = self._get_token_for_org(org_name, platform)
+        token = self._get_token_for_org(org_name, platform, usuario_executor)
         print(f"[{platform} Conector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
         
         try:
