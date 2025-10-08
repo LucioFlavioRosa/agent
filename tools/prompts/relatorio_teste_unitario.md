@@ -22,6 +22,7 @@ Foque apenas em problemas de severidade **Moderada** ou **Severa**.
 2.  **SEVERIDADE:** Atribua uma severidade (`Moderado`, `Severo`) para cada ação recomendada.
 3.  **AGNOSTICISMO DE LINGUAGEM:** As recomendações de ferramentas (ex: "mocking") devem ser conceituais ou usar exemplos de bibliotecas conhecidas na linguagem analisada.
 4.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, com a chave principal `"relatorio"`.
+5.   **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto ou markdown fora dele.
