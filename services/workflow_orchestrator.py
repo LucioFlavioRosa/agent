@@ -219,17 +219,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 'nome_branch': branch_name
             })
         retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
-        print(f"[{job_id}] Flag retornar_lista_arquivos: {retornar_lista_arquivos}")
+        usuario_executor = job_info.get('data', {}).get('usuario_executor')
+        print(f"[{job_id}] Usuario executor para step {current_step_index}: {usuario_executor}")
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa,
             'repository_type': job_info['data']['repository_type'],
             'retornar_lista_arquivos': retornar_lista_arquivos,
             'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False),
-            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
+            'usuario_executor': usuario_executor
         })
         agent_params['job_id'] = job_id
-        usuario_executor = job_info.get('data', {}).get('usuario_executor')
         print(f"[{job_id}] Usuario executor para step {current_step_index}: {usuario_executor}")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
