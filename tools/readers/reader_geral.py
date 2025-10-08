@@ -49,7 +49,8 @@ class ReaderGeral(IRepositoryReader):
         repository_type: str,
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None,
-        retornar_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False,
+        usuario_executor: Optional[str] = None
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         provider_name = type(self.repository_provider).__name__
         print(f"[Reader Geral] Iniciando leitura do repositório: {nome_repo} via {provider_name}")
@@ -57,7 +58,7 @@ class ReaderGeral(IRepositoryReader):
         print(f"[Reader Geral] Flag retornar_lista_arquivos: {retornar_lista_arquivos}")
         conexao_geral = ConexaoGeral.create_with_defaults()
         print(f"[Reader Geral] Usando repository_type explícito: {repository_type}")
-        repositorio = conexao_geral.connection(repositorio=nome_repo, repository_type=repository_type, repository_provider=self.repository_provider)
+        repositorio = conexao_geral.connection(repositorio=nome_repo, repository_type=repository_type, repository_provider=self.repository_provider, usuario_executor=usuario_executor)
         print(f"[Reader Geral] Objeto repositório recebido: {type(repositorio)}")
         resultado = None
         if repository_type == 'azure':
