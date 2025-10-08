@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from domain.interfaces.secret_manager_interface import ISecretManager
 from tools.conectores.github_conector import GitHubConector
@@ -30,11 +30,11 @@ class ConexaoGeral:
         
         return self._conectores_cache[cache_key]
     
-    def connection(self, repositorio: str, repository_type: str, repository_provider: IRepositoryProvider) -> Union[object]:
+    def connection(self, repositorio: str, repository_type: str, repository_provider: IRepositoryProvider, usuario_executor: Optional[str] = None) -> Union[object]:
         print(f"[Conexao Geral] Orquestrando conexão para {repository_type}: {repositorio}")
         
         conector = self._get_conector(repository_type, repository_provider)
-        return conector.connection(repositorio)
+        return conector.connection(repositorio, usuario_executor)
     
     @classmethod
     def create_with_defaults(cls) -> 'ConexaoGeral':
