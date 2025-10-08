@@ -1,7 +1,9 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .github_committer import processar_branch_github
 from .gitlab_committer import processar_branch_gitlab
 from .azure_committer import processar_branch_azure
+from tools.conectores.conexao_geral import ConexaoGeral
+from tools.repository_provider_factory import get_repository_provider_explicit
 
 def _is_gitlab_project(repo) -> bool:
     return hasattr(repo, 'web_url') or 'gitlab' in str(type(repo)).lower()
@@ -27,7 +29,6 @@ def processar_branch_por_provedor(
             mensagem_pr, descricao_pr, conjunto_de_mudancas,
             modo_adicao_incremental=modo_adicao_incremental
         )
-    
     if repository_type == 'gitlab':
         print(f"[DEBUG] Usando repository_type explícito: GitLab")
         return processar_branch_gitlab(
@@ -35,10 +36,23 @@ def processar_branch_por_provedor(
             mensagem_pr, descricao_pr, conjunto_de_mudancas,
             modo_adicao_incremental=modo_adicao_incremental
         )
-    
     print(f"[DEBUG] Usando repository_type explícito: GitHub")
     return processar_branch_github(
         repo, nome_branch, branch_de_origem, branch_alvo_do_pr,
         mensagem_pr, descricao_pr, conjunto_de_mudancas,
         modo_adicao_incremental=modo_adicao_incremental
     )
+
+class CommitOrchestrator:
+    def __init__(self, repository_provider=None):
+        self.repository_provider = repository_provider or get_repository_provider_explicit('github')
+    def commit_changes(self, dados_finais_formatados: List[Dict[str, Any]], repo_name: str, repository_type: str, usuario_executor: Optional[str] = None) -> Dict[str, Any]:
+        conexao_geral = ConexaoGeral.create_with_defaults()
+        repositorio = conexao_geral.connection(
+            repositorio=repo_name,
+            repository_type=repository_type,
+            repository_provider=self.repository_provider,
+            usuario_executor=usuario_executor
+        )
+        # ... restante da lógica de commit ...
+        return {}
