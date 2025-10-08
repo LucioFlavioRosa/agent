@@ -26,6 +26,7 @@ Sua análise deve se restringir a encontrar os seguintes padrões de código:
 1.  **FOCO EXCLUSIVO:** Ignore qualquer outro tipo de problema (performance, segurança, etc.). O foco é **100%** em DRY, YAGNI e KISS.
 2.  **SEJA MINUCIOSO:** Para cada violação, explique claramente por que ela é um problema e qual princípio ela viola.
 3.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, com a chave principal `"relatorio"`.
+4.   **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 O seu relatório em Markdown, dentro do JSON, deve ser detalhado e técnico, como um guia de refatoração para um desenvolvedor.
