@@ -10,28 +10,48 @@ class TestRunnerService:
     def __init__(self):
         pass
 
-    def run_tests_for_files(self, file_paths: List[str], repository_path: str) -> Dict[str, Any]:
+    def run_tests_for_files(self, file_paths: List[str], repository_path: str, layer: str = None, execute_integration_tests: bool = False, job_id: str = None) -> Dict[str, Any]:
         start_time = time.time()
         test_files = self._find_related_test_files(file_paths, repository_path)
-        if not test_files:
-            return {
-                'success': True,
-                'output': 'Nenhum teste relacionado encontrado para os arquivos modificados.',
-                'test_files': [],
-                'execution_time': 0.0
-            }
         results = []
-        for test_file in test_files:
-            result = self._run_pytest_on_file(test_file, repository_path)
-            results.append(result)
-        success = all(r['success'] for r in results)
-        output = '\n\n'.join(r['output'] for r in results)
+        integration_results = []
+        output = ''
+        success = True
+        execution_time = 0.0
+        if not test_files:
+            output = 'Nenhum teste relacionado encontrado para os arquivos modificados.'
+        else:
+            for test_file in test_files:
+                result = self._run_pytest_on_file(test_file, repository_path)
+                results.append(result)
+            success = all(r['success'] for r in results)
+            output = '\n\n'.join(r['output'] for r in results)
         execution_time = time.time() - start_time
+        integration_test_files = []
+        integration_success = True
+        integration_output = ''
+        integration_execution_time = 0.0
+        if execute_integration_tests:
+            integration_test_files = self._find_integration_test_files(repository_path)
+            if job_id is not None and layer is not None:
+                print(f"[{job_id}] Executando {len(integration_test_files)} testes de integração para camada {layer}")
+            integration_start_time = time.time()
+            for integration_test_file in integration_test_files:
+                result = self._run_pytest_on_file(integration_test_file, repository_path, timeout=300)
+                integration_results.append(result)
+            integration_success = all(r['success'] for r in integration_results)
+            integration_output = '\n\n'.join(r['output'] for r in integration_results)
+            integration_execution_time = time.time() - integration_start_time
         return {
-            'success': success,
+            'success': success and integration_success,
             'output': output,
             'test_files': test_files,
-            'execution_time': execution_time
+            'execution_time': execution_time,
+            'integration_tests_executed': execute_integration_tests,
+            'integration_test_files': integration_test_files,
+            'integration_success': integration_success,
+            'integration_output': integration_output,
+            'integration_execution_time': integration_execution_time
         }
 
     def run_all_tests(self, repository_path: str) -> Dict[str, Any]:
@@ -73,20 +93,24 @@ class TestRunnerService:
                 continue
         return list(related_tests)
 
+    def _find_integration_test_files(self, repository_path: str) -> List[str]:
+        integration_test_files = glob.glob(os.path.join(repository_path, 'tests', 'test_integration_*.py'))
+        return integration_test_files
+
     def _extract_module_name(self, file_path: str) -> str:
         base = os.path.basename(file_path)
         if base.endswith('.py'):
             return base[:-3]
         return base
 
-    def _run_pytest_on_file(self, test_file: str, repository_path: str) -> Dict[str, Any]:
+    def _run_pytest_on_file(self, test_file: str, repository_path: str, timeout: int = 120) -> Dict[str, Any]:
         try:
             completed = subprocess.run(
                 [sys.executable, '-m', 'pytest', test_file],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 cwd=repository_path,
-                timeout=120
+                timeout=timeout
             )
             output = completed.stdout.decode('utf-8')
             success = completed.returncode == 0
