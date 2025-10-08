@@ -35,6 +35,8 @@ Use seu conhecimento profundo para encontrar evidências de vulnerabilidades nos
 
 -   [ ] **A10: Server-Side Request Forgery (SSRF):** Procure por código que faz requisições HTTP para URLs controladas pelo usuário.
     -   *Exemplo de código vulnerável:* `image_content = requests.get(request.args.get('image_url'))`.
+       
+-   [ ] **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **FOCO NO RISCO:** Ignore questões de severidade `Baixa`.
