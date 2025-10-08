@@ -41,6 +41,7 @@ azure-devops==7.1.0b4
 redis==6.4.0
 pathspec>=0.12.0
 PyYAML==6.0.1
+networkx==3.5
 
 # --- Sub-dependências ---
 anyio==4.10.0
