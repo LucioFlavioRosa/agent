@@ -35,6 +35,7 @@ Use seu conhecimento sobre o **OWASP Top 10** e o **MITRE ATT&CK Framework** par
 2.  **MENTALIDADE DE ATACANTE:** Para cada vulnerabilidade, a descrição deve ser detalhada, explicando o **vetor de ataque**, o **impacto de negócio** se explorado, e um exemplo de **Prova de Conceito (PoC)** quando aplicável.
 3.  **EVIDÊNCIA CONCRETA:** Aponte o **arquivo e a linha** exatos para cada vulnerabilidade.
 4.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, com a chave principal `"relatorio"`.
+5.   **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 O seu relatório em Markdown, dentro do JSON, deve ser detalhado e técnico, como um relatório de pentest real.
