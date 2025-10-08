@@ -57,3 +57,17 @@ class DependencyAnalyzerService:
             except Exception:
                 continue
         return impacted_files
+
+    def detect_independent_task_groups(self, graph: TaskDependencyGraph) -> List[List[str]]:
+        G = nx.DiGraph()
+        for node, successors in graph.adjacency_list.items():
+            for succ in successors:
+                G.add_edge(node, succ)
+        scc = list(nx.strongly_connected_components(G))
+        groups = []
+        for component in scc:
+            group = list(component)
+            if len(group) > 0:
+                groups.append(group)
+        print(f"Identificados {len(groups)} grupos independentes de tarefas para paralelização")
+        return groups
