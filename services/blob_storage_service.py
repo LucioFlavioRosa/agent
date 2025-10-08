@@ -15,15 +15,25 @@ class BlobStorageService:
             raise RuntimeError('Azure Blob Storage container name missing.')
         
         connection_string = None
-        secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        try:
-            secret_manager = AzureSecretManager()
-            connection_string = secret_manager.get_secret(secret_name)
-        except Exception as e:
-            print(f"Warning: Failed to get connection string from Key Vault: {e}")
-            connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
+        
+        # 1. Tenta obter o NOME do segredo do Key Vault e buscar o valor
+        secret_name = os.getenv('AZURE_KV_SECRET_NAME_FOR_CONN_STRING')
+        if secret_name:
+            try:
+                print(f"Attempting to get connection string from Key Vault using secret name: {secret_name}")
+                secret_manager = AzureSecretManager()
+                connection_string = secret_manager.get_secret(secret_name)
+            except Exception as e:
+                print(f"Warning: Failed to get connection string from Key Vault: {e}")
+
+        # 2. Se a busca no Key Vault falhou ou não foi configurada, usa a string de conexão de fallback
         if not connection_string:
-            raise RuntimeError('Azure Blob Storage connection string not found in Key Vault or environment variables.')
+            print("Key Vault retrieval failed or not configured. Trying fallback environment variable.")
+            connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING_FALLBACK')
+            
+        # 3. Se ainda assim não encontrar, lança o erro
+        if not connection_string:
+            raise RuntimeError('Azure Blob Storage connection string not found in Key Vault or fallback environment variables.')
 
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
