@@ -27,6 +27,9 @@ Use seu conhecimento sobre os "Well-Architected Frameworks" e as melhores práti
 -   **Otimização de Custos (FinOps):**
     -   [ ] Oportunidades de uso de instâncias Spot ou recursos serverless
     -   [ ] Ausência de `tags` para atribuição de custos
+ 
+- **Fechamento do relatótio**
+    -  [ ]**Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **FOCO NO IMPACTO:** Concentre-se em problemas de severidade `Severo` ou `Moderado`.
