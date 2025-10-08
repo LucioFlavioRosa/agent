@@ -26,6 +26,7 @@ Seu relatório DEVE seguir estes princípios:
 -   [ ] **Melhores Práticas Modernas:** As sugestões devem estar alinhadas com as práticas recomendadas para a versão mais recente do .NET (atualmente .NET 9), como o uso de `async/await`, LINQ, injeção de dependência, e APIs de alta performance como `Span<T>`.
 -   [ ] **Detalhamento das Ações:** O relatório precisa ter uma seção chamada **"Plano de Ação Detalhado"**. As ações devem ser granulares e isoladas, permitindo que o desenvolvedor as implemente de forma incremental.
 -   [ ] **O relatório DEVE conter somente a seção Plano de Ação Detalhado:** A saída final deve ser focada e limpa, contendo apenas o plano detalhado para manter a resposta concisa e direta ao ponto.
+-   [ ]  **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA (JSON OBRIGATÓRIO)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto fora dele, contendo a chave principal `"relatorio"`.
