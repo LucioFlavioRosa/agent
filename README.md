@@ -4,6 +4,28 @@
 
 O MCP é uma plataforma robusta para automação de análises e modernização de código, orquestrando agentes inteligentes via API REST construída com FastAPI. O sistema utiliza Redis para armazenamento de jobs e suporta integração com múltiplos provedores de repositório (GitHub, GitLab, Azure DevOps) e modelos LLM (Claude, OpenAI).
 
+## Aplicação Incremental de Mudanças
+
+A partir da versão 9.0.0, o MCP oferece um sistema de aplicação incremental de mudanças de código baseado em relatórios de implementação. Este sistema permite:
+- Aplicação automática e sequencial de tarefas de código extraídas de relatórios estruturados
+- Paralelização inteligente de tarefas independentes (até 3 simultâneas)
+- Validação incremental de cada mudança via testes unitários e de integração
+- Commits atômicos por tarefa ou agrupados por camada, conforme estratégia definida
+- Retomada de execução após falhas via checkpoints
+- Detecção e tratamento de tarefas de alto impacto
+
+### Como ativar o modo incremental
+
+Para utilizar o modo incremental, envie o campo `aplicar_mudancas_incrementalmente=true` no payload da API `/start-analysis`. O relatório de implementação deve estar em formato de tabela markdown com colunas bem definidas (Passo, Camada, Ação, Caminho do Arquivo, Descrição).
+
+Benefícios:
+- Reduz risco de regressões por validar cada mudança individualmente
+- Facilita rollback de mudanças específicas
+- Otimiza tempo de execução por paralelizar tarefas independentes
+- Permite granularidade flexível de commits (`per_task`, `per_layer`, `single`)
+
+Consulte a [documentação detalhada](docs/incremental_changes_system.md) para exemplos, limitações e troubleshooting.
+
 ## Arquitetura do Sistema
 
 A estrutura do MCP segue princípios de arquitetura limpa, com separação clara de responsabilidades entre agentes, serviços, ferramentas e domínio. Os principais diretórios são:
@@ -24,7 +46,7 @@ A estrutura do MCP segue princípios de arquitetura limpa, com separação clara
 
 ### Funcionamento Principal do MCP
 
-```mermaid
+mermaid
 flowchart TD
     A[Cliente HTTP] -->|POST /start-analysis| B[FastAPI Endpoint]
     B --> C{Validar Payload}
@@ -64,11 +86,11 @@ flowchart TD
     style X fill:#9C27B0,color:#fff
     style V fill:#4CAF50,color:#fff
     style O fill:#F44336,color:#fff
-```
+
 
 ### Fluxo de Aprovação Manual
 
-```mermaid
+mermaid
 flowchart TD
     A[Workflow Pausado] -->|Status: AWAITING_APPROVAL| B[Cliente Revisa Relatório]
     B --> C{Decisão}
@@ -88,11 +110,11 @@ flowchart TD
     style E fill:#F44336,color:#fff
     style J fill:#4CAF50,color:#fff
     style K fill:#F44336,color:#fff
-```
+
 
 ### Fluxo de Geração de Código a Partir de Relatório
 
-```mermaid
+mermaid
 flowchart TD
     A[Cliente] -->|"POST /start-code-generation-from-report/{analysis_name}"| B[Buscar Job Original]
     B --> C{Job Existe?}
@@ -112,7 +134,7 @@ flowchart TD
     style F fill:#FF9800,color:#fff
     style M fill:#9C27B0,color:#fff
     style N fill:#4CAF50,color:#fff
-```
+
 
 ## Explicação do Código Principal (`mcp_server_fastapi.py`)
 
@@ -152,7 +174,7 @@ O arquivo `mcp_server_fastapi.py` é o ponto de entrada da API REST do MCP. Ele 
 
 - Retorna status atual, relatório e informações de Pull Request, se disponíveis.
 
-### Segurança e Performance
+## Segurança e Performance
 
 - **CORS:** Aberto por padrão (recomenda-se restringir em produção).
 - **Validação:** Pydantic previne dados inválidos.
@@ -181,3 +203,4 @@ O arquivo `mcp_server_fastapi.py` é o ponto de entrada da API REST do MCP. Ele 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Mermaid Documentation](https://mermaid-js.github.io/mermaid/#/)
 - [Redis Documentation](https://redis.io/)
+- [Documentação do sistema incremental](docs/incremental_changes_system.md)
