@@ -40,12 +40,27 @@ class RevisorStepExecutor(BaseStepExecutor):
         
         agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
-        
+        # Se o revisor precisar ler o repositório, propague usuario_executor:
+        # usuario_executor = agent_params.get('usuario_executor')
+        # repositorio = agent_params.get('repositorio')
+        # tipo_analise = agent_params.get('tipo_analise')
+        # nome_branch = agent_params.get('nome_branch')
+        # arquivos_especificos = agent_params.get('arquivos_especificos')
+        # retornar_lista_arquivos = agent_params.get('retornar_lista_arquivos', False)
+        # codigo_base = repo_reader.read_repository(
+        #     nome_repo=repositorio,
+        #     tipo_analise=tipo_analise,
+        #     repository_type=agent_params.get('repository_type'),
+        #     nome_branch=nome_branch,
+        #     arquivos_especificos=arquivos_especificos,
+        #     retornar_lista_arquivos=retornar_lista_arquivos,
+        #     usuario_executor=usuario_executor
+        # )
         agente = AgentFactory.create_agent("revisor", repo_reader, llm_provider)
         agent_response = agente.main(**agent_params)
         
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
