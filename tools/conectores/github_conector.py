@@ -1,5 +1,5 @@
 from github import Repository
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_secret_manager import AzureSecretManager
@@ -17,9 +17,9 @@ class GitHubConector(BaseConector):
             print(f"[GitHub Conector] ERRO: Formato inválido do repositório: {repositorio}")
             raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio'.")
     
-    def connection(self, repositorio: str) -> Union[Repository, object]:
+    def connection(self, repositorio: str, usuario_executor: Optional[str] = None) -> Union[Repository, object]:
         org_name = self._extract_org_name(repositorio)
-        return self._handle_repository_connection(repositorio, "GitHub", org_name)
+        return self._handle_repository_connection(repositorio, "GitHub", org_name, usuario_executor)
     
     @classmethod
     def create_with_defaults(cls) -> 'GitHubConector':
