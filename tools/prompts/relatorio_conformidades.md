@@ -13,6 +13,7 @@ Sua análise deve se restringir a encontrar os seguintes problemas críticos:
 -   [ ] **Referências Quebradas:** Chamadas a funções, métodos, classes ou variáveis que não existem, foram renomeadas ou movidas.
 -   [ ] **Imports Inválidos:** `import`s que apontam para módulos ou objetos inexistentes.
 -   [ ] **Código Órfão/Morto:** Funções, classes ou arquivos que se tornaram inutilizados após a refatoração e que podem causar confusão ou erros futuros se chamados.
+-   [ ]  **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 4. ESCOPO DE EXCLUSÃO (O QUE IGNORAR)
 É crucial que você **IGNORE E NÃO RELATE** os seguintes itens:
