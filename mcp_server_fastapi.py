@@ -49,6 +49,7 @@ class StartAnalysisPayload(BaseModel):
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
+    checkpoint_available: Optional[bool] = Field(False, description="Indica se há checkpoint disponível para retomada da execução incremental.")
 
 class UpdateJobPayload(BaseModel):
     job_id: str
@@ -117,7 +118,16 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         analysis_service.register_analysis(analysis_name, job_id)
     print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
-    return StartAnalysisResponse(job_id=job_id)
+    checkpoint_available = False
+    context_cache_service = container.get_context_cache_service()
+    checkpoint_key = f"checkpoint:{job_id}"
+    try:
+        checkpoint = context_cache_service.get_checkpoint(checkpoint_key)
+        if checkpoint:
+            checkpoint_available = True
+    except Exception:
+        checkpoint_available = False
+    return StartAnalysisResponse(job_id=job_id, checkpoint_available=checkpoint_available)
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
@@ -189,7 +199,16 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
     print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
-    return StartAnalysisResponse(job_id=new_job_id)
+    checkpoint_available = False
+    context_cache_service = container.get_context_cache_service()
+    checkpoint_key = f"checkpoint:{new_job_id}"
+    try:
+        checkpoint = context_cache_service.get_checkpoint(checkpoint_key)
+        if checkpoint:
+            checkpoint_available = True
+    except Exception:
+        checkpoint_available = False
+    return StartAnalysisResponse(job_id=new_job_id, checkpoint_available=checkpoint_available)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
@@ -232,3 +251,44 @@ def get_jobs_for_report(report_name: str):
     except Exception as e:
         print(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar jobs associados ao relatório.")
+
+@app.post("/resume-incremental-changes/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
+def resume_incremental_changes(job_id: str, background_tasks: BackgroundTasks):
+    context_cache_service = container.get_context_cache_service()
+    incremental_orchestrator_service = container.get_incremental_orchestrator_service()
+    job_store = container.get_job_store()
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+    status = job.get(JobFields.STATUS)
+    if status != 'incremental_execution_paused':
+        raise HTTPException(status_code=400, detail="Job não está em estado 'incremental_execution_paused'.")
+    checkpoint_key = f"checkpoint:{job_id}"
+    checkpoint = context_cache_service.get_checkpoint(checkpoint_key)
+    if not checkpoint:
+        raise HTTPException(status_code=404, detail="Checkpoint não encontrado para este job.")
+    report_text = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
+    repo_name = job.get(JobFields.DATA, {}).get(JobFields.REPO_NAME)
+    branch_name = job.get(JobFields.DATA, {}).get(JobFields.BRANCH_NAME)
+    repository_type = job.get(JobFields.DATA, {}).get(JobFields.REPOSITORY_TYPE)
+    try:
+        incremental_result = incremental_orchestrator_service.execute_incremental_changes(
+            job_id=job_id,
+            report_text=report_text,
+            repo_name=repo_name,
+            branch_name=branch_name,
+            repository_type=repository_type,
+            completed_tasks=checkpoint.get('completed_tasks', [])
+        )
+        job[JobFields.DATA]['incremental_execution_summary'] = incremental_result
+        job_store.set_job(job_id, job)
+        return FinalStatusResponse(
+            job_id=job_id,
+            status=job.get(JobFields.STATUS),
+            report_blob_url=job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL),
+            analysis_report=job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT),
+            incremental_execution_summary=incremental_result
+        )
+    except Exception as e:
+        print(f"[{job_id}] Falha ao retomar execução incremental: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao retomar execução incremental: {str(e)}")
