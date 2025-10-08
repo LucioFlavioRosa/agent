@@ -29,6 +29,7 @@ Concentre sua análise nos seguintes artefatos de documentação:
 1.  **FOCO NO IMPACTO:** Ignore problemas de baixa severidade (`Leve`). Relate apenas o que for `Moderado` ou `Severo`.
 2.  **CONCISÃO:** Seja direto e acionável.
 3.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, com a chave principal `"relatorio"`.
+4.   **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto ou markdown fora dele.
