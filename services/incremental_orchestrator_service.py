@@ -15,7 +15,7 @@ class IncrementalOrchestratorService:
         self.committer = committer
         self.redis_client = redis_client
 
-    def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None, pause_on_high_impact: bool = False) -> Dict[str, Any]:
         tasks = self.report_parser.parse_implementation_plan(report_text)
         codebase = self.repository_reader.read_repository(repo_name, branch_name, repository_type)
         for file_path, content in codebase.items():
@@ -25,6 +25,7 @@ class IncrementalOrchestratorService:
         all_tasks = {task.id: task for task in tasks}
         completed_tasks = {}
         failed_tasks = {}
+        high_impact_tasks = []
         checkpoint_key = f"checkpoint:{job_id}"
         if completed_task_ids:
             for tid in completed_task_ids:
@@ -32,9 +33,26 @@ class IncrementalOrchestratorService:
                 if result_data:
                     completed_tasks[tid] = result_data
         for level in levels:
+            sorted_level = []
+            for tid in level:
+                task = all_tasks[tid]
+                impacted_files = self.dependency_analyzer.analyze_task_impact(task, codebase)
+                if len(impacted_files) > 10:
+                    print(f"[{job_id}] WARNING: Tarefa {task.id} pode impactar {len(impacted_files)} arquivos. Considere revisão manual.")
+                    high_impact_tasks.append(task.id)
+                    if pause_on_high_impact:
+                        print(f"[{job_id}] Execução pausada antes da tarefa de alto impacto {task.id} aguardando aprovação manual.")
+                        return {
+                            "completed_tasks": list(completed_tasks.keys()),
+                            "failed_tasks": list(failed_tasks.keys()),
+                            "commits": [],
+                            "resumable": True,
+                            "high_impact_tasks": high_impact_tasks
+                        }
+                sorted_level.append(tid)
             futures = {}
             with ThreadPoolExecutor(max_workers=3) as executor:
-                for tid in level:
+                for tid in sorted_level:
                     if tid in completed_tasks or tid in failed_tasks:
                         continue
                     task = all_tasks[tid]
@@ -69,7 +87,8 @@ class IncrementalOrchestratorService:
             "completed_tasks": list(completed_tasks.keys()),
             "failed_tasks": list(failed_tasks.keys()),
             "commits": [],
-            "resumable": resumable
+            "resumable": resumable,
+            "high_impact_tasks": high_impact_tasks
         }
         return result_summary
 
