@@ -12,14 +12,14 @@ class BlobStorageService:
 
     def _init_blob_service(self):
        
-        container_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
+        container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
         if not container_name:
             raise RuntimeError('Azure Blob Storage container name missing.')
         
         connection_string = None
         
         # 1. Tenta obter o NOME do segredo do Key Vault e buscar o valor
-        secret_name = os.getenv('AZURE_KV_SECRET_NAME_FOR_CONN_STRING')
+        secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
         if secret_name:
             try:
                 print(f"Attempting to get connection string from Key Vault using secret name: {secret_name}")
