@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_secret_manager import AzureSecretManager
@@ -25,9 +25,9 @@ class AzureConector(BaseConector):
             print(f"[Azure Conector] ERRO: {e}")
             raise
     
-    def connection(self, repositorio: str) -> Union[object]:
+    def connection(self, repositorio: str, usuario_executor: Optional[str] = None) -> Union[object]:
         org_name = self._extract_org_name(repositorio)
-        return self._handle_repository_connection(repositorio, "Azure", org_name)
+        return self._handle_repository_connection(repositorio, "Azure", org_name, usuario_executor)
     
     @classmethod
     def create_with_defaults(cls) -> 'AzureConector':
