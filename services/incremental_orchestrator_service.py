@@ -15,7 +15,7 @@ class IncrementalOrchestratorService:
         self.committer = committer
         self.redis_client = redis_client
 
-    def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None, pause_on_high_impact: bool = False) -> Dict[str, Any]:
         tasks = self.report_parser.parse_implementation_plan(report_text)
         codebase = self.repository_reader.read_repository(repo_name, branch_name, repository_type)
         for file_path, content in codebase.items():
@@ -31,10 +31,27 @@ class IncrementalOrchestratorService:
                 result_data = self.context_cache.get_cached_task_context(tid)
                 if result_data:
                     completed_tasks[tid] = result_data
+        high_impact_tasks = []
+        paused_for_high_impact = False
         for level in levels:
             futures = {}
+            sorted_level = list(level)
+            for tid in sorted_level:
+                if tid in completed_tasks or tid in failed_tasks:
+                    continue
+                task = all_tasks[tid]
+                impacted_files = self.dependency_analyzer.analyze_task_impact(task, codebase)
+                if impacted_files and len(impacted_files) > 10:
+                    print(f"[{job_id}] WARNING: Tarefa {task.id} pode impactar {len(impacted_files)} arquivos. Considere revisão manual.")
+                    high_impact_tasks.append(task.id)
+                    if pause_on_high_impact:
+                        print(f"[{job_id}] PAUSANDO execução incremental antes da tarefa de alto impacto {task.id}.")
+                        paused_for_high_impact = True
+                        break
+            if paused_for_high_impact:
+                break
             with ThreadPoolExecutor(max_workers=3) as executor:
-                for tid in level:
+                for tid in sorted_level:
                     if tid in completed_tasks or tid in failed_tasks:
                         continue
                     task = all_tasks[tid]
@@ -69,8 +86,13 @@ class IncrementalOrchestratorService:
             "completed_tasks": list(completed_tasks.keys()),
             "failed_tasks": list(failed_tasks.keys()),
             "commits": [],
-            "resumable": resumable
+            "resumable": resumable,
+            "high_impact_tasks": high_impact_tasks
         }
+        if high_impact_tasks:
+            print(f"[{job_id}] Tarefas de alto impacto detectadas: {high_impact_tasks}")
+        if paused_for_high_impact:
+            result_summary["paused_for_high_impact"] = True
         return result_summary
 
     def _build_task_context(self, task: CodeTask, completed_tasks: Dict[str, TaskExecutionResult]) -> TaskExecutionContext:
