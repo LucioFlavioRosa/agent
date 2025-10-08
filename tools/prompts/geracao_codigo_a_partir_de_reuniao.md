@@ -14,6 +14,7 @@ Sua análise e plano devem obrigatoriamente cobrir os seguintes pontos:
 -   [ ] **Estrutura de Projeto Idiomática:** Para cada componente (backend, frontend), defina a estrutura de pastas e arquivos que siga **rigorosamente as convenções da comunidade** para aquela tecnologia.
 -   [ ] **Planejamento Detalhado de Componentes:** Para cada arquivo, especifique suas responsabilidades, e se aplicável, as principais classes, funções ou métodos que ele conterá.
 -   [ ] **Artefatos de Repositório Essenciais:** Garanta a inclusão de `README.md`, `.gitignore`, `.env.example`, `Dockerfile`, e pastas de `tests/`.
+-   [ ] **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **SEJA MINUCIOSO:** Esta é a regra mais importante. A descrição de cada arquivo na tabela deve ser uma mini-especificação técnica.
