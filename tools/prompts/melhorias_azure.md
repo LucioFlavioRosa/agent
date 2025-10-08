@@ -20,6 +20,7 @@ Seu plano DEVE seguir estes princípios, baseados nas melhores práticas da Micr
 -   [ ] **Sempre lembre da necessidade de atualizar o arquivo `requirements.txt`** com as novas dependências do Azure SDK.
 -   [ ] **Cirúrgico e de Baixo Impacto:** O plano deve se integrar à arquitetura existente. **NÃO** proponha refatorações estruturais que não sejam estritamente necessárias para a nova feature.
 -   [ ] **Sequencial e Lógico:** **Esta é a regra mais importante.** O plano de ação deve ser apresentado em uma **ordem lógica de implementação**. Ex: 1º criar/alterar recursos Azure, 2º configurar permissões e rede, 3º atualizar configurações e dependências da aplicação, 4º modificar o código para usar os novos recursos, 5º criar testes, 6º implantar.
+-   [ ]  **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA (JSON OBRIGATÓRIO)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto fora dele, contendo a chave principal `"relatorio"`.
