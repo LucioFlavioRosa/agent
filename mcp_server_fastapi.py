@@ -49,6 +49,7 @@ class StartAnalysisPayload(BaseModel):
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
+    checkpoint_available: bool = Field(False, description="Indica se há checkpoint disponível para retomada da execução incremental.")
 
 class UpdateJobPayload(BaseModel):
     job_id: str
@@ -117,118 +118,38 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         analysis_service.register_analysis(analysis_name, job_id)
     print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
-    return StartAnalysisResponse(job_id=job_id)
+    incremental_orchestrator_service = container.get_incremental_orchestrator_service()
+    checkpoint_available = False
+    checkpoint = incremental_orchestrator_service.get_checkpoint(job_id)
+    if checkpoint and checkpoint.get('completed_tasks'):
+        checkpoint_available = True
+    return StartAnalysisResponse(job_id=job_id, checkpoint_available=checkpoint_available)
 
-@app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
-def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
-    job_store = container.get_job_store()
-    job = job_store.get_job(payload.job_id)
-    job_validation_service.validate_job_for_approval(job, payload.job_id)
-    if payload.action == JobActions.APPROVE:
-        if payload.instrucoes_extras:
-            job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
-            print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
-        job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
-        paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
-        start_from_step = paused_step + 1
-        job_store.set_job(payload.job_id, job)
-        background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
-        return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.WORKFLOW_STARTED, "message": "Aprovação recebida."}
-    if payload.action == JobActions.REJECT:
-        job[JobFields.STATUS] = JobStatus.REJECTED
-        job_store.set_job(payload.job_id, job)
-        return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
-
-@app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
-def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
+@app.post("/resume-incremental-changes/{job_id}", response_model=Dict[str, Any], tags=["Jobs"])
+def resume_incremental_changes(job_id: str, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
     job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
-    job_validation_service.validate_job_exists(job, job_id)
-    report = job_validation_service.get_report_from_job(job, job_id)
-    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
-    return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
-
-@app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
-def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
-    job_store = container.get_job_store()
-    analysis_service = container.get_analysis_name_service()
-    job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
-    job = job_store.get_job(job_id)
-    job_validation_service.validate_job_exists(job, job_id)
-    report = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
-    blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
-    return AnalysisByNameResponse(
+    if job.get(JobFields.STATUS) != "incremental_execution_paused":
+        raise HTTPException(status_code=400, detail="Job não está em estado de pausa incremental")
+    incremental_orchestrator_service = container.get_incremental_orchestrator_service()
+    checkpoint = incremental_orchestrator_service.get_checkpoint(job_id)
+    if not checkpoint:
+        raise HTTPException(status_code=404, detail="Checkpoint não encontrado para este job")
+    completed_task_ids = checkpoint.get('completed_tasks', [])
+    report_text = job.get(JobFields.DATA, {}).get(JobFields.ANALYSIS_REPORT)
+    repo_name = job.get(JobFields.DATA, {}).get(JobFields.REPO_NAME)
+    branch_name = job.get(JobFields.DATA, {}).get(JobFields.BRANCH_NAME)
+    repository_type = job.get(JobFields.DATA, {}).get(JobFields.REPOSITORY_TYPE)
+    result = incremental_orchestrator_service.execute_incremental_changes(
         job_id=job_id,
-        analysis_name=analysis_name,
-        analysis_report=report,
-        report_blob_url=blob_url
+        report_text=report_text,
+        repo_name=repo_name,
+        branch_name=branch_name,
+        repository_type=repository_type,
+        completed_task_ids=completed_task_ids
     )
-
-@app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
-def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
-    job_store = container.get_job_store()
-    analysis_service = container.get_analysis_name_service()
-    job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
-    original_job = job_store.get_job(job_id)
-    job_validation_service.validate_job_exists(original_job, job_id)
-    report = job_validation_service.get_report_from_job(original_job, None)
-    original_data = original_job[JobFields.DATA]
-    original_repo_name = original_data[JobFields.REPO_NAME]
-    original_repository_type = original_data[JobFields.REPOSITORY_TYPE]
-    normalized_repo_name = repository_normalizer_service.normalize_repo_name(
-        original_repo_name, original_repository_type
-    )
-    new_job_id = str(uuid.uuid4())
-    new_job_data = job_data_service.create_derived_job_data(
-        original_job, analysis_name, normalized_repo_name, report
-    )
-    job_store.set_job(new_job_id, new_job_data)
-    analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
-    background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
-    return StartAnalysisResponse(job_id=new_job_id)
-
-@app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
-def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
-    job_store = container.get_job_store()
-    job = job_store.get_job(job_id)
-    job_validation_service.validate_job_exists(job, job_id)
-    status = job.get(JobFields.STATUS)
-    job_data = job.get(JobFields.DATA, {})
-    blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
-    gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
-    analysis_report = job_data.get(JobFields.ANALYSIS_REPORT, None)
-    incremental_execution_summary = job_data.get('incremental_execution_summary')
-    print(f"[{job_id}] [get_status] status: {status}")
-    print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
-    print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
-    print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
-    try:
-        if status == JobStatus.COMPLETED:
-            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, analysis_report=analysis_report, incremental_execution_summary=incremental_execution_summary)
-        elif status == JobStatus.FAILED:
-            return response_builder_service.build_failed_response(job_id, job)
-        else:
-            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, incremental_execution_summary=incremental_execution_summary)
-    except ValidationError as e:
-        print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
-        print(f"Dados brutos do job que causaram o erro: {job}")
-        raise
-
-@app.get("/reports/{report_name}/jobs", response_model=List[str], tags=["Reports"])
-def get_jobs_for_report(report_name: str):
-    blob_storage = container.get_blob_storage()
-    container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
-    account_url = os.getenv('AZURE_STORAGE_ACCOUNT_URL')
-    if not container_name or not account_url:
-        raise HTTPException(status_code=500, detail="Configuração de Blob Storage ausente.")
-    report_blob_url = f"{account_url}/{container_name}/{report_name}"
-    try:
-        jobs = blob_storage.get_jobs_for_report(report_blob_url)
-        return jobs
-    except Exception as e:
-        print(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao buscar jobs associados ao relatório.")
+    job[JobFields.DATA]['incremental_execution_summary'] = result
+    job_store.set_job(job_id, job)
+    return result
