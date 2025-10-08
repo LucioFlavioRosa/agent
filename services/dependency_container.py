@@ -10,6 +10,13 @@ from services.commit_handler import CommitHandler
 from services.data_formatter import DataFormatter
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
+from services.report_parser_service import ReportParserService
+from services.dependency_analyzer_service import DependencyAnalyzerService
+from services.context_cache_service import ContextCacheService
+from agents.agente_aplicador_incremental import AgenteAplicadorIncremental
+from services.test_runner_service import TestRunnerService
+from services.incremental_committer_service import IncrementalCommitterService
+from services.incremental_orchestrator_service import IncrementalOrchestratorService
 
 class DependencyContainer:
     def __init__(self):
@@ -25,6 +32,13 @@ class DependencyContainer:
         self._data_formatter = None
         self._rag_retriever = None
         self._changeset_filler = None
+        self._report_parser_service = None
+        self._dependency_analyzer_service = None
+        self._context_cache_service = None
+        self._agente_aplicador_incremental = None
+        self._test_runner_service = None
+        self._incremental_committer_service = None
+        self._incremental_orchestrator_service = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -96,3 +110,50 @@ class DependencyContainer:
             cache = AnalysisNameCache(self.get_job_store())
             self._analysis_name_service = AnalysisNameService(cache)
         return self._analysis_name_service
+
+    def get_report_parser_service(self) -> ReportParserService:
+        if self._report_parser_service is None:
+            self._report_parser_service = ReportParserService()
+        return self._report_parser_service
+
+    def get_dependency_analyzer_service(self) -> DependencyAnalyzerService:
+        if self._dependency_analyzer_service is None:
+            self._dependency_analyzer_service = DependencyAnalyzerService()
+        return self._dependency_analyzer_service
+
+    def get_context_cache_service(self) -> ContextCacheService:
+        if self._context_cache_service is None:
+            self._context_cache_service = ContextCacheService(self.get_job_store())
+        return self._context_cache_service
+
+    def get_agente_aplicador_incremental(self) -> AgenteAplicadorIncremental:
+        if self._agente_aplicador_incremental is None:
+            self._agente_aplicador_incremental = AgenteAplicadorIncremental(
+                repository_reader=None,  # Deve ser injetado conforme arquitetura
+                llm_provider=None,       # Deve ser injetado conforme arquitetura
+                context_cache_service=self.get_context_cache_service()
+            )
+        return self._agente_aplicador_incremental
+
+    def get_test_runner_service(self) -> TestRunnerService:
+        if self._test_runner_service is None:
+            self._test_runner_service = TestRunnerService()
+        return self._test_runner_service
+
+    def get_incremental_committer_service(self) -> IncrementalCommitterService:
+        if self._incremental_committer_service is None:
+            self._incremental_committer_service = IncrementalCommitterService()
+        return self._incremental_committer_service
+
+    def get_incremental_orchestrator_service(self) -> IncrementalOrchestratorService:
+        if self._incremental_orchestrator_service is None:
+            self._incremental_orchestrator_service = IncrementalOrchestratorService(
+                report_parser=self.get_report_parser_service(),
+                dependency_analyzer=self.get_dependency_analyzer_service(),
+                context_cache=self.get_context_cache_service(),
+                agente_aplicador=self.get_agente_aplicador_incremental(),
+                repository_reader=None,  # Deve ser injetado conforme arquitetura
+                test_runner=self.get_test_runner_service(),
+                committer=self.get_incremental_committer_service()
+            )
+        return self._incremental_orchestrator_service
