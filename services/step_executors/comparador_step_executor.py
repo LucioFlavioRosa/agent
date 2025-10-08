@@ -11,37 +11,38 @@ class ComparadorStepExecutor(BaseStepExecutor):
     def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                 current_step_index: int, previous_step_result: Dict[str, Any], 
                 repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
-        
-        instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
-        instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
-        instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
-
-        observacoes_humanas = self.job_handler.get_approval_instructions(job_info)
-        if observacoes_humanas:
-            instrucoes_formatadas += f"\n\n---\n\nOBSERVAÇÕES ADICIONAIS DO USUÁRIO NA APROVAÇÃO:\n{observacoes_humanas}"
-            print(f"[{job_id}] Aplicando instruções extras de aprovação na etapa {current_step_index}: {observacoes_humanas[:100]}...")
-            self.job_handler.clear_approval_instructions(job_info)
-            self.job_handler.update_job(job_id, job_info)
-
-        agent_params['instrucoes_extras'] = instrucoes_formatadas
-        agent_params.update({
-            'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
-            'repository_type': job_info['data']['repository_type'],
-            'job_id': job_id,
-            'projeto': job_info['data']['projeto'],
-            'status_update': step['status_update']
-        })
-        
+        repository_type = agent_params.get('repository_type')
+        usuario_executor = agent_params.get('usuario_executor')
+        repo_name_modernizado = agent_params.get('repo_name_modernizado')
+        branch_name_modernizado = agent_params.get('branch_name_modernizado')
+        repo_name_original = agent_params.get('repo_name_original')
+        branch_name_original = agent_params.get('branch_name_original')
+        tipo_analise = agent_params.get('tipo_analise')
+        codigo_modernizado = repo_reader.read_repository(
+            nome_repo=repo_name_modernizado,
+            tipo_analise=tipo_analise,
+            repository_type=repository_type,
+            nome_branch=branch_name_modernizado,
+            usuario_executor=usuario_executor
+        )
+        codigo_original = repo_reader.read_repository(
+            nome_repo=repo_name_original,
+            tipo_analise=tipo_analise,
+            repository_type=repository_type,
+            nome_branch=branch_name_original,
+            usuario_executor=usuario_executor
+        )
         agente = AgentFactory.create_agent("comparador", repo_reader, llm_provider)
-        agent_response = agente.main(**agent_params)
-        
+        agent_response = agente.main(
+            codigo_modernizado=codigo_modernizado,
+            codigo_original=codigo_original,
+            **agent_params
+        )
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
-        
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
                 print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
                 return previous_step_result
             raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
-        
         return json.loads(cleaned_string)
