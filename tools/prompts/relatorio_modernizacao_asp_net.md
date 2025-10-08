@@ -24,6 +24,7 @@ Seu plano DEVE seguir estes princípios:
 -   [ ] **Detalhamento das mudanças:** Traga uma seção no relatório chamada Plano de Ação Detalhado, com as ações que vão ser feitas, as ações devem ser isoladas entre si, pois vou precisar em alguns casos executar as mudanças aos poucos.
 -   [ ] **O relatório DEVE conter somente a seçao Plano de Ação Detalhado:** Traga sempre os passos da mudança em sequência temporal que deve ser implementado, pois irei implementar as mudanças em fases, então é necessário saber o que devo fazer primeiro.
 -   [ ] **Traga SOMENTE as mudanças necessárias** no relatório pois precisos ser objetivos e economizar token
+-   [ ]  **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA (JSON OBRIGATÓRIO)
 Sua saída DEVE ser um único bloco de código JSON válido, sem nenhum texto fora dele, contendo a chave principal `"relatorio"`.
