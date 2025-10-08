@@ -38,24 +38,34 @@ O sistema de aplicação incremental permite que mudanças de código descritas 
 - `pause_on_high_impact`: Pausa execução antes de tarefas que podem impactar muitos arquivos.
 - `commit_strategy`: Permite escolher granularidade dos commits (`per_task`, `per_layer`, `single`).
 
-## Otimizações
+## Otimizações e Configurações Avançadas
 
-- Cache de contexto reduz leituras repetidas de arquivos.
-- Paralelização de tarefas independentes (até 3 simultâneas).
-- Checkpoints permitem retomada após falha.
-- Sugestão de ordem ótima prioriza tarefas críticas e complexas.
+### Flag `pause_on_high_impact`
+Permite que o sistema pause a execução incremental antes de aplicar tarefas que podem impactar um número elevado de arquivos (por exemplo, mais de 10). Quando ativada, o workflow aguarda aprovação manual antes de prosseguir com estas tarefas, reduzindo riscos de grandes regressões. O sistema loga as tarefas de alto impacto e recomenda revisão manual.
 
-## Limitações
+### Flag `commit_strategy`
+Permite escolher a granularidade dos commits incrementais:
+- `per_task`: Um commit para cada tarefa individual.
+- `per_layer`: Um commit agrupado para todas as tarefas de uma mesma camada (ex: "Domínio", "Serviços").
+- `single`: Um único commit para todas as tarefas do relatório.
+A estratégia utilizada é logada para auditoria e pode ser definida no payload da API.
 
-- Sistema depende de relatórios bem estruturados.
-- Mudanças de infraestrutura não são aplicadas automaticamente.
-- Detecção de dependências implícitas pode ser limitada.
+### Métricas de Performance
+- **Cache hit rate:** O sistema calcula e loga a taxa de acertos do cache de contexto, indicando a eficiência do cache em evitar leituras repetidas do repositório. Exemplo de log: `Cache hit rate: 85.3%`.
+- **Tempo de execução por tarefa:** Cada tarefa tem seu tempo de execução logado, permitindo análise de gargalos e otimização futura.
+- **Paralelização efetiva:** O sistema loga quantas tarefas foram executadas em paralelo em cada nível do grafo de dependências.
 
-## Troubleshooting
+### Interpretação de Logs de Execução Incremental
+- Logs detalham ordem de execução sugerida, tarefas de alto impacto, checkpoints salvos, resultados de testes, commits realizados e eventuais falhas.
+- Logs de paralelização indicam grupos independentes de tarefas executados simultaneamente.
+- Logs de rollback detalham reversões de commits em caso de falha de validação.
 
-- Se parsing do relatório falhar, valide formato conforme exemplos abaixo.
-- Se tarefas de alto impacto forem detectadas, revise manualmente antes de continuar.
-- Em caso de falha, use o endpoint `/resume-incremental-changes/{job_id}` para retomar execução.
+### Troubleshooting de Problemas Comuns
+- **Tarefa falha por timeout:** O sistema tenta até 3 vezes com backoff exponencial. Se todas falharem, tarefa é marcada como failed e dependentes são puladas.
+- **Como aumentar timeout:** Ajuste o parâmetro de timeout no serviço de execução de tarefas ou na configuração do LLM provider.
+- **Parsing do relatório falha:** Verifique se o relatório segue o formato de tabela markdown com as colunas obrigatórias. Consulte exemplos válidos abaixo.
+- **Testes de integração não são encontrados:** Certifique-se que arquivos de teste de integração seguem o padrão `test_integration_*.py` e importam os arquivos modificados.
+- **Execução incremental é lenta:** Verifique logs de cache hit rate e paralelização. Considere aumentar número de threads se o rate limiting do LLM permitir.
 
 ## Exemplos de Relatórios
 
