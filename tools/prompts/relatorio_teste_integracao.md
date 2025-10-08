@@ -25,6 +25,7 @@ Use seu conhecimento sobre a Pirâmide de Testes e padrões de arquitetura para 
 1.  **FOCO NO IMPACTO:** Ignore problemas de baixa severidade. Relate apenas o que for `Médio`, `Alto` ou `Crítico`.
 2.  **SOLUÇÕES MODERNAS:** As ações recomendadas devem priorizar práticas modernas de testes de integração, como o uso de containers.
 3.  **FORMATO JSON ESTRITO:** A saída **DEVE** ser um único bloco JSON válido, com a chave principal `"relatorio"`.
+4.   **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 O seu relatório em Markdown, dentro do JSON, deve ser técnico e acionável.
