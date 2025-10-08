@@ -19,6 +19,7 @@ Sua análise DEVE seguir rigorosamente este checklist para garantir uma cobertur
 -   [ ] **Gerenciamento de Configuração e Segredos:** Confirme que as configurações e strings de conexão do `Web.config` foram migradas corretamente para o `appsettings.json` e que o acesso a segredos foi modernizado (ex: usando o sistema de Injeção de Dependência para `IConfiguration`).
 -   [ ] **Fluxo de Navegação e Roteamento:** Garanta que o fluxo de navegação entre as páginas na aplicação original (`Response.Redirect`) foi replicado corretamente no sistema de roteamento da nova aplicação (ex: diretivas `@page` no Blazor e uso do `NavigationManager`).
 -   [ ] **Funcionalidades Ausentes ou Regressões:** Identifique explicitamente qualquer funcionalidade, por menor que seja (ex: um `Label` de feedback para o usuário, uma validação específica), que existia no código original e que **não foi implementada** no código modernizado.
+-   [ ]  **Estimativa de tempo de execução:** Traga uma seção final com uma estimativa de tempo para execução das tarefas
 
 ## 5. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **FOCO NA EQUIVALÊNCIA:** O foco principal é a paridade funcional. Melhorias de arquitetura (ex: extração de um serviço) devem ser notadas como positivas, desde que mantenham o comportamento original.
