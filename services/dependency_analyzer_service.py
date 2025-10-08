@@ -1,7 +1,7 @@
 import ast
 import networkx as nx
 from typing import List, Dict
-from domain/models/incremental_change_models import CodeTask, TaskDependencyGraph
+from domain.models.incremental_change_models import CodeTask, TaskDependencyGraph
 
 class DependencyAnalyzerService:
     def build_dependency_graph(self, tasks: List[CodeTask], codebase: Dict[str, str]) -> TaskDependencyGraph:
