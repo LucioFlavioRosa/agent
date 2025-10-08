@@ -26,13 +26,20 @@ class IncrementalOrchestratorService:
         levels = self.dependency_analyzer.topological_sort(graph)
         completed_tasks = {}
         execution_order_rationale = []
+        high_impact_tasks = []
+        all_tasks = graph.tasks
         for level in levels:
             sorted_tasks = self._sort_tasks_by_priority(level, graph)
+            print(f"[{job_id}] Ordem de execução sugerida: {[task_id for task_id in sorted_tasks]}")
             execution_order_rationale.append([task_id for task_id in sorted_tasks])
             with ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_task = {}
                 for task_id in sorted_tasks:
                     task = graph.tasks[task_id]
+                    impacted_files = self.dependency_analyzer.analyze_task_impact(task, codebase)
+                    if len(impacted_files) > 10:
+                        print(f"[{job_id}] WARNING: Tarefa {task.id} pode impactar {len(impacted_files)} arquivos. Considere revisão manual.")
+                        high_impact_tasks.append(task.id)
                     context = self._build_task_context(task, completed_tasks)
                     future = executor.submit(self.agente_aplicador.apply_single_task, task, context, job_id)
                     future_to_task[future] = task_id
@@ -58,7 +65,8 @@ class IncrementalOrchestratorService:
             "completed_tasks": [tid for tid, res in completed_tasks.items() if res.success],
             "failed_tasks": [tid for tid, res in completed_tasks.items() if not res.success],
             "commits": [],
-            "execution_order_rationale": execution_order_rationale
+            "execution_order_rationale": execution_order_rationale,
+            "high_impact_tasks": high_impact_tasks
         }
         return summary
 
@@ -85,6 +93,6 @@ class IncrementalOrchestratorService:
             task = graph.tasks[task_id]
             criticidade = sum([1 for t in graph.tasks.values() if task_id in t.dependencies])
             complexidade = task.estimated_tokens
-            risco = len(task.dependencies)
+            risco = len(self.dependency_analyzer.analyze_task_impact(task, {t.file_path: "" for t in graph.tasks.values()}))
             return (-criticidade, -complexidade, -risco)
         return sorted(level, key=priority)
