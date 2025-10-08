@@ -156,7 +156,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             report_text=report_text,
                             repo_name=repo_name,
                             branch_name=job_info['data'].get('branch_name'),
-                            repository_type=repository_type
+                            repository_type=repository_type,
+                            usuario_executor=job_info.get('data', {}).get('usuario_executor')
                         )
                         job_info['data']['incremental_execution_summary'] = incremental_result
                         if incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) == len(incremental_result.get('all_tasks', [])):
@@ -228,6 +229,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'usuario_executor': job_info.get('data', {}).get('usuario_executor')
         })
         agent_params['job_id'] = job_id
+        usuario_executor = job_info.get('data', {}).get('usuario_executor')
+        print(f"[{job_id}] Usuario executor para step {current_step_index}: {usuario_executor}")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
