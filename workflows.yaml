@@ -18,7 +18,7 @@ relatorio_avaliacao_terraform:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_cleancode:
@@ -41,7 +41,7 @@ relatorio_cleancode:
       model_name: "gpt-4.1-mni"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_conformidades:
@@ -64,7 +64,7 @@ relatorio_conformidades:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_docstring:
@@ -87,7 +87,7 @@ relatorio_docstring:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_documentacao:
@@ -110,7 +110,7 @@ relatorio_documentacao:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_implentacao_feature:
@@ -133,7 +133,7 @@ relatorio_implentacao_feature:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_implentacao_feature_azure:
@@ -156,7 +156,7 @@ relatorio_implentacao_feature_azure:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_owasp:
@@ -179,7 +179,7 @@ relatorio_owasp:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
         
 relatorio_pentest:
@@ -202,7 +202,7 @@ relatorio_pentest:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_performance_eficiencia:
@@ -225,7 +225,7 @@ relatorio_performance_eficiencia:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_sast:
@@ -248,7 +248,7 @@ relatorio_sast:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_simplicacao:
@@ -271,7 +271,7 @@ relatorio_simplicacao:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_teste_integracao:
@@ -294,7 +294,7 @@ relatorio_teste_integracao:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
 
 relatorio_teste_unitario:
@@ -317,7 +317,7 @@ relatorio_teste_unitario:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 30000
         
 geracao_codigo_a_partir_de_reuniao:
@@ -340,7 +340,7 @@ geracao_codigo_a_partir_de_reuniao:
       model_name: "gpt-4.1-mini"
       agent_type: "processador"
       params:
-        tipo_analise: "agrupamento_commits"
+        tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 32000
 
 relatorio_modernizacao_asp_net:
