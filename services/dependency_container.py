@@ -123,7 +123,8 @@ class DependencyContainer:
 
     def get_context_cache_service(self) -> ContextCacheService:
         if self._context_cache_service is None:
-            self._context_cache_service = ContextCacheService(self.get_job_store())
+            redis_connection_string = os.getenv("REDIS_URL") 
+            self._context_cache_service = ContextCacheService(redis_connection_string)
         return self._context_cache_service
 
     def get_agente_aplicador_incremental(self) -> AgenteAplicadorIncremental:
