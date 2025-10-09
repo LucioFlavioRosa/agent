@@ -12,7 +12,7 @@ class JobDataService:
 
     def create_initial_job_data(self, payload_dict: dict, normalized_repo_name: str, analysis_name: str) -> dict:
         job_id = payload_dict.get('job_id', 'N/A')
-        print(f"[{job_id}] Flag aplicar_mudancas_incrementalmente definida como: {aplicar_mudancas_incrementalmente}")
+        print(f"[{job_id}] Flag aplicar_mudancas_incrementalmente definida como: {payload_dict.get('aplicar_mudancas_incrementalmente')}")
         return {
             JobFields.STATUS: JobStatus.STARTING,
             JobFields.DATA: {
@@ -36,7 +36,7 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: payload_dict.get('retornar_lista_arquivos', False),
                 JobFields.MODO_ADICAO_INCREMENTAL: payload_dict.get('modo_adicao_incremental', False),
                 JobFields.USUARIO_EXECUTOR: payload_dict.get('usuario_executor'),
-                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: payload_dict.get(JobFields.aplicar_mudancas_incrementalmente),
+                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: payload_dict.get('aplicar_mudancas_incrementalmente'),
             },
             JobFields.ERROR_DETAILS: None
         }
@@ -65,7 +65,7 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
                 JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
                 JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
-                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: original_data.get(JobFields.aplicar_mudancas_incrementalmente),
+                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: original_data.get(JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE),
               
             },
             JobFields.ERROR_DETAILS: None
