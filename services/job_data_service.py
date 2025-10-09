@@ -37,7 +37,7 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: payload_dict.get('retornar_lista_arquivos', False),
                 JobFields.MODO_ADICAO_INCREMENTAL: payload_dict.get('modo_adicao_incremental', False),
                 JobFields.USUARIO_EXECUTOR: payload_dict.get('usuario_executor'),
-                'aplicar_mudancas_incrementalmente': aplicar_mudancas_incrementalmente
+                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: original_data.get(JobFields.aplicar_mudancas_incrementalmente),
             },
             JobFields.ERROR_DETAILS: None
         }
@@ -66,7 +66,8 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
                 JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
                 JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
-                'aplicar_mudancas_incrementalmente': aplicar_mudancas_incrementalmente
+                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: original_data.get(JobFields.aplicar_mudancas_incrementalmente),
+              
             },
             JobFields.ERROR_DETAILS: None
         }
