@@ -9,10 +9,13 @@ class CommitHandler:
     def __init__(self, repository_provider_factory=None, conexao_geral_factory=None):
         self.repository_provider_factory = repository_provider_factory or get_repository_provider_explicit
         self.conexao_geral_factory = conexao_geral_factory or ConexaoGeral.create_with_defaults
+        self.committer = None  # Para validação de tipo
     
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
                       repository_type: str, repo_name: str) -> None:
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
+        if not hasattr(self, 'committer') or self.committer is None:
+            print(f"[{job_id}] [CommitHandler] Tipo do committer: {type(getattr(self, 'committer', None))}, Métodos disponíveis: {dir(getattr(self, 'committer', None))[:5]}...")
         try:
             branch_base_para_pr = job_info['data'].get('branch_name', 'main')
             print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
