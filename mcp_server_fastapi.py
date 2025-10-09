@@ -40,7 +40,7 @@ class StartAnalysisPayload(BaseModel):
     retornar_lista_arquivos: bool = Field(False, description="Se True, além do código filtrado, retorna lista completa de todos os arquivos do repositório")
     modo_adicao_incremental: bool = Field(False, description="Se True, o novo conteúdo será ADICIONADO ao final dos arquivos existentes, ao invés de substituí-los. Útil para migrações de frameworks.")
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
-    aplicar_mudancas_incrementalmente: bool = Field(False, description="Se True, ativa o sistema incremental de aplicação de mudanças de código.")
+    aplicar_mudancas_incrementalmente: bool = Field(True, description="Se True, ativa o sistema incremental de aplicação de mudanças de código.")
 class StartAnalysisResponse(BaseModel):
     job_id: str
     checkpoint_available: Optional[bool] = Field(False, description="Indica se há checkpoint disponível para retomada da execução incremental.")
@@ -92,6 +92,10 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
+    if payload_dict.get('aplicar_mudancas_incrementalmente'):
+        print(f"[{job_id}] [API] Flag aplicar_mudancas_incrementalmente ATIVA na criação do job. Valor: {payload_dict['aplicar_mudancas_incrementalmente']}")
+        if payload_dict.get('gerar_relatorio_apenas'):
+            raise HTTPException(status_code=400, detail="Não é permitido ativar ambos 'aplicar_mudancas_incrementalmente' e 'gerar_relatorio_apenas' simultaneamente.")
     if payload_dict.get('aplicar_mudancas_incrementalmente', False):
         if payload_dict.get('gerar_relatorio_apenas', False):
             raise HTTPException(status_code=400, detail="Não é permitido ativar 'aplicar_mudancas_incrementalmente' quando 'gerar_relatorio_apenas' está ativo.")
@@ -269,7 +273,7 @@ def resume_incremental_changes(job_id: str, background_tasks: BackgroundTasks):
             repo_name=repo_name,
             branch_name=branch_name,
             repository_type=repository_type,
-            completed_tasks=checkpoint.get('completed_tasks', [])
+            completed_task_ids=checkpoint.get('completed_tasks', [])
         )
         job[JobFields.DATA]['incremental_execution_summary'] = incremental_result
         job_store.set_job(job_id, job)
