@@ -12,6 +12,7 @@ class IncrementalCommitterService:
         commit_hash = None
         commit_url = None
         files_committed = list(modified_files.keys())
+        deleted_files = modified_files.get('__deleted_files__', [])
         if commit_strategy == 'per_task':
             commit_message = f"[Incremental] Step {task.step_number}: {task.action} {task.file_path}\n\n{task.description[:200]}..."
             repository_provider = get_repository_provider_explicit(repository_type)
@@ -20,7 +21,8 @@ class IncrementalCommitterService:
                 branch_name=branch_name,
                 files=modified_files,
                 commit_message=commit_message,
-                author=None
+                author=None,
+                deleted_files=deleted_files
             )
             commit_hash = commit_result.get('commit_hash')
             commit_url = commit_result.get('commit_url')
@@ -42,7 +44,8 @@ class IncrementalCommitterService:
                 'commit_url': commit_url,
                 'pr_url': pr_url,
                 'commit_message': commit_message,
-                'files_committed': files_committed
+                'files_committed': files_committed,
+                'deleted_files': deleted_files
             }
         elif commit_strategy == 'per_layer':
             return self.create_grouped_commit(job_id, [task], modified_files, repo_name, branch_name, repository_type, commit_strategy)
@@ -56,6 +59,7 @@ class IncrementalCommitterService:
         pr_url = None
         commit_hash = None
         commit_url = None
+        deleted_files = modified_files.get('__deleted_files__', [])
         if commit_strategy == 'per_layer':
             layer = tasks[0].layer if tasks else 'N/A'
             commit_message = f"[Incremental] Camada {layer}: {len(tasks)} mudanças\n"
@@ -73,7 +77,8 @@ class IncrementalCommitterService:
             branch_name=branch_name,
             files=modified_files,
             commit_message=commit_message,
-            author=None
+            author=None,
+            deleted_files=deleted_files
         )
         commit_hash = commit_result.get('commit_hash')
         commit_url = commit_result.get('commit_url')
@@ -95,7 +100,8 @@ class IncrementalCommitterService:
             'commit_url': commit_url,
             'pr_url': pr_url,
             'commit_message': commit_message,
-            'files_committed': list(modified_files.keys())
+            'files_committed': list(modified_files.keys()),
+            'deleted_files': deleted_files
         }
 
     def rollback_commit(self, commit_hash: str, repo_name: str, repository_type: str) -> Dict[str, Any]:
