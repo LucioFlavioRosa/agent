@@ -3,19 +3,16 @@ from typing import Optional
 from models import JobStatus, JobFields
 
 class JobDataService:
-    """Serviço responsável por criação e manipulação de dados de jobs."""
-    
     def generate_analysis_name(self, provided_name: Optional[str], job_id: str) -> str:
-        """Gera nome de análise automaticamente se não fornecido."""
         if provided_name:
             return provided_name
-        
         analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
         print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
         return analysis_name
-    
     def create_initial_job_data(self, payload_dict: dict, normalized_repo_name: str, analysis_name: str) -> dict:
-        """Cria estrutura inicial de dados do job."""
+        job_id = payload_dict.get('job_id', 'N/A')
+        aplicar_incremental = payload_dict.get('aplicar_mudancas_incrementalmente', False)
+        print(f"[{job_id}] Flag aplicar_mudancas_incrementalmente definida como: {aplicar_incremental}")
         return {
             JobFields.STATUS: JobStatus.STARTING,
             JobFields.DATA: {
@@ -38,14 +35,16 @@ class JobDataService:
                 JobFields.BRANCH_NAME_ORIGINAL: payload_dict.get('branch_name_original'),
                 JobFields.RETORNAR_LISTA_ARQUIVOS: payload_dict.get('retornar_lista_arquivos', False),
                 JobFields.MODO_ADICAO_INCREMENTAL: payload_dict.get('modo_adicao_incremental', False),
-                JobFields.USUARIO_EXECUTOR: payload_dict.get('usuario_executor')
+                JobFields.USUARIO_EXECUTOR: payload_dict.get('usuario_executor'),
+                'aplicar_mudancas_incrementalmente': aplicar_incremental
             },
             JobFields.ERROR_DETAILS: None
         }
-    
     def create_derived_job_data(self, original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
-        """Cria dados de job derivado para implementação baseada em relatório."""
         original_data = original_job[JobFields.DATA]
+        new_job_id = str(uuid.uuid4())
+        aplicar_incremental = original_data.get('aplicar_mudancas_incrementalmente', False)
+        print(f"[{new_job_id}] Job derivado - aplicar_mudancas_incrementalmente: {aplicar_incremental}")
         return {
             JobFields.STATUS: JobStatus.STARTING,
             JobFields.DATA: {
@@ -64,7 +63,8 @@ class JobDataService:
                 JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE],
                 JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
                 JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
-                JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR)
+                JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
+                'aplicar_mudancas_incrementalmente': aplicar_incremental
             },
             JobFields.ERROR_DETAILS: None
         }
