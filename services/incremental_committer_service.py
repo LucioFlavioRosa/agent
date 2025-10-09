@@ -12,54 +12,49 @@ class IncrementalCommitterService:
         commit_hash = None
         commit_url = None
         files_committed = list(modified_files.keys())
-        deleted_files = modified_files.get('__deleted_files__', [])
-        if commit_strategy == 'per_task':
-            commit_message = f"[Incremental] Step {task.step_number}: {task.action} {task.file_path}\n\n{task.description[:200]}..."
-            repository_provider = get_repository_provider_explicit(repository_type)
-            commit_result = repository_provider.commit_changes(
-                repo_name=repo_name,
-                branch_name=branch_name,
-                files=modified_files,
-                deleted_files=deleted_files,
-                commit_message=commit_message,
-                author=None
-            )
-            commit_hash = commit_result.get('commit_hash')
-            commit_url = commit_result.get('commit_url')
-            pr_url = commit_result.get('pr_url')
-            if not pr_url and hasattr(repository_provider, 'create_pull_request'):
-                try:
-                    pr_result = repository_provider.create_pull_request(
-                        repo_name=repo_name,
-                        source_branch=branch_name,
-                        target_branch='main',
-                        title=commit_message,
-                        description=commit_message
-                    )
-                    pr_url = pr_result.get('pr_url')
-                except Exception as e:
-                    pr_url = f"ERRO: Falha ao criar PR - {str(e)}"
-            return {
-                'commit_hash': commit_hash,
-                'commit_url': commit_url,
-                'pr_url': pr_url,
-                'commit_message': commit_message,
-                'files_committed': files_committed,
-                'deleted_files': deleted_files
-            }
-        elif commit_strategy == 'per_layer':
-            return self.create_grouped_commit(job_id, [task], modified_files, repo_name, branch_name, repository_type, commit_strategy)
-        elif commit_strategy == 'single':
-            return self.create_grouped_commit(job_id, [task], modified_files, repo_name, branch_name, repository_type, commit_strategy)
-        else:
-            raise ValueError(f"Estratégia de commit desconhecida: {commit_strategy}")
-
+        deleted_files = getattr(task, 'deleted_files', []) if hasattr(task, 'deleted_files') else []
+        commit_message = f"[Incremental] Step {task.step_number}: {task.action} {task.file_path}\n\n{task.description[:200]}..."
+        repository_provider = get_repository_provider_explicit(repository_type)
+        commit_result = repository_provider.commit_changes(
+            repo_name=repo_name,
+            branch_name=branch_name,
+            files=modified_files,
+            deleted_files=deleted_files,
+            commit_message=commit_message,
+            author=None
+        )
+        commit_hash = commit_result.get('commit_hash')
+        commit_url = commit_result.get('commit_url')
+        pr_url = commit_result.get('pr_url')
+        if not pr_url and hasattr(repository_provider, 'create_pull_request'):
+            try:
+                pr_result = repository_provider.create_pull_request(
+                    repo_name=repo_name,
+                    source_branch=branch_name,
+                    target_branch='main',
+                    title=commit_message,
+                    description=commit_message
+                )
+                pr_url = pr_result.get('pr_url')
+            except Exception as e:
+                pr_url = f"ERRO: Falha ao criar PR - {str(e)}"
+        return {
+            'commit_hash': commit_hash,
+            'commit_url': commit_url,
+            'pr_url': pr_url,
+            'commit_message': commit_message,
+            'files_committed': files_committed,
+            'deleted_files': deleted_files
+        }
     def create_grouped_commit(self, job_id: str, tasks: List[Any], modified_files: Dict[str, str], repo_name: str, branch_name: str, repository_type: str, commit_strategy: Literal['per_task', 'per_layer', 'single'] = 'per_layer') -> Dict[str, Any]:
         print(f"[{job_id}] Usando estratégia de commit: {commit_strategy}")
         pr_url = None
         commit_hash = None
         commit_url = None
-        deleted_files = modified_files.get('__deleted_files__', [])
+        deleted_files = []
+        for task in tasks:
+            if hasattr(task, 'deleted_files'):
+                deleted_files.extend(getattr(task, 'deleted_files', []))
         if commit_strategy == 'per_layer':
             layer = tasks[0].layer if tasks else 'N/A'
             commit_message = f"[Incremental] Camada {layer}: {len(tasks)} mudanças\n"
@@ -103,7 +98,6 @@ class IncrementalCommitterService:
             'files_committed': list(modified_files.keys()),
             'deleted_files': deleted_files
         }
-
     def rollback_commit(self, commit_hash: str, repo_name: str, repository_type: str) -> Dict[str, Any]:
         repository_provider = get_repository_provider_explicit(repository_type)
         try:
