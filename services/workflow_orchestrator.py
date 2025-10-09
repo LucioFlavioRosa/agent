@@ -160,6 +160,19 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             usuario_executor=job_info.get('data', {}).get('usuario_executor')
                         )
                         job_info['data']['incremental_execution_summary'] = incremental_result
+                        # Propaga PRs criados para commit_details
+                        commit_details = []
+                        for pr in incremental_result.get('pull_requests', []):
+                            commit_details.append({
+                                'branch_name': pr.get('branch_name'),
+                                'success': pr.get('pr_url') is not None and pr.get('pr_url', '').startswith('http'),
+                                'pr_url': pr.get('pr_url'),
+                                'message': 'PR criado incrementalmente',
+                                'arquivos_modificados': []
+                            })
+                        if commit_details:
+                            job_info['data']['commit_details'] = commit_details
+                        print(f"[{job_id}] [Incremental] commit_details após propagação: {job_info['data'].get('commit_details')}")
                         if incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) == len(incremental_result.get('all_tasks', [])):
                             print(f"[{job_id}] [Incremental] Todas as tarefas falharam. Marcando job como failed.")
                             self.job_handler.update_job_status(job_id, JobFields.FAILED)
@@ -169,12 +182,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             print(f"[{job_id}] [Incremental] Execução parcial: algumas tarefas falharam. Continuando workflow com warning.")
                             job_info['data']['incremental_warning'] = 'Execução incremental parcialmente bem-sucedida. Algumas tarefas falharam.'
                             self.job_handler.update_job(job_id, job_info)
-                            # Continua workflow normalmente
                         else:
                             print(f"[{job_id}] [Incremental] Execução 100% bem-sucedida. Pulando steps de aplicação de mudanças.")
                             self.job_handler.update_job(job_id, job_info)
-                            # Pula steps 1 e 2 do workflow atual
-                            # Vai direto para step de aprovação/commit final
                             return
                     except Exception as e:
                         print(f"[{job_id}] [Incremental] Falha na execução incremental: {e}")
