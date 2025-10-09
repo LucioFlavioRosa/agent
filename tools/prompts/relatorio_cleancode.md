@@ -36,5 +36,9 @@ O JSON de saída deve conter exatamente uma chave no nível principal: `relatori
 
 ```json
 {
-  "relatorio": "# Relatório de Auditoria de Princípios SOLID\n\n## 1. Violação do Princípio da Inversão de Dependência (DIP)\n\n**Severidade:** Severo\n\n- **Problema:** A classe `OrderProcessor` no arquivo `services/order_service.py` instancia diretamente uma conexão com o banco de dados: `self.db_connection = PostgreSQLConnection()`. Isso acopla a lógica de negócio diretamente à implementação do banco de dados PostgreSQL, tornando impossível testar a classe de forma isolada ou trocar o banco no futuro sem alterar o código.\n\n## 2. Violação do Princípio da Responsabilidade Única (SRP)\n\n**Severidade:** Moderado\n\n- **Problema:** A classe `User` em `models/user.py` possui métodos para gerenciar dados (`save`, `load`), para validar o e-mail (`validate_email_format`) e para enviar notificações (`send_welcome_email`). Ela tem mais de uma razão para mudar (mudanças na lógica de persistência, nas regras de validação ou no sistema de notificações).\n\n## 3. Plano de Refatoração SOLID\n\n| Arquivo a Modificar | Ação de Refatoração Recomendada |\n|---|---|\n| `services/order_service.py` | Modificar o construtor de `OrderProcessor` para receber uma abstração de banco de dados (ex: `IDatabaseConnection`) via Injeção de Dependência. |\n| `models/user.py` | Extrair a lógica de envio de e-mails para uma nova classe `NotificationService` e a lógica de validação para uma classe `UserValidator`. A classe `User` deve ser apenas um objeto de dados (DTO/Entity). |"
+  "relatorio": "# Relatório de Auditoria de Princípios SOLID
+  | Passo # | Camada | Ação | Caminho do Arquivo | Descrição |
+  |---|---|---|---|---|
+  | 1 | Domínio | CRIAR | `domain/models/rbac_models.py` | explicar detalhadamente o que deve ser feito eos motivos |
+  | 2 | Serviços | MODIFICAR | `services/rbac_service.py` | explicar detalhadamente o que deve ser feito eos motivos |
 }
