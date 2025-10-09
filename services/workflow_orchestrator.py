@@ -162,19 +162,18 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         import json as _json
                         print(f"[WORKFLOW_ORCHESTRATOR] incremental_result recebido: {_json.dumps(incremental_result, indent=2)}")
                         job_info['data']['incremental_execution_summary'] = incremental_result
-                        # Propaga PRs criados para commit_details
                         commit_details = []
                         for pr in incremental_result.get('pull_requests', []):
                             commit_details.append({
                                 'branch_name': pr.get('branch_name'),
-                                'success': pr.get('pr_url') is not None and pr.get('pr_url', '').startswith('http'),
+                                'success': pr.get('pr_url') is not None and (pr.get('pr_url', '').startswith('http') or 'PR criado' in pr.get('pr_url', '')), 
                                 'pr_url': pr.get('pr_url'),
                                 'message': 'PR criado incrementalmente',
                                 'arquivos_modificados': []
                             })
                         if commit_details:
                             job_info['data']['commit_details'] = commit_details
-                        print(f"[WORKFLOW_ORCHESTRATOR] commit_details após propagação: {_json.dumps(job_info['data'].get('commit_details'), indent=2)}")
+                            print(f"[{job_id}] [WorkflowOrchestrator] commit_details propagado do modo incremental: {_json.dumps(commit_details, indent=2)}")
                         self.job_handler.update_job(job_id, job_info)
                         if incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) == len(incremental_result.get('all_tasks', [])):
                             print(f"[{job_id}] [Incremental] Todas as tarefas falharam. Marcando job como failed.")
@@ -275,8 +274,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.update_job_status(job_id, 'committing_to_github')
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
         import json as _json
-        print(f"[WORKFLOW_ORCHESTRATOR] commit_details após execute_commits: {_json.dumps(job_info['data'].get('commit_details'), indent=2)}")
+        print(f"[{job_id}] [WorkflowOrchestrator] commit_details após execute_commits: {_json.dumps(job_info['data'].get('commit_details'), indent=2)}")
         self.job_handler.update_job(job_id, job_info)
+        print(f"[{job_id}] [WorkflowOrchestrator] Job atualizado no job store após commits.")
         print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info['data'].get('commit_details', [])}")
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
         self.job_handler.update_job_status(job_id, 'completed')
