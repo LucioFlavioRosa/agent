@@ -15,6 +15,8 @@ class ResponseBuilderService:
         gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
         aplicar_incremental = job_data.get('aplicar_mudancas_incrementalmente', False)
         print(f"[{job_id}] [ResponseBuilder] Construindo resposta - modo relatório: {gerar_relatorio_apenas}, modo incremental: {aplicar_incremental}")
+        print(f"[{job_id}] [ResponseBuilder] commit_details presente: {bool(job_data.get('commit_details'))}, tamanho: {len(job_data.get('commit_details', []))}")
+        print(f"[{job_id}] [ResponseBuilder] incremental_execution_summary presente: {bool(job_data.get('incremental_execution_summary'))}")
         if aplicar_incremental:
             print(f"[{job_id}] [ResponseBuilder] incremental_execution_summary: {job_data.get('incremental_execution_summary')}")
         else:
@@ -41,11 +43,15 @@ class ResponseBuilderService:
     def _build_standard_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
         job_data = job.get(JobFields.DATA, {})
         summary_list = self.pr_extractor_service.extract_pull_requests(job_id, job_data)
-        print(f"[{job_id}] [ResponseBuilder] PRs extraídos: {len(summary_list)}")
-        for pr in summary_list:
-            print(f"[{job_id}] [ResponseBuilder] PR: branch={pr.branch_name}, url={pr.pull_request_url}")
+        print(f"[{job_id}] [ResponseBuilder] PRs extraídos pelo extractor: {len(summary_list)}")
+        for i, pr in enumerate(summary_list):
+            print(f"[{job_id}] [ResponseBuilder] PR {i+1}: branch={pr.branch_name}, url={pr.pull_request_url}")
         if not summary_list:
-            print(f"[{job_id}] [ResponseBuilder] WARNING: Nenhum PR encontrado para job completo.")
+            print(f"[{job_id}] [ResponseBuilder] WARNING: summary_list vazio. Tentando re-extrair PRs...")
+            summary_list = self.pr_extractor_service.extract_pull_requests(job_id, job_data)
+            if not summary_list:
+                print(f"[{job_id}] [ResponseBuilder] ERRO: Re-extração falhou. commit_details: {job_data.get('commit_details')}, incremental_summary: {job_data.get('incremental_execution_summary')}")
+                raise HTTPException(status_code=500, detail="Erro interno: PRs não puderam ser extraídos para job completo.")
         self.logging_service.log_completed_job(job_id, job_data, summary_list, blob_url)
         final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
