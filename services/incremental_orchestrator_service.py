@@ -70,7 +70,10 @@ class IncrementalOrchestratorService:
                             impacted_files = self.dependency_analyzer.analyze_task_impact(all_tasks[tid], codebase)
                             valid = self._validate_task_result(all_tasks[tid], result, impacted_files)
                             if valid:
-                                commit_result = self.committer.create_incremental_commit(job_id, all_tasks[tid], result.modified_files, repo_name, branch_name, repository_type)
+                                modified_files = result.modified_files
+                                if hasattr(result, 'deleted_files') and result.deleted_files:
+                                    modified_files['__deleted_files__'] = result.deleted_files
+                                commit_result = self.committer.create_incremental_commit(job_id, all_tasks[tid], modified_files, repo_name, branch_name, repository_type)
                                 pr_url = commit_result.get('pr_url')
                                 pr_urls.append(pr_url)
                                 pull_requests.append({
@@ -105,7 +108,6 @@ class IncrementalOrchestratorService:
         if paused_for_high_impact:
             result_summary["paused_for_high_impact"] = True
         return result_summary
-
     def _build_task_context(self, task: CodeTask, completed_tasks: Dict[str, TaskExecutionResult]) -> TaskExecutionContext:
         related_files = {}
         for dep in task.dependencies:
@@ -114,11 +116,9 @@ class IncrementalOrchestratorService:
                 related_files[dep] = cached
         previous_task_results = [completed_tasks[dep].__dict__ for dep in task.dependencies if dep in completed_tasks]
         return TaskExecutionContext(task=task, related_files=related_files, previous_task_results=previous_task_results)
-
     def _validate_task_result(self, task: CodeTask, result: TaskExecutionResult, impacted_files: List[str]) -> bool:
         test_result = self.test_runner.run_tests_for_files(list(result.modified_files.keys()), "./repo")
         return test_result.get("success", False)
-
     def get_checkpoint(self, job_id: str) -> Optional[Dict[str, Any]]:
         checkpoint_key = f"checkpoint:{job_id}"
         data = self.redis_client.get(checkpoint_key)
