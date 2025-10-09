@@ -3,11 +3,16 @@ from models import PullRequestSummary
 
 class PullRequestExtractorService:
     def extract_pull_requests(self, job_id: str, job_data: dict) -> List[PullRequestSummary]:
-        if job_data.get('aplicar_mudancas_incrementalmente', False):
-            print(f"[{job_id}] [PRExtractor] Modo incremental detectado. Extraindo PRs de incremental_execution_summary.")
+        aplicar_incremental = job_data.get('aplicar_mudancas_incrementalmente', False)
+        print(f"[{job_id}] [PRExtractor] Modo {'incremental' if aplicar_incremental else 'padrão'} detectado. Extraindo PRs.")
+        if aplicar_incremental:
             return self._extract_prs_from_incremental_summary(job_id, job_data)
-        print(f"[{job_id}] [PRExtractor] Modo padrão detectado. Extraindo PRs de commit_details.")
         return self._extract_prs_from_commit_details(job_id, job_data)
+
+    def _validate_pr_url(self, pr_url: str) -> bool:
+        if not pr_url or not isinstance(pr_url, str):
+            return False
+        return pr_url.startswith('http://') or pr_url.startswith('https://')
 
     def _extract_prs_from_incremental_summary(self, job_id: str, job_data: dict) -> List[PullRequestSummary]:
         summary_list = []
@@ -17,7 +22,7 @@ class PullRequestExtractorService:
         for pr in pull_requests:
             pr_url = pr.get('pr_url')
             branch_name = pr.get('branch_name', 'branch-desconhecida')
-            if not pr_url or not isinstance(pr_url, str) or pr_url.strip() == '':
+            if not self._validate_pr_url(pr_url):
                 print(f"[{job_id}] [PRExtractor] WARNING: PR incremental sem URL válida para branch {branch_name}. Pulando.")
                 continue
             task_ids = pr.get('task_ids', [])
@@ -28,15 +33,17 @@ class PullRequestExtractorService:
                 arquivos_modificados=arquivos_modificados
             ))
             print(f"[{job_id}] [PRExtractor] PR incremental extraído: branch={branch_name}, url={pr_url}")
+        print(f"[{job_id}] [PRExtractor] PRs válidos extraídos (incremental): {len(summary_list)}")
         return summary_list
 
     def _extract_prs_from_commit_details(self, job_id: str, job_data: dict) -> List[PullRequestSummary]:
         summary_list = []
         commit_details = job_data.get('commit_details', [])
+        print(f"[{job_id}] [PRExtractor] Extraindo PRs do modo padrão. Total encontrado: {len(commit_details)}")
         for pr in commit_details:
             pr_url = pr.get('pr_url')
             branch_name = pr.get('branch_name', 'branch-desconhecida')
-            if not pr_url or not isinstance(pr_url, str) or pr_url.strip() == '':
+            if not self._validate_pr_url(pr_url):
                 print(f"[{job_id}] [PRExtractor] WARNING: PR padrão sem URL válida para branch {branch_name}. Pulando.")
                 continue
             arquivos_modificados = pr.get('arquivos_modificados', [])
@@ -46,4 +53,5 @@ class PullRequestExtractorService:
                 arquivos_modificados=arquivos_modificados
             ))
             print(f"[{job_id}] [PRExtractor] PR padrão extraído: branch={branch_name}, url={pr_url}")
+        print(f"[{job_id}] [PRExtractor] PRs válidos extraídos (padrão): {len(summary_list)}")
         return summary_list
