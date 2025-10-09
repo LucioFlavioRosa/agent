@@ -56,6 +56,7 @@ class JobFields:
     RETORNAR_LISTA_ARQUIVOS = 'retornar_lista_arquivos'
     MODO_ADICAO_INCREMENTAL = 'modo_adicao_incremental'
     USUARIO_EXECUTOR = 'usuario_executor'
+    APLICAR_MUDANCAS_INCREMENTALMENTE = 'aplicar_mudancas_incrementalmente'
 
 class JobActions:
     APPROVE = 'approve'
