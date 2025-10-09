@@ -11,7 +11,6 @@ class CodeTask(BaseModel):
     dependencies: List[str] = []
     estimated_tokens: int = 0
     status: Literal['pending', 'running', 'completed', 'failed'] = 'pending'
-    deleted_files: List[str] = []
 
 class TaskDependencyGraph(BaseModel):
     tasks: Dict[str, CodeTask]
