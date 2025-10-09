@@ -4,29 +4,24 @@ import time
 import traceback
 import os
 from urllib.parse import urlparse
-
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
-
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
 from services.api_service_factory import ApiServiceFactory
 from services.response_builder_service import FinalStatusResponse
 from models import JobStatus, JobFields, JobActions
-
 container = DependencyContainer()
 api_service_factory = ApiServiceFactory()
 workflow_registry_service = container.get_workflow_registry_service()
 ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
-
 response_builder_service = api_service_factory.get_response_builder_service()
 repository_normalizer_service = api_service_factory.get_repository_normalizer_service()
 job_data_service = api_service_factory.get_job_data_service()
 job_validation_service = api_service_factory.get_job_validation_service()
 logging_service = api_service_factory.get_logging_service()
-
 class StartAnalysisPayload(BaseModel):
     repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
     branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
@@ -46,32 +41,26 @@ class StartAnalysisPayload(BaseModel):
     modo_adicao_incremental: bool = Field(False, description="Se True, o novo conteúdo será ADICIONADO ao final dos arquivos existentes, ao invés de substituí-los. Útil para migrações de frameworks.")
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     aplicar_mudancas_incrementalmente: bool = Field(False, description="Se True, ativa o sistema incremental de aplicação de mudanças de código.")
-
 class StartAnalysisResponse(BaseModel):
     job_id: str
     checkpoint_available: Optional[bool] = Field(False, description="Indica se há checkpoint disponível para retomada da execução incremental.")
-
 class UpdateJobPayload(BaseModel):
     job_id: str
     action: Literal["approve", "reject"]
     instrucoes_extras: Optional[str] = None
-
 class PullRequestSummary(BaseModel):
     pull_request_url: str
     branch_name: str
     arquivos_modificados: List[str]
-
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
     report_blob_url: Optional[str] = Field(None)
-
 class AnalysisByNameResponse(BaseModel):
     job_id: str
     analysis_name: str
     analysis_report: Optional[str]
     report_blob_url: Optional[str] = Field(None)
-
 class FinalStatusResponse(BaseModel):
     job_id: str
     status: str
@@ -81,18 +70,15 @@ class FinalStatusResponse(BaseModel):
     diagnostic_logs: Optional[Dict[str, Any]] = None
     report_blob_url: Optional[str] = None
     incremental_execution_summary: Optional[Dict[str, Any]] = None
-
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA.",
     version="9.0.0" 
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
-
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
@@ -128,7 +114,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     except Exception:
         checkpoint_available = False
     return StartAnalysisResponse(job_id=job_id, checkpoint_available=checkpoint_available)
-
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
@@ -148,7 +133,6 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         job[JobFields.STATUS] = JobStatus.REJECTED
         job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
-
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
     job_store = container.get_job_store()
@@ -160,7 +144,6 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     report = job_validation_service.get_report_from_job(job, job_id)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
     return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
-
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
     job_store = container.get_job_store()
@@ -176,7 +159,6 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
         analysis_report=report,
         report_blob_url=blob_url
     )
-
 @app.post("/start-code-generation-from-report/{analysis_name}", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
@@ -209,7 +191,6 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     except Exception:
         checkpoint_available = False
     return StartAnalysisResponse(job_id=new_job_id, checkpoint_available=checkpoint_available)
-
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
@@ -221,16 +202,24 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
     analysis_report = job_data.get(JobFields.ANALYSIS_REPORT, None)
     incremental_execution_summary = job_data.get('incremental_execution_summary')
+    aplicar_incremental = job_data.get('aplicar_mudancas_incrementalmente', False)
     print(f"[{job_id}] [get_status] status: {status}")
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
+    print(f"[{job_id}] [get_status] aplicar_mudancas_incrementalmente: {aplicar_incremental}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
     print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
+    print(f"[{job_id}] [get_status] commit_details: {job_data.get('commit_details')}")
+    print(f"[{job_id}] [get_status] incremental_execution_summary: {incremental_execution_summary}")
     if incremental_execution_summary:
         print(f"[{job_id}] [API] Retornando incremental_execution_summary: {incremental_execution_summary}")
         print(f"[{job_id}] [API] commit_details: {job_data.get('commit_details')}")
     try:
         if status == JobStatus.COMPLETED:
-            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, analysis_report=analysis_report, incremental_execution_summary=incremental_execution_summary)
+            response = response_builder_service.build_completed_response(job_id, job, blob_url)
+            print(f"[{job_id}] [get_status] Conteúdo do campo summary da resposta: {getattr(response, 'summary', None)}")
+            if not getattr(response, 'summary', None):
+                print(f"[{job_id}] [get_status] ERROR: Campo summary vazio ou None para job COMPLETED.")
+            return response
         elif status == JobStatus.FAILED:
             return response_builder_service.build_failed_response(job_id, job)
         else:
@@ -239,7 +228,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
         raise
-
 @app.get("/reports/{report_name}/jobs", response_model=List[str], tags=["Reports"])
 def get_jobs_for_report(report_name: str):
     blob_storage = container.get_blob_storage()
@@ -254,7 +242,6 @@ def get_jobs_for_report(report_name: str):
     except Exception as e:
         print(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar jobs associados ao relatório.")
-
 @app.post("/resume-incremental-changes/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def resume_incremental_changes(job_id: str, background_tasks: BackgroundTasks):
     context_cache_service = container.get_context_cache_service()
