@@ -16,7 +16,8 @@ class JobHandler:
         old_job = self.job_manager.get_job(job_id)
         updated_job = job_info
         if old_job and old_job.get('data', {}).get('aplicar_mudancas_incrementalmente') and not updated_job.get('data', {}).get('aplicar_mudancas_incrementalmente'):
-            print(f"[{job_id}] WARNING: Flag aplicar_mudancas_incrementalmente foi perdida durante atualização do job!")
+            print(f"[{job_id}] RESTAURANDO flag aplicar_mudancas_incrementalmente perdida")
+            updated_job['data']['aplicar_mudancas_incrementalmente'] = True
         self.job_manager.update_job(job_id, job_info)
     def handle_job_error(self, job_id: str, error: Exception, context: str) -> None:
         self.job_manager.handle_job_error(job_id, error, context)
