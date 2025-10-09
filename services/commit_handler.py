@@ -52,13 +52,7 @@ class CommitHandler:
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
-                mudancas_validas, mudancas_exclusao = [], []
-                for mudanca in grupo.get("conjunto_de_mudancas", []):
-                    status = mudanca.get('status', '').upper()
-                    if status == 'DELETE':
-                        mudancas_exclusao.append(mudanca)
-                    elif status in ['CRIADO', 'CRIAR', 'MODIFICADO', 'MODIFICAR', 'CREATE', 'MODIFY']:
-                        mudancas_validas.append(mudanca)
+                mudancas_exclusao = [m for m in grupo.get("conjunto_de_mudancas", []) if m.get('status') == 'DELETE']
                 if mudancas_exclusao:
                     print(f"[{job_id}] Processando {len(mudancas_exclusao)} exclusões no grupo {i+1}")
                 try:
