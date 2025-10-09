@@ -27,3 +27,4 @@ class TaskExecutionResult(BaseModel):
     modified_files: Dict[str, str]
     error_message: Optional[str] = None
     tokens_used: int = 0
+    pr_url: Optional[str] = None
