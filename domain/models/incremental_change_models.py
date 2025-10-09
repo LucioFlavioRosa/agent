@@ -28,3 +28,4 @@ class TaskExecutionResult(BaseModel):
     error_message: Optional[str] = None
     tokens_used: int = 0
     pr_url: Optional[str] = None
+    deleted_files: List[str] = []
