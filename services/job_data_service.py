@@ -37,7 +37,7 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: payload_dict.get('retornar_lista_arquivos', False),
                 JobFields.MODO_ADICAO_INCREMENTAL: payload_dict.get('modo_adicao_incremental', False),
                 JobFields.USUARIO_EXECUTOR: payload_dict.get('usuario_executor'),
-                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: original_data.get(JobFields.aplicar_mudancas_incrementalmente),
+                JobFields.APLICAR_MUDANCAS_INCREMENTALMENTE: payload_dict.get(JobFields.aplicar_mudancas_incrementalmente),
             },
             JobFields.ERROR_DETAILS: None
         }
