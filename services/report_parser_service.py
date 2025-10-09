@@ -1,25 +1,17 @@
 class ReportParserService:
     def parse_implementation_plan(self, report_text):
-        tasks = []
-        for line in report_text.splitlines():
-            if 'EXCLUIR' in line or 'DELETE' in line:
-                # Exemplo: | 3 | Serviços | EXCLUIR | `backend/app/deprecated_module.py` | ... |
-                parts = [p.strip(' |`') for p in line.split('|')]
-                if len(parts) >= 5:
-                    step_number = int(parts[0])
-                    layer = parts[1]
-                    action = 'DELETE'
-                    file_path = parts[3]
-                    description = parts[4]
-                    tasks.append(CodeTask(
-                        id=f"task-{step_number}",
-                        step_number=step_number,
-                        layer=layer,
-                        action=action,
-                        file_path=file_path,
-                        description=description,
-                        dependencies=[],
-                        estimated_tokens=0
-                    ))
-            # ... parsing padrão para outras ações ...
-        return tasks
+        # Parseia o relatório e identifica ações de exclusão
+        tarefas = []
+        for linha in report_text.splitlines():
+            if 'EXCLUIR' in linha or 'DELETE' in linha:
+                partes = linha.split('|')
+                if len(partes) >= 5:
+                    file_path = partes[3].strip().strip('`')
+                    description = partes[4].strip()
+                    tarefas.append({
+                        'action': 'DELETE',
+                        'file_path': file_path,
+                        'description': description
+                    })
+            # ... lógica para outras ações ...
+        return tarefas
