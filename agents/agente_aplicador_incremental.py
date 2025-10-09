@@ -11,7 +11,8 @@ class AgenteAplicadorIncremental:
         self.llm_provider = llm_provider
         self.context_cache_service = context_cache_service
 
-    def apply_single_task(self, task: CodeTask, context: TaskExecutionContext, job_id: str) -> TaskExecutionResult:
+    def apply_single_task(self, task: CodeTask, context: TaskExecutionContext, job_id: str, usuario_executor: Optional[str] = None) -> TaskExecutionResult:
+        print(f"[{job_id}] [AgenteAplicador] ENTRADA - Tarefa {task.id}, job_id recebido: {job_id}")
         max_attempts = 3
         attempt = 0
         last_error = None
@@ -19,6 +20,7 @@ class AgenteAplicadorIncremental:
         while attempt < max_attempts:
             try:
                 prompt = self._build_prompt(task, context)
+                print(f"[{job_id}] [AgenteAplicador] Chamando LLM com tipo_tarefa='aplicacao_incremental_mudanca'")
                 response = self.llm_provider.executar_prompt(
                     tipo_tarefa="aplicacao_incremental_mudanca",
                     prompt_principal=prompt,
@@ -40,8 +42,9 @@ class AgenteAplicadorIncremental:
                         tipo_analise='aplicacao_incremental_mudanca',
                         model_name='N/A',
                         modo_adicao_incremental=False,
-                        usuario_executor=None
+                        usuario_executor=usuario_executor
                     )
+                    print(f"[{job_id}] [AgenteAplicador] Log customizado registrado com tipo_analise='aplicacao_incremental_mudanca'")
                 print(f"[{job_id}] [AgenteAplicador] Tarefa {task.id} finalizada. Sucesso: {success}, arquivos modificados: {len(arquivos_modificados)}")
                 return TaskExecutionResult(
                     task_id=task.id,
