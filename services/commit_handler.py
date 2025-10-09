@@ -11,6 +11,7 @@ class CommitHandler:
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
                       repository_type: str, repo_name: str) -> None:
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
+        
         try:
             branch_base_para_pr = job_info['data'].get('branch_name', 'main')
             print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
@@ -52,7 +53,8 @@ class CommitHandler:
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
-                mudancas_exclusao = [m for m in grupo.get("conjunto_de_mudancas", []) if m.get('status') == 'DELETE']
+                conjunto_de_mudancas = grupo.get("conjunto_de_mudancas", [])
+                mudancas_exclusao = [m for m in conjunto_de_mudancas if m.get('status', '').upper() == 'DELETE']
                 if mudancas_exclusao:
                     print(f"[{job_id}] Processando {len(mudancas_exclusao)} exclusões no grupo {i+1}")
                 try:
@@ -63,7 +65,7 @@ class CommitHandler:
                         branch_alvo_do_pr=branch_base_para_pr,
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
                         descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
-                        conjunto_de_mudancas=grupo.get("conjunto_de_mudancas", []),
+                        conjunto_de_mudancas=conjunto_de_mudancas,
                         repository_type=repository_type,
                         modo_adicao_incremental=modo_adicao_incremental
                     )
