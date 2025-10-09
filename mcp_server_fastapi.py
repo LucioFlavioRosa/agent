@@ -206,6 +206,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     print(f"[{job_id}] [get_status] status: {status}")
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [get_status] aplicar_mudancas_incrementalmente: {aplicar_incremental}")
+    print(f"[{job_id}] [API /status] Flag aplicar_mudancas_incrementalmente na resposta: {job_data.get('aplicar_mudancas_incrementalmente')}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
     print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
     print(f"[{job_id}] [get_status] commit_details: {job_data.get('commit_details')}")
