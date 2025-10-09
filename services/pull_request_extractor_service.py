@@ -24,6 +24,25 @@ class PullRequestExtractorService:
         incremental_summary = job_data.get('incremental_execution_summary', {})
         pull_requests = incremental_summary.get('pull_requests', [])
         print(f"[{job_id}] [PRExtractor] Extraindo PRs do modo incremental. Total encontrado: {len(pull_requests)}")
+        if not pull_requests:
+            commit_details = job_data.get('commit_details', [])
+            print(f"[{job_id}] [PRExtractor] FALLBACK: incremental_execution_summary vazio, lendo de commit_details. Total: {len(commit_details)}")
+            for pr in commit_details:
+                pr_url = pr.get('pr_url')
+                branch_name = pr.get('branch_name', 'branch-desconhecida')
+                print(f"[{job_id}] [PRExtractor] Validando PR fallback: branch={branch_name}, pr_url='{pr_url}'")
+                if not self._validate_pr_url(pr_url):
+                    print(f"[{job_id}] [PRExtractor] WARNING: PR fallback REJEITADO para branch {branch_name}. URL: '{pr_url}'")
+                    continue
+                arquivos_modificados = pr.get('arquivos_modificados', [])
+                summary_list.append(PullRequestSummary(
+                    pull_request_url=pr_url,
+                    branch_name=branch_name,
+                    arquivos_modificados=arquivos_modificados
+                ))
+                print(f"[{job_id}] [PRExtractor] PR fallback ACEITO: branch={branch_name}, url={pr_url}")
+            print(f"[{job_id}] [PRExtractor] PRs válidos extraídos (fallback): {len(summary_list)}")
+            return summary_list
         for pr in pull_requests:
             pr_url = pr.get('pr_url')
             branch_name = pr.get('branch_name', 'branch-desconhecida')
