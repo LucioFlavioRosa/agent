@@ -12,8 +12,8 @@ class IncrementalCommitterService:
         commit_hash = None
         commit_url = None
         files_committed = list(modified_files.keys())
-        deleted_files = getattr(task, 'deleted_files', []) if hasattr(task, 'deleted_files') else []
-        commit_message = f"[Incremental] Step {task.step_number}: {task.action} {task.file_path}\n\n{task.description[:200]}..."
+        deleted_files = modified_files.get('__deleted_files__', [])
+        commit_message = f"[Incremental] Step {task.step_number}: {task.action} {task.file_path}\n{task.description[:200]}..."
         repository_provider = get_repository_provider_explicit(repository_type)
         commit_result = repository_provider.commit_changes(
             repo_name=repo_name,
@@ -51,10 +51,7 @@ class IncrementalCommitterService:
         pr_url = None
         commit_hash = None
         commit_url = None
-        deleted_files = []
-        for task in tasks:
-            if hasattr(task, 'deleted_files'):
-                deleted_files.extend(getattr(task, 'deleted_files', []))
+        deleted_files = modified_files.get('__deleted_files__', [])
         if commit_strategy == 'per_layer':
             layer = tasks[0].layer if tasks else 'N/A'
             commit_message = f"[Incremental] Camada {layer}: {len(tasks)} mudanças\n"
