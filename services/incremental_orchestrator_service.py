@@ -17,11 +17,17 @@ class IncrementalOrchestratorService:
 
     def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None, pause_on_high_impact: bool = False) -> Dict[str, Any]:
         tasks = self.report_parser.parse_implementation_plan(report_text)
+        print(f"[{job_id}] [IncrementalOrchestrator] Total de tarefas recebidas do parser: {len(tasks)}")
+        for task in tasks:
+            print(f"[{job_id}] [IncrementalOrchestrator] Tarefa {task.id}: step={task.step_number}, layer={task.layer}, action={task.action}, file={task.file_path}")
         codebase = self.repository_reader.read_repository(repo_name, branch_name, repository_type)
         for file_path, content in codebase.items():
             self.context_cache.cache_file_content(file_path, content)
         graph = self.dependency_analyzer.build_dependency_graph(tasks, codebase)
         levels = self.dependency_analyzer.topological_sort(graph)
+        total_tasks_in_graph = sum(len(level) for level in levels)
+        if total_tasks_in_graph != len(tasks):
+            raise ValueError(f"Grafo de dependências incompleto. Tarefas extraídas: {len(tasks)}, Tarefas no grafo: {total_tasks_in_graph}")
         all_tasks = {task.id: task for task in tasks}
         completed_tasks = {}
         failed_tasks = {}
@@ -35,7 +41,8 @@ class IncrementalOrchestratorService:
         paused_for_high_impact = False
         pr_urls = []
         pull_requests = []
-        for level in levels:
+        for level_index, level in enumerate(levels):
+            print(f"[{job_id}] [IncrementalOrchestrator] Processando nível {level_index+1}/{len(levels)}, tarefas neste nível: {len(level)}")
             futures = {}
             sorted_level = list(level)
             for tid in sorted_level:
@@ -52,10 +59,12 @@ class IncrementalOrchestratorService:
                         break
             if paused_for_high_impact:
                 break
+            print(f"[{job_id}] [IncrementalOrchestrator] Aguardando conclusão de {len(sorted_level)} tarefas submetidas")
             with ThreadPoolExecutor(max_workers=3) as executor:
                 for tid in sorted_level:
                     if tid in completed_tasks or tid in failed_tasks:
                         continue
+                    print(f"[{job_id}] [IncrementalOrchestrator] Submetendo tarefa {tid} para execução")
                     task = all_tasks[tid]
                     context = self._build_task_context(task, completed_tasks)
                     future = executor.submit(self.agente_aplicador.apply_single_task, task, context, job_id)
@@ -64,6 +73,7 @@ class IncrementalOrchestratorService:
                     tid = futures[future]
                     try:
                         result = future.result()
+                        print(f"[{job_id}] [IncrementalOrchestrator] Tarefa {tid} concluída. Sucesso: {result.success}")
                         self.context_cache.cache_task_context(tid, result)
                         if result.success:
                             completed_tasks[tid] = result
@@ -71,6 +81,7 @@ class IncrementalOrchestratorService:
                             valid = self._validate_task_result(all_tasks[tid], result, impacted_files)
                             if valid:
                                 commit_result = self.committer.create_incremental_commit(job_id, all_tasks[tid], result.modified_files, repo_name, branch_name, repository_type)
+                                print(f"[{job_id}] [IncrementalOrchestrator] Commit criado para tarefa {tid}. PR URL: {commit_result.get('pr_url')}")
                                 pr_url = commit_result.get('pr_url')
                                 pr_urls.append(pr_url)
                                 pull_requests.append({
@@ -78,6 +89,7 @@ class IncrementalOrchestratorService:
                                     'pr_url': pr_url,
                                     'task_ids': [tid]
                                 })
+                                print(f"[{job_id}] [IncrementalOrchestrator] Total de PRs criados até agora: {len(pull_requests)}")
                             else:
                                 failed_tasks[tid] = result
                         else:
