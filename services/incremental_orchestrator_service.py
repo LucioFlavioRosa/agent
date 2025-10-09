@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, List
 from domain.models.incremental_change_models import CodeTask, TaskExecutionResult, TaskExecutionContext
 
 class IncrementalOrchestratorService:
-    def __init__(self, report_parser, dependency_analyzer, context_cache, agente_aplicador, repository_reader, test_runner, committer, redis_client):
+    def __init__(self, report_parser, dependency_analyzer, context_cache, agente_aplicador, repository_reader, test_runner, committer, redis_client=None):
         self.report_parser = report_parser
         self.dependency_analyzer = dependency_analyzer
         self.context_cache = context_cache
@@ -16,7 +16,9 @@ class IncrementalOrchestratorService:
         self.redis_client = redis_client
 
     def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None, pause_on_high_impact: bool = False, usuario_executor: Optional[str] = None) -> Dict[str, Any]:
-        print(f"[{job_id}] [IncrementalOrchestrator] ENTRADA - aplicar_mudancas_incrementalmente implícito (método chamado)")
+        if not report_text or len(report_text.strip()) < 100:
+            raise ValueError(f"[{job_id}] ERRO: report_text inválido para execução incremental. Tamanho: {len(report_text) if report_text else 0}")
+        print(f"[{job_id}] [IncrementalOrchestrator] Iniciando com report_text de {len(report_text)} caracteres, repo={repo_name}, branch={branch_name}")
         tasks = self.report_parser.parse_implementation_plan(report_text)
         if not tasks:
             raise ValueError(f"[{job_id}] ERRO: Parser não retornou tarefas do relatório")
@@ -103,9 +105,14 @@ class IncrementalOrchestratorService:
                 "completed_tasks": list(completed_tasks.keys()),
                 "failed_tasks": list(failed_tasks.keys())
             }
-            self.redis_client.set(checkpoint_key, json.dumps(checkpoint_data))
-            print(f"[{job_id}] Checkpoint salvo: {len(completed_tasks)}/{len(all_tasks)} tarefas completadas")
+            if self.redis_client:
+                self.redis_client.set(checkpoint_key, json.dumps(checkpoint_data))
+                print(f"[{job_id}] Checkpoint salvo: {len(completed_tasks)}/{len(all_tasks)} tarefas completadas")
         resumable = len(completed_tasks) < len(all_tasks)
+        if not pull_requests or len(pull_requests) == 0:
+            print(f"[{job_id}] WARNING: Nenhum PR foi criado durante a execução incremental. Tarefas completadas: {len(completed_tasks)}, Tarefas falhadas: {len(failed_tasks)}")
+        for pr in pull_requests:
+            print(f"[{job_id}] [IncrementalOrchestrator] PR criado: branch={pr.get('branch_name')}, url={pr.get('pr_url')}, tasks={pr.get('task_ids')}")
         result_summary = {
             "completed_tasks": list(completed_tasks.keys()),
             "failed_tasks": list(failed_tasks.keys()),
@@ -136,7 +143,8 @@ class IncrementalOrchestratorService:
 
     def get_checkpoint(self, job_id: str) -> Optional[Dict[str, Any]]:
         checkpoint_key = f"checkpoint:{job_id}"
-        data = self.redis_client.get(checkpoint_key)
-        if data:
-            return json.loads(data)
+        if self.redis_client:
+            data = self.redis_client.get(checkpoint_key)
+            if data:
+                return json.loads(data)
         return None
