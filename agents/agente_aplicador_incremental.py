@@ -3,7 +3,7 @@ import os
 
 class AgenteAplicadorIncremental:
     def apply_single_task(self, task, context, job_id):
-        if task.action.upper() == 'DELETE':
+        if task.action == 'DELETE':
             file_path = task.file_path
             if os.path.exists(file_path):
                 try:
@@ -12,31 +12,28 @@ class AgenteAplicadorIncremental:
                         task_id=task.id,
                         success=True,
                         modified_files={},
-                        deleted_files=[file_path],
-                        error_message=None
+                        deleted_files=[file_path]
                     )
-                except Exception as e:
+                except Exception:
                     return TaskExecutionResult(
                         task_id=task.id,
                         success=False,
                         modified_files={},
                         deleted_files=[],
-                        error_message=str(e)
+                        error_message=f"Falha ao excluir {file_path}"
                     )
             else:
                 return TaskExecutionResult(
                     task_id=task.id,
                     success=True,
                     modified_files={},
-                    deleted_files=[file_path],
-                    error_message=None
+                    deleted_files=[]
                 )
         # Lógica padrão para criar/modificar arquivos
         # ...
         return TaskExecutionResult(
             task_id=task.id,
             success=True,
-            modified_files={task.file_path: 'conteudo_modificado'},
-            deleted_files=[],
-            error_message=None
+            modified_files={task.file_path: "conteudo_modificado"},
+            deleted_files=[]
         )
