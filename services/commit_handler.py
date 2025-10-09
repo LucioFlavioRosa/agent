@@ -65,7 +65,9 @@ class CommitHandler:
                         repository_type=repository_type,
                         modo_adicao_incremental=modo_adicao_incremental
                     )
+                    print(f"[COMMIT_HANDLER] Grupo {i+1} - PR URL recebida: {resultado_branch.get('pr_url')}")
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
+                    print(f"[COMMIT_HANDLER] Validando PR URL do grupo {i+1}: antes={resultado_branch.get('pr_url')}, depois={resultado_branch['pr_url']}")
                 except Exception as e:
                     print(f"[{job_id}] ERRO no processamento do grupo {i+1}: {str(e)}")
                     resultado_branch = {
@@ -112,6 +114,7 @@ class CommitHandler:
         else:
             if not pr_url or pr_url == "" or pr_url is None:
                 resultado_branch['pr_url'] = f"ERRO: Falha na criação do PR (Grupo {grupo_num}). Verifique logs."
+        print(f"[COMMIT_HANDLER] Validando PR URL do grupo {grupo_num}: antes={pr_url}, depois={resultado_branch['pr_url']}")
         return resultado_branch
     def _is_valid_url(self, url: str) -> bool:
         if not url or not isinstance(url, str):
