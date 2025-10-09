@@ -33,6 +33,8 @@ class IncrementalOrchestratorService:
                     completed_tasks[tid] = result_data
         high_impact_tasks = []
         paused_for_high_impact = False
+        pr_urls = []
+        pull_requests = []
         for level in levels:
             futures = {}
             sorted_level = list(level)
@@ -68,7 +70,14 @@ class IncrementalOrchestratorService:
                             impacted_files = self.dependency_analyzer.analyze_task_impact(all_tasks[tid], codebase)
                             valid = self._validate_task_result(all_tasks[tid], result, impacted_files)
                             if valid:
-                                self.committer.create_incremental_commit(job_id, all_tasks[tid], result.modified_files, repo_name, branch_name, repository_type)
+                                commit_result = self.committer.create_incremental_commit(job_id, all_tasks[tid], result.modified_files, repo_name, branch_name, repository_type)
+                                pr_url = commit_result.get('pr_url')
+                                pr_urls.append(pr_url)
+                                pull_requests.append({
+                                    'branch_name': branch_name,
+                                    'pr_url': pr_url,
+                                    'task_ids': [tid]
+                                })
                             else:
                                 failed_tasks[tid] = result
                         else:
@@ -87,7 +96,9 @@ class IncrementalOrchestratorService:
             "failed_tasks": list(failed_tasks.keys()),
             "commits": [],
             "resumable": resumable,
-            "high_impact_tasks": high_impact_tasks
+            "high_impact_tasks": high_impact_tasks,
+            "pr_urls": pr_urls,
+            "pull_requests": pull_requests
         }
         if high_impact_tasks:
             print(f"[{job_id}] Tarefas de alto impacto detectadas: {high_impact_tasks}")
