@@ -160,7 +160,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             usuario_executor=job_info.get('data', {}).get('usuario_executor')
                         )
                         import json as _json
-                        print(f"[WORKFLOW_ORCHESTRATOR] incremental_result recebido: {_json.dumps(incremental_result, indent=2)}")
+                        if not incremental_result.get('pull_requests'):
+                            print(f"[{job_id}] ERROR: incremental_result não contém pull_requests. Dados: {_json.dumps(incremental_result, indent=2)}")
+                        print(f"[{job_id}] [WorkflowOrchestrator] Salvando incremental_execution_summary: {_json.dumps(incremental_result, indent=2)}")
                         job_info['data']['incremental_execution_summary'] = incremental_result
                         commit_details = []
                         for pr in incremental_result.get('pull_requests', []):
