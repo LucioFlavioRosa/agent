@@ -42,6 +42,7 @@ redis==6.4.0
 pathspec>=0.12.0
 PyYAML==6.0.1
 networkx==3.5
+tenacity==8.2.3
 
 # --- Sub-dependências ---
 anyio==4.10.0
