@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Dict, Any, Optional
 
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
@@ -107,105 +108,75 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     else:
                         print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
                         report_generated_by_agent = True
-                step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
-                                                             previous_step_result, repo_reader, i, start_from_step)
-                self.job_handler.save_step_result(job_info, current_step_index, step_result)
-                previous_step_result = step_result
-                if current_step_index == 0 and report_generated_by_agent:
-                    print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (step 0)")
-                    sucesso_salvar = self._save_generated_report(job_id, job_info, step_result, current_step_index)
-                    if not sucesso_salvar:
-                        raise ValueError(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio e não pode ser salvo.")
-                    if not job_info['data'].get('report_blob_url'):
-                        raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
-                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
-                    strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                    try:
-                        if job_info['data'].get('report_blob_url'):
-                            self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
-                    except Exception as e:
-                        print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
-                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        analysis_report = job_info['data'].get('analysis_report')
-                        if not analysis_report or len(analysis_report.strip()) < 100:
-                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
-                        self.job_handler.update_job_status(job_id, 'completed')
-                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only, gerado pelo agente)")
-                        return
-                    if strategy.should_pause_for_approval(job_info, step):
-                        self.handle_approval_step(job_id, job_info, current_step_index, step_result)
-                        return
-                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        analysis_report = job_info['data'].get('analysis_report')
-                        if not analysis_report or len(analysis_report.strip()) < 100:
-                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
-                        self.job_handler.update_job_status(job_id, 'completed')
-                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                        return
                 # INÍCIO DA INTEGRAÇÃO DO SISTEMA INCREMENTAL (PASSO 9)
-                if current_step_index == 0:
-                    job_data = job_info['data']
-                    aplicar_incremental = job_data.get('aplicar_mudancas_incrementalmente', False)
-                    if aplicar_incremental:
-                        print(f"[{job_id}] [WorkflowOrchestrator] CHECKPOINT 1: Flag aplicar_mudancas_incrementalmente ATIVA no início do step 0")
-                    if aplicar_incremental:
-                        print(f"[{job_id}] [DEBUG] Flag aplicar_mudancas_incrementalmente detectada: {aplicar_incremental}")
-                    if aplicar_incremental:
-                        import json as _json
-                        print(f"[{job_id}] [WorkflowOrchestrator] CHECKPOINT 2: Chamando execute_incremental_changes com job_data: {_json.dumps({k: v for k, v in job_data.items() if k in ['aplicar_mudancas_incrementalmente', 'analysis_name', 'repository_type']}, indent=2)}")
-                        if not job_info['data'].get('aplicar_mudancas_incrementalmente'):
-                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Flag aplicar_mudancas_incrementalmente perdida antes de chamar execute_incremental_changes")
-                        report_text = job_info['data'].get('analysis_report')
-                        if not report_text:
-                            print(f"[{job_id}] [Incremental] Relatório de implementação não encontrado para execução incremental.")
-                            self.job_handler.handle_job_error(job_id, Exception('Relatório de implementação ausente'), 'workflow')
-                            return
-                        print(f"[{job_id}] [Incremental] Executando mudanças incrementais a partir do relatório.")
-                        try:
-                            incremental_result = self.incremental_orchestrator_service.execute_incremental_changes(
-                                job_id=job_id,
-                                report_text=report_text,
-                                repo_name=repo_name,
-                                branch_name=job_info['data'].get('branch_name'),
-                                repository_type=repository_type,
-                                usuario_executor=job_info.get('data', {}).get('usuario_executor')
-                            )
-                            import json as _json
-                            print(f"[{job_id}] [DEBUG] execute_incremental_changes retornou: {_json.dumps(incremental_result, indent=2)}")
-                            if not incremental_result.get('pull_requests'):
-                                print(f"[{job_id}] ERROR: incremental_result não contém pull_requests. Dados: {_json.dumps(incremental_result, indent=2)}")
-                            print(f"[{job_id}] [WorkflowOrchestrator] Salvando incremental_execution_summary: {_json.dumps(incremental_result, indent=2)}")
-                            job_info['data']['incremental_execution_summary'] = incremental_result
-                            commit_details = []
-                            for pr in incremental_result.get('pull_requests', []):
-                                commit_details.append({
-                                    'branch_name': pr.get('branch_name'),
-                                    'success': pr.get('pr_url') is not None and (pr.get('pr_url', '').startswith('http') or 'PR criado' in pr.get('pr_url', '')), 
-                                    'pr_url': pr.get('pr_url'),
-                                    'message': 'PR criado incrementalmente',
-                                    'arquivos_modificados': []
-                                })
-                            if commit_details:
-                                job_info['data']['commit_details'] = commit_details
-                                print(f"[{job_id}] [WorkflowOrchestrator] commit_details propagado do modo incremental: {_json.dumps(commit_details, indent=2)}")
-                            self.job_handler.update_job(job_id, job_info)
-                            if incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) == len(incremental_result.get('all_tasks', [])):
-                                print(f"[{job_id}] [Incremental] Todas as tarefas falharam. Marcando job como failed.")
-                                self.job_handler.update_job_status(job_id, JobFields.FAILED)
-                                self.job_handler.update_job(job_id, job_info)
-                                return
-                            elif incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) > 0:
-                                print(f"[{job_id}] [Incremental] Execução parcial: algumas tarefas falharam. Continuando workflow com warning.")
-                                job_info['data']['incremental_warning'] = 'Execução incremental parcialmente bem-sucedida. Algumas tarefas falharam.'
-                                self.job_handler.update_job(job_id, job_info)
-                            else:
-                                print(f"[{job_id}] [Incremental] Execução 100% bem-sucedida. Pulando steps de aplicação de mudanças.")
-                                self.job_handler.update_job(job_id, job_info)
-                                return
-                        except Exception as e:
-                            print(f"[{job_id}] [Incremental] Falha na execução incremental: {e}")
-                            self.job_handler.handle_job_error(job_id, e, 'workflow')
-                            return
+                job_data = job_info['data']
+                aplicar_incremental = job_data.get('aplicar_mudancas_incrementalmente', False)
+                print(f"[{job_id}] [DEBUG] Verificando condições para modo incremental: current_step_index={current_step_index}, aplicar_incremental={aplicar_incremental}, gerar_relatorio_apenas={job_data.get('gerar_relatorio_apenas')}")
+                incremental_enabled = os.getenv('INCREMENTAL_MODE_ENABLED', 'false').lower() == 'true'
+                if aplicar_incremental and not incremental_enabled:
+                    print(f"[{job_id}] WARNING: aplicar_mudancas_incrementalmente=True, mas INCREMENTAL_MODE_ENABLED=false. Desativando modo incremental.")
+                    aplicar_incremental = False
+                if current_step_index == 0 and aplicar_incremental:
+                    print(f"[{job_id}] [WorkflowOrchestrator] CHECKPOINT 1: Flag aplicar_mudancas_incrementalmente ATIVA no início do step 0")
+                    if not self.incremental_orchestrator_service:
+                        raise ValueError(f"[{job_id}] ERRO: incremental_orchestrator_service não foi injetado no WorkflowOrchestrator")
+                    if not job_info['data'].get('analysis_report'):
+                        raise ValueError(f"[{job_id}] ERRO: analysis_report ausente para execução incremental")
+                    print(f"[{job_id}] [DEBUG] Flag aplicar_mudancas_incrementalmente detectada: {aplicar_incremental}")
+                    import json as _json
+                    print(f"[{job_id}] [WorkflowOrchestrator] CHECKPOINT 2: Chamando execute_incremental_changes com job_data: {_json.dumps({k: v for k, v in job_data.items() if k in ['aplicar_mudancas_incrementalmente', 'analysis_name', 'repository_type']}, indent=2)}")
+                    report_text = job_info['data'].get('analysis_report')
+                    if not report_text:
+                        print(f"[{job_id}] [Incremental] Relatório de implementação não encontrado para execução incremental.")
+                        self.job_handler.handle_job_error(job_id, Exception('Relatório de implementação ausente'), 'workflow')
+                        return
+                    print(f"[{job_id}] [Incremental] Executando mudanças incrementais a partir do relatório.")
+                    incremental_result = self.incremental_orchestrator_service.execute_incremental_changes(
+                        job_id=job_id,
+                        report_text=report_text,
+                        repo_name=repo_name,
+                        branch_name=job_info['data'].get('branch_name'),
+                        repository_type=repository_type,
+                        usuario_executor=job_info.get('data', {}).get('usuario_executor')
+                    )
+                    if not incremental_result or not isinstance(incremental_result, dict):
+                        raise ValueError(f"[{job_id}] ERRO: execute_incremental_changes retornou resultado inválido: {type(incremental_result)}")
+                    if 'pull_requests' not in incremental_result:
+                        print(f"[{job_id}] WARNING: incremental_result não contém 'pull_requests'. Dados: {incremental_result}")
+                    import json as _json
+                    print(f"[{job_id}] [DEBUG] execute_incremental_changes retornou: {_json.dumps(incremental_result, indent=2)}")
+                    if not incremental_result.get('pull_requests'):
+                        print(f"[{job_id}] ERROR: incremental_result não contém pull_requests. Dados: {_json.dumps(incremental_result, indent=2)}")
+                    print(f"[{job_id}] [WorkflowOrchestrator] Salvando incremental_execution_summary: {_json.dumps(incremental_result, indent=2)}")
+                    job_info['data']['incremental_execution_summary'] = incremental_result
+                    commit_details = []
+                    for pr in incremental_result.get('pull_requests', []):
+                        print(f"[{job_id}] [IncrementalOrchestrator] PR criado: branch={pr.get('branch_name')}, url={pr.get('pr_url')}, tasks={pr.get('task_ids')}")
+                        commit_details.append({
+                            'branch_name': pr.get('branch_name'),
+                            'success': pr.get('pr_url') is not None and (pr.get('pr_url', '').startswith('http') or 'PR criado' in pr.get('pr_url', '')), 
+                            'pr_url': pr.get('pr_url'),
+                            'message': 'PR criado incrementalmente',
+                            'arquivos_modificados': []
+                        })
+                    if commit_details:
+                        job_info['data']['commit_details'] = commit_details
+                        print(f"[{job_id}] [WorkflowOrchestrator] commit_details propagado do modo incremental: {_json.dumps(commit_details, indent=2)}")
+                    self.job_handler.update_job(job_id, job_info)
+                    if incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) == len(incremental_result.get('all_tasks', [])):
+                        print(f"[{job_id}] [Incremental] Todas as tarefas falharam. Marcando job como failed.")
+                        self.job_handler.update_job_status(job_id, JobFields.FAILED)
+                        self.job_handler.update_job(job_id, job_info)
+                        return
+                    elif incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) > 0:
+                        print(f"[{job_id}] [Incremental] Execução parcial: algumas tarefas falharam. Continuando workflow com warning.")
+                        job_info['data']['incremental_warning'] = 'Execução incremental parcialmente bem-sucedida. Algumas tarefas falharam.'
+                        self.job_handler.update_job(job_id, job_info)
+                    else:
+                        print(f"[{job_id}] [Incremental] Execução bem-sucedida. FINALIZANDO workflow sem executar commits tradicionais.")
+                        self.job_handler.update_job(job_id, job_info)
+                        self.job_handler.update_job_status(job_id, 'completed')
+                        return
                 # FIM DA INTEGRAÇÃO DO SISTEMA INCREMENTAL (PASSO 9)
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                 if strategy.should_finalize_workflow(job_info, current_step_index):
@@ -273,6 +244,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                           final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+        if job_info['data'].get('aplicar_mudancas_incrementalmente'):
+            raise ValueError(f"[{job_id}] ERRO LÓGICO: _finalize_workflow foi chamado com aplicar_mudancas_incrementalmente=True. Isso indica que o fluxo incremental não foi executado corretamente.")
         resultado_agrupamento, resultado_refatoracao = self.data_formatter.extract_workflow_results(
             job_info, workflow, final_result
         )
