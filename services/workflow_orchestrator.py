@@ -27,6 +27,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
         self.incremental_orchestrator_service = incremental_orchestrator_service
+
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
@@ -46,6 +47,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
         return True
+
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
         print(f"[{job_id}] [WorkflowOrchestrator] Flag aplicar_mudancas_incrementalmente lida do job_store: {job_info.get('data', {}).get('aplicar_mudancas_incrementalmente', False)}")
@@ -64,7 +66,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS)}")
                 print(f"[{job_id}] Status atual: {step['status_update']}")
-                print(f"[{job_id}] [WorkflowOrchestrator] DEBUG - aplicar_mudancas_incrementalmente: {job_info['data'].get('aplicar_mudancas_incrementalmente', False)} (antes da verificação do step)")
+                print(f"[{job_id}] [WorkflowOrchestrator] Flag aplicar_mudancas_incrementalmente lida do job_store (antes do step): {job_info.get('data', {}).get('aplicar_mudancas_incrementalmente', False)}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
                 report_generated_by_agent = False
                 if current_step_index == 0:
@@ -109,8 +111,40 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                                              previous_step_result, repo_reader, i, start_from_step)
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
+                if current_step_index == 0 and report_generated_by_agent:
+                    print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (step 0)")
+                    sucesso_salvar = self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                    if not sucesso_salvar:
+                        raise ValueError(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio e não pode ser salvo.")
+                    if not job_info['data'].get('report_blob_url'):
+                        raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
+                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
+                    strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                    try:
+                        if job_info['data'].get('report_blob_url'):
+                            self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
+                    except Exception as e:
+                        print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
+                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
+                        analysis_report = job_info['data'].get('analysis_report')
+                        if not analysis_report or len(analysis_report.strip()) < 100:
+                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
+                        self.job_handler.update_job_status(job_id, 'completed')
+                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only, gerado pelo agente)")
+                        return
+                    if strategy.should_pause_for_approval(job_info, step):
+                        self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                        return
+                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
+                        analysis_report = job_info['data'].get('analysis_report')
+                        if not analysis_report or len(analysis_report.strip()) < 100:
+                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
+                        self.job_handler.update_job_status(job_id, 'completed')
+                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
+                        return
+                if current_step_index == 0:
+                    print(f"[{job_id}] [WorkflowOrchestrator] Flag aplicar_mudancas_incrementalmente lida do job_store (antes de condicional incremental): {job_info.get('data', {}).get('aplicar_mudancas_incrementalmente', False)}")
                 if current_step_index == 0 and job_info['data'].get('aplicar_mudancas_incrementalmente', False):
-                    print(f"[{job_id}] [WorkflowOrchestrator] ENTRANDO NO BLOCO INCREMENTAL - aplicar_mudancas_incrementalmente: {job_info['data'].get('aplicar_mudancas_incrementalmente', False)}")
                     report_text = job_info['data'].get('analysis_report')
                     if not report_text:
                         print(f"[{job_id}] [Incremental] Relatório de implementação não encontrado para execução incremental.")
@@ -174,6 +208,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
+
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
                                    repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
@@ -213,6 +248,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
+
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         report_text = self.report_handler.extract_report_text(step_result)
@@ -220,6 +256,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
+
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                           final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         resultado_agrupamento, resultado_refatoracao = self.data_formatter.extract_workflow_results(
