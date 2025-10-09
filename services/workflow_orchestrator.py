@@ -52,6 +52,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
+        print(f"[{job_id}] [WorkflowOrchestrator] Flag aplicar_mudancas_incrementalmente ao iniciar workflow: {job_info.get('data', {}).get('aplicar_mudancas_incrementalmente')}")
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
@@ -174,6 +175,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         if commit_details:
                             job_info['data']['commit_details'] = commit_details
                             print(f"[{job_id}] [WorkflowOrchestrator] commit_details propagado do modo incremental: {_json.dumps(commit_details, indent=2)}")
+                        # Validação da flag antes de atualizar job
+                        if not job_info.get('data', {}).get('aplicar_mudancas_incrementalmente'):
+                            print(f"[{job_id}] ERRO CRÍTICO: Flag aplicar_mudancas_incrementalmente foi PERDIDA antes de atualizar job!")
                         self.job_handler.update_job(job_id, job_info)
                         if incremental_result.get('failed_tasks') and len(incremental_result['failed_tasks']) == len(incremental_result.get('all_tasks', [])):
                             print(f"[{job_id}] [Incremental] Todas as tarefas falharam. Marcando job como failed.")
