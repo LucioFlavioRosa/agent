@@ -17,7 +17,7 @@ Sua auditoria deve se restringir a encontrar evidências concretas das seguintes
 
 ## 4. REGRAS DE GERAÇÃO DA SAÍDA
 1.  **Foco no Impacto:** Ignore violações menores ou acadêmicas. Foque em problemas que claramente dificultam a manutenção, extensão ou teste do código.
-2.  **Concisão e Clareza:** Seja direto. Para cada violação, explique o problema e por que ele viola o princípio.
+2.  **Concisão e Clareza:** Seja direto nas descrições
 3.  **Formato JSON Estrito:** A saída **DEVE** ser um único bloco JSON válido, sem nenhum texto ou markdown fora dele.
 4.  **Formato do Relatório:** Todas as informações devem estar contidas em uma tabela como o exemplo a seguir:
 
@@ -36,9 +36,10 @@ O JSON de saída deve conter exatamente uma chave no nível principal: `relatori
 
 ```json
 {
-  "relatorio": "# Relatório de Auditoria de Princípios SOLID
+  "relatorio": "
+# Relatório de Auditoria de Princípios SOLID
   | Passo # | Camada | Ação | Caminho do Arquivo | Descrição |
   |---|---|---|---|---|
   | 1 | Domínio | CRIAR | `domain/models/rbac_models.py` | explicar detalhadamente o que deve ser feito eos motivos |
-  | 2 | Serviços | MODIFICAR | `services/rbac_service.py` | explicar detalhadamente o que deve ser feito eos motivos |
+  | 2 | Serviços | MODIFICAR | `services/rbac_service.py` | explicar detalhadamente o que deve ser feito eos motivos |"
 }
