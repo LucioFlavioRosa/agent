@@ -2,6 +2,8 @@ import json
 import time
 from typing import Dict, Any, Optional
 from domain.models.incremental_change_models import CodeTask, TaskExecutionContext, TaskExecutionResult
+from agents.logging_utils import log_custom_data
+from datetime import datetime, timezone
 
 class AgenteAplicadorIncremental:
     def __init__(self, repository_reader, llm_provider, context_cache_service):
@@ -13,6 +15,7 @@ class AgenteAplicadorIncremental:
         max_attempts = 3
         attempt = 0
         last_error = None
+        print(f"[{job_id}] [AgenteAplicador] Iniciando aplicação da tarefa {task.id}: {task.action} {task.file_path}")
         while attempt < max_attempts:
             try:
                 prompt = self._build_prompt(task, context)
@@ -24,6 +27,22 @@ class AgenteAplicadorIncremental:
                 arquivos_modificados = response.get("arquivos_modificados", {})
                 success = bool(arquivos_modificados)
                 tokens_used = response.get("tokens_saida", 0)
+                if success:
+                    log_custom_data(
+                        job_id=job_id,
+                        projeto='N/A',
+                        data_hora=datetime.now(timezone.utc).isoformat(),
+                        tokens_in=0,
+                        tokens_out=response.get('tokens_saida', 0),
+                        status='aplicacao_de_mudancas',
+                        tipo_repositorio='N/A',
+                        nome_repositorio='N/A',
+                        tipo_analise='aplicacao_incremental_mudanca',
+                        model_name='N/A',
+                        modo_adicao_incremental=False,
+                        usuario_executor=None
+                    )
+                print(f"[{job_id}] [AgenteAplicador] Tarefa {task.id} finalizada. Sucesso: {success}, arquivos modificados: {len(arquivos_modificados)}")
                 return TaskExecutionResult(
                     task_id=task.id,
                     success=success,
@@ -36,6 +55,7 @@ class AgenteAplicadorIncremental:
                 attempt += 1
                 print(f"[{job_id}] Tentativa {attempt}/{max_attempts} para tarefa {task.id} falhou: {last_error}. Retrying...")
                 time.sleep(2 ** (attempt - 1))
+        print(f"[{job_id}] [AgenteAplicador] Tarefa {task.id} finalizada. Sucesso: False, arquivos modificados: 0")
         return TaskExecutionResult(
             task_id=task.id,
             success=False,
