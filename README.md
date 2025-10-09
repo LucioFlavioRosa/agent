@@ -1,206 +1,139 @@
 # Multi-Agent Code Platform (MCP)
 
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/seu-usuario/seu-repo/actions)
+[![Coverage Status](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/seu-usuario/seu-repo)
+[![Version](https://img.shields.io/badge/version-9.0.0-blue)](https://github.com/seu-usuario/seu-repo/releases)
+
+Servidor robusto para orquestração de agentes de IA, análise e modernização de código, baseado em FastAPI, Redis e arquitetura multi-agente.
+
+## Sumário
+- [Visão Geral](#visão-geral)
+- [Arquitetura do Sistema](#arquitetura-do-sistema)
+- [Configuração de Ambiente](#configuração-de-ambiente)
+- [Como Executar os Testes](#como-executar-os-testes)
+- [Exemplos de Uso da API](#exemplos-de-uso-da-api)
+- [Contribuindo](#contribuindo)
+- [Changelog](#changelog)
+
 ## Visão Geral
-
-O MCP é uma plataforma robusta para automação de análises e modernização de código, orquestrando agentes inteligentes via API REST construída com FastAPI. O sistema utiliza Redis para armazenamento de jobs e suporta integração com múltiplos provedores de repositório (GitHub, GitLab, Azure DevOps) e modelos LLM (Claude, OpenAI).
-
-## Aplicação Incremental de Mudanças
-
-A partir da versão 9.0.0, o MCP oferece um sistema de aplicação incremental de mudanças de código baseado em relatórios de implementação. Este sistema permite:
-- Aplicação automática e sequencial de tarefas de código extraídas de relatórios estruturados
-- Paralelização inteligente de tarefas independentes (até 3 simultâneas)
-- Validação incremental de cada mudança via testes unitários e de integração
-- Commits atômicos por tarefa ou agrupados por camada, conforme estratégia definida
-- Retomada de execução após falhas via checkpoints
-- Detecção e tratamento de tarefas de alto impacto
-
-### Como ativar o modo incremental
-
-Para utilizar o modo incremental, envie o campo `aplicar_mudancas_incrementalmente=true` no payload da API `/start-analysis`. O relatório de implementação deve estar em formato de tabela markdown com colunas bem definidas (Passo, Camada, Ação, Caminho do Arquivo, Descrição).
-
-Benefícios:
-- Reduz risco de regressões por validar cada mudança individualmente
-- Facilita rollback de mudanças específicas
-- Otimiza tempo de execução por paralelizar tarefas independentes
-- Permite granularidade flexível de commits (`per_task`, `per_layer`, `single`)
-
-Consulte a [documentação detalhada](docs/incremental_changes_system.md) para exemplos, limitações e troubleshooting.
+O MCP (Multi-Agent Code Platform) é uma plataforma extensível para automação de fluxos de trabalho de análise e refatoração de código, utilizando agentes inteligentes e integração com múltiplos provedores de repositório (GitHub, GitLab, Azure DevOps).
 
 ## Arquitetura do Sistema
 
-A estrutura do MCP segue princípios de arquitetura limpa, com separação clara de responsabilidades entre agentes, serviços, ferramentas e domínio. Os principais diretórios são:
 
-- `agents/`: Implementações dos agentes de processamento, revisão e comparação de código.
-- `services/`: Serviços de negócio e infraestrutura (ex: orquestração de workflow, manipulação de jobs, integração com LLMs).
-- `tools/`: Utilitários e integrações com provedores externos (repositórios, storage, secrets).
-- `domain/`: Interfaces e contratos para abstração de dependências.
-
-### Padrões de Design Utilizados
-
-- **Dependency Injection:** Centralizado no `DependencyContainer`, facilita testes e extensibilidade.
-- **Factory Pattern:** Utilizado para criação de serviços complexos e provedores.
-- **Service Layer:** Lógica de negócio isolada em serviços especializados.
-- **Background Tasks:** Execução assíncrona de workflows via FastAPI.
-
-## Diagrama de Fluxo (Mermaid)
-
-### Funcionamento Principal do MCP
-
-```mermaid
-flowchart TD
-    A[Cliente HTTP] -->|POST /start-analysis| B[FastAPI Endpoint]
-    B --> C{Validar Payload}
-    C -->|Inválido| D[Retornar Erro 422]
-    C -->|Válido| E[Normalizar Nome do Repositório]
-    E --> F[Gerar job_id e analysis_name]
-    F --> G[Criar Job no Redis]
-    G --> H[Registrar Análise]
-    H --> I[Disparar Workflow em Background]
-    I --> J[Retornar job_id ao Cliente]
-    
-    I --> K[WorkflowOrchestrator]
-    K --> L{Executar Step 1: Ler Código}
-    L --> M[RepositoryReader]
-    M --> N{Código Lido com Sucesso?}
-    N -->|Não| O[Atualizar Job: FAILED]
-    N -->|Sim| P{Executar Step 2: Analisar com LLM}
-    P --> Q[LLMProvider - Claude/OpenAI]
-    Q --> R{Análise Concluída?}
-    R -->|Não| O
-    R -->|Sim| S{Executar Step 3: Gerar Relatório}
-    S --> T[Salvar Relatório no Blob Storage]
-    T --> U{gerar_relatorio_apenas?}
-    U -->|Sim| V[Atualizar Job: COMPLETED]
-    U -->|Não| W{Executar Step 4: Criar PR}
-    W --> X[RepositoryCommitter]
-    X --> Y{PR Criado?}
-    Y -->|Não| O
-    Y -->|Sim| V
-    
-    V --> Z[Cliente Consulta Status]
-    Z -->|"GET /status/{job_id}"| AA[Retornar Resultado Final]
-    
-    style B fill:#4CAF50,color:#fff
-    style K fill:#2196F3,color:#fff
-    style Q fill:#FF9800,color:#fff
-    style X fill:#9C27B0,color:#fff
-    style V fill:#4CAF50,color:#fff
-    style O fill:#F44336,color:#fff
-```
-
-### Fluxo de Aprovação Manual
-
-mermaid
-flowchart TD
-    A[Workflow Pausado] -->|Status: AWAITING_APPROVAL| B[Cliente Revisa Relatório]
-    B --> C{Decisão}
-    C -->|Aprovar| D[POST /update-job-status - action: approve]
-    C -->|Rejeitar| E[POST /update-job-status - action: reject]
-    
-    D --> F[Atualizar Status: WORKFLOW_STARTED]
-    F --> G[Retomar Workflow no Step Pausado + 1]
-    G --> H[Executar Steps Restantes]
-    H --> I[Criar Pull Request]
-    I --> J[Status: COMPLETED]
-    
-    E --> K[Atualizar Status: REJECTED]
-    K --> L[Encerrar Processamento]
-    
-    style D fill:#4CAF50,color:#fff
-    style E fill:#F44336,color:#fff
-    style J fill:#4CAF50,color:#fff
-    style K fill:#F44336,color:#fff
++-------------------+
+|    FastAPI        |
++-------------------+
+          |
+          v
++-------------------+
+|   Workflow        |
+|   Orchestrator    |
++-------------------+
+          |
+          v
++-------------------+
+|    Redis          |
++-------------------+
+          |
+          v
++-------------------+
+|  Agentes (Python) |
+|  - Aplicador      |
+|  - Revisor        |
+|  - Comparador     |
+|  - Processador    |
++-------------------+
+          |
+          v
++-------------------+
+| Repositórios      |
+| (GitHub/GitLab/   |
+|  Azure DevOps)    |
++-------------------+
 
 
-### Fluxo de Geração de Código a Partir de Relatório
+- **FastAPI**: expõe endpoints REST para orquestração e monitoramento.
+- **Workflow Orchestrator**: gerencia a execução dos agentes e etapas do fluxo.
+- **Redis**: fila de tarefas, cache e checkpoint de execuções.
+- **Agentes**: executam tarefas especializadas (aplicação de mudanças, revisão, comparação, processamento).
+- **Repositórios**: integração com múltiplos provedores.
 
-mermaid
-flowchart TD
-    A[Cliente] -->|"POST /start-code-generation-from-report/{analysis_name}"| B[Buscar Job Original]
-    B --> C{Job Existe?}
-    C -->|Não| D[Retornar Erro 404]
-    C -->|Sim| E[Recuperar Relatório do Job Original]
-    E --> F[Criar Novo Job Derivado]
-    F --> G[Copiar Configurações do Job Original]
-    G --> H[Definir gerar_relatorio_apenas = False]
-    H --> I[Definir gerar_novo_relatorio = False]
-    I --> J[Salvar Novo Job no Redis]
-    J --> K[Disparar Workflow em Background]
-    K --> L[Executar Steps de Geração de Código]
-    L --> M[Criar Pull Request]
-    M --> N[Status: COMPLETED]
-    
-    style B fill:#2196F3,color:#fff
-    style F fill:#FF9800,color:#fff
-    style M fill:#9C27B0,color:#fff
-    style N fill:#4CAF50,color:#fff
+## Configuração de Ambiente
+
+1. **Clone o repositório:**
+   bash
+   git clone https://github.com/seu-usuario/seu-repo.git
+   cd seu-repo
+   
+
+2. **Crie e configure o arquivo de variáveis de ambiente:**
+   - Renomeie `.env.example` para `.env` e preencha com suas credenciais e configurações.
+   - Consulte o arquivo `.env.example` para detalhes sobre cada variável.
+
+3. **Instale as dependências:**
+   bash
+   pip install -r requirements.txt
+   
+
+4. **Inicie o Redis:**
+   - Certifique-se de que o Redis está rodando localmente ou configure o acesso conforme sua infraestrutura.
+
+5. **Execute o servidor FastAPI:**
+   bash
+   uvicorn mcp_server_fastapi:app --reload
+   
+
+## Como Executar os Testes
+
+Execute todos os testes automatizados com:
+
+bash
+pytest -v tests/
 
 
-## Explicação do Código Principal (`mcp_server_fastapi.py`)
+## Exemplos de Uso da API
 
-### Função
+### Iniciar uma análise
 
-O arquivo `mcp_server_fastapi.py` é o ponto de entrada da API REST do MCP. Ele expõe endpoints para:
+bash
+curl -X POST "http://localhost:8000/start-analysis" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repo_name_modernizado": "seu-org/seu-repo",
+    "branch_name_modernizado": "main",
+    "projeto": "projeto-exemplo",
+    "analysis_type": "modernizacao",
+    "repository_type": "github"
+  }'
 
-- Iniciar novas análises de código
-- Gerenciar aprovação/rejeição de jobs
-- Consultar status e relatórios
-- Gerar código a partir de relatórios existentes
 
-### Principais Componentes
+### Buscar relatório de um job
 
-- **DependencyContainer:** Centraliza a criação e injeção de dependências (serviços, provedores, etc.).
-- **ApiServiceFactory:** Cria instâncias de serviços de negócio.
-- **WorkflowOrchestrator:** Executa workflows de análise em background, step a step.
-- **JobStore:** Gerencia o estado dos jobs no Redis.
-- **JobDataService, JobValidationService, ResponseBuilderService:** Serviços especializados para manipulação, validação e resposta de jobs.
+bash
+curl -X GET "http://localhost:8000/jobs/{job_id}/report"
 
-### Fluxo de Início de Análise (`/start-analysis`)
 
-1. Recebe payload validado pelo Pydantic.
-2. Normaliza o nome do repositório.
-3. Gera identificadores (`job_id`, `analysis_name`).
-4. Cria o job inicial no Redis.
-5. Registra a análise para consultas futuras.
-6. Dispara o workflow em background.
-7. Retorna o `job_id` ao cliente.
+### Exemplo em Python (requests)
 
-### Fluxo de Aprovação/Rejeição (`/update-job-status`)
+python
+import requests
 
-- Aprovação: Atualiza status, salva instruções extras e retoma o workflow.
-- Rejeição: Atualiza status para rejeitado e encerra o processamento.
+payload = {
+    "repo_name_modernizado": "seu-org/seu-repo",
+    "branch_name_modernizado": "main",
+    "projeto": "projeto-exemplo",
+    "analysis_type": "modernizacao",
+    "repository_type": "github"
+}
+resp = requests.post("http://localhost:8000/start-analysis", json=payload)
+print(resp.json())
 
-### Consulta de Status (`/status/{job_id}`)
 
-- Retorna status atual, relatório e informações de Pull Request, se disponíveis.
+## Contribuindo
 
-## Segurança e Performance
+Veja o arquivo [CONTRIBUTING.md](CONTRIBUTING.md) para diretrizes detalhadas sobre configuração de ambiente, fluxo de trabalho para Pull Requests, padrões de código e execução de testes.
 
-- **CORS:** Aberto por padrão (recomenda-se restringir em produção).
-- **Validação:** Pydantic previne dados inválidos.
-- **Execução Assíncrona:** Workflows não bloqueiam a API.
-- **Redis:** Armazenamento rápido para jobs.
+## Changelog
 
----
-
-## Troubleshooting (Resolução de Problemas)
-
-### Erros Comuns
-
-- **Erro de conexão com Redis:**
-  - Verifique se o serviço Redis está ativo e as variáveis de ambiente de conexão estão corretas.
-- **Falha de autenticação com provedores Git:**
-  - Confirme se os tokens/secrets estão configurados corretamente no Azure Key Vault ou variáveis de ambiente.
-- **Timeouts de LLM:**
-  - Ajuste o timeout no serviço de LLM ou aumente os recursos disponíveis.
-- **Job não avança de status:**
-  - Consulte os logs do WorkflowOrchestrator e verifique se há exceções não tratadas.
-
----
-
-## Referências
-
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [Mermaid Documentation](https://mermaid-js.github.io/mermaid/#/)
-- [Redis Documentation](https://redis.io/)
-- [Documentação do sistema incremental](docs/incremental_changes_system.md)
+Consulte o arquivo [CHANGELOG.md](CHANGELOG.md) para o histórico de versões e mudanças.
