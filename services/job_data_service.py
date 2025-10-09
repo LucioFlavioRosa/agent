@@ -12,7 +12,6 @@ class JobDataService:
 
     def create_initial_job_data(self, payload_dict: dict, normalized_repo_name: str, analysis_name: str) -> dict:
         job_id = payload_dict.get('job_id', 'N/A')
-        aplicar_mudancas_incrementalmente = payload_dict.get('aplicar_mudancas_incrementalmente', False)
         print(f"[{job_id}] Flag aplicar_mudancas_incrementalmente definida como: {aplicar_mudancas_incrementalmente}")
         return {
             JobFields.STATUS: JobStatus.STARTING,
