@@ -2,7 +2,7 @@ def _processar_mudancas_comuns(conjunto_de_mudancas):
     mudancas_validas = []
     mudancas_exclusao = []
     for mudanca in conjunto_de_mudancas:
-        status = mudanca.get('status')
+        status = mudanca.get('status', '').upper()
         if status == 'DELETE':
             mudancas_exclusao.append(mudanca)
         else:
