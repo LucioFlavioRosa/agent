@@ -2,6 +2,8 @@ from typing import Dict, Any
 from tools.conectores.conexao_geral import ConexaoGeral
 from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.repository_provider_factory import get_repository_provider_explicit
+import time
+import logging
 
 class CommitHandler:
     def __init__(self, repository_provider_factory=None, conexao_geral_factory=None):
@@ -11,7 +13,6 @@ class CommitHandler:
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
                       repository_type: str, repo_name: str) -> None:
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
-        
         try:
             branch_base_para_pr = job_info['data'].get('branch_name', 'main')
             print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
@@ -53,30 +54,51 @@ class CommitHandler:
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
-                try:
-                    resultado_branch = processar_branch_por_provedor(
-                        repo=repo,
-                        nome_branch=grupo.get("branch_sugerida", f"branch-grupo-{i+1}"),
-                        branch_de_origem=branch_base_para_pr,
-                        branch_alvo_do_pr=branch_base_para_pr,
-                        mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
-                        descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
-                        conjunto_de_mudancas=grupo.get("conjunto_de_mudancas", []),
-                        repository_type=repository_type,
-                        modo_adicao_incremental=modo_adicao_incremental
-                    )
-                    print(f"[COMMIT_HANDLER] Grupo {i+1} - PR URL recebida: {resultado_branch.get('pr_url')}")
-                    resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
-                    print(f"[COMMIT_HANDLER] Validando PR URL do grupo {i+1}: antes={resultado_branch.get('pr_url')}, depois={resultado_branch['pr_url']}")
-                except Exception as e:
-                    print(f"[{job_id}] ERRO no processamento do grupo {i+1}: {str(e)}")
-                    resultado_branch = {
-                        "branch_name": grupo.get("branch_sugerida", f"branch-grupo-{i+1}"),
-                        "success": False,
-                        "pr_url": f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}",
-                        "message": f"Erro no grupo {i+1}: {str(e)}",
-                        "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in grupo.get("conjunto_de_mudancas", [])]
-                    }
+                retry_attempts = 0
+                max_retry = 3
+                resultado_branch = None
+                while retry_attempts < max_retry:
+                    try:
+                        resultado_branch = processar_branch_por_provedor(
+                            repo=repo,
+                            nome_branch=grupo.get("branch_sugerida", f"branch-grupo-{i+1}"),
+                            branch_de_origem=branch_base_para_pr,
+                            branch_alvo_do_pr=branch_base_para_pr,
+                            mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
+                            descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
+                            conjunto_de_mudancas=grupo.get("conjunto_de_mudancas", []),
+                            repository_type=repository_type,
+                            modo_adicao_incremental=modo_adicao_incremental
+                        )
+                        print(f"[COMMIT_HANDLER] Grupo {i+1} - PR URL recebida: {resultado_branch.get('pr_url')}")
+                        resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
+                        print(f"[COMMIT_HANDLER] Validando PR URL do grupo {i+1}: antes={resultado_branch.get('pr_url')}, depois={resultado_branch['pr_url']}")
+                        # Checa se houve conflito de referência
+                        pr_url = resultado_branch.get('pr_url', '')
+                        if resultado_branch.get('success') is False and ('TF401028' in pr_url or 'GitReferenceStaleException' in pr_url):
+                            logging.warning(f"[{job_id}] [COMMIT_HANDLER] Conflito de referência detectado no grupo {i+1}: {pr_url}. Retry {retry_attempts+1}/{max_retry}")
+                            print(f"[{job_id}] [COMMIT_HANDLER] Sistema de retry acionado para conflito de referência no grupo {i+1}.")
+                            retry_attempts += 1
+                            if retry_attempts < max_retry:
+                                time.sleep(5)
+                                continue
+                        break
+                    except Exception as e:
+                        logging.error(f"[{job_id}] [COMMIT_HANDLER] Erro no processamento do grupo {i+1}: {str(e)}. Retry {retry_attempts+1}/{max_retry}")
+                        if 'TF401028' in str(e) or 'GitReferenceStaleException' in str(e):
+                            print(f"[{job_id}] [COMMIT_HANDLER] Sistema de retry acionado para conflito de referência no grupo {i+1}.")
+                            retry_attempts += 1
+                            if retry_attempts < max_retry:
+                                time.sleep(5)
+                                continue
+                        resultado_branch = {
+                            "branch_name": grupo.get("branch_sugerida", f"branch-grupo-{i+1}"),
+                            "success": False,
+                            "pr_url": f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}",
+                            "message": f"Erro no grupo {i+1}: {str(e)}",
+                            "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in grupo.get("conjunto_de_mudancas", [])]
+                        }
+                        break
                 print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}'")
                 commit_results.append(resultado_branch)
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
