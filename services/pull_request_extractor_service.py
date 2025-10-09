@@ -12,7 +12,12 @@ class PullRequestExtractorService:
     def _validate_pr_url(self, pr_url: str) -> bool:
         if not pr_url or not isinstance(pr_url, str):
             return False
-        return pr_url.startswith('http://') or pr_url.startswith('https://')
+        return (
+            pr_url.startswith('http://') or
+            pr_url.startswith('https://') or
+            'PR criado' in pr_url or
+            'Branch processada' in pr_url
+        )
 
     def _extract_prs_from_incremental_summary(self, job_id: str, job_data: dict) -> List[PullRequestSummary]:
         summary_list = []
@@ -22,8 +27,9 @@ class PullRequestExtractorService:
         for pr in pull_requests:
             pr_url = pr.get('pr_url')
             branch_name = pr.get('branch_name', 'branch-desconhecida')
+            print(f"[{job_id}] [PRExtractor] Validando PR incremental: branch={branch_name}, pr_url='{pr_url}'")
             if not self._validate_pr_url(pr_url):
-                print(f"[{job_id}] [PRExtractor] WARNING: PR incremental sem URL válida para branch {branch_name}. Pulando.")
+                print(f"[{job_id}] [PRExtractor] WARNING: PR incremental REJEITADO para branch {branch_name}. URL: '{pr_url}'")
                 continue
             task_ids = pr.get('task_ids', [])
             arquivos_modificados = [f"task-{tid}" for tid in task_ids]
@@ -32,7 +38,7 @@ class PullRequestExtractorService:
                 branch_name=branch_name,
                 arquivos_modificados=arquivos_modificados
             ))
-            print(f"[{job_id}] [PRExtractor] PR incremental extraído: branch={branch_name}, url={pr_url}")
+            print(f"[{job_id}] [PRExtractor] PR incremental ACEITO: branch={branch_name}, url={pr_url}")
         print(f"[{job_id}] [PRExtractor] PRs válidos extraídos (incremental): {len(summary_list)}")
         return summary_list
 
@@ -43,8 +49,9 @@ class PullRequestExtractorService:
         for pr in commit_details:
             pr_url = pr.get('pr_url')
             branch_name = pr.get('branch_name', 'branch-desconhecida')
+            print(f"[{job_id}] [PRExtractor] Validando PR padrão: branch={branch_name}, pr_url='{pr_url}'")
             if not self._validate_pr_url(pr_url):
-                print(f"[{job_id}] [PRExtractor] WARNING: PR padrão sem URL válida para branch {branch_name}. Pulando.")
+                print(f"[{job_id}] [PRExtractor] WARNING: PR padrão REJEITADO para branch {branch_name}. URL: '{pr_url}'")
                 continue
             arquivos_modificados = pr.get('arquivos_modificados', [])
             summary_list.append(PullRequestSummary(
@@ -52,6 +59,6 @@ class PullRequestExtractorService:
                 branch_name=branch_name,
                 arquivos_modificados=arquivos_modificados
             ))
-            print(f"[{job_id}] [PRExtractor] PR padrão extraído: branch={branch_name}, url={pr_url}")
+            print(f"[{job_id}] [PRExtractor] PR padrão ACEITO: branch={branch_name}, url={pr_url}")
         print(f"[{job_id}] [PRExtractor] PRs válidos extraídos (padrão): {len(summary_list)}")
         return summary_list
