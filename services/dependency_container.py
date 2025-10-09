@@ -1,5 +1,4 @@
 import os
-
 from tools.job_store import RedisJobStore
 from services.workflow_orchestrator import WorkflowOrchestrator
 from services.job_manager import JobManager
@@ -95,6 +94,10 @@ class DependencyContainer:
     def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
         if self._workflow_orchestrator is None:
             workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
+            incremental_orchestrator = self.get_incremental_orchestrator_service()
+            if not incremental_orchestrator:
+                raise ValueError("ERRO: IncrementalOrchestratorService não pôde ser criado")
+            print(f"[DependencyContainer] IncrementalOrchestratorService criado com sucesso: {type(incremental_orchestrator)}")
             self._workflow_orchestrator = WorkflowOrchestrator(
                 self.get_job_manager(), 
                 self.get_blob_storage(), 
@@ -103,7 +106,8 @@ class DependencyContainer:
                 self.get_job_handler(),
                 self.get_report_handler(),
                 self.get_commit_handler(),
-                self.get_data_formatter()
+                self.get_data_formatter(),
+                incremental_orchestrator
             )
         return self._workflow_orchestrator
     
