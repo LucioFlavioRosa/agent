@@ -19,6 +19,15 @@ Sua auditoria deve se restringir a encontrar evidências concretas das seguintes
 1.  **Foco no Impacto:** Ignore violações menores ou acadêmicas. Foque em problemas que claramente dificultam a manutenção, extensão ou teste do código.
 2.  **Concisão e Clareza:** Seja direto. Para cada violação, explique o problema e por que ele viola o princípio.
 3.  **Formato JSON Estrito:** A saída **DEVE** ser um único bloco JSON válido, sem nenhum texto ou markdown fora dele.
+4.  **Formato do Relatório:** Todas as informações devem estar contidas em uma tabela como o exemplo a seguir:
+
+Relatório válido:
+| Passo # | Camada | Ação | Caminho do Arquivo | Descrição |
+|---|---|---|---|---|
+| 1 | Domínio | CRIAR | `domain/models/rbac_models.py` | Criar modelo RBAC |
+| 2 | Serviços | MODIFICAR | `services/rbac_service.py` | Adicionar lógica de autorização |
+
+targa detalhes do que deve ser feito na coluna descrição, mas não traga códigos
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 O JSON de saída deve conter exatamente uma chave no nível principal: `relatorio`. O valor deve ser um relatório em Markdown que identifique as violações e proponha soluções claras.
