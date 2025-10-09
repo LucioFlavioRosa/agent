@@ -70,7 +70,11 @@ class IncrementalOrchestratorService:
                             impacted_files = self.dependency_analyzer.analyze_task_impact(all_tasks[tid], codebase)
                             valid = self._validate_task_result(all_tasks[tid], result, impacted_files)
                             if valid:
-                                commit_result = self.committer.create_incremental_commit(job_id, all_tasks[tid], result.modified_files, repo_name, branch_name, repository_type)
+                                modified_files = result.modified_files
+                                if hasattr(result, 'deleted_files') and result.deleted_files:
+                                    if '__deleted_files__' not in modified_files:
+                                        modified_files['__deleted_files__'] = result.deleted_files
+                                commit_result = self.committer.create_incremental_commit(job_id, all_tasks[tid], modified_files, repo_name, branch_name, repository_type)
                                 pr_url = commit_result.get('pr_url')
                                 pr_urls.append(pr_url)
                                 pull_requests.append({
