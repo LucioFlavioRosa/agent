@@ -15,8 +15,11 @@ class IncrementalOrchestratorService:
         self.committer = committer
         self.redis_client = redis_client
 
-    def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None, pause_on_high_impact: bool = False) -> Dict[str, Any]:
+    def execute_incremental_changes(self, job_id: str, report_text: str, repo_name: str, branch_name: str, repository_type: str, completed_task_ids: Optional[List[str]] = None, pause_on_high_impact: bool = False, usuario_executor: Optional[str] = None) -> Dict[str, Any]:
+        print(f"[{job_id}] [IncrementalOrchestrator] ENTRADA - aplicar_mudancas_incrementalmente implícito (método chamado)")
         tasks = self.report_parser.parse_implementation_plan(report_text)
+        if not tasks:
+            raise ValueError(f"[{job_id}] ERRO: Parser não retornou tarefas do relatório")
         print(f"[{job_id}] [IncrementalOrchestrator] Total de tarefas recebidas do parser: {len(tasks)}")
         for task in tasks:
             print(f"[{job_id}] [IncrementalOrchestrator] Tarefa {task.id}: step={task.step_number}, layer={task.layer}, action={task.action}, file={task.file_path}")
@@ -64,10 +67,10 @@ class IncrementalOrchestratorService:
                 for tid in sorted_level:
                     if tid in completed_tasks or tid in failed_tasks:
                         continue
-                    print(f"[{job_id}] [IncrementalOrchestrator] Submetendo tarefa {tid} para execução")
+                    print(f"[{job_id}] [IncrementalOrchestrator] Chamando apply_single_task para tarefa {tid} com job_id={job_id}")
                     task = all_tasks[tid]
                     context = self._build_task_context(task, completed_tasks)
-                    future = executor.submit(self.agente_aplicador.apply_single_task, task, context, job_id)
+                    future = executor.submit(self.agente_aplicador.apply_single_task, task, context, job_id, usuario_executor)
                     futures[future] = tid
                 for future in as_completed(futures):
                     tid = futures[future]
