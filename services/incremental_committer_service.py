@@ -20,9 +20,9 @@ class IncrementalCommitterService:
                 repo_name=repo_name,
                 branch_name=branch_name,
                 files=modified_files,
+                deleted_files=deleted_files,
                 commit_message=commit_message,
-                author=None,
-                deleted_files=deleted_files
+                author=None
             )
             commit_hash = commit_result.get('commit_hash')
             commit_url = commit_result.get('commit_url')
@@ -76,9 +76,9 @@ class IncrementalCommitterService:
             repo_name=repo_name,
             branch_name=branch_name,
             files=modified_files,
+            deleted_files=deleted_files,
             commit_message=commit_message,
-            author=None,
-            deleted_files=deleted_files
+            author=None
         )
         commit_hash = commit_result.get('commit_hash')
         commit_url = commit_result.get('commit_url')
