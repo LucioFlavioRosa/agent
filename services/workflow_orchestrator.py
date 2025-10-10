@@ -63,7 +63,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
 
-            # Mudança principal: parsing incremental deve ocorrer IMEDIATAMENTE APÓS aprovação (step 1)
             if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -80,45 +79,33 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
-            
-                # Se for o passo incremental, processe todos os batches e SAIA do loop principal
                 if executar_incremental and current_step_index == 1:
                     step_batches = job_info['data'][JobFields.STEP_BATCHES]
                     current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
                     batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
                     total_batches = len(step_batches)
-            
                     for batch_idx in range(current_batch_index, total_batches):
                         batch = step_batches[batch_idx]
                         print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
                         agent_params = step.get('params', {}).copy() if step.get('params') else {}
                         agent_params['current_batch'] = batch
                         agent_params['total_batches'] = total_batches
-                        
                         result = self._execute_step_with_strategy(
                             job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                         )
-                        
                         batch_results.append(result)
                         job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                         job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                         self.job_handler.update_job(job_id, job_info)
-            
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
-                    
-                    # CORREÇÃO 2: Use 'break' para sair do loop principal após processar os batches
                     break 
-                
-                # Execução normal para steps não incrementais
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
-            
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-        
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
@@ -196,7 +183,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             total_batches = len(batch_results)
             total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
             print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
-            final_result = {'incremental_results': batch_results}
+            final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
         resultado_agrupamento, resultado_refatoracao = self.data_formatter.extract_workflow_results(
             job_info, workflow, final_result
         )
