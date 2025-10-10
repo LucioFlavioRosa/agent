@@ -62,9 +62,9 @@ class AgenteRevisor:
         status_update: Optional[str] = None,
         retornar_lista_arquivos: bool = False,
         modo_adicao_incremental: bool = False,
-        usuario_executor: Optional[str] = None
+        usuario_executor: Optional[str] = None,
+        current_batch: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
-
         resultado_leitura = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,
@@ -73,19 +73,15 @@ class AgenteRevisor:
             arquivos_especificos=arquivos_especificos,
             retornar_lista_arquivos=retornar_lista_arquivos
         )
-        
         codigo_para_analise = resultado_leitura.get('codigo', {})
         lista_arquivos = resultado_leitura.get('lista_arquivos', [])
-
         if not codigo_para_analise:
             if arquivos_especificos and len(arquivos_especificos) > 0:
                 print(f"[Agente Revisor] AVISO: Nenhum dos arquivos específicos foi encontrado no repositório para a análise '{tipo_analise}'.")
             else:
                 print(f"[Agente Revisor] AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
             print(f"[Agente Revisor] Retornando resposta vazia devido à ausência de código")
-            
             return {"resultado": {"reposta_final": {}}}
-
         if lista_arquivos:
             print(f"[Agente Revisor] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
             codigo_str = json.dumps({
@@ -94,7 +90,14 @@ class AgenteRevisor:
             }, indent=2, ensure_ascii=False)
         else:
             codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
-
+        # Suporte a processamento incremental por batch
+        if current_batch is not None and isinstance(current_batch, list) and len(current_batch) > 0:
+            batch_instrucao = "ATENÇÃO: Processar APENAS os passos listados abaixo. Ignorar todos os outros passos do relatório original.\n"
+            batch_instrucao += json.dumps(current_batch, indent=2, ensure_ascii=False)
+            if instrucoes_extras:
+                instrucoes_extras += "\n\n" + batch_instrucao
+            else:
+                instrucoes_extras = batch_instrucao
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
             prompt_principal=codigo_str,
@@ -103,7 +106,6 @@ class AgenteRevisor:
             model_name=model_name,
             max_token_out=max_token_out,
         )
-
         log_custom_data(
             job_id=job_id,
             projeto=projeto,
@@ -118,7 +120,6 @@ class AgenteRevisor:
             modo_adicao_incremental=modo_adicao_incremental,
             usuario_executor=usuario_executor
         )
-
         return {
             "resultado": {
                 "reposta_final": resultado_da_ia
