@@ -63,7 +63,8 @@ class AgenteRevisor:
         retornar_lista_arquivos: bool = False,
         modo_adicao_incremental: bool = False,
         usuario_executor: Optional[str] = None,
-        current_batch: Optional[List[Dict[str, Any]]] = None
+        current_batch: Optional[List[Dict[str, Any]]] = None,
+        **kwargs
     ) -> Dict[str, Any]:
         resultado_leitura = self._get_code(
             repositorio=repositorio,
