@@ -61,13 +61,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
+            max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
 
-            if executar_incremental and start_from_step >= 1:
+            # Mudança principal: parsing incremental deve ocorrer IMEDIATAMENTE APÓS aprovação (step 1)
+            if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
-                    if not report_text:
-                        raise ValueError(f"[{job_id}] ERRO: Não há relatório aprovado para parsing incremental.")
-                    step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text)
+                    if not report_text or not report_text.strip():
+                        raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
+                    step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
                     job_info['data'][JobFields.STEP_BATCHES] = step_batches
                     job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
                     job_info['data'][JobFields.BATCH_RESULTS] = []
@@ -81,6 +83,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] Status atual: {step['status_update']}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
 
+                # Refatorado: processamento incremental de batches ocorre no step 1
                 if executar_incremental and current_step_index == 1:
                     step_batches = job_info['data'][JobFields.STEP_BATCHES]
                     current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
@@ -88,7 +91,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     total_batches = len(step_batches)
                     for batch_idx in range(current_batch_index, total_batches):
                         batch = step_batches[batch_idx]
-                        print(f"[{job_id}] [INCREMENTAL] Processando batch {batch_idx+1}/{total_batches} com {len(batch)} steps.")
+                        print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps. Steps: {[s.get('Passo #') for s in batch]}")
                         agent_params = step.get('params', {}).copy() if step.get('params') else {}
                         agent_params['current_batch'] = batch
                         agent_params['batch_index'] = batch_idx
@@ -102,8 +105,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                         self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches ({total_batches}) processados.")
-                    previous_step_result = {'incremental_results': batch_results}
-                    print(f"[{job_id}] [INCREMENTAL] Resultados dos batches consolidados para o próximo step.")
+                    print(f"[{job_id}] [INCREMENTAL] Consolidação: {len(batch_results)} batches, {sum(len(b) for b in step_batches)} steps totais.")
+                    previous_step_result = {'incremental_results': batch_results, 'total_batches': len(step_batches), 'total_steps': sum(len(b) for b in step_batches)}
                     continue
 
                 step_result = self._execute_step_with_strategy(
