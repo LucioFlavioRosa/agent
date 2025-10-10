@@ -42,7 +42,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] Relatório salvo com sucesso: {url}")
         job_info['data']['report_blob_url'] = url
         self.job_handler.update_job(job_id, job_info)
-        # Redundância segura: atualiza o tracker explicitamente
         try:
             if job_info['data'].get('report_blob_url'):
                 self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
@@ -62,10 +61,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repo_reader = ReaderGeral(repository_provider=repository_provider)
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
-            # INICIO: Lógica para execução incremental de steps
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             if start_from_step == 0:
-                # Após geração/leitura do relatório (step 0)
                 if executar_incremental:
                     report_text = None
                     if job_info['data'].get('analysis_report'):
@@ -78,7 +75,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         job_info['data']['current_batch_index'] = 0
                         job_info['data']['incremental_results'] = []
                         self.job_handler.update_job(job_id, job_info)
-            # Execução incremental
             if executar_incremental and 'step_batches' in job_info['data']:
                 step_batches = job_info['data']['step_batches']
                 current_batch_index = job_info['data'].get('current_batch_index', 0)
@@ -88,11 +84,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     batch = step_batches[batch_idx]
                     batch_results = []
                     for step in batch:
-                        # Monta step_dict para _execute_step_with_strategy
-                        # Aqui, adaptamos para usar a lógica do step do workflow, mas com dados do relatório
-                        # Usamos o primeiro step do workflow como base
                         workflow_step = steps_to_run[0] if steps_to_run else {}
-                        # Atualiza workflow_step com informações do step do relatório
                         step_for_execution = dict(workflow_step)
                         step_for_execution.update({
                             'descricao': step.get('descricao'),
@@ -110,11 +102,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data']['incremental_results'] = incremental_results
                     job_info['data']['current_batch_index'] = batch_idx + 1
                     self.job_handler.update_job(job_id, job_info)
-                # Após todos os lotes, consolidar e finalizar
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
                 return
-            # FIM: Lógica incremental
-            # Modo normal (não incremental)
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -273,15 +262,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                           final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        # INICIO: Consolidação incremental
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
         if executar_incremental and 'incremental_results' in job_info['data']:
-            # Consolida todos os resultados dos lotes em um único resultado final
             incremental_results = job_info['data']['incremental_results']
-            # Estratégia: concatenar outputs ou aplicar lógica de merge customizada
-            # Aqui, simplesmente agrupamos todos os resultados em uma lista
             final_result = {'incremental_results': incremental_results}
-        # FIM: Consolidação incremental
         resultado_agrupamento, resultado_refatoracao = self.data_formatter.extract_workflow_results(
             job_info, workflow, final_result
         )
