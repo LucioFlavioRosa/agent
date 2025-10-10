@@ -1,6 +1,7 @@
 from github import GithubException, UnknownObjectException
 from typing import Dict, Any, List
 from tools.repo_committers.base_committer import BaseCommitter
+from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
 
 def processar_branch_github(
     repo,
@@ -13,8 +14,13 @@ def processar_branch_github(
     modo_adicao_incremental: bool = False
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote GitHub para a Branch: '{nome_branch}' ---")
-    
     resultado_branch = BaseCommitter._inicializar_resultado_branch(nome_branch)
+    sanitized = BranchNameSanitizer.sanitize(nome_branch)
+    if sanitized != nome_branch or sanitized == "invalid-branch":
+        msg = f"Nome da branch inválido para GitHub: '{nome_branch}' (sanitizado: '{sanitized}')"
+        print(f"[ERRO][GITHUB] {msg}")
+        BaseCommitter._finalizar_resultado_erro(resultado_branch, msg)
+        return resultado_branch
     commits_realizados = 0
 
     try:
