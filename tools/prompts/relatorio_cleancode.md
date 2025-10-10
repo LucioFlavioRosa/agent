@@ -27,12 +27,12 @@ Relatório válido:
 | 1 | Domínio | CRIAR | `domain/models/rbac_models.py` | Criar modelo RBAC | vai demorar 3 dias uteis |
 | 2 | Serviços | MODIFICAR | `services/rbac_service.py` | Adicionar lógica de autorização | vai demorar 2 horas |
 
-naõ deve haver texto algum ao final
+naõ deve haver texto algum fora da tabela
 
-targa detalhes do que deve ser feito na coluna descrição, mas não traga códigos
+traga detalhes do que deve ser feito na coluna descrição, mas não traga códigos
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
-O JSON de saída deve conter exatamente uma chave no nível principal: `relatorio`. O valor deve ser um relatório em Markdown que identifique as violações e proponha soluções claras.
+O JSON de saída deve conter exatamente uma chave no nível principal: `relatorio`. O valor deve ser um relatório em Markdown que identifique as violações e proponha soluções claras. nao deve haver texto que não esteja a tabela
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
