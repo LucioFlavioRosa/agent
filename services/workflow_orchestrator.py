@@ -23,7 +23,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                  commit_handler: CommitHandler = None, data_formatter: DataFormatter = None):
         self.workflow_registry = workflow_registry
         self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
-
         self.job_handler = job_handler or JobHandler(job_manager)
         self.report_handler = report_handler or ReportHandler(blob_storage)
         self.commit_handler = commit_handler or CommitHandler()
@@ -62,135 +61,56 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
-            if start_from_step == 0:
-                if executar_incremental:
-                    report_text = None
-                    if job_info['data'].get('analysis_report'):
-                        report_text = job_info['data']['analysis_report']
-                    elif previous_step_result and 'relatorio' in previous_step_result:
-                        report_text = previous_step_result['relatorio']
-                    if report_text:
-                        step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text)
-                        job_info['data']['step_batches'] = step_batches
-                        job_info['data']['current_batch_index'] = 0
-                        job_info['data']['incremental_results'] = []
-                        self.job_handler.update_job(job_id, job_info)
-            if executar_incremental and 'step_batches' in job_info['data']:
-                step_batches = job_info['data']['step_batches']
-                current_batch_index = job_info['data'].get('current_batch_index', 0)
-                incremental_results = job_info['data'].get('incremental_results', [])
-                total_batches = len(step_batches)
-                for batch_idx in range(current_batch_index, total_batches):
-                    batch = step_batches[batch_idx]
-                    print(f"[{job_id}] [INCREMENTAL] Iniciando processamento do batch {batch_idx+1}/{total_batches} com {len(batch)} steps.")
-                    batch_results = []
-                    for idx_step, step in enumerate(batch):
-                        print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches} - Step {idx_step+1}/{len(batch)}: {step.get('descricao', 'N/A')[:100]}")
-                        print(f"[{job_id}] [INCREMENTAL] Chamando _execute_step_with_strategy para batch {batch_idx}, step {idx_step}.")
-                        result = self._execute_step_with_strategy(
-                            job_id, job_info, step, batch_idx, previous_step_result, repo_reader, batch_idx, start_from_step
-                        )
-                        print(f"[{job_id}] [INCREMENTAL] Step {idx_step+1}/{len(batch)} executado. Tamanho do resultado: {len(str(result)) if result is not None else 0}")
-                        batch_results.append(result)
-                        previous_step_result = result
-                    incremental_results.append(batch_results)
-                    job_info['data']['incremental_results'] = incremental_results
-                    job_info['data']['current_batch_index'] = batch_idx + 1
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1} concluído. current_batch_index atualizado para {job_info['data']['current_batch_index']}.")
-                print(f"[{job_id}] [INCREMENTAL] Todos os batches ({total_batches}) processados.")
-                self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
-                return
+            # Step 0: geração do relatório
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 print(f"[{job_id}] gerar_relatorio_apenas: {job_info.get('data', {}).get(JobFields.GERAR_RELATORIO_APENAS)}")
                 print(f"[{job_id}] Status atual: {step['status_update']}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
-                report_generated_by_agent = False
-                if current_step_index == 0:
-                    existing_report_result = self.report_handler.try_read_existing_report(job_id, job_info, current_step_index)
-                    existing_report_text = self.report_handler.validate_and_parse_blob_report(existing_report_result, job_id)
-                    if existing_report_text:
-                        print(f"[{job_id}] [DEBUG] Relatório lido do blob storage, tamanho: {len(existing_report_text)}")
-                        job_info['data']['analysis_report'] = existing_report_text
-                        report_data = {'relatorio': existing_report_text}
-                        self.job_handler.save_step_result(job_info, current_step_index, report_data)
+                # INCREMENTAL EXECUTION LOGIC FOR STEP 1 (APLICAÇÃO DE MUDANÇAS)
+                if executar_incremental and current_step_index == 1:
+                    if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
+                        report_text = job_info['data'].get('analysis_report')
+                        if not report_text:
+                            raise ValueError(f"[{job_id}] ERRO: Não há relatório aprovado para parsing incremental.")
+                        step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text)
+                        job_info['data'][JobFields.STEP_BATCHES] = step_batches
+                        job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
+                        job_info['data'][JobFields.BATCH_RESULTS] = []
                         self.job_handler.update_job(job_id, job_info)
-                        strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                        try:
-                            if job_info['data'].get('report_blob_url'):
-                                self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
-                        except Exception as e:
-                            print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after reading report: {e}")
-                        if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                            print(f"[{job_id}] [DEBUG] Validando relatório antes de finalizar workflow (modo report_only, lido do blob)")
-                            analysis_report = job_info['data'].get('analysis_report')
-                            if not analysis_report or len(analysis_report.strip()) < 100:
-                                raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
-                            self.job_handler.update_job_status(job_id, 'completed')
-                            print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only, lido do blob)")
-                            return
-                        if strategy.should_pause_for_approval(job_info, step):
-                            self.handle_approval_step(job_id, job_info, current_step_index, report_data)
-                            return
-                        if strategy.should_finalize_workflow(job_info, current_step_index):
-                            print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
-                            print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
-                            print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
-                            print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                            analysis_report = job_info['data'].get('analysis_report')
-                            if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                                if not analysis_report or len(analysis_report.strip()) < 100:
-                                    raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
-                            self.job_handler.update_job_status(job_id, 'completed')
-                            print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                            print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                            return
-                        previous_step_result = report_data
-                        continue
-                    else:
-                        print(f"[{job_id}] Relatório inválido ou vazio lido do Blob. Gerando novo relatório.")
-                        report_generated_by_agent = True
-                step_result = self._execute_step_with_strategy(job_id, job_info, step, current_step_index, 
-                                                             previous_step_result, repo_reader, i, start_from_step)
+                        print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
+                    step_batches = job_info['data'][JobFields.STEP_BATCHES]
+                    current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
+                    batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
+                    total_batches = len(step_batches)
+                    for batch_idx in range(current_batch_index, total_batches):
+                        batch = step_batches[batch_idx]
+                        print(f"[{job_id}] [INCREMENTAL] Processando batch {batch_idx+1}/{total_batches} com {len(batch)} steps.")
+                        agent_params = step.get('params', {}).copy() if step.get('params') else {}
+                        agent_params['current_batch'] = batch
+                        agent_params['batch_index'] = batch_idx
+                        agent_params['total_batches'] = total_batches
+                        result = self._execute_step_with_strategy(
+                            job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, batch_steps=batch, agent_params_override=agent_params
+                        )
+                        print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches} executado. Tamanho do resultado: {len(str(result)) if result is not None else 0}")
+                        batch_results.append(result)
+                        job_info['data'][JobFields.BATCH_RESULTS] = batch_results
+                        job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
+                        self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [INCREMENTAL] Todos os batches ({total_batches}) processados.")
+                    # Consolidar resultados dos batches para o próximo step
+                    previous_step_result = {'incremental_results': batch_results}
+                    print(f"[{job_id}] [INCREMENTAL] Resultados dos batches consolidados para o próximo step.")
+                    continue  # Não executa o step padrão, já processou incrementalmente
+                # Execução padrão para outros steps
+                step_result = self._execute_step_with_strategy(
+                    job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
+                )
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
-                if current_step_index == 0 and report_generated_by_agent:
-                    print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (step 0)")
-                    sucesso_salvar = self._save_generated_report(job_id, job_info, step_result, current_step_index)
-                    if not sucesso_salvar:
-                        raise ValueError(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio e não pode ser salvo.")
-                    if not job_info['data'].get('report_blob_url'):
-                        raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
-                    print(f"[{job_id}] Relatório salvo com sucesso: {job_info['data']['report_blob_url']}")
-                    strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                    try:
-                        if job_info['data'].get('report_blob_url'):
-                            self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
-                    except Exception as e:
-                        print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
-                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        print(f"[{job_id}] [DEBUG] Validando relatório antes de finalizar workflow (modo report_only, gerado pelo agente)")
-                        analysis_report = job_info['data'].get('analysis_report')
-                        if not analysis_report or len(analysis_report.strip()) < 100:
-                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
-                        self.job_handler.update_job_status(job_id, 'completed')
-                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only, gerado pelo agente)")
-                        return
-                    if strategy.should_pause_for_approval(job_info, step):
-                        self.handle_approval_step(job_id, job_info, current_step_index, step_result)
-                        return
-                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        print(f"[{job_id}] [DEBUG] Finalizando workflow imediatamente após salvar relatório pois gerar_relatorio_apenas=True")
-                        print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                        analysis_report = job_info['data'].get('analysis_report')
-                        if not analysis_report or len(analysis_report.strip()) < 100:
-                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
-                        self.job_handler.update_job_status(job_id, 'completed')
-                        print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                        print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                        return
+                # Finalização padrão
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
@@ -208,16 +128,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if strategy.should_pause_for_approval(job_info, step):
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
+            # Finalização do workflow após todos os steps
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
-                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_index: Optional[int] = None) -> Dict[str, Any]:
+                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
-        agent_params = step.get('params', {}).copy()
+        agent_params = step.get('params', {}).copy() if step.get('params') else {}
         is_comparador_agent = step.get('agent') == 'comparador'
         if is_comparador_agent:
             agent_params.update({
@@ -243,8 +164,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'usuario_executor': job_info.get('data', {}).get('usuario_executor')
         })
         agent_params['job_id'] = job_id
-        if batch_index is not None:
-            print(f"[{job_id}] [INCREMENTAL] _execute_step_with_strategy: batch_index={batch_index}, current_step_index={current_step_index}, descricao='{step.get('descricao', 'N/A')[:100]}'")
+        if batch_steps is not None:
+            agent_params['current_batch'] = batch_steps
+        if agent_params_override:
+            agent_params.update(agent_params_override)
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
@@ -262,12 +185,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                           final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
-        if executar_incremental and 'incremental_results' in job_info['data']:
-            incremental_results = job_info['data']['incremental_results']
-            total_batches = len(incremental_results)
-            total_steps = sum(len(batch) for batch in incremental_results)
+        if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
+            batch_results = job_info['data'][JobFields.BATCH_RESULTS]
+            total_batches = len(batch_results)
+            total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
             print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
-            final_result = {'incremental_results': incremental_results}
+            final_result = {'incremental_results': batch_results}
         resultado_agrupamento, resultado_refatoracao = self.data_formatter.extract_workflow_results(
             job_info, workflow, final_result
         )
