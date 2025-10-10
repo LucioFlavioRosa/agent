@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 class PullRequestSummary(BaseModel):
@@ -60,6 +60,7 @@ class JobFields:
     STEP_BATCHES = 'step_batches'
     CURRENT_BATCH_INDEX = 'current_batch_index'
     BATCH_RESULTS = 'batch_results'
+    MAX_STEPS_PER_BATCH = 'max_steps_per_batch'
 
 class JobActions:
     APPROVE = 'approve'
@@ -84,3 +85,4 @@ class StartAnalysisPayload(BaseModel):
     modo_adicao_incremental: bool = False
     usuario_executor: Optional[str] = None
     executar_steps_incrementalmente: bool = False
+    max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
