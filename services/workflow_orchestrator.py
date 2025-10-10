@@ -82,26 +82,23 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 total_batches = len(step_batches)
                 for batch_idx in range(current_batch_index, total_batches):
                     batch = step_batches[batch_idx]
+                    print(f"[{job_id}] [INCREMENTAL] Iniciando processamento do batch {batch_idx+1}/{total_batches} com {len(batch)} steps.")
                     batch_results = []
-                    for step in batch:
-                        workflow_step = steps_to_run[0] if steps_to_run else {}
-                        step_for_execution = dict(workflow_step)
-                        step_for_execution.update({
-                            'descricao': step.get('descricao'),
-                            'acao': step.get('acao'),
-                            'caminho': step.get('caminho'),
-                            'camada': step.get('camada'),
-                            'raw': step.get('raw'),
-                        })
+                    for idx_step, step in enumerate(batch):
+                        print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches} - Step {idx_step+1}/{len(batch)}: {step.get('descricao', 'N/A')[:100]}")
+                        print(f"[{job_id}] [INCREMENTAL] Chamando _execute_step_with_strategy para batch {batch_idx}, step {idx_step}.")
                         result = self._execute_step_with_strategy(
-                            job_id, job_info, step_for_execution, batch_idx, previous_step_result, repo_reader, batch_idx, start_from_step
+                            job_id, job_info, step, batch_idx, previous_step_result, repo_reader, batch_idx, start_from_step
                         )
+                        print(f"[{job_id}] [INCREMENTAL] Step {idx_step+1}/{len(batch)} executado. Tamanho do resultado: {len(str(result)) if result is not None else 0}")
                         batch_results.append(result)
                         previous_step_result = result
                     incremental_results.append(batch_results)
                     job_info['data']['incremental_results'] = incremental_results
                     job_info['data']['current_batch_index'] = batch_idx + 1
                     self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1} concluído. current_batch_index atualizado para {job_info['data']['current_batch_index']}.")
+                print(f"[{job_id}] [INCREMENTAL] Todos os batches ({total_batches}) processados.")
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
                 return
             for i, step in enumerate(steps_to_run):
@@ -247,7 +244,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         })
         agent_params['job_id'] = job_id
         if batch_index is not None:
-            print(f"[{job_id}] Executando step {current_step_index} do batch {batch_index}")
+            print(f"[{job_id}] [INCREMENTAL] _execute_step_with_strategy: batch_index={batch_index}, current_step_index={current_step_index}, descricao='{step.get('descricao', 'N/A')[:100]}'")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
@@ -267,6 +264,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
         if executar_incremental and 'incremental_results' in job_info['data']:
             incremental_results = job_info['data']['incremental_results']
+            total_batches = len(incremental_results)
+            total_steps = sum(len(batch) for batch in incremental_results)
+            print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
             final_result = {'incremental_results': incremental_results}
         resultado_agrupamento, resultado_refatoracao = self.data_formatter.extract_workflow_results(
             job_info, workflow, final_result
