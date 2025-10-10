@@ -12,7 +12,6 @@ class IncrementalStepExecutorService:
         header_found = False
         for line in lines:
             if re.match(r'^\|.*\|$', line):
-                # Ignora linhas de separação (apenas |, -, e espaços)
                 if re.match(r'^\|[\s\-\|]+\|$', line):
                     continue
                 if not header_found:
@@ -26,7 +25,6 @@ class IncrementalStepExecutorService:
         rows = table_lines[1:]
         result = []
         for row in rows:
-            # Ignora linhas de separação novamente por segurança
             if re.match(r'^\|[\s\-\|]+\|$', row):
                 continue
             cols = [c.strip() for c in row.strip('|').split('|')]
@@ -62,3 +60,21 @@ class IncrementalStepExecutorService:
             batches.append(current_batch)
         print(f"[INCREMENTAL] {len(batches)} batches criados.")
         return batches
+
+    @staticmethod
+    def merge_all_batches(batch_results: List[Dict]) -> Dict[str, any]:
+        resumo_geral = []
+        conjunto_de_mudancas = []
+        for batch in batch_results:
+            if not isinstance(batch, dict):
+                continue
+            batch_resumo = batch.get("resumo_geral")
+            if batch_resumo:
+                resumo_geral.append(str(batch_resumo))
+            batch_mudancas = batch.get("conjunto_de_mudancas")
+            if isinstance(batch_mudancas, list):
+                conjunto_de_mudancas.extend(batch_mudancas)
+        return {
+            "resumo_geral": " ".join(resumo_geral).strip(),
+            "conjunto_de_mudancas": conjunto_de_mudancas
+        }
