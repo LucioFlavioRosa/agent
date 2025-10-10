@@ -62,7 +62,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
 
-            # INICIO DA MODIFICACAO: Quebra do relatório em batches APÓS aprovação e ANTES da execução do step 1
             if executar_incremental and start_from_step >= 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -74,7 +73,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-            # FIM DA MODIFICACAO
 
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
@@ -83,7 +81,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] Status atual: {step['status_update']}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
 
-                # INCREMENTAL EXECUTION LOGIC FOR STEP 1 (APLICAÇÃO DE MUDANÇAS)
                 if executar_incremental and current_step_index == 1:
                     step_batches = job_info['data'][JobFields.STEP_BATCHES]
                     current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
@@ -107,7 +104,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches ({total_batches}) processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     print(f"[{job_id}] [INCREMENTAL] Resultados dos batches consolidados para o próximo step.")
-                    continue  # Não executa o step padrão, já processou incrementalmente
+                    continue
 
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
