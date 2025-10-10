@@ -62,7 +62,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
 
-            # INICIO DA MODIFICACAO: Quebra do relatório em batches APÓS aprovação e ANTES da execução do step 1
+            # Quebra do relatório em batches APÓS aprovação e ANTES da execução do step 1
             if executar_incremental and start_from_step >= 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -74,7 +74,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-            # FIM DA MODIFICACAO
 
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
