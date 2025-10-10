@@ -80,4 +80,4 @@ class StartAnalysisPayload(BaseModel):
     retornar_lista_arquivos: bool = False
     modo_adicao_incremental: bool = False
     usuario_executor: Optional[str] = None
-    executar_steps_incrementalmente: bool = False  # Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.
+    executar_steps_incrementalmente: bool = False
