@@ -56,7 +56,28 @@ class JobFields:
     RETORNAR_LISTA_ARQUIVOS = 'retornar_lista_arquivos'
     MODO_ADICAO_INCREMENTAL = 'modo_adicao_incremental'
     USUARIO_EXECUTOR = 'usuario_executor'
+    EXECUTAR_STEPS_INCREMENTALMENTE = 'executar_steps_incrementalmente'
 
 class JobActions:
     APPROVE = 'approve'
     REJECT = 'reject'
+
+class StartAnalysisPayload(BaseModel):
+    repo_name_modernizado: str
+    branch_name_modernizado: Optional[str] = None
+    projeto: str
+    analysis_type: Any
+    instrucoes_extras: Optional[str] = None
+    usar_rag: bool = False
+    gerar_relatorio_apenas: bool = False
+    gerar_novo_relatorio: bool = True
+    model_name: Optional[str] = None
+    arquivos_especificos: Optional[List[str]] = None
+    analysis_name: Optional[str] = None
+    repository_type: str
+    repo_name_original: Optional[str] = None
+    branch_name_original: Optional[str] = None
+    retornar_lista_arquivos: bool = False
+    modo_adicao_incremental: bool = False
+    usuario_executor: Optional[str] = None
+    executar_steps_incrementalmente: bool = False  # Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.
