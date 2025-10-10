@@ -12,6 +12,9 @@ class IncrementalStepExecutorService:
         header_found = False
         for line in lines:
             if re.match(r'^\|.*\|$', line):
+                # Ignora linhas de separação (apenas |, -, e espaços)
+                if re.match(r'^\|[\s\-\|]+\|$', line):
+                    continue
                 if not header_found:
                     header_found = True
                 table_lines.append(line)
@@ -20,9 +23,12 @@ class IncrementalStepExecutorService:
         if len(table_lines) < 2:
             return []
         headers = [h.strip() for h in table_lines[0].strip('|').split('|')]
-        rows = table_lines[2:] if len(table_lines) > 2 else []
+        rows = table_lines[1:]
         result = []
         for row in rows:
+            # Ignora linhas de separação novamente por segurança
+            if re.match(r'^\|[\s\-\|]+\|$', row):
+                continue
             cols = [c.strip() for c in row.strip('|').split('|')]
             if len(cols) != len(headers):
                 continue
@@ -34,7 +40,9 @@ class IncrementalStepExecutorService:
     def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3) -> List[List[Dict]]:
         steps = IncrementalStepExecutorService.parse_report_table(report_text)
         if not steps:
+            print(f"[INCREMENTAL] Nenhum step encontrado no relatório para batching.")
             return []
+        print(f"[INCREMENTAL] {len(steps)} steps parseados do relatório.")
         batches = []
         current_batch = []
         for step in steps:
@@ -52,4 +60,5 @@ class IncrementalStepExecutorService:
                     current_batch = [step]
         if current_batch:
             batches.append(current_batch)
+        print(f"[INCREMENTAL] {len(batches)} batches criados.")
         return batches
