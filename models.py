@@ -57,6 +57,9 @@ class JobFields:
     MODO_ADICAO_INCREMENTAL = 'modo_adicao_incremental'
     USUARIO_EXECUTOR = 'usuario_executor'
     EXECUTAR_STEPS_INCREMENTALMENTE = 'executar_steps_incrementalmente'
+    STEP_BATCHES = 'step_batches'
+    CURRENT_BATCH_INDEX = 'current_batch_index'
+    BATCH_RESULTS = 'batch_results'
 
 class JobActions:
     APPROVE = 'approve'
