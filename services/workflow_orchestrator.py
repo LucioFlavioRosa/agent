@@ -184,18 +184,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
             print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
             final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
-        resultado_agrupamento, resultado_refatoracao = self.data_formatter.extract_workflow_results(
-            job_info, workflow, final_result
-        )
-        job_info['data']['diagnostic_logs'] = {
-            "penultimate_result": resultado_refatoracao,
-            "final_result": resultado_agrupamento
-        }
-        self.job_handler.update_job_status(job_id, 'populating_data')
-        dados_preenchidos = self.data_formatter.populate_changeset_data(
-            resultado_agrupamento, resultado_refatoracao
-        )
-        dados_finais_formatados = self.data_formatter.format_final_data(dados_preenchidos)
+        dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
         self.job_handler.update_job_status(job_id, 'committing_to_github')
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
         print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info['data'].get('commit_details', [])}")
