@@ -217,7 +217,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                    current_step_index: int, previous_step_result: Dict[str, Any], 
-                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int) -> Dict[str, Any]:
+                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_index: Optional[int] = None) -> Dict[str, Any]:
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy()
@@ -246,6 +246,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'usuario_executor': job_info.get('data', {}).get('usuario_executor')
         })
         agent_params['job_id'] = job_id
+        if batch_index is not None:
+            print(f"[{job_id}] Executando step {current_step_index} do batch {batch_index}")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
