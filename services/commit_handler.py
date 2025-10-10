@@ -52,6 +52,10 @@ class CommitHandler:
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
                 try:
+                    conjunto_de_mudancas = grupo.get("conjunto_de_mudancas", [])
+                    if not isinstance(conjunto_de_mudancas, list):
+                        print(f"[{job_id}] ERRO: conjunto_de_mudancas do grupo {i+1} não é uma lista. Valor: {conjunto_de_mudancas}")
+                        conjunto_de_mudancas = []
                     resultado_branch = processar_branch_por_provedor(
                         repo=repo,
                         nome_branch=grupo.get("branch_sugerida", f"branch-grupo-{i+1}"),
@@ -59,7 +63,7 @@ class CommitHandler:
                         branch_alvo_do_pr=branch_base_para_pr,
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
                         descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
-                        conjunto_de_mudancas=grupo.get("conjunto_de_mudancas", []),
+                        conjunto_de_mudancas=conjunto_de_mudancas,
                         repository_type=repository_type,
                         modo_adicao_incremental=modo_adicao_incremental
                     )
@@ -71,7 +75,7 @@ class CommitHandler:
                         "success": False,
                         "pr_url": f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}",
                         "message": f"Erro no grupo {i+1}: {str(e)}",
-                        "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in grupo.get("conjunto_de_mudancas", [])]
+                        "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in conjunto_de_mudancas]
                     }
                 print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}'")
                 commit_results.append(resultado_branch)
