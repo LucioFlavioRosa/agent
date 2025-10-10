@@ -76,7 +76,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
             # FIM DA MODIFICACAO
 
-            # Step 0: geração do relatório
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -110,7 +109,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [INCREMENTAL] Resultados dos batches consolidados para o próximo step.")
                     continue  # Não executa o step padrão, já processou incrementalmente
 
-                # Execução padrão para outros steps
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
