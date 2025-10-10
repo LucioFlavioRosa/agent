@@ -2,6 +2,7 @@ from typing import Dict, Any
 from tools.conectores.conexao_geral import ConexaoGeral
 from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.repository_provider_factory import get_repository_provider_explicit
+from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
 
 class CommitHandler:
     def __init__(self, repository_provider_factory=None, conexao_geral_factory=None):
@@ -56,9 +57,11 @@ class CommitHandler:
                     if not isinstance(conjunto_de_mudancas, list):
                         print(f"[{job_id}] ERRO: conjunto_de_mudancas do grupo {i+1} não é uma lista. Valor: {conjunto_de_mudancas}")
                         conjunto_de_mudancas = []
+                    branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
+                    branch_sugerida = BranchNameSanitizer.sanitize(branch_sugerida)
                     resultado_branch = processar_branch_por_provedor(
                         repo=repo,
-                        nome_branch=grupo.get("branch_sugerida", f"branch-grupo-{i+1}"),
+                        nome_branch=branch_sugerida,
                         branch_de_origem=branch_base_para_pr,
                         branch_alvo_do_pr=branch_base_para_pr,
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
@@ -71,7 +74,7 @@ class CommitHandler:
                 except Exception as e:
                     print(f"[{job_id}] ERRO no processamento do grupo {i+1}: {str(e)}")
                     resultado_branch = {
-                        "branch_name": grupo.get("branch_sugerida", f"branch-grupo-{i+1}"),
+                        "branch_name": branch_sugerida,
                         "success": False,
                         "pr_url": f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}",
                         "message": f"Erro no grupo {i+1}: {str(e)}",
