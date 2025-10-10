@@ -388,3 +388,27 @@ relatorio_erros_migracao:
       params:
         tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 32000
+
+suporte_dot_net:
+  description: "Sua especialidade é analisar trechos de código para gerar um plano de ação claro e bem fundamentado."
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_suporte_geral_dot_net.md"
+      requires_approval: true
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        max_token_out: 30000
+    - status_update: "agrupando_commits"
+      model_name: "gpt-4.1-mini"
+      agent_type: "processador"
+      params:
+        tipo_analise: "agrupamento_commits_simplificado"
+        max_token_out: 32000
+
