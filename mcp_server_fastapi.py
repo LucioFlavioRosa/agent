@@ -14,7 +14,7 @@ from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
 from services.api_service_factory import ApiServiceFactory
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions
+from models import JobStatus, JobFields, JobActions, StartAnalysisPayload
 
 container = DependencyContainer()
 api_service_factory = ApiServiceFactory()
@@ -26,26 +26,6 @@ repository_normalizer_service = api_service_factory.get_repository_normalizer_se
 job_data_service = api_service_factory.get_job_data_service()
 job_validation_service = api_service_factory.get_job_validation_service()
 logging_service = api_service_factory.get_logging_service()
-
-class StartAnalysisPayload(BaseModel):
-    repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
-    branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
-    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
-    analysis_type: ValidAnalysisTypes
-    instrucoes_extras: Optional[str] = None
-    usar_rag: bool = Field(False)
-    gerar_relatorio_apenas: bool = Field(False)
-    gerar_novo_relatorio: bool = Field(True, description="Se False, tenta ler relatório existente do Blob Storage usando analysis_name")
-    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
-    arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
-    analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
-    repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
-    repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
-    branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
-    retornar_lista_arquivos: bool = Field(False, description="Se True, além do código filtrado, retorna lista completa de todos os arquivos do repositório")
-    modo_adicao_incremental: bool = Field(False, description="Se True, o novo conteúdo será ADICIONADO ao final dos arquivos existentes, ao invés de substituí-los. Útil para migrações de frameworks.")
-    usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
-    executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
