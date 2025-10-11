@@ -14,6 +14,7 @@ class FinalStatusResponse(BaseModel):
     analysis_report: Optional[str] = None
     diagnostic_logs: Optional[Dict[str, Any]] = None
     report_blob_url: Optional[str] = None
+    build_errors: Optional[List[str]] = None
 
 class JobStatus:
     STARTING = 'starting'
@@ -61,6 +62,8 @@ class JobFields:
     CURRENT_BATCH_INDEX = 'current_batch_index'
     BATCH_RESULTS = 'batch_results'
     MAX_STEPS_PER_BATCH = 'max_steps_per_batch'
+    EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
+    BUILD_ERRORS = 'build_errors'
 
 class JobActions:
     APPROVE = 'approve'
@@ -86,3 +89,4 @@ class StartAnalysisPayload(BaseModel):
     usuario_executor: Optional[str] = None
     executar_steps_incrementalmente: bool = False
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
+    executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
