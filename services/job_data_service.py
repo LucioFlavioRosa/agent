@@ -34,7 +34,8 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: payload_dict.get('retornar_lista_arquivos', False),
                 JobFields.MODO_ADICAO_INCREMENTAL: payload_dict.get('modo_adicao_incremental', False),
                 JobFields.USUARIO_EXECUTOR: payload_dict.get('usuario_executor'),
-                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: payload_dict.get('executar_steps_incrementalmente', False)
+                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: payload_dict.get('executar_steps_incrementalmente', False),
+                JobFields.EXECUTAR_BUILD_DOTNET: payload_dict.get('executar_build_dotnet', False)
             },
             JobFields.ERROR_DETAILS: None
         }
@@ -60,7 +61,8 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
                 JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
                 JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
-                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: original_data.get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
+                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: original_data.get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False),
+                JobFields.EXECUTAR_BUILD_DOTNET: original_data.get(JobFields.EXECUTAR_BUILD_DOTNET, False)
             },
             JobFields.ERROR_DETAILS: None
         }
