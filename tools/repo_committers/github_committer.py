@@ -2,6 +2,7 @@ from github import GithubException, UnknownObjectException
 from typing import Dict, Any, List
 from tools.repo_committers.base_committer import BaseCommitter
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
+import json
 
 def processar_branch_github(
     repo,
@@ -85,7 +86,9 @@ def processar_branch_github(
         try:
             print(f"\nCriando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
             pr = repo.create_pull(title=mensagem_pr, body=descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA.", head=nome_branch, base=branch_alvo_do_pr)
-            print(f"Pull Request criado com sucesso! URL: {pr.html_url}")
+            print(f"[DEBUG][GITHUB] repo.create_pull retornou pr.html_url: {getattr(pr, 'html_url', None)}, pr.head.ref: {getattr(getattr(pr, 'head', None), 'ref', None)}")
+            if not hasattr(pr, 'html_url') or not isinstance(pr.html_url, str) or not pr.html_url.strip():
+                raise Exception(f"[ERRO][GITHUB] PR criado mas html_url inválido: {json.dumps(pr.__dict__, default=str)}")
             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr.html_url)
         except GithubException as e:
             if e.status == 422 and "A pull request for these commits already exists" in str(e.data):
@@ -94,7 +97,10 @@ def processar_branch_github(
             else:
                 print(f"ERRO ao criar PR para '{nome_branch}': {e}")
                 BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar PR: {e.data.get('message', str(e))}")
+        except Exception as e:
+            print(f"[ERRO][GITHUB] Falha crítica ao validar PR: {e}")
+            BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro crítico ao validar PR: {e}")
     else:
         print(f"\nNenhum commit realizado para a branch '{nome_branch}'. Pulando criação do PR.")
-        BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="Nenhuma mudança para commitar.")
+        BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
     return resultado_branch
