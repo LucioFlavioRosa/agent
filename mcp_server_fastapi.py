@@ -46,6 +46,49 @@ class StartAnalysisPayload(BaseModel):
     modo_adicao_incremental: bool = Field(False, description="Se True, o novo conteúdo será ADICIONADO ao final dos arquivos existentes, ao invés de substituí-los. Útil para migrações de frameworks.")
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
+    executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+
+def run_workflow_task(job_id: str, start_from_step: int = 0):
+    workflow_orchestrator = container.get_workflow_orchestrator()
+    workflow_orchestrator.execute_workflow(job_id, start_from_step)
+
+@app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
+def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    job_store = container.get_job_store()
+    analysis_service = container.get_analysis_name_service()
+    
+    repo_name = payload.repo_name_modernizado
+    branch_name = payload.branch_name_modernizado
+    
+    normalized_repo_name = repository_normalizer_service.normalize_repo_name(
+        repo_name, payload.repository_type
+    )
+
+    job_id = str(uuid.uuid4())
+    
+    analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
+
+    payload_dict = payload.dict()
+    payload_dict['analysis_type'] = payload.analysis_type.value
+    # Garante que o campo executar_build_dotnet está presente no payload propagado para o job_data
+    if 'executar_build_dotnet' not in payload_dict:
+        payload_dict['executar_build_dotnet'] = False
+    initial_job_data = job_data_service.create_initial_job_data(
+        payload_dict, normalized_repo_name, analysis_name
+    )
+
+    job_store.set_job(job_id, initial_job_data)
+
+    logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
+
+    if analysis_name:
+        analysis_service.register_analysis(analysis_name, job_id)
+
+    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
+
+    background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
+
+    return StartAnalysisResponse(job_id=job_id)
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -81,41 +124,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
-
-@app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
-def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    job_store = container.get_job_store()
-    analysis_service = container.get_analysis_name_service()
-    
-    repo_name = payload.repo_name_modernizado
-    branch_name = payload.branch_name_modernizado
-    
-    normalized_repo_name = repository_normalizer_service.normalize_repo_name(
-        repo_name, payload.repository_type
-    )
-
-    job_id = str(uuid.uuid4())
-    
-    analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
-
-    payload_dict = payload.dict()
-    payload_dict['analysis_type'] = payload.analysis_type.value
-    initial_job_data = job_data_service.create_initial_job_data(
-        payload_dict, normalized_repo_name, analysis_name
-    )
-
-    job_store.set_job(job_id, initial_job_data)
-
-    logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
-
-    if analysis_name:
-        analysis_service.register_analysis(analysis_name, job_id)
-
-    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
-
-    background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
-
-    return StartAnalysisResponse(job_id=job_id)
 
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
