@@ -52,6 +52,12 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
 
+app = FastAPI(
+    title="MCP Server - Multi-Agent Code Platform",
+    description="Servidor robusto com Redis para orquestrar agentes de IA.",
+    version="9.0.0" 
+)
+
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
