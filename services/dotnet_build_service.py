@@ -12,14 +12,11 @@ class DotNetBuildService:
                 command,
                 capture_output=True,
                 text=True,
-                check=False,
+                check=True,
                 cwd=repo_path
             )
-            if result.returncode == 0:
-                return True, None
-            else:
-                return False, result.stderr
+            return True, result.stdout
         except FileNotFoundError:
             return False, "Erro: O comando 'dotnet' não foi encontrado. Verifique se o .NET SDK está instalado e no PATH do sistema."
-        except Exception as e:
-            return False, f"Erro inesperado ao executar o build: {str(e)}"
+        except subprocess.CalledProcessError as e:
+            return False, e.stderr
