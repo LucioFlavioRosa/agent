@@ -5,6 +5,7 @@ import traceback
 from tools.repo_committers.base_committer import BaseCommitter
 from tools.conectores.azure_conector import AzureConector
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
+import json
 
 def processar_branch_azure(
     repo: Dict[str, Any],
@@ -97,7 +98,7 @@ def processar_branch_azure(
                 change_item["changeType"] = "delete"
             changes.append(change_item)
         if not changes:
-            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="Nenhuma mudança para commitar.")
+            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
             return resultado_branch
         print(f"[DEBUG][AZURE] Criando commit com {len(changes)} mudanças")
         push_url = f"{base_url}/git/repositories/{repository_id}/pushes?api-version=7.0"
@@ -127,9 +128,14 @@ def processar_branch_azure(
         if pr_response.status_code in [200, 201]:
             pr_data = pr_response.json()
             pr_web_url = pr_data.get('_links', {}).get('web', {}).get('href', '')
-            if not pr_web_url:
-                 pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo['name']}/pullrequest/{pr_data['pullRequestId']}"
-            print(f"Pull Request Azure criado com sucesso! URL: {pr_web_url}")
+            print(f"[DEBUG][AZURE] pr_response.json() retornou: {json.dumps(pr_data, default=str)}")
+            print(f"[DEBUG][AZURE] pr_web_url extraído: {pr_web_url}")
+            if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                if 'pullRequestId' in pr_data:
+                    pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo['name']}/pullrequest/{pr_data['pullRequestId']}"
+                    print(f"[DEBUG][AZURE] pr_web_url reconstruído manualmente: {pr_web_url}")
+                if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                    raise Exception(f"[ERRO][AZURE] PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_web_url)
         else:
             if "already exists" in pr_response.text.lower():
