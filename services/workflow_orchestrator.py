@@ -122,7 +122,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if strategy.should_pause_for_approval(job_info, step):
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
-            self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
+            executar_build_dotnet = job_info['data'].get(JobFields.EXECUTAR_BUILD_DOTNET, False)
+            self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name, executar_build_dotnet=executar_build_dotnet)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
 
@@ -176,7 +177,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.update_job(job_id, job_info)
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
-                          final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+                          final_result: Dict[str, Any], repository_type: str, repo_name: str, executar_build_dotnet: bool = False) -> None:
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
         if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
             batch_results = job_info['data'][JobFields.BATCH_RESULTS]
@@ -186,7 +187,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
         dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
         self.job_handler.update_job_status(job_id, 'committing_to_github')
-        self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+        self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name, executar_build_dotnet=executar_build_dotnet)
         print(f"[{job_id}] DIAGNÓSTICO - Atualizando job após commits com commit_details: {job_info['data'].get('commit_details', [])}")
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
