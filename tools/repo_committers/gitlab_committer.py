@@ -1,6 +1,7 @@
 from typing import Dict, Any, List
 from tools.repo_committers.base_committer import BaseCommitter
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
+import json
 
 def processar_branch_gitlab(
     repo,
@@ -93,9 +94,10 @@ def processar_branch_gitlab(
                     'title': mensagem_pr,
                     'description': descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA."
                 })
-                mr_url = getattr(mr_result, 'web_url', 'URL não disponível')
-                print(f"Merge Request GitLab criado com sucesso! URL: {mr_url}")
-                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_url)
+                print(f"[DEBUG][GITLAB] repo.mergerequests.create retornou mr_result.web_url: {getattr(mr_result, 'web_url', None)}, mr_result.source_branch: {getattr(mr_result, 'source_branch', None)}")
+                if not hasattr(mr_result, 'web_url') or not isinstance(mr_result.web_url, str) or not mr_result.web_url.strip():
+                    raise Exception(f"[ERRO][GITLAB] MR criado mas web_url inválido: {json.dumps(mr_result.__dict__, default=str)}")
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_result.web_url)
             except Exception as mr_e:
                 print(f"[ERRO][GITLAB] Exceção ao criar MR: {type(mr_e).__name__}: {mr_e}")
                 if "already exists" in str(mr_e).lower():
@@ -108,7 +110,7 @@ def processar_branch_gitlab(
                     BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar MR: {mr_e}")
         else:
             print(f"\nNenhum commit realizado para a branch GitLab '{nome_branch}'. Pulando criação do MR.")
-            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="Nenhuma mudança para commitar.")
+            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"MR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
     except Exception as e:
         print(f"[ERRO][GITLAB] ERRO FATAL ao processar branch GitLab '{nome_branch}': {type(e).__name__}: {e}")
         import traceback
