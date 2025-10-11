@@ -54,6 +54,7 @@ class CommitHandler:
                 print(f"[{job_id}] BLINDAGEM: commit_details definido com erro de formato")
                 return
             modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
+            build_errors_list = []
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
@@ -86,26 +87,52 @@ class CommitHandler:
                         "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in conjunto_de_mudancas]
                     }
                 print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}'")
+                # Build .NET após commit se solicitado e commit foi sucesso
+                if executar_build_dotnet and resultado_branch.get('success'):
+                    temp_dir = tempfile.mkdtemp(prefix=f"dotnet_build_{job_id}_")
+                    try:
+                        conexao_geral_build = self.conexao_geral_factory()
+                        repository_provider_build = self.repository_provider_factory(repository_type)
+                        repo_local = conexao_geral_build.clone_to_path(
+                            repositorio=repo_name,
+                            repository_type=repository_type,
+                            repository_provider=repository_provider_build,
+                            path=temp_dir
+                        )
+                        # Checkout branch criada
+                        if hasattr(repo_local, 'git'):
+                            repo_local.git.checkout(resultado_branch.get('branch_name'))
+                        elif hasattr(repo_local, 'checkout'):
+                            repo_local.checkout(resultado_branch.get('branch_name'))
+                        else:
+                            print(f"[{job_id}] [BUILD] AVISO: Não foi possível fazer checkout da branch '{resultado_branch.get('branch_name')}' (provider desconhecido)")
+                        build_service = DotNetBuildService()
+                        sucesso, erro = build_service.execute_build(temp_dir)
+                        if not sucesso:
+                            if 'build_errors' not in resultado_branch or not isinstance(resultado_branch['build_errors'], list):
+                                resultado_branch['build_errors'] = []
+                            resultado_branch['build_errors'].append(erro)
+                            build_errors_list.append(erro)
+                    except Exception as e:
+                        erro_msg = f"Erro crítico ao executar build .NET: {str(e)}"
+                        if 'build_errors' not in resultado_branch or not isinstance(resultado_branch['build_errors'], list):
+                            resultado_branch['build_errors'] = []
+                        resultado_branch['build_errors'].append(erro_msg)
+                        build_errors_list.append(erro_msg)
+                    finally:
+                        try:
+                            shutil.rmtree(temp_dir)
+                        except Exception as e:
+                            print(f"[{job_id}] [BUILD] AVISO: Falha ao remover diretório temporário '{temp_dir}': {e}")
                 commit_results.append(resultado_branch)
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
             print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {commit_results}")
             job_info['data']['commit_details'] = commit_results
+            if executar_build_dotnet:
+                job_info['data'][JobFields.BUILD_ERRORS] = build_errors_list if build_errors_list else None
             print(f"[{job_id}] DIAGNÓSTICO - commit_details salvo no job_info: {job_info['data']['commit_details']}")
             for i, result in enumerate(commit_results):
                 print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []))}")
-            if executar_build_dotnet:
-                print(f"[{job_id}] [BUILD] Flag executar_build_dotnet=True. Iniciando validação de build .NET nas branches criadas.")
-                build_errors_list = []
-                for result in commit_results:
-                    if result.get('success'):
-                        branch_name = result.get('branch_name')
-                        build_error = self._execute_dotnet_build_for_branch(job_id, repo_name, branch_name, repository_type)
-                        if build_error:
-                            if 'build_errors' not in result or not isinstance(result['build_errors'], list):
-                                result['build_errors'] = []
-                            result['build_errors'].append(build_error)
-                            build_errors_list.append(build_error)
-                job_info['data'][JobFields.BUILD_ERRORS] = build_errors_list if build_errors_list else None
             print(f"[{job_id}] BLINDAGEM: execute_commits concluído com sucesso")
         except Exception as e:
             print(f"[{job_id}] ERRO CRÍTICO em execute_commits: {str(e)}")
@@ -142,40 +169,3 @@ class CommitHandler:
         if not url or not isinstance(url, str):
             return False
         return url.startswith('http://') or url.startswith('https://') or "Branch processada" in url or "PR criado" in url
-
-    def _execute_dotnet_build_for_branch(self, job_id: str, repo_name: str, branch_name: str, repository_type: str) -> str:
-        print(f"[{job_id}] [BUILD] Iniciando build .NET para branch '{branch_name}' do repositório '{repo_name}' (tipo: {repository_type})")
-        temp_dir = tempfile.mkdtemp(prefix=f"dotnet_build_{job_id}_")
-        try:
-            conexao_geral = self.conexao_geral_factory()
-            repository_provider = self.repository_provider_factory(repository_type)
-            print(f"[{job_id}] [BUILD] Clonando repositório para diretório temporário: {temp_dir}")
-            repo_local = conexao_geral.clone_to_path(
-                repositorio=repo_name,
-                repository_type=repository_type,
-                repository_provider=repository_provider,
-                path=temp_dir
-            )
-            print(f"[{job_id}] [BUILD] Checkout da branch '{branch_name}'")
-            if hasattr(repo_local, 'git'):
-                repo_local.git.checkout(branch_name)
-            elif hasattr(repo_local, 'checkout'):  # para outros providers
-                repo_local.checkout(branch_name)
-            else:
-                print(f"[{job_id}] [BUILD] AVISO: Não foi possível fazer checkout da branch '{branch_name}' (provider desconhecido)")
-            build_service = DotNetBuildService()
-            sucesso, erro = build_service.execute_build(temp_dir)
-            if sucesso:
-                print(f"[{job_id}] [BUILD] Build .NET bem-sucedido para branch '{branch_name}'")
-                return None
-            else:
-                print(f"[{job_id}] [BUILD] Build .NET FALHOU para branch '{branch_name}'. Erro: {erro}")
-                return erro
-        except Exception as e:
-            print(f"[{job_id}] [BUILD] ERRO CRÍTICO ao executar build .NET para branch '{branch_name}': {e}")
-            return f"Erro crítico ao executar build .NET: {str(e)}"
-        finally:
-            try:
-                shutil.rmtree(temp_dir)
-            except Exception as e:
-                print(f"[{job_id}] [BUILD] AVISO: Falha ao remover diretório temporário '{temp_dir}': {e}")
