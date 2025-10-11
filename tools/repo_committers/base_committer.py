@@ -30,15 +30,15 @@ class BaseCommitter:
         return mudancas_validas
     @staticmethod
     def _finalizar_resultado_sucesso(resultado_branch: Dict[str, Any], pr_url: str = None, message: str = "PR criado.") -> None:
+        print(f"[DEBUG][BaseCommitter] _finalizar_resultado_sucesso: pr_url recebido: {pr_url}")
         resultado_branch["success"] = True
         resultado_branch["message"] = message
-        if pr_url and isinstance(pr_url, str) and pr_url.strip():
+        if pr_url is not None and isinstance(pr_url, str) and pr_url.strip():
             resultado_branch["pr_url"] = pr_url.strip()
             print(f"  [SUCESSO] PR criado: {pr_url}")
         else:
-            branch_name = resultado_branch.get("branch_name", "branch-desconhecida")
-            resultado_branch["pr_url"] = f"PR criado para branch: {branch_name}"
-            print(f"  [AVISO] PR criado mas URL não foi retornada. Branch: {branch_name}")
+            print(f"[ERRO][BaseCommitter] pr_url inválido recebido: {pr_url}")
+            raise ValueError(f"pr_url inválido recebido em _finalizar_resultado_sucesso: {pr_url}")
     @staticmethod
     def _finalizar_resultado_erro(resultado_branch: Dict[str, Any], error_message: str) -> None:
         resultado_branch["success"] = False
