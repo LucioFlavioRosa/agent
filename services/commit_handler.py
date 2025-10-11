@@ -3,6 +3,7 @@ from tools.conectores.conexao_geral import ConexaoGeral
 from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.repository_provider_factory import get_repository_provider_explicit
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
+import json
 
 class CommitHandler:
     def __init__(self, repository_provider_factory=None, conexao_geral_factory=None):
@@ -83,7 +84,16 @@ class CommitHandler:
                 print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}'")
                 commit_results.append(resultado_branch)
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
-            print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {commit_results}")
+            print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {json.dumps(commit_results, default=str)}")
+            # Validação final dos resultados dos commits
+            for idx, res in enumerate(commit_results):
+                if res.get('success'):
+                    pr_url = res.get('pr_url')
+                    branch_name = res.get('branch_name')
+                    if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
+                        raise Exception(f"[{job_id}] ERRO: Grupo {idx+1} retornou success=True mas pr_url inválido: {pr_url}, branch_name={branch_name}, resultado={json.dumps(res, default=str)}")
+                    if not branch_name or not isinstance(branch_name, str) or not branch_name.strip():
+                        raise Exception(f"[{job_id}] ERRO: Grupo {idx+1} retornou success=True mas branch_name inválido: {branch_name}, resultado={json.dumps(res, default=str)}")
             job_info['data']['commit_details'] = commit_results
             print(f"[{job_id}] DIAGNÓSTICO - commit_details salvo no job_info: {job_info['data']['commit_details']}")
             for i, result in enumerate(commit_results):
@@ -103,6 +113,7 @@ class CommitHandler:
             raise e
     
     def _validate_and_fix_pr_url(self, job_id: str, resultado_branch: Dict[str, Any], grupo_num: int) -> Dict[str, Any]:
+        print(f"[DEBUG][CommitHandler] _validate_and_fix_pr_url: job_id={job_id}, grupo_num={grupo_num}, pr_url={resultado_branch.get('pr_url')}, success={resultado_branch.get('success')}, branch_name={resultado_branch.get('branch_name')}")
         pr_url = resultado_branch.get('pr_url')
         success = resultado_branch.get('success', False)
         if success:
@@ -118,6 +129,7 @@ class CommitHandler:
         else:
             if not pr_url or pr_url == "" or pr_url is None:
                 resultado_branch['pr_url'] = f"ERRO: Falha na criação do PR (Grupo {grupo_num}). Verifique logs."
+        print(f"[DEBUG][CommitHandler] _validate_and_fix_pr_url (final): pr_url={resultado_branch.get('pr_url')}")
         return resultado_branch
     
     def _is_valid_url(self, url: str) -> bool:
