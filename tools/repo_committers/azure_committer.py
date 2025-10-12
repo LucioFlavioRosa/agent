@@ -20,9 +20,6 @@ def _deduplicar_mudancas_por_arquivo(mudancas_validas):
             arquivo_para_mudanca[caminho] = mudanca  # mantém a última ocorrência
     return list(arquivo_para_mudanca.values())
 
-def _build_commit_ui_url(organization: str, project: str, repo_name: str, commit_id: str) -> str:
-    return f"https://dev.azure.com/{organization}/{project}/_git/{repo_name}/commit/{commit_id}"
-
 def processar_branch_azure(
     repo: Dict[str, Any],
     nome_branch: str,
@@ -261,3 +258,6 @@ def processar_branch_azure(
         BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro fatal: {e}")
     print(f"[DEBUG][AZURE] Resultado final da branch {nome_branch}: {resultado_branch}")
     return resultado_branch
+
+def _build_commit_ui_url(organization: str, project: str, repo_name: str, commit_id: str) -> str:
+    return f"https://dev.azure.com/{organization}/{project}/_git/{repo_name}/commit/{commit_id}"
