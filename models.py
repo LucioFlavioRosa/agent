@@ -6,6 +6,7 @@ class PullRequestSummary(BaseModel):
     branch_name: str
     arquivos_modificados: List[str]
     build_result: Optional[Dict[str, Any]] = None
+    commit_url: Optional[str] = None
 
 class FinalStatusResponse(BaseModel):
     job_id: str
