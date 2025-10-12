@@ -130,7 +130,9 @@ def processar_branch_azure(
             print(f"[DEBUG][AZURE] pr_response.status_code: {pr_response.status_code}")
             print(f"[DEBUG][AZURE] pr_response.json() (completo): {json.dumps(pr_data, indent=2, default=str)}")
             print(f"[DEBUG][AZURE] pr_data.get('_links'): {pr_data.get('_links')}")
-            print(f"[DEBUG][AZURE] pr_data.get('_links', {}).get('web'): {pr_data.get('_links', {}).get('web')}")
+            links = pr_data.get('_links', {})
+            web_link = links.get('web')
+            print(f"[DEBUG][AZURE] pr_data.get('_links', {{}}).get('web'): {web_link}")
             pr_web_url = pr_data.get('_links', {}).get('web', {}).get('href', '')
             if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
                 pr_web_url = pr_data.get('url') or pr_data.get('webUrl') or ''
