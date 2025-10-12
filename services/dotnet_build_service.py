@@ -8,6 +8,7 @@ class DotNetBuildService:
         pass
 
     def build_project(self, job_id: str, repository_type: str, repo_name: str, branch_name: str) -> Dict[str, Any]:
+        print(f"[{job_id}] [DotNetBuildService] Iniciando build para repo={repo_name}, branch={branch_name}")
         result = {
             "success": False,
             "errors": [],
@@ -24,6 +25,7 @@ class DotNetBuildService:
             if clone_proc.returncode != 0:
                 result["errors"].append(f"Erro ao clonar repositório: {clone_proc.stderr}")
                 result["stderr"] = clone_proc.stderr
+                print(f"[{job_id}] [DotNetBuildService] Build finalizado. success={result['success']}, errors={len(result['errors'])}")
                 return result
             build_cmd = ["dotnet", "build"]
             build_proc = subprocess.run(build_cmd, cwd=local_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -41,6 +43,7 @@ class DotNetBuildService:
                     shutil.rmtree(local_dir)
                 except Exception:
                     pass
+        print(f"[{job_id}] [DotNetBuildService] Build finalizado. success={result['success']}, errors={len(result['errors'])}")
         return result
 
     def _get_clone_url(self, repository_type: str, repo_name: str) -> str:
