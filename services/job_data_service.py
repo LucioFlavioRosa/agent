@@ -1,66 +1,45 @@
-import uuid
-from typing import Optional
-from models import JobStatus, JobFields
+from models import JobFields
 
 class JobDataService:
-    def generate_analysis_name(self, provided_name: Optional[str], job_id: str) -> str:
-        if provided_name:
-            return provided_name
-        analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
-        print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
-        return analysis_name
-    
-    def create_initial_job_data(self, payload_dict: dict, normalized_repo_name: str, analysis_name: str) -> dict:
-        return {
-            JobFields.STATUS: JobStatus.STARTING,
-            JobFields.DATA: {
-                JobFields.REPO_NAME: normalized_repo_name,
-                JobFields.ORIGINAL_REPO_NAME: payload_dict.get('repo_name_modernizado'),
-                JobFields.PROJETO: payload_dict.get('projeto'),
-                JobFields.BRANCH_NAME: payload_dict.get('branch_name_modernizado'),
-                JobFields.ORIGINAL_ANALYSIS_TYPE: payload_dict.get('analysis_type'),
-                JobFields.INSTRUCOES_EXTRAS: payload_dict.get('instrucoes_extras'),
-                JobFields.MODEL_NAME: payload_dict.get('model_name'),
-                JobFields.USAR_RAG: payload_dict.get('usar_rag', False),
-                JobFields.GERAR_RELATORIO_APENAS: payload_dict.get('gerar_relatorio_apenas', False),
-                JobFields.GERAR_NOVO_RELATORIO: payload_dict.get('gerar_novo_relatorio', True),
-                JobFields.ARQUIVOS_ESPECIFICOS: payload_dict.get('arquivos_especificos'),
-                JobFields.ANALYSIS_NAME: analysis_name,
-                JobFields.REPOSITORY_TYPE: payload_dict.get('repository_type'),
-                JobFields.REPO_NAME_MODERNIZADO: payload_dict.get('repo_name_modernizado'),
-                JobFields.BRANCH_NAME_MODERNIZADO: payload_dict.get('branch_name_modernizado'),
-                JobFields.REPO_NAME_ORIGINAL: payload_dict.get('repo_name_original'),
-                JobFields.BRANCH_NAME_ORIGINAL: payload_dict.get('branch_name_original'),
-                JobFields.RETORNAR_LISTA_ARQUIVOS: payload_dict.get('retornar_lista_arquivos', False),
-                JobFields.MODO_ADICAO_INCREMENTAL: payload_dict.get('modo_adicao_incremental', False),
-                JobFields.USUARIO_EXECUTOR: payload_dict.get('usuario_executor'),
-                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: payload_dict.get('executar_steps_incrementalmente', False)
-            },
-            JobFields.ERROR_DETAILS: None
-        }
-    
-    def create_derived_job_data(self, original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
-        original_data = original_job[JobFields.DATA]
-        return {
-            JobFields.STATUS: JobStatus.STARTING,
-            JobFields.DATA: {
-                JobFields.REPO_NAME: normalized_repo_name,
-                JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
-                JobFields.PROJETO: original_data[JobFields.PROJETO],
-                JobFields.BRANCH_NAME: original_data[JobFields.BRANCH_NAME],
-                JobFields.ORIGINAL_ANALYSIS_TYPE: 'implementacao',
-                JobFields.INSTRUCOES_EXTRAS: f"Gerar código baseado no seguinte relatório:\n\n{report}",
-                JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
-                JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
-                JobFields.GERAR_RELATORIO_APENAS: False,
-                JobFields.GERAR_NOVO_RELATORIO: True,
-                JobFields.ARQUIVOS_ESPECIFICOS: original_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
-                JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
-                JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE],
-                JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
-                JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
-                JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
-                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: original_data.get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
-            },
-            JobFields.ERROR_DETAILS: None
-        }
+    def __init__(self):
+        pass
+
+    def create_initial_job_data(self, payload_dict, normalized_repo_name, analysis_name):
+        job_data = {}
+        job_data[JobFields.REPO_NAME] = normalized_repo_name
+        job_data[JobFields.ANALYSIS_NAME] = analysis_name
+        job_data[JobFields.ORIGINAL_ANALYSIS_TYPE] = payload_dict.get('analysis_type')
+        job_data[JobFields.PROJETO] = payload_dict.get('projeto')
+        job_data[JobFields.REPOSITORY_TYPE] = payload_dict.get('repository_type')
+        job_data[JobFields.REPO_NAME_MODERNIZADO] = payload_dict.get('repo_name_modernizado')
+        job_data[JobFields.BRANCH_NAME_MODERNIZADO] = payload_dict.get('branch_name_modernizado')
+        job_data[JobFields.REPO_NAME_ORIGINAL] = payload_dict.get('repo_name_original')
+        job_data[JobFields.BRANCH_NAME_ORIGINAL] = payload_dict.get('branch_name_original')
+        job_data[JobFields.INSTRUCOES_EXTRAS] = payload_dict.get('instrucoes_extras')
+        job_data[JobFields.USAR_RAG] = bool(payload_dict.get('usar_rag', False))
+        job_data[JobFields.GERAR_RELATORIO_APENAS] = bool(payload_dict.get('gerar_relatorio_apenas', False))
+        job_data[JobFields.GERAR_NOVO_RELATORIO] = bool(payload_dict.get('gerar_novo_relatorio', True))
+        job_data[JobFields.MODEL_NAME] = payload_dict.get('model_name')
+        job_data[JobFields.ARQUIVOS_ESPECIFICOS] = payload_dict.get('arquivos_especificos')
+        job_data[JobFields.RETORNAR_LISTA_ARQUIVOS] = bool(payload_dict.get('retornar_lista_arquivos', False))
+        job_data[JobFields.MODO_ADICAO_INCREMENTAL] = bool(payload_dict.get('modo_adicao_incremental', False))
+        job_data[JobFields.USUARIO_EXECUTOR] = payload_dict.get('usuario_executor')
+        job_data[JobFields.EXECUTAR_STEPS_INCREMENTALMENTE] = bool(payload_dict.get('executar_steps_incrementalmente', False))
+        job_data[JobFields.MAX_STEPS_PER_BATCH] = payload_dict.get('max_steps_per_batch', 3)
+        executar_build_dotnet = payload_dict.get('executar_build_dotnet', False)
+        if not isinstance(executar_build_dotnet, bool):
+            executar_build_dotnet = bool(executar_build_dotnet)
+        job_data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
+        return job_data
+
+    def create_derived_job_data(self, original_job, analysis_name, normalized_repo_name, report):
+        job_data = dict(original_job[JobFields.DATA])
+        job_data[JobFields.REPO_NAME] = normalized_repo_name
+        job_data[JobFields.ANALYSIS_NAME] = analysis_name
+        job_data[JobFields.ANALYSIS_REPORT] = report
+        return job_data
+
+    def generate_analysis_name(self, analysis_name, job_id):
+        if analysis_name:
+            return analysis_name
+        return f"analysis-{job_id}"
