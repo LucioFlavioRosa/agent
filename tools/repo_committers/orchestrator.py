@@ -47,7 +47,7 @@ def processar_branch_por_provedor(
             modo_adicao_incremental=modo_adicao_incremental
         )
         print(f"[DEBUG][orchestrator] Resultado GitHub: {json.dumps(resultado, default=str)}")
-    # Validação obrigatória das chaves
+    print(f"[DEBUG][orchestrator] Resultado retornado pelo committer ({repository_type}): {json.dumps(resultado, indent=2, default=str)}")
     for chave in ["branch_name", "success", "pr_url"]:
         if chave not in resultado:
             raise Exception(f"[orchestrator] Resultado do committer não contém a chave obrigatória '{chave}': {json.dumps(resultado, default=str)}")
