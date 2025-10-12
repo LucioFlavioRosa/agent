@@ -109,7 +109,7 @@ class CommitHandler:
             job_info['data']['commit_details'] = commit_results
             print(f"[{job_id}] DIAGNÓSTICO - commit_details salvo no job_info: {job_info['data']['commit_details']}")
             for i, result in enumerate(commit_results):
-                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []))}")
+                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}")
             print(f"[{job_id}] BLINDAGEM: execute_commits concluído com sucesso")
         except Exception as e:
             print(f"[{job_id}] ERRO CRÍTICO em execute_commits: {str(e)}")
