@@ -98,8 +98,9 @@ def processar_branch_gitlab(
                 traceback.print_exc()
         if last_commit_id:
             repo_web_url = getattr(repo, 'web_url', None)
-            if repo_web_url:
-                resultado_branch['commit_url'] = f"{repo_web_url}/-/commit/{last_commit_id}"
+            commit_url_candidate = f"{repo_web_url}/-/commit/{last_commit_id}" if repo_web_url and last_commit_id else None
+            if commit_url_candidate and BaseCommitter._validate_commit_url(commit_url_candidate):
+                resultado_branch['commit_url'] = commit_url_candidate
             else:
                 resultado_branch['commit_url'] = None
         print(f"[DEBUG][GITLAB] Commits realizados: {commits_realizados}")
