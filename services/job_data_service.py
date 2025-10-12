@@ -44,7 +44,7 @@ class JobDataService:
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
-    
+        }
     def create_derived_job_data(self, original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
         original_data = original_job[JobFields.DATA]
         return {
