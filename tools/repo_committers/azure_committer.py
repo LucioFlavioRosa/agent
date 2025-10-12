@@ -20,6 +20,9 @@ def _deduplicar_mudancas_por_arquivo(mudancas_validas):
             arquivo_para_mudanca[caminho] = mudanca  # mantém a última ocorrência
     return list(arquivo_para_mudanca.values())
 
+def _build_commit_ui_url(organization: str, project: str, repo_name: str, commit_id: str) -> str:
+    return f"https://dev.azure.com/{organization}/{project}/_git/{repo_name}/commit/{commit_id}"
+
 def processar_branch_azure(
     repo: Dict[str, Any],
     nome_branch: str,
@@ -47,6 +50,7 @@ def processar_branch_azure(
         organization = repo['_organization']
         project = repo['_project']
         repository_id = repo['id']
+        repo_name = repo['name']
         connector = AzureConector.create_with_defaults()
         token = connector._get_token_for_org(organization, platform='azure')
         base_url = f"https://dev.azure.com/{organization}/{project}/_apis"
@@ -140,9 +144,12 @@ def processar_branch_azure(
         try:
             push_data = push_response.json()
             commit_url = None
+            commit_id = None
             if 'commits' in push_data and len(push_data['commits']) > 0:
                 commit_info = push_data['commits'][0]
-                commit_url = commit_info.get('remoteUrl') or commit_info.get('url')
+                commit_id = commit_info.get('commitId')
+                if commit_id:
+                    commit_url = _build_commit_ui_url(organization, project, repo_name, commit_id)
             resultado_branch['commit_url'] = commit_url
         except Exception as e:
             print(f"[ERRO][AZURE] Não foi possível extrair commit_url do push_response: {e}")
