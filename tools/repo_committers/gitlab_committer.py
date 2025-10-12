@@ -94,10 +94,10 @@ def processar_branch_gitlab(
                     'title': mensagem_pr,
                     'description': descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA."
                 })
-                print(f"[DEBUG][GITLAB] mr_result.web_url: {getattr(mr_result, 'web_url', None)}, mr_result.source_branch: {getattr(mr_result, 'source_branch', None)}")
-                print(f"[DEBUG][GITLAB] mr_result.__dict__: {json.dumps(getattr(mr_result, '__dict__', {}), default=str)}")
-                if not hasattr(mr_result, 'web_url') or not isinstance(mr_result.web_url, str) or not mr_result.web_url.strip():
-                    raise Exception(f"[ERRO][GITLAB] MR criado mas web_url inválido: {json.dumps(getattr(mr_result, '__dict__', {}), default=str)}")
+                print(f"[DEBUG][GITLAB] mr_result.web_url ANTES de _finalizar_resultado_sucesso: {getattr(mr_result, 'web_url', 'ATRIBUTO NÃO ENCONTRADO')}")
+                if not hasattr(mr_result, 'web_url') or mr_result.web_url is None or not isinstance(mr_result.web_url, str) or not mr_result.web_url.strip():
+                    print(f"[ERRO][GITLAB] Objeto MR retornado sem web_url: {mr_result.__dict__}")
+                    raise Exception(f"[ERRO][GITLAB] MR criado mas web_url inválido: {json.dumps(mr_result.__dict__, default=str)}")
                 BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_result.web_url)
             except Exception as mr_e:
                 print(f"[ERRO][GITLAB] Exceção ao criar MR: {type(mr_e).__name__}: {mr_e}")
@@ -108,7 +108,7 @@ def processar_branch_gitlab(
                     BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_url, "MR já existente.")
                 else:
                     print(f"ERRO ao criar MR GitLab para '{nome_branch}': {mr_e}")
-                    raise
+                    BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar MR: {mr_e}")
         else:
             print(f"\nNenhum commit realizado para a branch GitLab '{nome_branch}'. Pulando criação do MR.")
             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"MR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
