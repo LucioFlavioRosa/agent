@@ -31,10 +31,10 @@ class BaseCommitter:
     @staticmethod
     def _finalizar_resultado_sucesso(resultado_branch: Dict[str, Any], pr_url: str = None, message: str = "PR criado.") -> None:
         print(f"[DEBUG][BaseCommitter] _finalizar_resultado_sucesso: pr_url recebido: {pr_url}")
+        if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
+            raise ValueError(f"[ERRO][BaseCommitter] pr_url inválido recebido em _finalizar_resultado_sucesso: tipo={type(pr_url)}, valor={pr_url}, repr={repr(pr_url)}")
         resultado_branch["success"] = True
         resultado_branch["message"] = message
-        if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
-            raise ValueError(f"[ERRO][BaseCommitter] pr_url inválido recebido: tipo={type(pr_url)}, valor={pr_url}, repr={repr(pr_url)}")
         resultado_branch["pr_url"] = pr_url.strip()
         print(f"  [SUCESSO] PR criado: {pr_url}")
     @staticmethod
