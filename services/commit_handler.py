@@ -117,17 +117,16 @@ class CommitHandler:
         pr_url = resultado_branch.get('pr_url')
         success = resultado_branch.get('success', False)
         if success:
-            if not pr_url or pr_url == "" or pr_url is None:
-                print(f"[{job_id}] AVISO: Grupo {grupo_num} marcado como sucesso mas pr_url está vazio")
-                resultado_branch['pr_url'] = f"AVISO: PR criado com sucesso mas URL não foi retornada pelo provedor (Grupo {grupo_num})"
-            elif not self._is_valid_url(pr_url):
+            if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
+                raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
+            if not self._is_valid_url(pr_url):
                 print(f"[{job_id}] AVISO: Grupo {grupo_num} tem pr_url que não é uma URL válida: '{pr_url}'")
                 if "Branch processada" in str(pr_url) or "PR criado" in str(pr_url):
                     pass
                 else:
                     resultado_branch['pr_url'] = f"AVISO: PR criado mas URL inválida retornada: {pr_url}"
         else:
-            if not pr_url or pr_url == "" or pr_url is None:
+            if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
                 resultado_branch['pr_url'] = f"ERRO: Falha na criação do PR (Grupo {grupo_num}). Verifique logs."
         print(f"[DEBUG][CommitHandler] _validate_and_fix_pr_url (final): pr_url={resultado_branch.get('pr_url')}")
         return resultado_branch
