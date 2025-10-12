@@ -12,6 +12,14 @@ import string
 def _gerar_sufixo_aleatorio(tamanho=6):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=tamanho))
 
+def _deduplicar_mudancas_por_arquivo(mudancas_validas):
+    arquivo_para_mudanca = {}
+    for mudanca in mudancas_validas:
+        caminho = mudanca.get("caminho")
+        if caminho:
+            arquivo_para_mudanca[caminho] = mudanca  # mantém a última ocorrência
+    return list(arquivo_para_mudanca.values())
+
 def processar_branch_azure(
     repo: Dict[str, Any],
     nome_branch: str,
@@ -80,6 +88,7 @@ def processar_branch_azure(
             raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
         changes = []
         mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
+        mudancas_validas = _deduplicar_mudancas_por_arquivo(mudancas_validas)
         for mudanca in mudancas_validas:
             caminho = mudanca["caminho"]
             status = mudanca["status"]
