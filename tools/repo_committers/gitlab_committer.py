@@ -96,12 +96,11 @@ def processar_branch_gitlab(
                 })
                 print(f"[DEBUG][GITLAB] Tipo do objeto mr_result: {type(mr_result)}")
                 print(f"[DEBUG][GITLAB] Atributos do objeto mr_result: {dir(mr_result)}")
-                print(f"[DEBUG][GITLAB] mr_result.__dict__: {getattr(mr_result, '__dict__', {})}")
+                print(f"[DEBUG][GITLAB] mr_result.__dict__: {mr_result.__dict__}")
                 print(f"[DEBUG][GITLAB] mr_result.web_url (direto): {getattr(mr_result, 'web_url', None)}")
-                # Passo 2: validação detalhada da extração do web_url
                 if not hasattr(mr_result, 'web_url') or mr_result.web_url is None or not isinstance(mr_result.web_url, str) or not mr_result.web_url.strip():
-                    print(f"[ERRO][GITLAB] MR criado mas web_url inválido: {json.dumps(getattr(mr_result, '__dict__', {}), default=str)}")
-                    BaseCommitter._finalizar_resultado_erro(resultado_branch, f"MR criado mas web_url inválido: {json.dumps(getattr(mr_result, '__dict__', {}), default=str)}")
+                    print(f"[ERRO][GITLAB] MR criado mas web_url inválido: {json.dumps(mr_result.__dict__, default=str)}")
+                    BaseCommitter._finalizar_resultado_erro(resultado_branch, f"MR criado mas web_url inválido: {json.dumps(mr_result.__dict__, default=str)}")
                     return resultado_branch
                 BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_result.web_url.strip())
             except Exception as mr_e:
