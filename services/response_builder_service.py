@@ -6,76 +6,69 @@ import time
 from models import JobStatus, JobFields, FinalStatusResponse, PullRequestSummary
 
 class ResponseBuilderService:
-    """Serviço responsável por construir respostas da API de forma estruturada."""
-    
     def __init__(self, pr_extractor_service, logging_service):
         self.pr_extractor_service = pr_extractor_service
         self.logging_service = logging_service
-    
     def build_completed_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
-        """Constrói resposta para jobs completados."""
         job_data = job.get(JobFields.DATA, {})
         gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
-        
-        print(f"[{job_id}] [ResponseBuilder] Construindo resposta - modo relatório: {gerar_relatorio_apenas}")
-        
         if gerar_relatorio_apenas:
             return self._build_report_only_response(job_id, job_data, blob_url)
-        
         return self._build_standard_response(job_id, job, blob_url)
-    
     def _build_report_only_response(self, job_id: str, job_data: dict, blob_url: Optional[str]) -> FinalStatusResponse:
-        """Constrói resposta para modo somente relatório."""
         analysis_report = job_data.get(JobFields.ANALYSIS_REPORT)
         final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
-        
         if not analysis_report:
             raise HTTPException(
                 status_code=500, 
                 detail=f"[{job_id}] ERRO INTERNO: Relatório ausente no modo report_only após finalização do workflow."
             )
-        
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.COMPLETED,
             analysis_report=analysis_report,
             report_blob_url=final_blob_url
         )
-    
     def _build_standard_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
-        """Constrói resposta padrão com PRs e logs."""
         job_data = job.get(JobFields.DATA, {})
-        
-        # Extrai PRs usando serviço especializado
         summary_list = self.pr_extractor_service.extract_pull_requests(job_id, job_data)
-        
-        # Realiza logging usando serviço especializado
         self.logging_service.log_completed_job(job_id, job_data, summary_list, blob_url)
-        
         final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
-        
+        build_errors = []
+        commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
+        for commit in commit_details:
+            errors = commit.get("build_errors")
+            if errors:
+                build_errors.extend(errors)
+        if not build_errors:
+            build_errors = None
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.COMPLETED,
             summary=summary_list,
             diagnostic_logs=logs,
-            report_blob_url=final_blob_url
+            report_blob_url=final_blob_url,
+            build_errors=build_errors
         )
-    
     def build_failed_response(self, job_id: str, job: dict) -> FinalStatusResponse:
-        """Constrói resposta para jobs que falharam."""
         job_data = job.get(JobFields.DATA, {})
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
-        
-        # Log do job falhado
         self.logging_service.log_failed_job(job_id, job_data, blob_url)
-        
+        build_errors = []
+        commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
+        for commit in commit_details:
+            errors = commit.get("build_errors")
+            if errors:
+                build_errors.extend(errors)
+        if not build_errors:
+            build_errors = None
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.FAILED,
             error_details=job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado."),
             diagnostic_logs=logs,
-            report_blob_url=blob_url
+            report_blob_url=blob_url,
+            build_errors=build_errors
         )
