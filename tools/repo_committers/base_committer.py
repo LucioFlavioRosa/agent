@@ -8,7 +8,8 @@ class BaseCommitter:
             "success": False,
             "pr_url": None,
             "message": "",
-            "arquivos_modificados": []
+            "arquivos_modificados": [],
+            "commit_url": None
         }
     @staticmethod
     def _processar_mudancas_comuns(conjunto_de_mudancas: list, resultado_branch: Dict[str, Any]) -> List[Dict[str, Any]]:
