@@ -142,6 +142,9 @@ class CommitHandler:
         else:
             if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
                 resultado_branch['pr_url'] = f"ERRO: Falha na criação do PR (Grupo {grupo_num}). Verifique logs."
+        # Validação final conforme instrução do usuário (passo 8)
+        if resultado_branch.get('success') and (not resultado_branch.get('pr_url') or not isinstance(resultado_branch.get('pr_url'), str) or not resultado_branch.get('pr_url').strip()):
+            raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
         print(f"[DEBUG][CommitHandler] _validate_and_fix_pr_url (final): pr_url={resultado_branch.get('pr_url')}")
         return resultado_branch
     
