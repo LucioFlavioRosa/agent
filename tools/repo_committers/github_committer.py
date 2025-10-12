@@ -21,6 +21,7 @@ def processar_branch_github(
 ) -> Dict[str, Any]:
     print(f"\n--- Processando Lote GitHub para a Branch: '{nome_branch}' ---")
     resultado_branch = BaseCommitter._inicializar_resultado_branch(nome_branch)
+    resultado_branch['commit_url'] = None
     sanitized = BranchNameSanitizer.sanitize(nome_branch)
     if sanitized != nome_branch or sanitized == "invalid-branch":
         msg = f"Nome da branch inválido para GitHub: '{nome_branch}' (sanitizado: '{sanitized}')"
@@ -33,6 +34,7 @@ def processar_branch_github(
         BaseCommitter._finalizar_resultado_erro(resultado_branch, str(ve))
         return resultado_branch
     commits_realizados = 0
+    commit_url = None
     try:
         ref_base = repo.get_git_ref(f"heads/{branch_de_origem}")
         repo.create_git_ref(ref=f"refs/heads/{nome_branch}", sha=ref_base.object.sha)
@@ -59,11 +61,16 @@ def processar_branch_github(
             if status in ("ADICIONADO", "CRIADO"):
                 if sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
-                    repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
+                    commit_response = repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
                 else:
-                    repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo or "", branch=nome_branch)
+                    commit_response = repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo or "", branch=nome_branch)
                 print(f"  [CRIADO/MODIFICADO] {caminho}")
                 commits_realizados += 1
+                # Extrai a URL do commit se possível
+                if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
+                    commit_url = getattr(commit_response['commit'], 'html_url', None)
+                elif commit_response and 'commit' in commit_response and 'url' in commit_response['commit']:
+                    commit_url = commit_response['commit']['url']
             elif status == "MODIFICADO":
                 if not sha_arquivo_existente or not arquivo_existente:
                     print(f"  [ERRO] Arquivo '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
@@ -71,22 +78,32 @@ def processar_branch_github(
                 if modo_adicao_incremental:
                     conteudo_existente = arquivo_existente.decoded_content.decode('utf-8')
                     conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
-                repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
+                commit_response = repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [MODIFICADO] {caminho}")
                 commits_realizados += 1
+                if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
+                    commit_url = getattr(commit_response['commit'], 'html_url', None)
+                elif commit_response and 'commit' in commit_response and 'url' in commit_response['commit']:
+                    commit_url = commit_response['commit']['url']
             elif status == "REMOVIDO":
                 if not sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
                     continue
-                repo.delete_file(path=caminho, message=f"refactor: remove {caminho}", sha=sha_arquivo_existente, branch=nome_branch)
+                commit_response = repo.delete_file(path=caminho, message=f"refactor: remove {caminho}", sha=sha_arquivo_existente, branch=nome_branch)
                 print(f"  [REMOVIDO] {caminho}")
                 commits_realizados += 1
+                if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
+                    commit_url = getattr(commit_response['commit'], 'html_url', None)
+                elif commit_response and 'commit' in commit_response and 'url' in commit_response['commit']:
+                    commit_url = commit_response['commit']['url']
             else:
                 print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo '{caminho}'. Ignorando.")
         except GithubException as e:
             print(f"ERRO ao processar o arquivo '{caminho}': {e.data.get('message', str(e))}")
         except Exception as e:
             print(f"ERRO inesperado ao processar o arquivo '{caminho}': {e}")
+    if commit_url:
+        resultado_branch['commit_url'] = commit_url
     if commits_realizados > 0:
         tentativas = 0
         while tentativas < 2:
