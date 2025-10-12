@@ -105,7 +105,11 @@ def processar_branch_gitlab(
                     print(f"[DEBUG][GITLAB] Atributos do objeto mr_result: {dir(mr_result)}")
                     print(f"[DEBUG][GITLAB] mr_result.__dict__: {mr_result.__dict__}")
                     print(f"[DEBUG][GITLAB] mr_result.web_url (direto): {getattr(mr_result, 'web_url', None)}")
-                    print(f"[DEBUG][GITLAB] mr_result.web_url ANTES de _finalizar_resultado_sucesso: {getattr(mr_result, 'web_url', 'ATRIBUTO NÃO ENCONTRADO')}")
+                    print(f"[DEBUG][GITLAB] mr_result.web_url ANTES de validação: {getattr(mr_result, 'web_url', 'ATRIBUTO NÃO ENCONTRADO')}")
+                    if not hasattr(mr_result, 'web_url') or mr_result.web_url is None or not isinstance(mr_result.web_url, str) or not mr_result.web_url.strip():
+                        print(f"[ERRO][GITLAB] MR criado mas web_url inválido: {json.dumps(mr_result.__dict__, default=str)}")
+                        BaseCommitter._finalizar_resultado_erro(resultado_branch, f"MR criado mas web_url inválido: {json.dumps(mr_result.__dict__, default=str)}")
+                        break
                     BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr_result.web_url.strip())
                     break
                 except ValueError as ve:
