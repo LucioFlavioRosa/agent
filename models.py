@@ -5,6 +5,7 @@ class PullRequestSummary(BaseModel):
     pull_request_url: str
     branch_name: str
     arquivos_modificados: List[str]
+    build_result: Optional[Dict[str, Any]] = None
 
 class FinalStatusResponse(BaseModel):
     job_id: str
@@ -64,6 +65,7 @@ class JobFields:
     MAX_STEPS_PER_BATCH = 'max_steps_per_batch'
     EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
     BUILD_ERRORS = 'build_errors'
+    BUILD_RESULT = 'build_result'
 
 class JobActions:
     APPROVE = 'approve'
