@@ -3,6 +3,8 @@ import uuid
 import time
 import traceback
 import os
+from typing import Optional
+
 from urllib.parse import urlparse
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
@@ -13,6 +15,7 @@ from services.workflow_registry_service import WorkflowRegistryService
 from services.api_service_factory import ApiServiceFactory
 from services.response_builder_service import FinalStatusResponse
 from models import JobStatus, JobFields, JobActions
+
 container = DependencyContainer()
 api_service_factory = ApiServiceFactory()
 workflow_registry_service = container.get_workflow_registry_service()
@@ -22,6 +25,7 @@ repository_normalizer_service = api_service_factory.get_repository_normalizer_se
 job_data_service = api_service_factory.get_job_data_service()
 job_validation_service = api_service_factory.get_job_validation_service()
 logging_service = api_service_factory.get_logging_service()
+
 class StartAnalysisPayload(BaseModel):
     repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
     branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
@@ -42,30 +46,37 @@ class StartAnalysisPayload(BaseModel):
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    
 class StartAnalysisResponse(BaseModel):
     job_id: str
+    
 class UpdateJobPayload(BaseModel):
     job_id: str
     action: Literal["approve", "reject"]
     instrucoes_extras: Optional[str] = None
+    
 class PullRequestSummary(BaseModel):
     pull_request_url: str
     branch_name: str
     arquivos_modificados: List[str]
+    
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
     report_blob_url: Optional[str] = Field(None)
+    
 class AnalysisByNameResponse(BaseModel):
     job_id: str
     analysis_name: str
     analysis_report: Optional[str]
     report_blob_url: Optional[str] = Field(None)
+    
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA.",
     version="9.0.0" 
 )
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
@@ -163,6 +174,7 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     return StartAnalysisResponse(job_id=new_job_id)
+
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
@@ -184,6 +196,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             return response_builder_service.build_failed_response(job_id, job)
         else:
             return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, build_errors=job_data.get('build_errors'))
+            
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
