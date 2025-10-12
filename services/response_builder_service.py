@@ -32,17 +32,23 @@ class ResponseBuilderService:
     def _build_standard_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
         job_data = job.get(JobFields.DATA, {})
         summary_list = self.pr_extractor_service.extract_pull_requests(job_id, job_data)
+        print(f"[{job_id}] [DEBUG][ResponseBuilderService] commit_details: {job_data.get(JobFields.COMMIT_DETAILS)}")
+        for idx, commit in enumerate(job_data.get(JobFields.COMMIT_DETAILS, [])):
+            print(f"[{job_id}] [DEBUG][ResponseBuilderService] commit_details[{idx}] build_result presente: {'build_result' in commit}, build_errors presente: {'build_errors' in commit}, build_result={commit.get('build_result')}")
         self.logging_service.log_completed_job(job_id, job_data, summary_list, blob_url)
         final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
         logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
         build_errors = []
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        for commit in commit_details:
+        for idx, commit in enumerate(commit_details):
             errors = commit.get("build_errors")
             if errors:
+                print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors encontrados em commit_details[{idx}]: {errors}")
                 build_errors.extend(errors)
         if not build_errors:
             build_errors = None
+        else:
+            print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors consolidados: {build_errors}")
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.COMPLETED,
@@ -58,12 +64,15 @@ class ResponseBuilderService:
         self.logging_service.log_failed_job(job_id, job_data, blob_url)
         build_errors = []
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        for commit in commit_details:
+        for idx, commit in enumerate(commit_details):
             errors = commit.get("build_errors")
             if errors:
+                print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors encontrados em commit_details[{idx}]: {errors}")
                 build_errors.extend(errors)
         if not build_errors:
             build_errors = None
+        else:
+            print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors consolidados: {build_errors}")
         return FinalStatusResponse(
             job_id=job_id,
             status=JobStatus.FAILED,
