@@ -74,7 +74,9 @@ def processar_branch_azure(
             "oldObjectId": "0000000000000000000000000000000000000000",
             "newObjectId": source_commit_id
         }]
+        print(f"[LOG][AZURE] Criando branch '{nome_branch}' a partir de '{branch_de_origem}'. Payload: {json.dumps(create_branch_payload)}")
         branch_response = requests.post(create_branch_url, headers=headers, json=create_branch_payload, timeout=30)
+        print(f"[LOG][AZURE] branch_response.status_code: {branch_response.status_code}, branch_response.text: {branch_response.text}")
         if branch_response.status_code in [200, 201]:
             print(f"SUCESSO: Branch '{nome_branch}' criada.")
             current_commit_id = source_commit_id
@@ -89,6 +91,7 @@ def processar_branch_azure(
             current_commit_id = refs_data_destino['value'][0]['objectId']
             print(f"[DEBUG][AZURE] Commit ID da branch existente '{nome_branch}': {current_commit_id}")
         else:
+            print(f"[ERRO][AZURE] Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
             raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
         changes = []
         mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
@@ -137,23 +140,31 @@ def processar_branch_azure(
                 "changes": changes
             }]
         }
-        print(f"[DEBUG][AZURE] push_payload: {json.dumps(push_payload, indent=2, default=str)}")
+        print(f"[LOG][AZURE] push_payload: {json.dumps(push_payload, indent=2, default=str)}")
         max_push_attempts = 2
         push_attempt = 0
         commit_url = None
         commit_id = None
         while push_attempt < max_push_attempts:
+            print(f"[LOG][AZURE] Realizando push tentativa {push_attempt+1} para branch '{nome_branch}' com current_commit_id: {current_commit_id}")
             push_response = requests.post(push_url, headers=headers, json=push_payload, timeout=60)
-            print(f"[DEBUG][AZURE] push_response.status_code: {push_response.status_code}")
+            print(f"[LOG][AZURE] push_response.status_code: {push_response.status_code}, push_response.text: {push_response.text}")
             if push_response.status_code in [200, 201]:
                 push_data = push_response.json()
                 if 'commits' not in push_data or not isinstance(push_data['commits'], list) or len(push_data['commits']) == 0:
+                    print(f"[ERRO][AZURE] Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
                     raise Exception(f"Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
                 try:
                     commit_info = push_data['commits'][0]
                     commit_id = commit_info.get('commitId')
                     if commit_id:
-                        commit_url = _build_commit_ui_url(organization, project, repo_name, commit_id)
+                        commit_url_candidate = _build_commit_ui_url(organization, project, repo_name, commit_id)
+                        print(f"[LOG][AZURE] commit_id extraído: {commit_id}, commit_url_candidate: {commit_url_candidate}")
+                        if BaseCommitter._validate_commit_url(commit_url_candidate):
+                            commit_url = commit_url_candidate
+                        else:
+                            print(f"[WARN][AZURE] commit_url construído não é válido: {commit_url_candidate}")
+                            commit_url = None
                 except Exception as e:
                     print(f"[ERRO][AZURE] Não foi possível extrair commit_url do push_response: {e}")
                     commit_url = None
@@ -172,6 +183,7 @@ def processar_branch_azure(
                 push_attempt += 1
                 continue
             else:
+                print(f"[ERRO][AZURE] Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
                 raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
         resultado_branch['commit_url'] = commit_url
         tentativas = 0
@@ -186,6 +198,7 @@ def processar_branch_azure(
                     "description": descricao_pr
                 }
                 pr_response = requests.post(pr_url, headers=headers, json=pr_payload, timeout=30)
+                print(f"[LOG][AZURE] pr_response.status_code: {pr_response.status_code}, pr_response.text: {pr_response.text}")
                 if pr_response.status_code in [200, 201]:
                     pr_data = pr_response.json()
                     print(f"[DEBUG][AZURE] pr_response.status_code: {pr_response.status_code}")
@@ -222,6 +235,7 @@ def processar_branch_azure(
                             continue
                         break
                     else:
+                        print(f"[ERRO][AZURE] Erro ao criar PR Azure: {pr_response.status_code} - {pr_response.text}")
                         raise Exception(f"Erro ao criar PR Azure: {pr_response.status_code} - {pr_response.text}")
             except ValueError as ve:
                 print(f"[ERRO][AZURE] PR retornado sem web_url ou web_url inválido.")
