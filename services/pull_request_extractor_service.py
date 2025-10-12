@@ -20,6 +20,8 @@ class PullRequestExtractorService:
             arquivos_modificados = pr_info.get('arquivos_modificados', [])
             success = pr_info.get('success', False)
             commit_url = pr_info.get('commit_url') if 'commit_url' in pr_info else None
+            build_result = pr_info.get('build_result') if 'build_result' in pr_info else None
+            print(f"[{job_id}] [DEBUG][PullRequestExtractorService] build_result presente no commit_details[{i}]: {build_result is not None}")
             if success and branch_name:
                 if pr_url:
                     print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name}")
@@ -28,6 +30,7 @@ class PullRequestExtractorService:
                             pull_request_url=pr_url,
                             branch_name=branch_name,
                             arquivos_modificados=arquivos_modificados,
+                            build_result=build_result,
                             commit_url=commit_url
                         )
                     )
@@ -38,6 +41,7 @@ class PullRequestExtractorService:
                             pull_request_url=f"Branch processada: {branch_name}",
                             branch_name=branch_name,
                             arquivos_modificados=arquivos_modificados,
+                            build_result=build_result,
                             commit_url=commit_url
                         )
                     )
@@ -47,6 +51,7 @@ class PullRequestExtractorService:
                         pull_request_url=pr_info.get('message', f"Branch processada: {branch_name}"),
                         branch_name=branch_name,
                         arquivos_modificados=arquivos_modificados,
+                        build_result=build_result,
                         commit_url=commit_url
                     )
                 )
@@ -80,6 +85,7 @@ class PullRequestExtractorService:
                         pull_request_url=pr_url,
                         branch_name=branch_name,
                         arquivos_modificados=arquivos_modificados,
+                        build_result=None,
                         commit_url=None
                     )
                 )
@@ -98,6 +104,7 @@ class PullRequestExtractorService:
                         pull_request_url="PR criado com base no resultado da análise",
                         branch_name="branch-implementacao",
                         arquivos_modificados=arquivos_modificados,
+                        build_result=None,
                         commit_url=None
                     )
                 )
