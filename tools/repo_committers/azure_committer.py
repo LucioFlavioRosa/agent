@@ -137,6 +137,16 @@ def processar_branch_azure(
         if push_response.status_code not in [200, 201]:
             raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
         print(f"[DEBUG][AZURE] Commit realizado com sucesso.")
+        try:
+            push_data = push_response.json()
+            commit_url = None
+            if 'commits' in push_data and len(push_data['commits']) > 0:
+                commit_info = push_data['commits'][0]
+                commit_url = commit_info.get('remoteUrl') or commit_info.get('url')
+            resultado_branch['commit_url'] = commit_url
+        except Exception as e:
+            print(f"[ERRO][AZURE] Não foi possível extrair commit_url do push_response: {e}")
+            resultado_branch['commit_url'] = None
         tentativas = 0
         while tentativas < 2:
             try:
