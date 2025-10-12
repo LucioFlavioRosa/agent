@@ -188,9 +188,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     build_errors.extend(errors)
             if build_errors:
                 job_info['data']['build_errors'] = build_errors
-                print(f"[{job_id}] [WORKFLOW] Erros de build .NET detectados: {build_errors}")
             else:
                 job_info['data']['build_errors'] = None
+            self.job_handler.update_job(job_id, job_info)
+        else:
+            job_info['data']['build_errors'] = None
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
         self.job_handler.update_job_status(job_id, 'completed')
