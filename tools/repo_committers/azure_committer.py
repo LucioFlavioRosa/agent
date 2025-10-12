@@ -138,23 +138,41 @@ def processar_branch_azure(
             }]
         }
         print(f"[DEBUG][AZURE] push_payload: {json.dumps(push_payload, indent=2, default=str)}")
-        push_response = requests.post(push_url, headers=headers, json=push_payload, timeout=60)
-        print(f"[DEBUG][AZURE] push_response.status_code: {push_response.status_code}")
-        if push_response.status_code not in [200, 201]:
-            raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
-        push_data = push_response.json()
-        if 'commits' not in push_data or not isinstance(push_data['commits'], list) or len(push_data['commits']) == 0:
-            raise Exception(f"Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
+        max_push_attempts = 2
+        push_attempt = 0
         commit_url = None
         commit_id = None
-        try:
-            commit_info = push_data['commits'][0]
-            commit_id = commit_info.get('commitId')
-            if commit_id:
-                commit_url = _build_commit_ui_url(organization, project, repo_name, commit_id)
-        except Exception as e:
-            print(f"[ERRO][AZURE] Não foi possível extrair commit_url do push_response: {e}")
-            commit_url = None
+        while push_attempt < max_push_attempts:
+            push_response = requests.post(push_url, headers=headers, json=push_payload, timeout=60)
+            print(f"[DEBUG][AZURE] push_response.status_code: {push_response.status_code}")
+            if push_response.status_code in [200, 201]:
+                push_data = push_response.json()
+                if 'commits' not in push_data or not isinstance(push_data['commits'], list) or len(push_data['commits']) == 0:
+                    raise Exception(f"Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
+                try:
+                    commit_info = push_data['commits'][0]
+                    commit_id = commit_info.get('commitId')
+                    if commit_id:
+                        commit_url = _build_commit_ui_url(organization, project, repo_name, commit_id)
+                except Exception as e:
+                    print(f"[ERRO][AZURE] Não foi possível extrair commit_url do push_response: {e}")
+                    commit_url = None
+                break
+            elif push_response.status_code in [400, 409]:
+                print(f"[ERRO][AZURE] Push falhou com status {push_response.status_code}. Tentando atualizar current_commit_id e retentar...")
+                refs_url_destino = f"{base_url}/git/repositories/{repository_id}/refs?filter=heads/{nome_branch}&api-version=7.0"
+                refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
+                refs_response_destino.raise_for_status()
+                refs_data_destino = refs_response_destino.json()
+                if not refs_data_destino.get('value'):
+                    raise Exception(f"Branch '{nome_branch}' não encontrada ao tentar atualizar SHA para retry do push.")
+                current_commit_id = refs_data_destino['value'][0]['objectId']
+                print(f"[DEBUG][AZURE] Novo current_commit_id para retry: {current_commit_id}")
+                push_payload['refUpdates'][0]['oldObjectId'] = current_commit_id
+                push_attempt += 1
+                continue
+            else:
+                raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
         resultado_branch['commit_url'] = commit_url
         tentativas = 0
         while tentativas < 2:
@@ -224,4 +242,5 @@ def processar_branch_azure(
         print(f"[ERRO][AZURE] ERRO FATAL ao processar branch Azure '{nome_branch}': {type(e).__name__}: {e}")
         traceback.print_exc()
         BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro fatal: {e}")
+    print(f"[DEBUG][AZURE] Resultado final da branch {nome_branch}: {resultado_branch}")
     return resultado_branch
