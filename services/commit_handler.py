@@ -4,11 +4,13 @@ from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.repository_provider_factory import get_repository_provider_explicit
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
 import json
+from services.dotnet_build_service import DotNetBuildService
 
 class CommitHandler:
-    def __init__(self, repository_provider_factory=None, conexao_geral_factory=None):
+    def __init__(self, repository_provider_factory=None, conexao_geral_factory=None, dotnet_build_service=None):
         self.repository_provider_factory = repository_provider_factory or get_repository_provider_explicit
         self.conexao_geral_factory = conexao_geral_factory or ConexaoGeral.create_with_defaults
+        self.dotnet_build_service = dotnet_build_service or DotNetBuildService()
     
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
                       repository_type: str, repo_name: str) -> None:
@@ -50,6 +52,7 @@ class CommitHandler:
                 print(f"[{job_id}] BLINDAGEM: commit_details definido com erro de formato")
                 return
             modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
+            executar_build_dotnet = job_info.get('data', {}).get('executar_build_dotnet', False)
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
@@ -72,6 +75,16 @@ class CommitHandler:
                         modo_adicao_incremental=modo_adicao_incremental
                     )
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
+                    if executar_build_dotnet:
+                        build_result = self.dotnet_build_service.build_project(
+                            job_id=job_id,
+                            repository_type=repository_type,
+                            repo_name=repo_name,
+                            branch_name=branch_sugerida
+                        )
+                        resultado_branch["build_result"] = build_result
+                        if not build_result.get("success", False):
+                            resultado_branch["build_errors"] = build_result.get("errors", [])
                 except Exception as e:
                     print(f"[{job_id}] ERRO no processamento do grupo {i+1}: {str(e)}")
                     resultado_branch = {
@@ -85,7 +98,6 @@ class CommitHandler:
                 commit_results.append(resultado_branch)
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
             print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {json.dumps(commit_results, default=str)}")
-            # Validação final dos resultados dos commits
             for idx, res in enumerate(commit_results):
                 if res.get('success'):
                     pr_url = res.get('pr_url')
