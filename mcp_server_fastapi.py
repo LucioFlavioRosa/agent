@@ -3,19 +3,16 @@ import uuid
 import time
 import traceback
 import os
-
 from urllib.parse import urlparse
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
 from pydantic import BaseModel, Field, ValidationError
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
-
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
 from services.api_service_factory import ApiServiceFactory
 from services.response_builder_service import FinalStatusResponse
 from models import JobStatus, JobFields, JobActions
-
 container = DependencyContainer()
 api_service_factory = ApiServiceFactory()
 workflow_registry_service = container.get_workflow_registry_service()
@@ -25,7 +22,6 @@ repository_normalizer_service = api_service_factory.get_repository_normalizer_se
 job_data_service = api_service_factory.get_job_data_service()
 job_validation_service = api_service_factory.get_job_validation_service()
 logging_service = api_service_factory.get_logging_service()
-
 class StartAnalysisPayload(BaseModel):
     repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
     branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
@@ -46,72 +42,57 @@ class StartAnalysisPayload(BaseModel):
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-
 class StartAnalysisResponse(BaseModel):
     job_id: str
-
 class UpdateJobPayload(BaseModel):
     job_id: str
     action: Literal["approve", "reject"]
     instrucoes_extras: Optional[str] = None
-
 class PullRequestSummary(BaseModel):
     pull_request_url: str
     branch_name: str
     arquivos_modificados: List[str]
-
 class ReportResponse(BaseModel):
     job_id: str
     analysis_report: Optional[str]
     report_blob_url: Optional[str] = Field(None)
-
 class AnalysisByNameResponse(BaseModel):
     job_id: str
     analysis_name: str
     analysis_report: Optional[str]
     report_blob_url: Optional[str] = Field(None)
-
 app = FastAPI(
     title="MCP Server - Multi-Agent Code Platform",
     description="Servidor robusto com Redis para orquestrar agentes de IA.",
     version="9.0.0" 
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
-    
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
-    
     repo_name = payload.repo_name_modernizado
     branch_name = payload.branch_name_modernizado
-    
     normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         repo_name, payload.repository_type
     )
     job_id = str(uuid.uuid4())
-    
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
-
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
-  
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
         analysis_service.register_analysis(analysis_name, job_id)
     print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
-
     return StartAnalysisResponse(job_id=job_id)
-
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
@@ -121,7 +102,6 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         if payload.instrucoes_extras:
             job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
             print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
-        
         job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
         start_from_step = paused_step + 1
@@ -135,11 +115,9 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
 @app.get("/jobs/{job_id}/report", response_model=ReportResponse, tags=["Jobs"])
 def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o relatório")):
     job_store = container.get_job_store()
-    
     job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-        
     print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
     job_validation_service.validate_job_exists(job, job_id)
     report = job_validation_service.get_report_from_job(job, job_id)
@@ -149,7 +127,6 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
-    
     job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
@@ -165,7 +142,6 @@ def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise 
 def start_code_generation_from_report(analysis_name: str, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
-    
     job_id = job_validation_service.validate_analysis_exists(analysis_name, analysis_service)
     original_job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(original_job, job_id)
@@ -188,7 +164,6 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
 def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
-    
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
     status = job.get(JobFields.STATUS)
@@ -206,7 +181,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         elif status == JobStatus.FAILED:
             return response_builder_service.build_failed_response(job_id, job)
         else:
-            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url)
+            return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, build_errors=job_data.get('build_errors'))
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
