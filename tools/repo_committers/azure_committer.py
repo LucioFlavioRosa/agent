@@ -185,7 +185,10 @@ def processar_branch_azure(
             else:
                 print(f"[ERRO][AZURE] Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
                 raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
-        resultado_branch['commit_url'] = commit_url
+        if commit_url and BaseCommitter._validate_commit_url(commit_url):
+            resultado_branch['commit_url'] = commit_url
+        else:
+            resultado_branch['commit_url'] = None
         tentativas = 0
         while tentativas < 2:
             try:
