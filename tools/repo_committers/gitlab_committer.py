@@ -33,6 +33,7 @@ def processar_branch_gitlab(
         BaseCommitter._finalizar_resultado_erro(resultado_branch, str(ve))
         return resultado_branch
     commits_realizados = 0
+    last_commit_id = None
     try:
         print(f"[DEBUG][GITLAB] Iniciando criação da branch: {nome_branch} a partir de {branch_de_origem}")
         try:
@@ -55,6 +56,7 @@ def processar_branch_gitlab(
             conteudo = mudanca["conteudo"]
             print(f"[DEBUG][GITLAB] Mudança: arquivo='{caminho}', status='{status}', conteudo_length={len(conteudo) if conteudo else 0}")
             try:
+                commit_id = None
                 if status in ("ADICIONADO", "CRIADO"):
                     print(f"[DEBUG][GITLAB] Chamando repo.files.create para {caminho}")
                     dados_criacao = {
@@ -63,9 +65,10 @@ def processar_branch_gitlab(
                         'content': conteudo or "",
                         'commit_message': f"feat: Cria {caminho}"
                     }
-                    repo.files.create(dados_criacao)
-                    print(f"  [CRIADO] GitLab {caminho}")
+                    file_obj = repo.files.create(dados_criacao)
                     commits_realizados += 1
+                    if hasattr(file_obj, 'commit_id'):
+                        commit_id = getattr(file_obj, 'commit_id', None)
                 elif status == "MODIFICADO":
                     print(f"[DEBUG][GITLAB] Buscando arquivo para modificar: {caminho}")
                     arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
@@ -74,21 +77,31 @@ def processar_branch_gitlab(
                         conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                     arquivo.content = conteudo or ""
                     arquivo.save(branch=nome_branch, commit_message=f"refactor: Modifica {caminho}")
-                    print(f"  [MODIFICADO] GitLab {caminho}")
                     commits_realizados += 1
+                    if hasattr(arquivo, 'commit_id'):
+                        commit_id = getattr(arquivo, 'commit_id', None)
                 elif status == "REMOVIDO":
                     print(f"[DEBUG][GITLAB] Chamando repo.files.delete para {caminho}")
-                    repo.files.delete(file_path=caminho,
+                    delete_result = repo.files.delete(file_path=caminho,
                                       branch=nome_branch,
                                       commit_message=f"refactor: Remove {caminho}")
-                    print(f"  [REMOVIDO] GitLab {caminho}")
                     commits_realizados += 1
+                    if isinstance(delete_result, dict) and 'commit_id' in delete_result:
+                        commit_id = delete_result['commit_id']
                 else:
                     print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo GitLab '{caminho}'. Ignorando.")
+                if commit_id:
+                    last_commit_id = commit_id
             except Exception as file_e:
                 print(f"[ERRO][GITLAB] Erro ao processar o arquivo '{caminho}': {type(file_e).__name__}: {file_e}")
                 import traceback
                 traceback.print_exc()
+        if last_commit_id:
+            repo_web_url = getattr(repo, 'web_url', None)
+            if repo_web_url:
+                resultado_branch['commit_url'] = f"{repo_web_url}/-/commit/{last_commit_id}"
+            else:
+                resultado_branch['commit_url'] = None
         print(f"[DEBUG][GITLAB] Commits realizados: {commits_realizados}")
         if commits_realizados > 0:
             tentativas = 0
