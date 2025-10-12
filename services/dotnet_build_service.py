@@ -1,5 +1,6 @@
 import subprocess
 import os
+import shutil
 from typing import Dict, Any, Optional, List
 
 class DotNetBuildService:
@@ -13,11 +14,11 @@ class DotNetBuildService:
             "stdout": "",
             "stderr": ""
         }
+        local_dir = f"/tmp/{job_id}_{branch_name}"
         try:
-            local_dir = f"/tmp/{job_id}_{branch_name}"
             clone_url = self._get_clone_url(repository_type, repo_name)
             if os.path.exists(local_dir):
-                subprocess.run(["rm", "-rf", local_dir], check=True)
+                shutil.rmtree(local_dir)
             clone_cmd = ["git", "clone", "--branch", branch_name, clone_url, local_dir]
             clone_proc = subprocess.run(clone_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             if clone_proc.returncode != 0:
@@ -34,6 +35,12 @@ class DotNetBuildService:
                 result["errors"] = self._parse_build_errors(build_proc.stdout, build_proc.stderr)
         except Exception as e:
             result["errors"].append(str(e))
+        finally:
+            if os.path.exists(local_dir):
+                try:
+                    shutil.rmtree(local_dir)
+                except Exception:
+                    pass
         return result
 
     def _get_clone_url(self, repository_type: str, repo_name: str) -> str:
