@@ -86,7 +86,10 @@ def processar_branch_github(
         try:
             print(f"\nCriando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
             pr = repo.create_pull(title=mensagem_pr, body=descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA.", head=nome_branch, base=branch_alvo_do_pr)
-            print(f"[DEBUG][GITHUB] repo.create_pull retornou pr.html_url: {getattr(pr, 'html_url', None)}, pr.head.ref: {getattr(getattr(pr, 'head', None), 'ref', None)}")
+            print(f"[DEBUG][GITHUB] Tipo do objeto pr: {type(pr)}")
+            print(f"[DEBUG][GITHUB] Atributos do objeto pr: {dir(pr)}")
+            print(f"[DEBUG][GITHUB] pr.__dict__: {pr.__dict__}")
+            print(f"[DEBUG][GITHUB] pr.html_url (direto): {getattr(pr, 'html_url', None)}")
             if not hasattr(pr, 'html_url') or not isinstance(pr.html_url, str) or not pr.html_url.strip():
                 raise Exception(f"[ERRO][GITHUB] PR criado mas html_url inválido: {json.dumps(pr.__dict__, default=str)}")
             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr.html_url)
