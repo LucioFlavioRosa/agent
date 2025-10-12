@@ -66,11 +66,14 @@ def processar_branch_github(
                     commit_response = repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo or "", branch=nome_branch)
                 print(f"  [CRIADO/MODIFICADO] {caminho}")
                 commits_realizados += 1
-                # Extrai a URL do commit se possível
                 if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
-                    commit_url = getattr(commit_response['commit'], 'html_url', None)
+                    commit_url_candidate = getattr(commit_response['commit'], 'html_url', None)
+                    if commit_url_candidate and BaseCommitter._validate_commit_url(commit_url_candidate):
+                        commit_url = commit_url_candidate
                 elif commit_response and 'commit' in commit_response and 'url' in commit_response['commit']:
-                    commit_url = commit_response['commit']['url']
+                    commit_url_candidate = commit_response['commit']['url']
+                    if commit_url_candidate and BaseCommitter._validate_commit_url(commit_url_candidate):
+                        commit_url = commit_url_candidate
             elif status == "MODIFICADO":
                 if not sha_arquivo_existente or not arquivo_existente:
                     print(f"  [ERRO] Arquivo '{caminho}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
@@ -82,9 +85,13 @@ def processar_branch_github(
                 print(f"  [MODIFICADO] {caminho}")
                 commits_realizados += 1
                 if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
-                    commit_url = getattr(commit_response['commit'], 'html_url', None)
+                    commit_url_candidate = getattr(commit_response['commit'], 'html_url', None)
+                    if commit_url_candidate and BaseCommitter._validate_commit_url(commit_url_candidate):
+                        commit_url = commit_url_candidate
                 elif commit_response and 'commit' in commit_response and 'url' in commit_response['commit']:
-                    commit_url = commit_response['commit']['url']
+                    commit_url_candidate = commit_response['commit']['url']
+                    if commit_url_candidate and BaseCommitter._validate_commit_url(commit_url_candidate):
+                        commit_url = commit_url_candidate
             elif status == "REMOVIDO":
                 if not sha_arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho}' marcado como REMOVIDO já não existe. Ignorando.")
@@ -93,17 +100,23 @@ def processar_branch_github(
                 print(f"  [REMOVIDO] {caminho}")
                 commits_realizados += 1
                 if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
-                    commit_url = getattr(commit_response['commit'], 'html_url', None)
+                    commit_url_candidate = getattr(commit_response['commit'], 'html_url', None)
+                    if commit_url_candidate and BaseCommitter._validate_commit_url(commit_url_candidate):
+                        commit_url = commit_url_candidate
                 elif commit_response and 'commit' in commit_response and 'url' in commit_response['commit']:
-                    commit_url = commit_response['commit']['url']
+                    commit_url_candidate = commit_response['commit']['url']
+                    if commit_url_candidate and BaseCommitter._validate_commit_url(commit_url_candidate):
+                        commit_url = commit_url_candidate
             else:
                 print(f"  [AVISO] Status '{status}' não reconhecido para o arquivo '{caminho}'. Ignorando.")
         except GithubException as e:
             print(f"ERRO ao processar o arquivo '{caminho}': {e.data.get('message', str(e))}")
         except Exception as e:
             print(f"ERRO inesperado ao processar o arquivo '{caminho}': {e}")
-    if commit_url:
+    if commit_url and BaseCommitter._validate_commit_url(commit_url):
         resultado_branch['commit_url'] = commit_url
+    else:
+        resultado_branch['commit_url'] = None
     if commits_realizados > 0:
         tentativas = 0
         while tentativas < 2:
