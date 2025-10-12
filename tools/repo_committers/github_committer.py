@@ -90,7 +90,6 @@ def processar_branch_github(
             print(f"[DEBUG][GITHUB] Atributos do objeto pr: {dir(pr)}")
             print(f"[DEBUG][GITHUB] pr.__dict__: {pr.__dict__}")
             print(f"[DEBUG][GITHUB] pr.html_url (direto): {getattr(pr, 'html_url', None)}")
-            # Passo 1: validação detalhada da extração do html_url
             if not hasattr(pr, 'html_url') or pr.html_url is None or not isinstance(pr.html_url, str) or not pr.html_url.strip():
                 print(f"[ERRO][GITHUB] PR criado mas html_url inválido: {json.dumps(pr.__dict__, default=str)}")
                 BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas html_url inválido: {json.dumps(pr.__dict__, default=str)}")
