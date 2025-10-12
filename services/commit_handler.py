@@ -14,6 +14,7 @@ class CommitHandler:
     
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
                       repository_type: str, repo_name: str) -> None:
+        print(f"[{job_id}] [DEBUG] INICIO execute_commits: executar_build_dotnet={job_info.get('data', {}).get('executar_build_dotnet')}")
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
         print(f"[{job_id}] DIAGNÓSTICO - Estrutura de dados_finais_formatados recebida: {dados_finais_formatados}")
         try:
@@ -55,6 +56,7 @@ class CommitHandler:
                 return
             modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
             executar_build_dotnet = job_info.get('data', {}).get('executar_build_dotnet', False)
+            print(f"[{job_id}] [DEBUG] Loop de grupos: executar_build_dotnet extraído={executar_build_dotnet}")
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
@@ -77,18 +79,17 @@ class CommitHandler:
                         modo_adicao_incremental=modo_adicao_incremental
                     )
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
-                    # Passo 6: garantir commit_url propagado
                     if 'commit_url' not in resultado_branch:
                         resultado_branch['commit_url'] = None
                     if executar_build_dotnet:
-                        print(f"[{job_id}] [BUILD] executar_build_dotnet={executar_build_dotnet}, iniciando build para branch {branch_sugerida}")
+                        print(f"[{job_id}] [DEBUG] Antes do build: executar_build_dotnet={executar_build_dotnet}, branch={branch_sugerida}, commit_details presente: {job_info.get('data', {}).get('commit_details') is not None}")
                         build_result = self.dotnet_build_service.build_project(
                             job_id=job_id,
                             repository_type=repository_type,
                             repo_name=repo_name,
                             branch_name=branch_sugerida
                         )
-                        print(f"[{job_id}] [BUILD] Resultado do build: success={build_result.get('success')}, errors={len(build_result.get('errors', []) )}")
+                        print(f"[{job_id}] [DEBUG] Resultado do build: success={build_result.get('success')}, errors={len(build_result.get('errors', []) )}")
                         resultado_branch["build_result"] = build_result
                         if not build_result.get("success", False):
                             resultado_branch["build_errors"] = build_result.get("errors", [])
@@ -104,21 +105,15 @@ class CommitHandler:
                     }
                 print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}', commit_url='{resultado_branch.get('commit_url')}'")
                 commit_results.append(resultado_branch)
+            print(f"[{job_id}] [DEBUG] Pós-loop grupos: commit_results contém build_result/build_errors?")
+            for idx, res in enumerate(commit_results):
+                print(f"[{job_id}] [DEBUG] Grupo {idx+1}: build_result presente={ 'build_result' in res }, build_errors presente={ 'build_errors' in res }, build_result={res.get('build_result')}")
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
             print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {json.dumps(commit_results, default=str)}")
-            for idx, res in enumerate(commit_results):
-                if res.get('success'):
-                    pr_url = res.get('pr_url')
-                    branch_name = res.get('branch_name')
-                    if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
-                        raise Exception(f"[{job_id}] ERRO: Grupo {idx+1} retornou success=True mas pr_url inválido: {pr_url}, branch_name={branch_name}, resultado={json.dumps(res, default=str)}")
-                    if not branch_name or not isinstance(branch_name, str) or not branch_name.strip():
-                        raise Exception(f"[{job_id}] ERRO: Grupo {idx+1} retornou success=True mas branch_name inválido: {branch_name}, resultado={json.dumps(res, default=str)}")
-            job_info['data']['commit_details'] = commit_results
-            print(f"[{job_id}] DIAGNÓSTICO - commit_details salvo no job_info: {job_info['data']['commit_details']}")
             for i, result in enumerate(commit_results):
                 print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}, commit_url='{result.get('commit_url')}'")
             print(f"[{job_id}] BLINDAGEM: execute_commits concluído com sucesso")
+            job_info['data']['commit_details'] = commit_results
         except Exception as e:
             print(f"[{job_id}] ERRO CRÍTICO em execute_commits: {str(e)}")
             if 'commit_details' not in job_info.get('data', {}):
