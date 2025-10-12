@@ -6,6 +6,11 @@ from tools.repo_committers.base_committer import BaseCommitter
 from tools.conectores.azure_conector import AzureConector
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
 import json
+import random
+import string
+
+def _gerar_sufixo_aleatorio(tamanho=6):
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=tamanho))
 
 def processar_branch_azure(
     repo: Dict[str, Any],
@@ -98,7 +103,14 @@ def processar_branch_azure(
                 change_item["changeType"] = "delete"
             changes.append(change_item)
         if not changes:
-            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
+            try:
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
+            except ValueError as ve:
+                print(f"[ERRO][AZURE] PR vazio mas pr_url inválido. Tentando retry com sufixo aleatório.")
+                sufixo = _gerar_sufixo_aleatorio()
+                novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
+                mensagem_pr = novo_titulo
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}-{sufixo}", message="Nenhuma mudança para commitar.")
             return resultado_branch
         print(f"[DEBUG][AZURE] Criando commit com {len(changes)} mudanças")
         push_url = f"{base_url}/git/repositories/{repository_id}/pushes?api-version=7.0"
@@ -116,41 +128,68 @@ def processar_branch_azure(
         if push_response.status_code not in [200, 201]:
             raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
         print(f"[DEBUG][AZURE] Commit realizado com sucesso.")
-        print(f"[DEBUG][AZURE] Criando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'")
-        pr_url = f"{base_url}/git/repositories/{repository_id}/pullrequests?api-version=7.0"
-        pr_payload = {
-            "sourceRefName": f"refs/heads/{nome_branch}",
-            "targetRefName": f"refs/heads/{branch_alvo_do_pr}",
-            "title": mensagem_pr,
-            "description": descricao_pr
-        }
-        pr_response = requests.post(pr_url, headers=headers, json=pr_payload, timeout=30)
-        if pr_response.status_code in [200, 201]:
-            pr_data = pr_response.json()
-            print(f"[DEBUG][AZURE] pr_response.status_code: {pr_response.status_code}")
-            print(f"[DEBUG][AZURE] pr_response.json() (completo): {json.dumps(pr_data, indent=2, default=str)}")
-            print(f"[DEBUG][AZURE] pr_data.get('_links'): {pr_data.get('_links')}")
-            links = pr_data.get('_links', {})
-            web_link = links.get('web')
-            print(f"[DEBUG][AZURE] pr_data.get('_links', {{}}).get('web'): {web_link}")
-            pr_web_url = pr_data.get('_links', {}).get('web', {}).get('href', '')
-            if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
-                pr_web_url = pr_data.get('url') or pr_data.get('webUrl') or ''
-            if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
-                if 'pullRequestId' in pr_data:
-                    pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo['name']}/pullrequest/{pr_data['pullRequestId']}"
-                    print(f"[DEBUG][AZURE] pr_web_url reconstruído manualmente: {pr_web_url}")
-            if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
-                print(f"[ERRO][AZURE] PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
-                BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
-                return resultado_branch
-            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_web_url.strip())
-        else:
-            if "already exists" in pr_response.text.lower():
-                print(f"AVISO: PR para esta branch Azure já existe.")
-                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="PR já existente.")
-            else:
-                raise Exception(f"Erro ao criar PR Azure: {pr_response.status_code} - {pr_response.text}")
+        tentativas = 0
+        while tentativas < 2:
+            try:
+                print(f"[DEBUG][AZURE] Criando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'")
+                pr_url = f"{base_url}/git/repositories/{repository_id}/pullrequests?api-version=7.0"
+                pr_payload = {
+                    "sourceRefName": f"refs/heads/{nome_branch}",
+                    "targetRefName": f"refs/heads/{branch_alvo_do_pr}",
+                    "title": mensagem_pr,
+                    "description": descricao_pr
+                }
+                pr_response = requests.post(pr_url, headers=headers, json=pr_payload, timeout=30)
+                if pr_response.status_code in [200, 201]:
+                    pr_data = pr_response.json()
+                    print(f"[DEBUG][AZURE] pr_response.status_code: {pr_response.status_code}")
+                    print(f"[DEBUG][AZURE] pr_data COMPLETO: {json.dumps(pr_data, indent=2, default=str)}")
+                    print(f"[DEBUG][AZURE] pr_data.get('_links'): {pr_data.get('_links')}")
+                    links = pr_data.get('_links', {})
+                    web_link = links.get('web')
+                    print(f"[DEBUG][AZURE] pr_data.get('_links', {{}}).get('web'): {web_link}")
+                    pr_web_url = pr_data.get('_links', {}).get('web', {}).get('href', '')
+                    if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                        pr_web_url = pr_data.get('url') or pr_data.get('webUrl') or ''
+                    if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                        if 'pullRequestId' in pr_data:
+                            pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo['name']}/pullrequest/{pr_data['pullRequestId']}"
+                            print(f"[DEBUG][AZURE] pr_web_url reconstruído manualmente: {pr_web_url}")
+                    print(f"[DEBUG][AZURE] pr_web_url ANTES de _finalizar_resultado_sucesso: {pr_web_url}")
+                    if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                        print(f"[ERRO][AZURE] pr_web_url extraído está vazio. pr_data: {pr_data}")
+                    BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_web_url.strip())
+                    break
+                else:
+                    if "already exists" in pr_response.text.lower():
+                        print(f"AVISO: PR para esta branch Azure já existe.")
+                        try:
+                            BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="PR já existente.")
+                        except ValueError as ve:
+                            print(f"[ERRO][AZURE] PR já existente mas pr_url inválido. Tentando retry com sufixo aleatório.")
+                            sufixo = _gerar_sufixo_aleatorio()
+                            novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
+                            mensagem_pr = novo_titulo
+                            tentativas += 1
+                            continue
+                        break
+                    else:
+                        raise Exception(f"Erro ao criar PR Azure: {pr_response.status_code} - {pr_response.text}")
+            except ValueError as ve:
+                print(f"[ERRO][AZURE] PR retornado sem web_url ou web_url inválido.")
+                if tentativas == 0:
+                    sufixo = _gerar_sufixo_aleatorio()
+                    novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
+                    print(f"[AZURE][RETRY] Tentando criar PR novamente com título modificado: {novo_titulo}")
+                    mensagem_pr = novo_titulo
+                    tentativas += 1
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                print(f"[ERRO][AZURE] Falha crítica ao criar PR: {e}")
+                BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro crítico ao validar PR: {e}")
+                break
     except Exception as e:
         print(f"[ERRO][AZURE] ERRO FATAL ao processar branch Azure '{nome_branch}': {type(e).__name__}: {e}")
         traceback.print_exc()
