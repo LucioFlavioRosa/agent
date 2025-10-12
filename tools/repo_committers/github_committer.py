@@ -98,6 +98,10 @@ def processar_branch_github(
                 print(f"[DEBUG][GITHUB] pr.__dict__: {pr.__dict__}")
                 print(f"[DEBUG][GITHUB] pr.html_url (direto): {getattr(pr, 'html_url', None)}")
                 print(f"[DEBUG][GITHUB] pr.html_url ANTES de _finalizar_resultado_sucesso: {getattr(pr, 'html_url', 'ATRIBUTO NÃO ENCONTRADO')}")
+                if not hasattr(pr, 'html_url') or pr.html_url is None or not isinstance(pr.html_url, str) or not pr.html_url.strip():
+                    print(f"[ERRO][GITHUB] PR criado mas html_url inválido: {json.dumps(pr.__dict__, default=str)}")
+                    BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas html_url inválido: {json.dumps(pr.__dict__, default=str)}")
+                    break
                 BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr.html_url.strip())
                 break
             except ValueError as ve:
