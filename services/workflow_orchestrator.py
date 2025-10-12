@@ -134,8 +134,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 'branch_name_original': job_info['data'].get('branch_name_original')
             })
         else:
-            repo_name = job_info['data'].get('repo_name_modernizado', job_info['data']['repo_name'])
-            branch_name = job_info['data'].get('branch_name_modernizado', job_info['data']['branch_name'])
+            repo_name = job_info['data'].get('repo_name_modernizado')
+            branch_name = job_info['data'].get('branch_name_modernizado')
             agent_params.update({
                 'repositorio': repo_name,
                 'nome_branch': branch_name
