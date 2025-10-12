@@ -127,10 +127,11 @@ def processar_branch_azure(
         pr_response = requests.post(pr_url, headers=headers, json=pr_payload, timeout=30)
         if pr_response.status_code in [200, 201]:
             pr_data = pr_response.json()
+            print(f"[DEBUG][AZURE] pr_data COMPLETO: {json.dumps(pr_data, indent=2, default=str)}")
             pr_web_url = pr_data.get('_links', {}).get('web', {}).get('href', '')
-            print(f"[DEBUG][AZURE] pr_response.json() retornou: {json.dumps(pr_data, default=str)}")
             print(f"[DEBUG][AZURE] pr_web_url extraído: {pr_web_url}")
             if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                print(f"[ERRO][AZURE] pr_web_url extraído está vazio. pr_data: {pr_data}")
                 if 'pullRequestId' in pr_data:
                     pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo['name']}/pullrequest/{pr_data['pullRequestId']}"
                     print(f"[DEBUG][AZURE] pr_web_url reconstruído manualmente: {pr_web_url}")
