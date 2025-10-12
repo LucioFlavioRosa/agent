@@ -76,12 +76,14 @@ class CommitHandler:
                     )
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
                     if executar_build_dotnet:
+                        print(f"[{job_id}] [BUILD] executar_build_dotnet={executar_build_dotnet}, iniciando build para branch {branch_sugerida}")
                         build_result = self.dotnet_build_service.build_project(
                             job_id=job_id,
                             repository_type=repository_type,
                             repo_name=repo_name,
                             branch_name=branch_sugerida
                         )
+                        print(f"[{job_id}] [BUILD] Resultado do build: success={build_result.get('success')}, errors={len(build_result.get('errors', []))}")
                         resultado_branch["build_result"] = build_result
                         if not build_result.get("success", False):
                             resultado_branch["build_errors"] = build_result.get("errors", [])
