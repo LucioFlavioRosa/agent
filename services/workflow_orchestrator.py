@@ -120,8 +120,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
-                                   current_step_index: int, previous_step_result: Dict[str, Any], 
-                                   repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
+                                    current_step_index: int, previous_step_result: Dict[str, Any], 
+                                    repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
@@ -167,7 +167,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
-                          final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+                           final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
         if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
             batch_results = job_info['data'][JobFields.BATCH_RESULTS]
