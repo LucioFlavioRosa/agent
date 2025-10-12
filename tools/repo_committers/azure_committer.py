@@ -158,6 +158,8 @@ def processar_branch_azure(
                     print(f"[DEBUG][AZURE] pr_web_url ANTES de _finalizar_resultado_sucesso: {pr_web_url}")
                     if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
                         print(f"[ERRO][AZURE] pr_web_url extraído está vazio. pr_data: {pr_data}")
+                        BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
+                        break
                     BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_web_url.strip())
                     break
                 else:
