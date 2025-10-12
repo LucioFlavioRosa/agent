@@ -34,7 +34,8 @@ class CommitHandler:
                     "success": False,
                     "pr_url": f"ERRO: Falha na conexão com repositório. {str(e)}",
                     "message": f"Erro de conexão: {str(e)}",
-                    "arquivos_modificados": []
+                    "arquivos_modificados": [],
+                    "commit_url": None
                 }]
                 print(f"[{job_id}] BLINDAGEM: Erro de conexão tratado, commit_details definido")
                 return
@@ -47,7 +48,8 @@ class CommitHandler:
                     "success": False,
                     "pr_url": "ERRO: Formato de entrada de grupos está vazio ou malformado.",
                     "message": "Formato de entrada de grupos está vazio ou malformado.",
-                    "arquivos_modificados": []
+                    "arquivos_modificados": [],
+                    "commit_url": None
                 }]
                 print(f"[{job_id}] BLINDAGEM: commit_details definido com erro de formato")
                 return
@@ -75,6 +77,9 @@ class CommitHandler:
                         modo_adicao_incremental=modo_adicao_incremental
                     )
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
+                    # Passo 6: garantir commit_url propagado
+                    if 'commit_url' not in resultado_branch:
+                        resultado_branch['commit_url'] = None
                     if executar_build_dotnet:
                         print(f"[{job_id}] [BUILD] executar_build_dotnet={executar_build_dotnet}, iniciando build para branch {branch_sugerida}")
                         build_result = self.dotnet_build_service.build_project(
@@ -83,7 +88,7 @@ class CommitHandler:
                             repo_name=repo_name,
                             branch_name=branch_sugerida
                         )
-                        print(f"[{job_id}] [BUILD] Resultado do build: success={build_result.get('success')}, errors={len(build_result.get('errors', []))}")
+                        print(f"[{job_id}] [BUILD] Resultado do build: success={build_result.get('success')}, errors={len(build_result.get('errors', []) )}")
                         resultado_branch["build_result"] = build_result
                         if not build_result.get("success", False):
                             resultado_branch["build_errors"] = build_result.get("errors", [])
@@ -94,9 +99,10 @@ class CommitHandler:
                         "success": False,
                         "pr_url": f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}",
                         "message": f"Erro no grupo {i+1}: {str(e)}",
-                        "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in conjunto_de_mudancas]
+                        "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in conjunto_de_mudancas],
+                        "commit_url": None
                     }
-                print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}'")
+                print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}', commit_url='{resultado_branch.get('commit_url')}'")
                 commit_results.append(resultado_branch)
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
             print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {json.dumps(commit_results, default=str)}")
@@ -111,7 +117,7 @@ class CommitHandler:
             job_info['data']['commit_details'] = commit_results
             print(f"[{job_id}] DIAGNÓSTICO - commit_details salvo no job_info: {job_info['data']['commit_details']}")
             for i, result in enumerate(commit_results):
-                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}")
+                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}, commit_url='{result.get('commit_url')}'")
             print(f"[{job_id}] BLINDAGEM: execute_commits concluído com sucesso")
         except Exception as e:
             print(f"[{job_id}] ERRO CRÍTICO em execute_commits: {str(e)}")
@@ -121,7 +127,8 @@ class CommitHandler:
                     "success": False,
                     "pr_url": f"ERRO: Falha geral no commit. {str(e)}",
                     "message": f"Erro geral: {str(e)}",
-                    "arquivos_modificados": []
+                    "arquivos_modificados": [],
+                    "commit_url": None
                 }]
             print(f"[{job_id}] BLINDAGEM: Erro geral tratado, commit_details garantido")
             raise e
@@ -142,7 +149,6 @@ class CommitHandler:
         else:
             if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
                 resultado_branch['pr_url'] = f"ERRO: Falha na criação do PR (Grupo {grupo_num}). Verifique logs."
-        # Validação final conforme instrução do usuário (passo 8)
         if resultado_branch.get('success') and (not resultado_branch.get('pr_url') or not isinstance(resultado_branch.get('pr_url'), str) or not resultado_branch.get('pr_url').strip()):
             raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
         print(f"[DEBUG][CommitHandler] _validate_and_fix_pr_url (final): pr_url={resultado_branch.get('pr_url')}")
