@@ -5,6 +5,7 @@ import traceback
 from tools.repo_committers.base_committer import BaseCommitter
 from tools.conectores.azure_conector import AzureConector
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
+from tools.repo_committers.azure_pr_url_builder import build_pr_ui_url
 import json
 import random
 import string
@@ -50,7 +51,7 @@ def processar_branch_azure(
         organization = repo['_organization']
         project = repo['_project']
         repository_id = repo['id']
-        repo_name = repo['name']
+        repo_name = repo.get('name') or repo.get('_repository')
         connector = AzureConector.create_with_defaults()
         token = connector._get_token_for_org(organization, platform='azure')
         base_url = f"https://dev.azure.com/{organization}/{project}/_apis"
@@ -206,18 +207,13 @@ def processar_branch_azure(
                     pr_data = pr_response.json()
                     print(f"[DEBUG][AZURE] pr_response.status_code: {pr_response.status_code}")
                     print(f"[DEBUG][AZURE] pr_data COMPLETO: {json.dumps(pr_data, indent=2, default=str)}")
-                    print(f"[DEBUG][AZURE] pr_data.get('_links'): {pr_data.get('_links')}")
-                    links = pr_data.get('_links', {})
-                    web_link = links.get('web')
-                    print(f"[DEBUG][AZURE] pr_data.get('_links', {{}}).get('web'): {web_link}")
-                    pr_web_url = pr_data.get('_links', {}).get('web', {}).get('href', '')
-                    if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
-                        pr_web_url = pr_data.get('url') or pr_data.get('webUrl') or ''
-                    if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
-                        if 'pullRequestId' in pr_data:
-                            pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo['name']}/pullrequest/{pr_data['pullRequestId']}"
-                            print(f"[DEBUG][AZURE] pr_web_url reconstruído manualmente: {pr_web_url}")
-                    print(f"[DEBUG][AZURE] pr_web_url ANTES de _finalizar_resultado_sucesso: {pr_web_url}")
+                    pull_request_id = pr_data.get('pullRequestId')
+                    if pull_request_id and organization and project and repo_name:
+                        pr_web_url = build_pr_ui_url(organization, project, repo_name, pull_request_id)
+                        print(f"[DEBUG][AZURE] pr_web_url construído manualmente: {pr_web_url}")
+                    else:
+                        pr_web_url = None
+                        print(f"[ERRO][AZURE] Não foi possível construir a URL de UI do PR: pullRequestId={pull_request_id}, organization={organization}, project={project}, repo_name={repo_name}")
                     if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
                         print(f"[ERRO][AZURE] pr_web_url extraído está vazio. pr_data: {pr_data}")
                         BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
