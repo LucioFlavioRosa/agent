@@ -127,19 +127,21 @@ def processar_branch_azure(
         pr_response = requests.post(pr_url, headers=headers, json=pr_payload, timeout=30)
         if pr_response.status_code in [200, 201]:
             pr_data = pr_response.json()
-            print(f"[DEBUG][AZURE] pr_response.json() retornou: {json.dumps(pr_data, default=str)}")
+            print(f"[DEBUG][AZURE] pr_response.status_code: {pr_response.status_code}")
+            print(f"[DEBUG][AZURE] pr_response.json() (completo): {json.dumps(pr_data, indent=2, default=str)}")
+            print(f"[DEBUG][AZURE] pr_data.get('_links'): {pr_data.get('_links')}")
+            print(f"[DEBUG][AZURE] pr_data.get('_links', {}).get('web'): {pr_data.get('_links', {}).get('web')}")
             pr_web_url = pr_data.get('_links', {}).get('web', {}).get('href', '')
-            print(f"[DEBUG][AZURE] pr_web_url extraído: {pr_web_url}")
-            # Passo 3: validação detalhada da extração do web_url
+            if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                pr_web_url = pr_data.get('url') or pr_data.get('webUrl') or ''
             if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
                 if 'pullRequestId' in pr_data:
                     pr_web_url = f"https://dev.azure.com/{organization}/{project}/_git/{repo['name']}/pullrequest/{pr_data['pullRequestId']}"
                     print(f"[DEBUG][AZURE] pr_web_url reconstruído manualmente: {pr_web_url}")
-                # Revalidação após reconstrução manual
-                if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
-                    print(f"[ERRO][AZURE] PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
-                    BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
-                    return resultado_branch
+            if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
+                print(f"[ERRO][AZURE] PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
+                BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
+                return resultado_branch
             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_web_url.strip())
         else:
             if "already exists" in pr_response.text.lower():
