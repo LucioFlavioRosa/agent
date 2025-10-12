@@ -180,7 +180,12 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
-    status = job.get(JobFields.STATUS)
+    
+    # ✅ CORREÇÃO APLICADA AQUI
+    # Garante que 'status' sempre tenha um valor string, fornecendo "PROCESSING" como padrão
+    # se a chave não existir ou seu valor for None/vazio.
+    status = job.get(JobFields.STATUS) or "PROCESSING"
+    
     job_data = job.get(JobFields.DATA, {})
     blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
