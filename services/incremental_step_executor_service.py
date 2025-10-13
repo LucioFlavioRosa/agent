@@ -45,31 +45,41 @@ class IncrementalStepExecutorService:
         batches = []
         current_batch = []
         current_batch_paths = set()
-        for step in steps:
+        # Mapeamento de arquivo para batch já criado
+        file_to_batch_index = {}
+        for idx, step in enumerate(steps):
             step_path = StepDependencyAnalyzer._normalize_path(step.get('Caminho do Arquivo', ''))
+            if step_path in file_to_batch_index:
+                # Já existe um batch para este arquivo, adicionar ao mesmo batch
+                batch_idx = file_to_batch_index[step_path]
+                batches[batch_idx].append(step)
+                print(f"[INCREMENTAL][BATCHING] Step {idx+1} adicionado ao batch existente {batch_idx} para arquivo '{step_path}'")
+                continue
             if not current_batch:
                 current_batch.append(step)
                 if step_path:
                     current_batch_paths.add(step_path)
+                    file_to_batch_index[step_path] = len(batches)
                 continue
-            # Se o arquivo já está no batch atual, adiciona (independente do tamanho do batch)
-            if step_path and step_path in current_batch_paths:
-                current_batch.append(step)
-                continue
-            # Se o batch não atingiu o limite, adiciona
             if len(current_batch) < max_steps_per_batch:
                 current_batch.append(step)
                 if step_path:
                     current_batch_paths.add(step_path)
+                    file_to_batch_index[step_path] = len(batches)
                 continue
-            # Caso contrário, fecha o batch atual e inicia um novo
+            # Fechar batch atual e iniciar novo
             batches.append(current_batch)
+            print(f"[INCREMENTAL][BATCHING] Batch {len(batches)-1} criado com {len(current_batch)} steps: arquivos {list(current_batch_paths)}")
             current_batch = [step]
             current_batch_paths = set()
             if step_path:
                 current_batch_paths.add(step_path)
+                file_to_batch_index[step_path] = len(batches)
         if current_batch:
             batches.append(current_batch)
+            print(f"[INCREMENTAL][BATCHING] Batch {len(batches)-1} criado com {len(current_batch)} steps: arquivos {list(current_batch_paths)}")
+        # Garantir que todos os steps do mesmo arquivo estão no mesmo batch
+        # (já garantido pela lógica acima)
         print(f"[INCREMENTAL] {len(batches)} batches criados.")
         return batches
 
