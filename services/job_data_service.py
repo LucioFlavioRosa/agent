@@ -51,22 +51,30 @@ class JobDataService:
             JobFields.STATUS: JobStatus.STARTING,
             JobFields.DATA: {
                 JobFields.REPO_NAME: normalized_repo_name,
-                JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
-                JobFields.PROJETO: original_data[JobFields.PROJETO],
-                JobFields.BRANCH_NAME: original_data[JobFields.BRANCH_NAME],
-                JobFields.ORIGINAL_ANALYSIS_TYPE: 'implementacao',
-                JobFields.INSTRUCOES_EXTRAS: f"Gerar código baseado no seguinte relatório:\n\n{report}",
-                JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
-                JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
-                JobFields.GERAR_RELATORIO_APENAS: False,
-                JobFields.GERAR_NOVO_RELATORIO: True,
-                JobFields.ARQUIVOS_ESPECIFICOS: original_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
-                JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
-                JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE],
-                JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
-                JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
-                JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
-                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: original_data.get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
-            },
-            JobFields.ERROR_DETAILS: None
+                JobFields.PROJETO: payload.get('projeto'),
+                JobFields.ANALYSIS_NAME: analysis_name,
+                JobFields.ORIGINAL_ANALYSIS_TYPE: payload.get('analysis_type'),
+                JobFields.REPOSITORY_TYPE: payload.get('repository_type'),
+                JobFields.REPO_NAME_MODERNIZADO: payload.get('repo_name_modernizado'),
+                JobFields.BRANCH_NAME_MODERNIZADO: payload.get('branch_name_modernizado'),
+                JobFields.REPO_NAME_ORIGINAL: payload.get('repo_name_original'),
+                JobFields.BRANCH_NAME_ORIGINAL: payload.get('branch_name_original'),
+                JobFields.INSTRUCOES_EXTRAS: payload.get('instrucoes_extras'),
+                JobFields.USAR_RAG: payload.get('usar_rag', False),
+                JobFields.GERAR_RELATORIO_APENAS: payload.get('gerar_relatorio_apenas', False),
+                JobFields.GERAR_NOVO_RELATORIO: payload.get('gerar_novo_relatorio', True),
+                JobFields.MODEL_NAME: payload.get('model_name'),
+                JobFields.ARQUIVOS_ESPECIFICOS: payload.get('arquivos_especificos'),
+                JobFields.RETORNAR_LISTA_ARQUIVOS: payload.get('retornar_lista_arquivos', False),
+                JobFields.MODO_ADICAO_INCREMENTAL: payload.get('modo_adicao_incremental', False),
+                JobFields.USUARIO_EXECUTOR: payload.get('usuario_executor'),
+                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: payload.get('executar_steps_incrementalmente', False),
+                JobFields.MAX_STEPS_PER_BATCH: payload.get('max_steps_per_batch', 3),
+                JobFields.EXECUTAR_BUILD_DOTNET: payload.get('executar_build_dotnet', False)
+            }
         }
+        if 'git_username' in payload and payload['git_username'] is not None:
+            job_data[JobFields.DATA][JobFields.GIT_USERNAME] = payload['git_username']
+        if 'git_token' in payload and payload['git_token'] is not None:
+            job_data[JobFields.DATA][JobFields.GIT_TOKEN] = payload['git_token']
+        return job_data
