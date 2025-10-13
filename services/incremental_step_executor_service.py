@@ -44,19 +44,30 @@ class IncrementalStepExecutorService:
         print(f"[INCREMENTAL] {len(steps)} steps parseados do relatório.")
         batches = []
         current_batch = []
+        current_batch_paths = set()
         for step in steps:
+            step_path = StepDependencyAnalyzer._normalize_path(step.get('Caminho do Arquivo', ''))
             if not current_batch:
                 current_batch.append(step)
-            else:
-                dependent = any(
-                    StepDependencyAnalyzer.are_steps_dependent(step, prev_step)
-                    for prev_step in current_batch
-                )
-                if len(current_batch) < max_steps_per_batch and not dependent:
-                    current_batch.append(step)
-                else:
-                    batches.append(current_batch)
-                    current_batch = [step]
+                if step_path:
+                    current_batch_paths.add(step_path)
+                continue
+            # Se o arquivo já está no batch atual, adiciona (independente do tamanho do batch)
+            if step_path and step_path in current_batch_paths:
+                current_batch.append(step)
+                continue
+            # Se o batch não atingiu o limite, adiciona
+            if len(current_batch) < max_steps_per_batch:
+                current_batch.append(step)
+                if step_path:
+                    current_batch_paths.add(step_path)
+                continue
+            # Caso contrário, fecha o batch atual e inicia um novo
+            batches.append(current_batch)
+            current_batch = [step]
+            current_batch_paths = set()
+            if step_path:
+                current_batch_paths.add(step_path)
         if current_batch:
             batches.append(current_batch)
         print(f"[INCREMENTAL] {len(batches)} batches criados.")
