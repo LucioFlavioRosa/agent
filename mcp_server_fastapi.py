@@ -14,7 +14,7 @@ from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
 from services.api_service_factory import ApiServiceFactory
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions
+from models import JobStatus, JobFields, JobFields, JobActions
 
 container = DependencyContainer()
 api_service_factory = ApiServiceFactory()
@@ -105,6 +105,11 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
+    # Garantir que git_username/git_token estejam em initial_job_data['data']
+    if 'git_username' in payload_dict:
+        initial_job_data['data']['git_username'] = payload_dict['git_username']
+    if 'git_token' in payload_dict:
+        initial_job_data['data']['git_token'] = payload_dict['git_token']
     # Passo 5: Log de debug para confirmar que os campos estão presentes
     print(f"[{job_id}] [DEBUG] Campos de credenciais no initial_job_data: git_username={initial_job_data.get('data', {}).get('git_username')}, git_token={'sim' if initial_job_data.get('data', {}).get('git_token') else 'não'}")
     job_store.set_job(job_id, initial_job_data)
