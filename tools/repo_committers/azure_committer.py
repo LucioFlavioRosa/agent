@@ -160,12 +160,16 @@ def processar_branch_azure(
             print(f"[LOG][AZURE] Realizando push tentativa {push_attempt+1} para branch '{nome_branch}' com current_commit_id: {current_commit_id}")
             push_response = requests.post(push_url, headers=headers, json=push_payload, timeout=60)
             print(f"[LOG][AZURE] push_response.status_code: {push_response.status_code}, push_response.text: {push_response.text}")
+            # INÍCIO DA LÓGICA DO PASSO 8
             if push_response.status_code in [200, 201]:
-                push_data = push_response.json()
-                # PASSO 8: Análise detalhada da resposta
+                try:
+                    push_data = push_response.json()
+                except Exception as e:
+                    print(f"[ERRO CRÍTICO][AZURE] Falha ao decodificar JSON da resposta do push: {e}")
+                    raise Exception(f"Erro ao decodificar JSON do push_response: {e}")
                 if 'commits' not in push_data or not isinstance(push_data['commits'], list) or len(push_data['commits']) == 0:
-                    print(f"[ERRO CRÍTICO][AZURE] Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
-                    raise Exception(f"Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
+                    print(f"[ERRO CRÍTICO][AZURE] Push realizado (status {push_response.status_code}) mas nenhum commit foi criado! Resposta completa: {json.dumps(push_data, indent=2, default=str)}")
+                    raise Exception(f"Push realizado (status {push_response.status_code}) mas nenhum commit foi criado! Resposta: {json.dumps(push_data, default=str)}")
                 try:
                     commit_info = push_data['commits'][0]
                     commit_id = commit_info.get('commitId')
