@@ -176,8 +176,25 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
             final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
         dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
+        # Passo 6: Validação antes de chamar execute_commits
+        if not dados_finais_formatados or 'grupos' not in dados_finais_formatados or not isinstance(dados_finais_formatados['grupos'], list) or len(dados_finais_formatados['grupos']) == 0:
+            print(f"[{job_id}] [ERRO] Estrutura de dados_finais_formatados inválida ou grupos vazio/malformado: {dados_finais_formatados}")
+            job_info['data']['commit_details'] = [{
+                "branch_name": "erro-formato",
+                "success": False,
+                "pr_url": "ERRO: Estrutura de entrada de dados_finais_formatados['grupos'] está vazia, ausente ou malformada.",
+                "message": "Estrutura de entrada de grupos está vazia, ausente ou malformada.",
+                "arquivos_modificados": [],
+                "commit_url": None
+            }]
+            job_info['data']['build_errors'] = None
+            job_info['status'] = JobFields.FAILED if hasattr(JobFields, 'FAILED') else 'failed'
+            job_info['error_details'] = "Estrutura de dados_finais_formatados inválida ou grupos vazio/malformado."
+            self.job_handler.update_job(job_id, job_info)
+            self.job_handler.update_job_status(job_id, 'failed')
+            print(f"[{job_id}] [ERRO] Commit não executado devido a dados inválidos. Status do job atualizado para FAILED.")
+            return
         self.job_handler.update_job_status(job_id, 'committing_to_github')
-        # Passo 11: garantir que usuario_executor seja extraído e passado para execute_commits
         usuario_executor = job_info['data'].get('usuario_executor')
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name, usuario_executor=usuario_executor)
         print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
@@ -199,7 +216,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_info['data']['build_errors'] = None
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
-        # Validação adicional para commit_details
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
             for idx, commit in enumerate(commit_details):
