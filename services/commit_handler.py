@@ -3,6 +3,7 @@ from tools.conectores.conexao_geral import ConexaoGeral
 from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.repository_provider_factory import get_repository_provider_explicit
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
+from tools.repo_committers.path_validator import PathValidator
 import json
 from services.dotnet_build_service import DotNetBuildService
 
@@ -56,7 +57,6 @@ class CommitHandler:
                 return
             modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
             executar_build_dotnet = job_info.get('data', {}).get('executar_build_dotnet', False)
-            # Passo 12: garantir que usuario_executor seja extraído corretamente
             if usuario_executor is None:
                 usuario_executor = job_info.get('data', {}).get('usuario_executor')
             print(f"[{job_id}] [DEBUG] Loop de grupos: executar_build_dotnet extraído={executar_build_dotnet}")
@@ -70,6 +70,30 @@ class CommitHandler:
                         conjunto_de_mudancas = []
                     branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
                     branch_sugerida = BranchNameSanitizer.sanitize(branch_sugerida)
+                    print(f"[{job_id}] [VALIDACAO] Validando caminhos do conjunto_de_mudancas do grupo {i+1} (total: {len(conjunto_de_mudancas)})")
+                    mudancas_validas = []
+                    mudancas_invalidas = []
+                    for idx_m, mudanca in enumerate(conjunto_de_mudancas):
+                        caminho = mudanca.get("caminho")
+                        try:
+                            caminho_validado = PathValidator.validate_path(caminho)
+                            mudanca["caminho"] = caminho_validado
+                            mudancas_validas.append(mudanca)
+                        except Exception as e:
+                            print(f"[{job_id}] [ERRO][commit_handler] Grupo {i+1}, Mudança {idx_m}: caminho inválido: '{caminho}'. Erro: {e}")
+                            mudancas_invalidas.append({"indice": idx_m, "caminho": caminho, "erro": str(e)})
+                    print(f"[{job_id}] [VALIDACAO] Grupo {i+1}: {len(mudancas_validas)} mudanças validadas, {len(mudancas_invalidas)} rejeitadas.")
+                    if len(mudancas_validas) == 0:
+                        job_info['data']['commit_details'] = [{
+                            "branch_name": branch_sugerida,
+                            "success": False,
+                            "pr_url": f"ERRO: Nenhuma mudança válida para commitar no grupo {i+1}. Mudanças inválidas: {mudancas_invalidas}",
+                            "message": f"Nenhuma mudança válida para commitar no grupo {i+1}.",
+                            "arquivos_modificados": [],
+                            "commit_url": None
+                        }]
+                        print(f"[{job_id}] [ERRO] Todas as mudanças do grupo {i+1} foram rejeitadas por caminho inválido. Pulando grupo.")
+                        continue
                     resultado_branch = processar_branch_por_provedor(
                         repo=repo,
                         nome_branch=branch_sugerida,
@@ -77,7 +101,7 @@ class CommitHandler:
                         branch_alvo_do_pr=branch_base_para_pr,
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
                         descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
-                        conjunto_de_mudancas=conjunto_de_mudancas,
+                        conjunto_de_mudancas=mudancas_validas,
                         repository_type=repository_type,
                         modo_adicao_incremental=modo_adicao_incremental
                     )
@@ -104,7 +128,7 @@ class CommitHandler:
                         "success": False,
                         "pr_url": f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}",
                         "message": f"Erro no grupo {i+1}: {str(e)}",
-                        "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in conjunto_de_mudancas],
+                        "arquivos_modificados": [arquivo.get('caminho', '') for arquivo in conjunto_de_mudancas],
                         "commit_url": None
                     }
                 print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}', commit_url='{resultado_branch.get('commit_url')}'")
