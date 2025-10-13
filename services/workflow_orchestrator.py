@@ -193,10 +193,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 job_info['data']['build_errors'] = build_errors
             else:
                 job_info['data']['build_errors'] = None
-            # Extração das credenciais de autenticação
+            # Passo 4: Extrair credenciais do job_info['data'] e passar para o build_project
             git_username = job_info['data'].get(JobFields.GIT_USERNAME)
             git_token = job_info['data'].get(JobFields.GIT_TOKEN)
             branch_name = job_info['data'].get('branch_name_modernizado') or job_info['data'].get('branch_name')
+            print(f"[{job_id}] [DEBUG] build_project: git_username={git_username}, git_token={'sim' if git_token else 'não'}")
             dotnet_build_service = DotNetBuildService()
             dotnet_build_service.build_project(
                 job_id=job_id,
@@ -211,7 +212,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_info['data']['build_errors'] = None
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
-        # Validação adicional para commit_details
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
             for idx, commit in enumerate(commit_details):
