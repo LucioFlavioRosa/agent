@@ -11,8 +11,7 @@ class AzureConector(BaseConector):
         parts = repository_name.split('/')
         if len(parts) != 3:
             raise ValueError(
-                f"Nome do repositório '{repository_name}' tem formato inválido. "
-                "Esperado 'organization/project/repository'."
+                f"Nome do repositório Azure inválido. Formato esperado: 'organization/project/repository'. Recebido: '{repository_name}'"
             )
         return parts[0], parts[1], parts[2]
     
