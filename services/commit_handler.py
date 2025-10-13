@@ -18,6 +18,28 @@ class CommitHandler:
         print(f"[{job_id}] [DEBUG] INICIO execute_commits: executar_build_dotnet={job_info.get('data', {}).get('executar_build_dotnet')}")
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
         print(f"[{job_id}] DIAGNÓSTICO - Estrutura de dados_finais_formatados recebida: {dados_finais_formatados}")
+        # Validação explícita dos dados antes de prosseguir
+        if not dados_finais_formatados or 'grupos' not in dados_finais_formatados or not isinstance(dados_finais_formatados['grupos'], list) or len(dados_finais_formatados['grupos']) == 0:
+            print(f"[{job_id}] [ERRO] Estrutura de dados_finais_formatados inválida ou grupos vazio/malformado: {dados_finais_formatados}")
+            if 'data' in job_info:
+                job_info['data']['commit_details'] = [{
+                    "branch_name": "erro-formato",
+                    "success": False,
+                    "pr_url": "ERRO: Estrutura de entrada de dados_finais_formatados['grupos'] está vazia, ausente ou malformada.",
+                    "message": "Estrutura de entrada de grupos está vazia, ausente ou malformada.",
+                    "arquivos_modificados": [],
+                    "commit_url": None
+                }]
+            else:
+                job_info['commit_details'] = [{
+                    "branch_name": "erro-formato",
+                    "success": False,
+                    "pr_url": "ERRO: Estrutura de entrada de dados_finais_formatados['grupos'] está vazia, ausente ou malformada.",
+                    "message": "Estrutura de entrada de grupos está vazia, ausente ou malformada.",
+                    "arquivos_modificados": [],
+                    "commit_url": None
+                }]
+            return
         try:
             branch_base_para_pr = job_info['data'].get('branch_name', 'main')
             print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
