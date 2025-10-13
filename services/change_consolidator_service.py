@@ -1,41 +1,17 @@
-from typing import List, Dict, Any
-
 class ChangeConsolidatorService:
     @staticmethod
-    def consolidate_changes(changes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        consolidated = {}
-        remove_paths = set()
-        for change in changes:
-            path = change.get('caminho_do_arquivo') or change.get('path')
-            status = (change.get('status') or change.get('action') or '').upper()
-            conteudo = change.get('conteudo') or change.get('content')
-            if not path:
-                continue
-            if path in remove_paths:
-                continue
-            if path in consolidated:
-                prev = consolidated[path]
-                prev_status = (prev.get('status') or prev.get('action') or '').upper()
-                # ADICIONADO/CRIADO + MODIFICADO => manter ADICIONADO com conteúdo final
-                if prev_status in ('ADICIONADO', 'CRIADO') and status == 'MODIFICADO':
-                    prev['conteudo'] = conteudo
-                    prev['status'] = prev_status
+    def consolidate_changes(conjunto_de_mudancas):
+        if not conjunto_de_mudancas or not isinstance(conjunto_de_mudancas, list):
+            return []
+        mudancas_normalizadas = []
+        for idx, mudanca in enumerate(conjunto_de_mudancas):
+            if 'caminho' not in mudanca:
+                if 'caminho_do_arquivo' in mudanca:
+                    mudanca['caminho'] = mudanca['caminho_do_arquivo']
+                    print(f"[CONSOLIDATE][NORMALIZAÇÃO] Mudança {idx}: 'caminho' ausente, copiado de 'caminho_do_arquivo'.")
+                else:
+                    print(f"[CONSOLIDATE][ERRO] Mudança {idx}: ambas as chaves 'caminho' e 'caminho_do_arquivo' ausentes. Mudança removida: {mudanca}")
                     continue
-                # MODIFICADO + REMOVIDO => manter apenas REMOVIDO
-                if prev_status == 'MODIFICADO' and status == 'REMOVIDO':
-                    consolidated[path] = {
-                        **change,
-                        'status': 'REMOVIDO',
-                        'conteudo': None
-                    }
-                    continue
-                # ADICIONADO/CRIADO + REMOVIDO => remover ambas
-                if prev_status in ('ADICIONADO', 'CRIADO') and status == 'REMOVIDO':
-                    del consolidated[path]
-                    remove_paths.add(path)
-                    continue
-                # Para outros casos, a última operação prevalece
-                consolidated[path] = {**change, 'status': status, 'conteudo': conteudo}
-            else:
-                consolidated[path] = {**change, 'status': status, 'conteudo': conteudo}
-        return [v for k, v in consolidated.items() if k not in remove_paths]
+            mudancas_normalizadas.append(mudanca)
+        # Aqui pode-se adicionar lógica extra de consolidação se necessário
+        return mudancas_normalizadas
