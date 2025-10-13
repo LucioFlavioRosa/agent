@@ -6,7 +6,13 @@ class ChangeConsolidatorService:
         consolidated = {}
         remove_paths = set()
         for change in changes:
-            path = change.get('caminho_do_arquivo') or change.get('path')
+            # Passo 2: normalização de chaves de caminho
+            if 'caminho' not in change:
+                if 'caminho_do_arquivo' in change:
+                    change['caminho'] = change['caminho_do_arquivo']
+                elif 'path' in change:
+                    change['caminho'] = change['path']
+            path = change.get('caminho')
             status = (change.get('status') or change.get('action') or '').upper()
             conteudo = change.get('conteudo') or change.get('content')
             if not path:
