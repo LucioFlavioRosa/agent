@@ -11,9 +11,7 @@ class ReportHandler:
         analysis_name = job_info['data'].get('analysis_name')
         report_blob_url = None
         try:
-            # Tenta ler o relatório
             report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            # Se relatório existe, constrói a URL do blob
             from tools.blob_report_path_builder import build_report_blob_path
             from os import getenv
             blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
@@ -23,7 +21,6 @@ class ReportHandler:
                 report_blob_url = f"{account_url}/{container_name}/{blob_path}"
             elif container_name:
                 report_blob_url = f"/{container_name}/{blob_path}"
-            # Atualiza o tracker de jobs se a URL estiver disponível
             if report_blob_url:
                 try:
                     self.blob_storage.update_job_tracker(report_blob_url, job_id)
@@ -36,13 +33,19 @@ class ReportHandler:
 
     def extract_report_text(self, step_result):
         if not step_result:
+            print(f"[ReportHandler][extract_report_text] step_result vazio ou None.")
             return None
         if isinstance(step_result, dict):
             if 'relatorio' in step_result:
-                return step_result['relatorio']
+                report = step_result['relatorio']
+                print(f"[ReportHandler][extract_report_text] Relatório extraído do campo 'relatorio', tamanho: {len(report) if report else 0}")
+                return report
             if 'resultado' in step_result and isinstance(step_result['resultado'], dict):
                 if 'relatorio' in step_result['resultado']:
-                    return step_result['resultado']['relatorio']
+                    report = step_result['resultado']['relatorio']
+                    print(f"[ReportHandler][extract_report_text] Relatório extraído do campo 'resultado.relatorio', tamanho: {len(report) if report else 0}")
+                    return report
+        print(f"[ReportHandler][extract_report_text] Não foi possível extrair relatório, step_result: {step_result}")
         return None
 
     def save_report_to_blob(self, job_id, job_info, report_text, report_generated_by_agent=False):
@@ -60,7 +63,6 @@ class ReportHandler:
         job_info['data']['report_blob_url'] = url
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] Relatório salvo no Blob Storage: {url} (tamanho: {len(report_text)} chars)")
-        # Atualiza o tracker de jobs após salvar o relatório
         try:
             self.blob_storage.update_job_tracker(url, job_id)
         except Exception as e:
@@ -78,10 +80,10 @@ class ReportHandler:
 
     def validate_and_parse_blob_report(self, report_text, job_id):
         if not report_text or not isinstance(report_text, str):
-            print(f"[{job_id}] ERRO: Relatório lido do Blob é inválido. Tipo: {type(report_text)}")
+            print(f"[ReportHandler][validate_and_parse_blob_report] ERRO: Relatório lido do Blob é inválido. Tipo: {type(report_text)}")
             return None
         if len(report_text.strip()) == 0:
-            print(f"[{job_id}] ERRO: Relatório lido do Blob está vazio.")
+            print(f"[ReportHandler][validate_and_parse_blob_report] ERRO: Relatório lido do Blob está vazio.")
             return None
-        print(f"[{job_id}] Relatório válido lido do Blob Storage ({len(report_text)} chars).")
+        print(f"[ReportHandler][validate_and_parse_blob_report] Relatório válido lido do Blob Storage (tamanho: {len(report_text)} chars).")
         return report_text
