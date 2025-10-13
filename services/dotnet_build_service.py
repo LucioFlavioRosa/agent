@@ -18,33 +18,29 @@ class DotNetBuildService:
         }
         local_dir = f"/tmp/{job_id}_{branch_name}"
         try:
-            clone_url = self._get_clone_url(repository_type, repo_name)
+            base_clone_url = self._get_clone_url(repository_type, repo_name)
+            print(f"[{job_id}] [DotNetBuildService] URL base de clone construída: {base_clone_url}")
             token = self._get_token_for_repository(repository_type, repo_name, usuario_executor)
+            print(f"[{job_id}] [DotNetBuildService] Token {'encontrado' if token else 'NÃO encontrado'} para autenticação")
             if token:
-                org = self._extract_org_from_repo_name(repository_type, repo_name)
-                print(f"[{job_id}] [DotNetBuildService] Token encontrado para org={org}, repository_type={repository_type}")
-                if repository_type == "azure":
-                    # Exemplo: https://{token}@dev.azure.com/org/project/repo
-                    if clone_url.startswith("https://"):
-                        clone_url = clone_url.replace("https://", f"https://{token}@", 1)
-                elif repository_type == "github":
-                    # Exemplo: https://{token}@github.com/org/repo.git
-                    if clone_url.startswith("https://"):
-                        clone_url = clone_url.replace("https://", f"https://{token}@", 1)
-                elif repository_type == "gitlab":
-                    # Exemplo: https://oauth2:{token}@gitlab.com/namespace/repo.git
-                    if clone_url.startswith("https://"):
-                        clone_url = clone_url.replace("https://", f"https://oauth2:{token}@", 1)
-                else:
-                    print(f"[{job_id}] [DotNetBuildService] Tipo de repositório não reconhecido para autenticação: {repository_type}")
+                clone_url = self._inject_token_into_url(base_clone_url, token, repository_type)
+                masked_clone_url = self._mask_token_in_url(clone_url)
+                print(f"[{job_id}] [DotNetBuildService] URL final de clone (token mascarado): {masked_clone_url}")
             else:
-                print(f"[{job_id}] [DotNetBuildService] Nenhum token encontrado, tentando clone sem autenticação.")
+                print(f"[{job_id}] [DotNetBuildService] Token não encontrado. Clone de repositório privado pode falhar.")
+                clone_url = base_clone_url
+                masked_clone_url = clone_url
             if os.path.exists(local_dir):
                 shutil.rmtree(local_dir)
             clone_cmd = ["git", "clone", "--branch", branch_name, clone_url, local_dir]
+            print(f"[{job_id}] [DotNetBuildService] Comando git clone (token mascarado): {['git', 'clone', '--branch', branch_name, masked_clone_url, local_dir]}")
             clone_proc = subprocess.run(clone_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            print(f"[{job_id}] [DotNetBuildService] git clone retornou código: {clone_proc.returncode}")
             if clone_proc.returncode != 0:
-                result["errors"].append(f"Erro ao clonar repositório: {clone_proc.stderr}")
+                error_msg = f"Erro ao clonar repositório: {clone_proc.stderr}"
+                if 'not found' in clone_proc.stderr and not token:
+                    error_msg += " Repositório não encontrado. Verifique se o repositório existe e se as credenciais (token) estão configuradas corretamente no Azure Key Vault."
+                result["errors"].append(error_msg)
                 result["stderr"] = clone_proc.stderr
                 print(f"[{job_id}] [DotNetBuildService] Build finalizado. success={result['success']}, errors={len(result['errors'])}")
                 return result
@@ -69,12 +65,47 @@ class DotNetBuildService:
 
     def _get_clone_url(self, repository_type: str, repo_name: str) -> str:
         if repository_type == "azure":
-            return f"https://dev.azure.com/{repo_name}"
+            parts = repo_name.split('/')
+            if len(parts) != 3:
+                raise ValueError(f"Nome do repositório Azure inválido. Formato esperado: 'organization/project/repository'. Recebido: '{repo_name}'")
+            organization, project, repository = parts
+            return f"https://dev.azure.com/{organization}/{project}/_git/{repository}"
         elif repository_type == "github":
+            parts = repo_name.split('/')
+            if len(parts) < 2:
+                raise ValueError(f"Nome do repositório GitHub inválido. Formato esperado: 'organization/repository'. Recebido: '{repo_name}'")
             return f"https://github.com/{repo_name}.git"
         elif repository_type == "gitlab":
             return f"https://gitlab.com/{repo_name}.git"
         return repo_name
+
+    def _inject_token_into_url(self, base_url: str, token: str, repository_type: str) -> str:
+        if repository_type == "azure":
+            if base_url.startswith("https://"):
+                return base_url.replace("https://", f"https://{token}@", 1)
+            else:
+                return base_url
+        elif repository_type == "github":
+            if base_url.startswith("https://"):
+                return base_url.replace("https://", f"https://{token}@", 1)
+            else:
+                return base_url
+        elif repository_type == "gitlab":
+            if base_url.startswith("https://"):
+                return base_url.replace("https://", f"https://oauth2:{token}@", 1)
+            else:
+                return base_url
+        return base_url
+
+    def _mask_token_in_url(self, url: str) -> str:
+        if '@' in url:
+            prefix, rest = url.split('@', 1)
+            if len(prefix) > 12:
+                masked = prefix[:8] + '***' + prefix[-2:]
+            else:
+                masked = '***'
+            return masked + '@' + rest
+        return url
 
     def _parse_build_errors(self, stdout: str, stderr: str) -> List[str]:
         errors = []
@@ -116,7 +147,6 @@ class DotNetBuildService:
                 raise ValueError(f"Nome do repositório GitHub inválido: {repo_name}")
         elif repository_type == "gitlab":
             try:
-                # Tenta tratar como Project ID numérico
                 int(repo_name)
                 return 'gitlab'
             except ValueError:
