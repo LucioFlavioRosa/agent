@@ -96,7 +96,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
-    # DEBUG: Logar o valor de executar_build_dotnet recebido
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     # Passo 2: Propagar git_username e git_token se presentes
     if hasattr(payload, 'git_username') and payload.git_username is not None:
@@ -106,6 +105,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
+    # Passo 5: Log de debug para confirmar que os campos estão presentes
+    print(f"[{job_id}] [DEBUG] Campos de credenciais no initial_job_data: git_username={initial_job_data.get('data', {}).get('git_username')}, git_token={'sim' if initial_job_data.get('data', {}).get('git_token') else 'não'}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
@@ -188,9 +189,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
     
-    # ✅ CORREÇÃO APLICADA AQUI
-    # Garante que 'status' sempre tenha um valor string, fornecendo "PROCESSING" como padrão
-    # se a chave não existir ou seu valor for None/vazio.
     status = job.get(JobFields.STATUS) or "PROCESSING"
     
     job_data = job.get(JobFields.DATA, {})
