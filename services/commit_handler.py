@@ -56,6 +56,7 @@ class CommitHandler:
                 return
             modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
             executar_build_dotnet = job_info.get('data', {}).get('executar_build_dotnet', False)
+            usuario_executor = job_info.get('data', {}).get('usuario_executor')
             print(f"[{job_id}] [DEBUG] Loop de grupos: executar_build_dotnet extraído={executar_build_dotnet}")
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
@@ -87,7 +88,8 @@ class CommitHandler:
                             job_id=job_id,
                             repository_type=repository_type,
                             repo_name=repo_name,
-                            branch_name=branch_sugerida
+                            branch_name=branch_sugerida,
+                            usuario_executor=usuario_executor
                         )
                         print(f"[{job_id}] [DEBUG] Resultado do build: success={build_result.get('success')}, errors={len(build_result.get('errors', []) )}")
                         resultado_branch["build_result"] = build_result
