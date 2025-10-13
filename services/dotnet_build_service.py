@@ -3,13 +3,12 @@ import os
 import shutil
 from typing import Dict, Any, Optional, List
 from tools.azure_secret_manager import AzureSecretManager
-import getpass
 
 class DotNetBuildService:
     def __init__(self):
-        pass
+        self.secret_manager = AzureSecretManager()
 
-    def build_project(self, job_id: str, repository_type: str, repo_name: str, branch_name: str) -> Dict[str, Any]:
+    def build_project(self, job_id: str, repository_type: str, repo_name: str, branch_name: str, usuario_executor: Optional[str] = None) -> Dict[str, Any]:
         print(f"[{job_id}] [DotNetBuildService] Iniciando build para repo={repo_name}, branch={branch_name}")
         result = {
             "success": False,
@@ -19,13 +18,22 @@ class DotNetBuildService:
         }
         local_dir = f"/tmp/{job_id}_{branch_name}"
         try:
-            token = self._get_token_for_repository(repository_type, repo_name)
-            clone_url = self._build_authenticated_clone_url(repository_type, repo_name, token)
+            clone_url = self._get_clone_url(repository_type, repo_name)
+            token = self._get_token_for_repository(repository_type, repo_name, usuario_executor)
             if token:
-                print(f"[{job_id}] [DotNetBuildService] Token encontrado para clone: usando URL autenticada.")
+                org = self._extract_org_from_repo_name(repository_type, repo_name)
+                if repository_type == "azure":
+                    if clone_url.startswith("https://"):
+                        clone_url = clone_url.replace("https://", f"https://{token}@", 1)
+                elif repository_type == "github":
+                    if clone_url.startswith("https://"):
+                        clone_url = clone_url.replace("https://", f"https://{token}@", 1)
+                elif repository_type == "gitlab":
+                    if clone_url.startswith("https://"):
+                        clone_url = clone_url.replace("https://", f"https://oauth2:{token}@", 1)
+                print(f"[{job_id}] [DotNetBuildService] Token encontrado e URL de clone ajustada para autenticação privada.")
             else:
                 print(f"[{job_id}] [DotNetBuildService] Nenhum token encontrado, tentando clone sem autenticação.")
-            print(f"[{job_id}] [DotNetBuildService] URL de clone utilizada: {clone_url}")
             if os.path.exists(local_dir):
                 shutil.rmtree(local_dir)
             clone_cmd = ["git", "clone", "--branch", branch_name, clone_url, local_dir]
@@ -54,70 +62,53 @@ class DotNetBuildService:
         print(f"[{job_id}] [DotNetBuildService] Build finalizado. success={result['success']}, errors={len(result['errors'])}")
         return result
 
-    def _get_token_for_repository(self, repository_type: str, repo_name: str) -> Optional[str]:
-        secret_manager = AzureSecretManager()
-        usuario = getpass.getuser()
-        org = self._extract_org_name(repository_type, repo_name)
-        search_keys = []
-        if org and usuario:
-            search_keys.append(f"{repository_type}-token-{org}-{usuario}")
-        if org:
-            search_keys.append(f"{repository_type}-token-{org}")
-        search_keys.append(f"{repository_type}-token")
-        for key in search_keys:
+    def _get_token_for_repository(self, repository_type: str, repo_name: str, usuario_executor: Optional[str]) -> Optional[str]:
+        org = self._extract_org_from_repo_name(repository_type, repo_name)
+        possible_keys = []
+        if usuario_executor:
+            possible_keys.append(f"{repository_type}-token-{org}-{usuario_executor}")
+        possible_keys.append(f"{repository_type}-token-{org}")
+        possible_keys.append(f"{repository_type}-token")
+        for key in possible_keys:
             try:
-                token = secret_manager.get_secret(key)
+                token = self.secret_manager.get_secret(key)
                 if token:
-                    print(f"[DotNetBuildService] Token encontrado usando chave: {key}")
+                    print(f"[DotNetBuildService] Token encontrado para chave: {key}")
                     return token
             except Exception as e:
-                print(f"[DotNetBuildService] Falha ao buscar token com chave {key}: {e}")
-        print(f"[DotNetBuildService] Nenhum token encontrado nas chaves: {search_keys}")
+                print(f"[DotNetBuildService] Falha ao buscar token para chave {key}: {e}")
+        print("[DotNetBuildService] Nenhum token encontrado após todas as tentativas.")
         return None
 
-    def _extract_org_name(self, repository_type: str, repo_name: str) -> Optional[str]:
+    def _extract_org_from_repo_name(self, repository_type: str, repo_name: str) -> str:
         if repository_type == "azure":
-            parts = repo_name.split('/')
-            if len(parts) == 3:
-                return parts[0]
+            try:
+                from tools.conectores.azure_conector import AzureConector
+                org, _, _ = AzureConector()._parse_repository_name(repo_name)
+                return org
+            except Exception:
+                return repo_name.split('/')[0]
         elif repository_type == "github":
-            parts = repo_name.split('/')
-            if len(parts) >= 2:
-                return parts[0]
+            try:
+                from tools.conectores.github_conector import GitHubConector
+                return GitHubConector()._extract_org_name(repo_name)
+            except Exception:
+                return repo_name.split('/')[0]
         elif repository_type == "gitlab":
-            if repo_name.isdigit():
-                return "gitlab"
-            parts = repo_name.split('/')
-            if len(parts) >= 2:
-                return parts[0]
-        return None
+            try:
+                from tools.conectores.gitlab_conector import GitLabConector
+                return GitLabConector()._extract_org_name(repo_name)
+            except Exception:
+                return 'gitlab'
+        return repo_name.split('/')[0]
 
-    def _build_authenticated_clone_url(self, repository_type: str, repo_name: str, token: Optional[str]) -> str:
+    def _get_clone_url(self, repository_type: str, repo_name: str) -> str:
         if repository_type == "azure":
-            base_url = f"https://dev.azure.com/{repo_name}"
-            if token:
-                return f"https://{token}@dev.azure.com/{repo_name}"
-            else:
-                return base_url
+            return f"https://dev.azure.com/{repo_name}"
         elif repository_type == "github":
-            base_url = f"https://github.com/{repo_name}.git"
-            if token:
-                return f"https://{token}@github.com/{repo_name}.git"
-            else:
-                return base_url
+            return f"https://github.com/{repo_name}.git"
         elif repository_type == "gitlab":
-            if repo_name.isdigit():
-                base_url = f"https://gitlab.com/{repo_name}.git"
-                if token:
-                    return f"https://oauth2:{token}@gitlab.com/{repo_name}.git"
-                else:
-                    return base_url
-            else:
-                base_url = f"https://gitlab.com/{repo_name}.git"
-                if token:
-                    return f"https://oauth2:{token}@gitlab.com/{repo_name}.git"
-                else:
-                    return base_url
+            return f"https://gitlab.com/{repo_name}.git"
         return repo_name
 
     def _parse_build_errors(self, stdout: str, stderr: str) -> List[str]:
