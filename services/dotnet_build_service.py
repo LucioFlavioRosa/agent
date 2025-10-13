@@ -115,7 +115,6 @@ class DotNetBuildService:
                 print(f"[DotNetBuildService] Clonando repositório público GitLab.")
                 return url, None, None
             elif repository_type == "azure":
-                # já tratado acima
                 pass
             url = repo_name
             print(f"[DotNetBuildService] Clonando repositório customizado sem autenticação.")
