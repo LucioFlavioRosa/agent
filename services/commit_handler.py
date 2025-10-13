@@ -35,7 +35,7 @@ class CommitHandler:
                     "branch_name": "erro-formato",
                     "success": False,
                     "pr_url": "ERRO: Estrutura de entrada de dados_finais_formatados['grupos'] está vazia, ausente ou malformada.",
-                    "message": "Estrutura de entrada de grupos está vazia, ausente ou malformada.",
+                    "message": "Estrutura de entrada de grupos está vazia ou malformada.",
                     "arquivos_modificados": [],
                     "commit_url": None
                 }]
@@ -92,10 +92,17 @@ class CommitHandler:
                         conjunto_de_mudancas = []
                     branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
                     branch_sugerida = BranchNameSanitizer.sanitize(branch_sugerida)
-                    print(f"[{job_id}] [VALIDACAO] Validando caminhos do conjunto_de_mudancas do grupo {i+1} (total: {len(conjunto_de_mudancas)})")
+                    print(f"[{job_id}] [DEBUG][NORMALIZACAO] Antes da normalização das chaves do conjunto_de_mudancas do grupo {i+1}: {json.dumps(conjunto_de_mudancas, default=str)}")
+                    # PASSO 3: Normalização das chaves do conjunto_de_mudancas
+                    conjunto_de_mudancas_normalizado = []
+                    for mudanca in conjunto_de_mudancas:
+                        mudanca_normalizada = PathValidator.normalize_change_keys(mudanca)
+                        conjunto_de_mudancas_normalizado.append(mudanca_normalizada)
+                    print(f"[{job_id}] [DEBUG][NORMALIZACAO] Depois da normalização das chaves do conjunto_de_mudancas do grupo {i+1}: {json.dumps(conjunto_de_mudancas_normalizado, default=str)}")
+                    print(f"[{job_id}] [VALIDACAO] Validando caminhos do conjunto_de_mudancas do grupo {i+1} (total: {len(conjunto_de_mudancas_normalizado)})")
                     mudancas_validas = []
                     mudancas_invalidas = []
-                    for idx_m, mudanca in enumerate(conjunto_de_mudancas):
+                    for idx_m, mudanca in enumerate(conjunto_de_mudancas_normalizado):
                         caminho = mudanca.get("caminho")
                         try:
                             caminho_validado = PathValidator.validate_path(caminho)
