@@ -13,7 +13,7 @@ class CommitHandler:
         self.dotnet_build_service = dotnet_build_service or DotNetBuildService()
     
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
-                      repository_type: str, repo_name: str) -> None:
+                      repository_type: str, repo_name: str, usuario_executor=None) -> None:
         print(f"[{job_id}] [DEBUG] INICIO execute_commits: executar_build_dotnet={job_info.get('data', {}).get('executar_build_dotnet')}")
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
         print(f"[{job_id}] DIAGNÓSTICO - Estrutura de dados_finais_formatados recebida: {dados_finais_formatados}")
@@ -56,7 +56,9 @@ class CommitHandler:
                 return
             modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
             executar_build_dotnet = job_info.get('data', {}).get('executar_build_dotnet', False)
-            usuario_executor = job_info.get('data', {}).get('usuario_executor')
+            # Passo 12: garantir que usuario_executor seja extraído corretamente
+            if usuario_executor is None:
+                usuario_executor = job_info.get('data', {}).get('usuario_executor')
             print(f"[{job_id}] [DEBUG] Loop de grupos: executar_build_dotnet extraído={executar_build_dotnet}")
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
