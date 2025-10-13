@@ -14,7 +14,6 @@ from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
-from services.dotnet_build_service import DotNetBuildService
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
@@ -193,20 +192,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 job_info['data']['build_errors'] = build_errors
             else:
                 job_info['data']['build_errors'] = None
-            branch_name = job_info['data'].get('branch_name_modernizado') or job_info['data'].get('branch_name')
-            print(f"[{job_id}] [DEBUG] build_project: branch_name={branch_name}")
-            dotnet_build_service = DotNetBuildService()
-            dotnet_build_service.build_project(
-                job_id=job_id,
-                repository_type=repository_type,
-                repo_name=repo_name,
-                branch_name=branch_name
-            )
             self.job_handler.update_job(job_id, job_info)
         else:
             job_info['data']['build_errors'] = None
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
+        # Validação adicional para commit_details
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
             for idx, commit in enumerate(commit_details):
