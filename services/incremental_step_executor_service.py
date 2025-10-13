@@ -2,6 +2,7 @@ from typing import List, Dict, Optional
 from services.step_dependency_analyzer import StepDependencyAnalyzer
 from services.change_consolidator_service import ChangeConsolidatorService
 import re
+import json
 
 class IncrementalStepExecutorService:
     @staticmethod
