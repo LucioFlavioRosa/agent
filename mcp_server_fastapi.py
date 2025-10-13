@@ -46,8 +46,14 @@ class StartAnalysisPayload(BaseModel):
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    git_username: Optional[str] = Field(None, description="Usuário para autenticação Git (privado)")
-    git_token: Optional[str] = Field(None, description="Token para autenticação Git (privado)")
+    git_username: Optional[str] = Field(
+        None,
+        description="[DEPRECATED] Ignorado. O sistema utiliza Azure SecretManager para autenticação. Não envie este campo."
+    )
+    git_token: Optional[str] = Field(
+        None,
+        description="[DEPRECATED] Ignorado. O sistema utiliza Azure SecretManager para autenticação. Não envie este campo."
+    )
     
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -97,16 +103,13 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
-    # Passo 2: Propagar git_username e git_token se presentes
-    if hasattr(payload, 'git_username') and payload.git_username is not None:
-        payload_dict['git_username'] = payload.git_username
-    if hasattr(payload, 'git_token') and payload.git_token is not None:
-        payload_dict['git_token'] = payload.git_token
+    # Passo 9: Não propagar git_username e git_token para o initial_job_data
+    if payload.git_username is not None or payload.git_token is not None:
+        print(f"[{job_id}] [WARNING] git_username/git_token fornecidos no payload, mas serão ignorados. O sistema utilizará o SecretManager para autenticação.")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
-    # Passo 5: Log de debug para confirmar que os campos estão presentes
-    print(f"[{job_id}] [DEBUG] Campos de credenciais no initial_job_data: git_username={initial_job_data.get('data', {}).get('git_username')}, git_token={'sim' if initial_job_data.get('data', {}).get('git_token') else 'não'}")
+    print(f"[{job_id}] [DEBUG] Campos de credenciais no initial_job_data: git_username={'IGNORADO'}, git_token={'IGNORADO'}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
