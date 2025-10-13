@@ -34,6 +34,16 @@ def processar_branch_github(
     except ValueError as ve:
         BaseCommitter._finalizar_resultado_erro(resultado_branch, str(ve))
         return resultado_branch
+
+    # PASSO 2: Garantir que a branch de destino existe ou criar explicitamente
+    try:
+        BaseCommitter._validate_branch_exists(repo, nome_branch, 'github', branch_de_origem)
+    except Exception as e:
+        msg = f"Falha ao validar/criar branch '{nome_branch}': {e}"
+        print(f"[ERRO][GITHUB] {msg}")
+        BaseCommitter._finalizar_resultado_erro(resultado_branch, msg)
+        return resultado_branch
+
     commits_realizados = 0
     commit_url = None
     mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
