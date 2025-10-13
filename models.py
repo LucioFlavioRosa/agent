@@ -67,8 +67,8 @@ class JobFields:
     EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
-    GIT_USERNAME = 'git_username'
-    GIT_TOKEN = 'git_token'
+    # GIT_USERNAME = 'git_username'  # Removido conforme instrução
+    # GIT_TOKEN = 'git_token'        # Removido conforme instrução
 
 class JobActions:
     APPROVE = 'approve'
@@ -95,5 +95,11 @@ class StartAnalysisPayload(BaseModel):
     executar_steps_incrementalmente: bool = False
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    git_username: Optional[str] = Field(None, description="Usuário para autenticação Git (privado)")
-    git_token: Optional[str] = Field(None, description="Token para autenticação Git (privado)")
+    git_username: Optional[str] = Field(
+        None,
+        description="[DEPRECATED] Ignorado. O sistema utiliza Azure SecretManager para autenticação. Não envie este campo."
+    )
+    git_token: Optional[str] = Field(
+        None,
+        description="[DEPRECATED] Ignorado. O sistema utiliza Azure SecretManager para autenticação. Não envie este campo."
+    )
