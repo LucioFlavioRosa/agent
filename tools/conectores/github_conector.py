@@ -10,12 +10,15 @@ class GitHubConector(BaseConector):
     
     def _extract_org_name(self, repositorio: str) -> str:
         try:
-            org_name = repositorio.strip().split('/')[0]
+            parts = repositorio.strip().split('/')
+            if len(parts) < 2:
+                raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio'.")
+            org_name = parts[0]
             print(f"[GitHub Conector] Organização extraída: {org_name}")
             return org_name
-        except (ValueError, IndexError):
+        except (ValueError, IndexError) as e:
             print(f"[GitHub Conector] ERRO: Formato inválido do repositório: {repositorio}")
-            raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio'.")
+            raise
     
     def connection(self, repositorio: str) -> Union[Repository, object]:
         org_name = self._extract_org_name(repositorio)
