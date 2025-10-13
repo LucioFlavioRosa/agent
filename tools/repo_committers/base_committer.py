@@ -82,3 +82,44 @@ class BaseCommitter:
             print(f"[DEBUG][BaseCommitter][_processar_mudancas_comuns] Mudança {idx}: caminho validado '{caminho_validado}'")
         print(f"[DEBUG][BaseCommitter][_processar_mudancas_comuns] Total processadas: {len(conjunto_de_mudancas)}, válidas: {len(mudancas_validas)}, ignoradas: {ignoradas}")
         return mudancas_validas
+
+    @staticmethod
+    def _validate_branch_exists(repo, branch_name, repository_type, branch_de_origem=None):
+        if repository_type == 'github':
+            from github import GithubException
+            try:
+                repo.get_branch(branch_name)
+                print(f"[DEBUG][BaseCommitter] Branch '{branch_name}' já existe no GitHub.")
+                return True
+            except GithubException as e:
+                if e.status == 404:
+                    print(f"[DEBUG][BaseCommitter] Branch '{branch_name}' não existe no GitHub. Tentando criar a partir de '{branch_de_origem}'...")
+                    try:
+                        sha_origem = repo.get_branch(branch_de_origem).commit.sha
+                        repo.create_git_ref(ref=f"refs/heads/{branch_name}", sha=sha_origem)
+                        print(f"[DEBUG][BaseCommitter] Branch '{branch_name}' criada com sucesso a partir de '{branch_de_origem}'.")
+                        return True
+                    except Exception as err:
+                        print(f"[ERRO][BaseCommitter] Falha ao criar branch '{branch_name}' a partir de '{branch_de_origem}': {err}")
+                        raise Exception(f"Falha ao criar branch '{branch_name}' a partir de '{branch_de_origem}': {err}")
+                else:
+                    print(f"[ERRO][BaseCommitter] Erro inesperado ao verificar branch '{branch_name}': {e}")
+                    raise
+        elif repository_type == 'gitlab':
+            try:
+                branches = repo.branches.list(search=branch_name)
+                if any(b.name == branch_name for b in branches):
+                    print(f"[DEBUG][BaseCommitter] Branch '{branch_name}' já existe no GitLab.")
+                    return True
+                print(f"[DEBUG][BaseCommitter] Branch '{branch_name}' não existe no GitLab. Tentando criar a partir de '{branch_de_origem}'...")
+                repo.branches.create({'branch': branch_name, 'ref': branch_de_origem})
+                print(f"[DEBUG][BaseCommitter] Branch '{branch_name}' criada com sucesso a partir de '{branch_de_origem}'.")
+                return True
+            except Exception as err:
+                print(f"[ERRO][BaseCommitter] Falha ao criar branch '{branch_name}' no GitLab: {err}")
+                raise Exception(f"Falha ao criar branch '{branch_name}' no GitLab: {err}")
+        elif repository_type == 'azure':
+            # No Azure, a lógica está implementada diretamente no committer devido à API REST
+            return True
+        else:
+            raise Exception(f"[BaseCommitter] Provedor de repositório '{repository_type}' não suportado para validação de branch.")
