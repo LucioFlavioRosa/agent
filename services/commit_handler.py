@@ -18,6 +18,7 @@ class CommitHandler:
         print(f"[{job_id}] [DEBUG] INICIO execute_commits: executar_build_dotnet={job_info.get('data', {}).get('executar_build_dotnet')}")
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
         print(f"[{job_id}] DIAGNÓSTICO - Estrutura de dados_finais_formatados recebida: {dados_finais_formatados}")
+        print(f"[{job_id}] [LOG] Parâmetros de conexão: repository_type={repository_type}, repo_name={repo_name}")
         # Validação explícita dos dados antes de prosseguir
         if not dados_finais_formatados or 'grupos' not in dados_finais_formatados or not isinstance(dados_finais_formatados['grupos'], list) or len(dados_finais_formatados['grupos']) == 0:
             print(f"[{job_id}] [ERRO] Estrutura de dados_finais_formatados inválida ou grupos vazio/malformado: {dados_finais_formatados}")
@@ -43,6 +44,7 @@ class CommitHandler:
         try:
             branch_base_para_pr = job_info['data'].get('branch_name', 'main')
             print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
+            # Validação robusta da conexão do repositório
             try:
                 repository_provider = self.repository_provider_factory(repository_type)
                 conexao_geral = self.conexao_geral_factory()
@@ -51,6 +53,16 @@ class CommitHandler:
                     repository_type=repository_type,
                     repository_provider=repository_provider
                 )
+                if repo is None:
+                    raise Exception(f"Falha ao conectar ao repositório: repo=None")
+                # Validação de métodos esperados (GitHub: get_branch, get_contents, etc)
+                if repository_type == 'github' and not (hasattr(repo, 'get_branch') and hasattr(repo, 'get_contents')):
+                    raise Exception(f"Objeto repo não possui métodos esperados do GitHub")
+                if repository_type == 'gitlab' and not hasattr(repo, 'branches'):
+                    raise Exception(f"Objeto repo não possui atributo 'branches' do GitLab")
+                if repository_type == 'azure' and not (hasattr(repo, 'id') or hasattr(repo, '_organization')):
+                    raise Exception(f"Objeto repo não possui atributos esperados do Azure")
+                print(f"[{job_id}] [LOG] Conexão com repositório estabelecida com sucesso.")
             except Exception as e:
                 print(f"[{job_id}] ERRO CRÍTICO: Falha ao conectar com repositório: {str(e)}")
                 job_info['data']['commit_details'] = [{
@@ -62,6 +74,64 @@ class CommitHandler:
                     "commit_url": None
                 }]
                 print(f"[{job_id}] BLINDAGEM: Erro de conexão tratado, commit_details definido")
+                return
+            # Validação da existência da branch de origem
+            try:
+                branch_origem_existe = False
+                if repository_type == 'github':
+                    try:
+                        repo.get_branch(branch_base_para_pr)
+                        branch_origem_existe = True
+                    except Exception as e:
+                        print(f"[{job_id}] [ERRO] Branch de origem '{branch_base_para_pr}' não encontrada no GitHub: {e}")
+                elif repository_type == 'gitlab':
+                    try:
+                        repo.branches.get(branch_base_para_pr)
+                        branch_origem_existe = True
+                    except Exception as e:
+                        print(f"[{job_id}] [ERRO] Branch de origem '{branch_base_para_pr}' não encontrada no GitLab: {e}")
+                elif repository_type == 'azure':
+                    try:
+                        # Azure: checa via API se branch existe
+                        if hasattr(repo, '_organization') and hasattr(repo, '_project') and hasattr(repo, 'id'):
+                            from tools.conectores.azure_conector import AzureConector
+                            connector = AzureConector.create_with_defaults()
+                            token = connector._get_token_for_org(repo._organization, platform='azure')
+                            import requests
+                            base_url = f"https://dev.azure.com/{repo._organization}/{repo._project}/_apis"
+                            refs_url = f"{base_url}/git/repositories/{repo.id}/refs?filter=heads/{branch_base_para_pr}&api-version=7.0"
+                            headers = {
+                                "Content-Type": "application/json",
+                                "Authorization": f"Basic {token}"
+                            }
+                            refs_response = requests.get(refs_url, headers=headers, timeout=30)
+                            refs_response.raise_for_status()
+                            refs_data = refs_response.json()
+                            if refs_data.get('value'):
+                                branch_origem_existe = True
+                    except Exception as e:
+                        print(f"[{job_id}] [ERRO] Branch de origem '{branch_base_para_pr}' não encontrada no Azure: {e}")
+                if not branch_origem_existe:
+                    print(f"[{job_id}] [ERRO] Branch de origem '{branch_base_para_pr}' não existe no repositório remoto. Commit abortado.")
+                    job_info['data']['commit_details'] = [{
+                        "branch_name": "erro-branch-origem",
+                        "success": False,
+                        "pr_url": f"ERRO: Branch de origem '{branch_base_para_pr}' não existe no repositório remoto.",
+                        "message": f"Branch de origem '{branch_base_para_pr}' não existe no repositório remoto.",
+                        "arquivos_modificados": [],
+                        "commit_url": None
+                    }]
+                    return
+            except Exception as e:
+                print(f"[{job_id}] [ERRO] Falha ao validar existência da branch de origem: {e}")
+                job_info['data']['commit_details'] = [{
+                    "branch_name": "erro-validacao-branch-origem",
+                    "success": False,
+                    "pr_url": f"ERRO: Falha ao validar existência da branch de origem: {e}",
+                    "message": f"Falha ao validar existência da branch de origem: {e}",
+                    "arquivos_modificados": [],
+                    "commit_url": None
+                }]
                 return
             commit_results = []
             grupos = dados_finais_formatados.get("grupos", [])
@@ -84,16 +154,15 @@ class CommitHandler:
             print(f"[{job_id}] [DEBUG] Loop de grupos: executar_build_dotnet extraído={executar_build_dotnet}")
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
-                print(f"[{job_id}] Processando grupo {i+1}/{len(grupos)}: {grupo_titulo}")
+                branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
+                print(f"[{job_id}] [LOG] Processando grupo {i+1}/{len(grupos)}: titulo='{grupo_titulo}', branch_sugerida='{branch_sugerida}', num_mudancas={len(grupo.get('conjunto_de_mudancas', []))}")
                 try:
                     conjunto_de_mudancas = grupo.get("conjunto_de_mudancas", [])
                     if not isinstance(conjunto_de_mudancas, list):
                         print(f"[{job_id}] ERRO: conjunto_de_mudancas do grupo {i+1} não é uma lista. Valor: {conjunto_de_mudancas}")
                         conjunto_de_mudancas = []
-                    branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
                     branch_sugerida = BranchNameSanitizer.sanitize(branch_sugerida)
                     print(f"[{job_id}] [DEBUG][NORMALIZACAO] Antes da normalização das chaves do conjunto_de_mudancas do grupo {i+1}: {json.dumps(conjunto_de_mudancas, default=str)}")
-                    # PASSO 3: Normalização das chaves do conjunto_de_mudancas
                     conjunto_de_mudancas_normalizado = []
                     for mudanca in conjunto_de_mudancas:
                         mudanca_normalizada = PathValidator.normalize_change_keys(mudanca)
@@ -160,15 +229,15 @@ class CommitHandler:
                         "arquivos_modificados": [arquivo.get('caminho', '') for arquivo in conjunto_de_mudancas],
                         "commit_url": None
                     }
-                print(f"[{job_id}] DIAGNÓSTICO - Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}', commit_url='{resultado_branch.get('commit_url')}'")
+                print(f"[{job_id}] [LOG] Resultado do grupo {i+1}: success={resultado_branch.get('success')}, pr_url='{resultado_branch.get('pr_url')}', branch_name='{resultado_branch.get('branch_name')}', commit_url='{resultado_branch.get('commit_url')}', arquivos_modificados={len(resultado_branch.get('arquivos_modificados', []))}")
                 commit_results.append(resultado_branch)
-            print(f"[{job_id}] [DEBUG] Pós-loop grupos: commit_results contém build_result/build_errors?")
+            print(f"[{job_id}] [LOG] Pós-loop grupos: commit_results contém build_result/build_errors?")
             for idx, res in enumerate(commit_results):
-                print(f"[{job_id}] [DEBUG] Grupo {idx+1}: build_result presente={ 'build_result' in res }, build_errors presente={ 'build_errors' in res }, build_result={res.get('build_result')}")
+                print(f"[{job_id}] [LOG] Grupo {idx+1}: build_result presente={ 'build_result' in res }, build_errors presente={ 'build_errors' in res }, build_result={res.get('build_result')}")
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
-            print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {json.dumps(commit_results, default=str)}")
+            print(f"[{job_id}] [LOG] DIAGNÓSTICO FINAL - commit_results antes de salvar: {json.dumps(commit_results, default=str)}")
             for i, result in enumerate(commit_results):
-                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}, commit_url='{result.get('commit_url')}'")
+                print(f"[{job_id}] [LOG] PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}, commit_url='{result.get('commit_url')}'")
             print(f"[{job_id}] BLINDAGEM: execute_commits concluído com sucesso")
             job_info['data']['commit_details'] = commit_results
         except Exception as e:
