@@ -101,12 +101,12 @@ def processar_branch_azure(
             caminho = mudanca["caminho"]
             status = mudanca["status"]
             conteudo = mudanca["conteudo"]
-            change_item = {
-                "item": {"path": f"/{caminho}"}
-            }
             if status in ("ADICIONADO", "CRIAR", "CRIADO"):
-                change_item["changeType"] = "add"
-                change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
+                change_item = {
+                    "item": {"path": f"/{caminho}"},
+                    "changeType": "add",
+                    "newContent": {"content": conteudo or "", "contentType": "rawtext"}
+                }
             elif status == "MODIFICADO":
                 if modo_adicao_incremental:
                     get_item_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho}&api-version=7.0"
@@ -114,20 +114,30 @@ def processar_branch_azure(
                     if item_response.status_code == 200:
                         conteudo_existente = item_response.text
                         conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
-                change_item["changeType"] = "edit"
-                change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
+                change_item = {
+                    "item": {"path": f"/{caminho}"},
+                    "changeType": "edit",
+                    "newContent": {"content": conteudo or "", "contentType": "rawtext"}
+                }
             elif status == "REMOVIDO":
-                change_item["changeType"] = "delete"
+                change_item = {
+                    "item": {"path": f"/{caminho}"},
+                    "changeType": "delete"
+                }
+            else:
+                continue
             changes.append(change_item)
-        if not changes:
+        # PASSO 5: Validação se há mudanças válidas
+        if len(changes) == 0:
+            print(f"[AVISO][AZURE] Nenhuma mudança válida para commitar para a branch '{nome_branch}'. Commit será ignorado.")
             try:
-                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}", message="Nenhuma mudança válida para commitar.")
             except ValueError as ve:
                 print(f"[ERRO][AZURE] PR vazio mas pr_url inválido. Tentando retry com sufixo aleatório.")
                 sufixo = _gerar_sufixo_aleatorio()
                 novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
                 mensagem_pr = novo_titulo
-                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}-{sufixo}", message="Nenhuma mudança para commitar.")
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}-{sufixo}", message="Nenhuma mudança válida para commitar.")
             return resultado_branch
         print(f"[DEBUG][AZURE] Criando commit com {len(changes)} mudanças")
         push_url = f"{base_url}/git/repositories/{repository_id}/pushes?api-version=7.0"
@@ -152,8 +162,9 @@ def processar_branch_azure(
             print(f"[LOG][AZURE] push_response.status_code: {push_response.status_code}, push_response.text: {push_response.text}")
             if push_response.status_code in [200, 201]:
                 push_data = push_response.json()
+                # PASSO 8: Análise detalhada da resposta
                 if 'commits' not in push_data or not isinstance(push_data['commits'], list) or len(push_data['commits']) == 0:
-                    print(f"[ERRO][AZURE] Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
+                    print(f"[ERRO CRÍTICO][AZURE] Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
                     raise Exception(f"Push realizado mas resposta inválida: {json.dumps(push_data, default=str)}")
                 try:
                     commit_info = push_data['commits'][0]
