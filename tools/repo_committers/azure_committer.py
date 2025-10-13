@@ -6,6 +6,7 @@ from tools.repo_committers.base_committer import BaseCommitter
 from tools.conectores.azure_conector import AzureConector
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
 from tools.repo_committers.azure_pr_url_builder import build_pr_ui_url
+from tools.repo_committers.path_validator import PathValidator
 import json
 import random
 import string
@@ -96,38 +97,43 @@ def processar_branch_azure(
             raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
         changes = []
         mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
-        mudancas_validas = _deduplicar_mudancas_por_arquivo(mudancas_validas)
-        for mudanca in mudancas_validas:
+        mudancas_validas_filtradas = []
+        for idx, mudanca in enumerate(mudancas_validas):
             caminho = mudanca["caminho"]
+            try:
+                caminho_validado = PathValidator.validate_path(caminho)
+            except Exception as e:
+                print(f"[ERRO][AZURE][processar_branch_azure] Mudança {idx}: caminho inválido: '{caminho}'. Erro: {e}")
+                continue
             status = mudanca["status"]
             conteudo = mudanca["conteudo"]
             if status in ("ADICIONADO", "CRIAR", "CRIADO"):
                 change_item = {
-                    "item": {"path": f"/{caminho}"},
+                    "item": {"path": f"/{caminho_validado}"},
                     "changeType": "add",
                     "newContent": {"content": conteudo or "", "contentType": "rawtext"}
                 }
             elif status == "MODIFICADO":
                 if modo_adicao_incremental:
-                    get_item_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho}&api-version=7.0"
+                    get_item_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho_validado}&api-version=7.0"
                     item_response = requests.get(get_item_url, headers=headers, timeout=30)
                     if item_response.status_code == 200:
                         conteudo_existente = item_response.text
                         conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                 change_item = {
-                    "item": {"path": f"/{caminho}"},
+                    "item": {"path": f"/{caminho_validado}"},
                     "changeType": "edit",
                     "newContent": {"content": conteudo or "", "contentType": "rawtext"}
                 }
             elif status == "REMOVIDO":
                 change_item = {
-                    "item": {"path": f"/{caminho}"},
+                    "item": {"path": f"/{caminho_validado}"},
                     "changeType": "delete"
                 }
             else:
                 continue
             changes.append(change_item)
-        # PASSO 5: Validação se há mudanças válidas
+            mudancas_validas_filtradas.append(mudanca)
         if len(changes) == 0:
             print(f"[AVISO][AZURE] Nenhuma mudança válida para commitar para a branch '{nome_branch}'. Commit será ignorado.")
             try:
@@ -151,16 +157,12 @@ def processar_branch_azure(
                 "changes": changes
             }]
         }
-        print(f"[LOG][AZURE] push_payload: {json.dumps(push_payload, indent=2, default=str)}")
         max_push_attempts = 2
         push_attempt = 0
         commit_url = None
         commit_id = None
         while push_attempt < max_push_attempts:
-            print(f"[LOG][AZURE] Realizando push tentativa {push_attempt+1} para branch '{nome_branch}' com current_commit_id: {current_commit_id}")
             push_response = requests.post(push_url, headers=headers, json=push_payload, timeout=60)
-            print(f"[LOG][AZURE] push_response.status_code: {push_response.status_code}, push_response.text: {push_response.text}")
-            # INÍCIO DA LÓGICA DO PASSO 8
             if push_response.status_code in [200, 201]:
                 try:
                     push_data = push_response.json()
@@ -175,18 +177,15 @@ def processar_branch_azure(
                     commit_id = commit_info.get('commitId')
                     if commit_id:
                         commit_url_candidate = _build_commit_ui_url(organization, project, repo_name, commit_id)
-                        print(f"[LOG][AZURE] commit_id extraído: {commit_id}, commit_url_candidate: {commit_url_candidate}")
                         if BaseCommitter._validate_commit_url(commit_url_candidate):
                             commit_url = commit_url_candidate
                         else:
-                            print(f"[WARN][AZURE] commit_url construído não é válido: {commit_url_candidate}")
                             commit_url = None
                 except Exception as e:
                     print(f"[ERRO][AZURE] Não foi possível extrair commit_url do push_response: {e}")
                     commit_url = None
                 break
             elif push_response.status_code in [400, 409]:
-                print(f"[ERRO][AZURE] Push falhou com status {push_response.status_code}. Tentando atualizar current_commit_id e retentar...")
                 refs_url_destino = f"{base_url}/git/repositories/{repository_id}/refs?filter=heads/{nome_branch}&api-version=7.0"
                 refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
                 refs_response_destino.raise_for_status()
@@ -194,12 +193,10 @@ def processar_branch_azure(
                 if not refs_data_destino.get('value'):
                     raise Exception(f"Branch '{nome_branch}' não encontrada ao tentar atualizar SHA para retry do push.")
                 current_commit_id = refs_data_destino['value'][0]['objectId']
-                print(f"[DEBUG][AZURE] Novo current_commit_id para retry: {current_commit_id}")
                 push_payload['refUpdates'][0]['oldObjectId'] = current_commit_id
                 push_attempt += 1
                 continue
             else:
-                print(f"[ERRO][AZURE] Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
                 raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
         if commit_url and BaseCommitter._validate_commit_url(commit_url):
             resultado_branch['commit_url'] = commit_url
@@ -208,7 +205,6 @@ def processar_branch_azure(
         tentativas = 0
         while tentativas < 2:
             try:
-                print(f"[DEBUG][AZURE] Criando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'")
                 pr_url = f"{base_url}/git/repositories/{repository_id}/pullrequests?api-version=7.0"
                 pr_payload = {
                     "sourceRefName": f"refs/heads/{nome_branch}",
@@ -217,31 +213,23 @@ def processar_branch_azure(
                     "description": descricao_pr
                 }
                 pr_response = requests.post(pr_url, headers=headers, json=pr_payload, timeout=30)
-                print(f"[LOG][AZURE] pr_response.status_code: {pr_response.status_code}, pr_response.text: {pr_response.text}")
                 if pr_response.status_code in [200, 201]:
                     pr_data = pr_response.json()
-                    print(f"[DEBUG][AZURE] pr_response.status_code: {pr_response.status_code}")
-                    print(f"[DEBUG][AZURE] pr_data COMPLETO: {json.dumps(pr_data, indent=2, default=str)}")
                     pull_request_id = pr_data.get('pullRequestId')
                     if pull_request_id and organization and project and repo_name:
                         pr_web_url = build_pr_ui_url(organization, project, repo_name, pull_request_id)
-                        print(f"[DEBUG][AZURE] pr_web_url construído manualmente: {pr_web_url}")
                     else:
                         pr_web_url = None
-                        print(f"[ERRO][AZURE] Não foi possível construir a URL de UI do PR: pullRequestId={pull_request_id}, organization={organization}, project={project}, repo_name={repo_name}")
                     if not pr_web_url or not isinstance(pr_web_url, str) or not pr_web_url.strip():
-                        print(f"[ERRO][AZURE] pr_web_url extraído está vazio. pr_data: {pr_data}")
                         BaseCommitter._finalizar_resultado_erro(resultado_branch, f"PR criado mas web_url inválido: {json.dumps(pr_data, default=str)}")
                         break
                     BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_web_url.strip())
                     break
                 else:
                     if "already exists" in pr_response.text.lower():
-                        print(f"AVISO: PR para esta branch Azure já existe.")
                         try:
                             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, message="PR já existente.")
                         except ValueError as ve:
-                            print(f"[ERRO][AZURE] PR já existente mas pr_url inválido. Tentando retry com sufixo aleatório.")
                             sufixo = _gerar_sufixo_aleatorio()
                             novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
                             mensagem_pr = novo_titulo
@@ -249,21 +237,18 @@ def processar_branch_azure(
                             continue
                         break
                     else:
-                        print(f"[ERRO][AZURE] Erro ao criar PR Azure: {pr_response.status_code} - {pr_response.text}")
-                        raise Exception(f"Erro ao criar PR Azure: {pr_response.status_code} - {pr_response.text}")
+                        BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar PR Azure: {pr_response.status_code} - {pr_response.text}")
+                        break
             except ValueError as ve:
-                print(f"[ERRO][AZURE] PR retornado sem web_url ou web_url inválido.")
                 if tentativas == 0:
                     sufixo = _gerar_sufixo_aleatorio()
                     novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
-                    print(f"[AZURE][RETRY] Tentando criar PR novamente com título modificado: {novo_titulo}")
                     mensagem_pr = novo_titulo
                     tentativas += 1
                     continue
                 else:
                     raise
             except Exception as e:
-                print(f"[ERRO][AZURE] Falha crítica ao criar PR: {e}")
                 BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro crítico ao validar PR: {e}")
                 break
     except Exception as e:
