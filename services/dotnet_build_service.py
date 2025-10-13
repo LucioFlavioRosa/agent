@@ -23,13 +23,6 @@ class DotNetBuildService:
             print(f"[{job_id}] [DotNetBuildService] URL de clone construída (autenticação: {auth_method}): {clone_url.split('@')[0] + '@***' + clone_url.split('@')[-1] if '@' in clone_url else clone_url}")
             if os.path.exists(local_dir):
                 shutil.rmtree(local_dir)
-            # Validação de autenticação para Azure DevOps privado
-            if repository_type == "azure":
-                if not used_username or not used_token:
-                    error_msg = f"[{job_id}] [DotNetBuildService] Nenhum método de autenticação disponível para repositório Azure DevOps privado. Forneça git_username/git_token ou configure o SecretManager."
-                    print(error_msg)
-                    result["errors"].append(error_msg)
-                    return result
             clone_cmd = ["git", "clone", "--branch", branch_name, clone_url, local_dir]
             try:
                 clone_proc = subprocess.run(clone_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -81,21 +74,26 @@ class DotNetBuildService:
                 org, project, repo = self._parse_azure_repo_name(repo_name)
             except Exception as e:
                 raise ValueError(f"Erro ao parsear repo_name Azure: {e}")
-            if not git_username or not git_token:
-                secret_name = f"{org}-Azure-PAT"
-                try:
-                    token = self.secret_manager.get_secret(secret_name)
-                    if token:
-                        used_username = "pat"
-                        used_token = token
-                        auth_method = f"SecretManager:{secret_name}"
-                        print(f"[DotNetBuildService] Token Azure DevOps lido do SecretManager para org '{org}' (secret: {secret_name}).")
-                    else:
-                        print(f"[DotNetBuildService] Nenhum token retornado do SecretManager para org '{org}' (secret: {secret_name}).")
-                except Exception as e:
-                    print(f"[DotNetBuildService] Erro ao buscar token do SecretManager para org '{org}' (secret: {secret_name}): {e}")
-            else:
-                auth_method = "payload"
+            # Sempre tentar buscar do SecretManager antes de validar credenciais
+            secret_name = f"{org}-Azure-PAT"
+            token = None
+            try:
+                token = self.secret_manager.get_secret(secret_name)
+                if token:
+                    used_username = "pat"
+                    used_token = token
+                    auth_method = f"SecretManager:{secret_name}"
+                    print(f"[DotNetBuildService] Token Azure DevOps lido do SecretManager para org '{org}' (secret: {secret_name}).")
+                else:
+                    print(f"[DotNetBuildService] Nenhum token retornado do SecretManager para org '{org}' (secret: {secret_name}).")
+            except Exception as e:
+                print(f"[DotNetBuildService] Erro ao buscar token do SecretManager para org '{org}' (secret: {secret_name}): {e}")
+            # Se não encontrou no SecretManager, usar credenciais do payload se existirem
+            if not used_username or not used_token:
+                if git_username and git_token:
+                    used_username = git_username
+                    used_token = git_token
+                    auth_method = "payload"
             safe_username = quote(used_username, safe='') if used_username else ''
             safe_token = quote(used_token, safe='') if used_token else ''
             if safe_username and safe_token:
@@ -104,6 +102,10 @@ class DotNetBuildService:
             else:
                 url = f"https://dev.azure.com/{org}/{project}/_git/{repo}"
                 print(f"[DotNetBuildService] URL de clone Azure DevOps sem autenticação construída: {url}")
+            # Remover validação prematura: só retorna erro se não houver credenciais DEPOIS de tentar buscar no SecretManager
+            if not safe_username or not safe_token:
+                error_msg = f"Falha ao obter credenciais. git_username/git_token não fornecidos E secret '{secret_name}' não encontrado no SecretManager."
+                print(f"[DotNetBuildService] {error_msg}")
             return url, used_username, used_token, auth_method or "none"
         if git_username and git_token:
             safe_username = quote(git_username, safe='')
