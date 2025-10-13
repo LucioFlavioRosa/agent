@@ -7,11 +7,7 @@ class StepDependencyAnalyzer:
         path2 = StepDependencyAnalyzer._normalize_path(step2.get('Caminho do Arquivo', ''))
         if not path1 or not path2:
             return False
-        if path1 == path2:
-            return True
-        if path1.startswith(path2) or path2.startswith(path1):
-            return True
-        return False
+        return path1 == path2
 
     @staticmethod
     def _normalize_path(path: str) -> str:
