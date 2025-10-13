@@ -38,6 +38,7 @@ class DotNetBuildService:
             print(f"[{job_id}] [DotNetBuildService] git clone retornou código: {clone_proc.returncode}")
             if clone_proc.returncode != 0:
                 error_msg = f"Erro ao clonar repositório: {clone_proc.stderr}"
+                # Passo 6: Mensagem de erro mais clara se não houver token
                 if 'not found' in clone_proc.stderr and not token:
                     error_msg += " Repositório não encontrado. Verifique se o repositório existe e se as credenciais (token) estão configuradas corretamente no Azure Key Vault."
                 result["errors"].append(error_msg)
