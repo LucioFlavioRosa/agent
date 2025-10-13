@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+from tools.repo_committers.path_validator import PathValidator
 
 class BaseCommitter:
     @staticmethod
@@ -30,11 +31,19 @@ class BaseCommitter:
     @staticmethod
     def _validate_no_duplicate_paths(conjunto_de_mudancas: List[Dict[str, Any]]):
         paths = set()
-        for mudanca in conjunto_de_mudancas:
+        for idx, mudanca in enumerate(conjunto_de_mudancas):
             caminho = mudanca.get("caminho")
-            if caminho in paths:
-                raise ValueError(f"Arquivo duplicado na lista de mudanças: {caminho}")
-            paths.add(caminho)
+            try:
+                caminho_validado = PathValidator.validate_path(caminho)
+            except Exception as e:
+                print(f"[ERRO][BaseCommitter][_validate_no_duplicate_paths] Mudança {idx}: caminho inválido: '{caminho}'. Erro: {e}")
+                raise ValueError(f"Mudança {idx}: caminho inválido: '{caminho}'. Erro: {e}")
+            if caminho_validado in paths:
+                print(f"[ERRO][BaseCommitter][_validate_no_duplicate_paths] Caminho duplicado detectado: '{caminho_validado}' (mudança {idx})")
+                raise ValueError(f"Arquivo duplicado na lista de mudanças: {caminho_validado}")
+            print(f"[DEBUG][BaseCommitter][_validate_no_duplicate_paths] Caminho validado: '{caminho_validado}' (mudança {idx})")
+            paths.add(caminho_validado)
+        print(f"[DEBUG][BaseCommitter][_validate_no_duplicate_paths] Total de caminhos validados: {len(paths)}")
 
     @staticmethod
     def _validate_commit_url(url: str) -> bool:
@@ -53,13 +62,23 @@ class BaseCommitter:
     @staticmethod
     def _processar_mudancas_comuns(conjunto_de_mudancas: List[Dict[str, Any]], resultado_branch: Dict[str, Any]) -> List[Dict[str, Any]]:
         mudancas_validas = []
-        for mudanca in conjunto_de_mudancas:
+        ignoradas = 0
+        for idx, mudanca in enumerate(conjunto_de_mudancas):
             status = mudanca.get("status")
             caminho = mudanca.get("caminho")
             conteudo = mudanca.get("conteudo")
+            try:
+                caminho_validado = PathValidator.validate_path(caminho)
+            except Exception as e:
+                print(f"[ERRO][BaseCommitter][_processar_mudancas_comuns] Mudança {idx}: caminho inválido: '{caminho}', status='{status}', conteudo='{str(conteudo)[:100]}'. Erro: {e}")
+                ignoradas += 1
+                continue
             if status in ("ADICIONADO", "CRIADO", "MODIFICADO"):
                 if conteudo is None or (isinstance(conteudo, str) and conteudo.strip() == ""):
-                    print(f"[ERRO][BaseCommitter] Mudança ignorada: arquivo '{caminho}' com status '{status}' possui conteudo vazio ou None.")
+                    print(f"[ERRO][BaseCommitter] Mudança ignorada: arquivo '{caminho_validado}' com status '{status}' possui conteudo vazio ou None.")
+                    ignoradas += 1
                     continue
-            mudancas_validas.append(mudanca)
+            mudancas_validas.append({**mudanca, "caminho": caminho_validado})
+            print(f"[DEBUG][BaseCommitter][_processar_mudancas_comuns] Mudança {idx}: caminho validado '{caminho_validado}'")
+        print(f"[DEBUG][BaseCommitter][_processar_mudancas_comuns] Total processadas: {len(conjunto_de_mudancas)}, válidas: {len(mudancas_validas)}, ignoradas: {ignoradas}")
         return mudancas_validas
