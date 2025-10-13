@@ -28,10 +28,10 @@ class GitLabConector(BaseConector):
                     return namespace
                 else:
                     print(f"[GitLab Conector] Path GitLab inválido. Usando 'gitlab' como fallback.")
-                    return 'gitlab'
+                    raise ValueError(f"O nome do repositório GitLab '{repositorio}' tem formato inválido. Esperado 'namespace/projeto' ou Project ID numérico.")
             except (ValueError, IndexError):
                 print(f"[GitLab Conector] Erro ao extrair namespace do path GitLab. Usando 'gitlab' como fallback.")
-                return 'gitlab'
+                raise ValueError(f"O nome do repositório GitLab '{repositorio}' tem formato inválido. Esperado 'namespace/projeto' ou Project ID numérico.")
     
     def _normalize_repository_identifier(self, repositorio: str) -> str:
         if self._is_gitlab_project_id(repositorio):
