@@ -105,7 +105,7 @@ class CommitHandler:
                     for idx_m, mudanca in enumerate(conjunto_de_mudancas_normalizado):
                         caminho = mudanca.get("caminho")
                         try:
-                            caminho_validado = PathValidator.validate_path(caminho)
+                            caminho_validado = PathValidator.validate_path(mudanca)
                             mudanca["caminho"] = caminho_validado
                             mudancas_validas.append(mudanca)
                         except Exception as e:
