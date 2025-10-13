@@ -70,31 +70,46 @@ def processar_branch_azure(
         source_commit_id = refs_data_origem['value'][0]['objectId']
         print(f"[DEBUG][AZURE] Commit ID da branch origem: {source_commit_id}")
         current_commit_id = ""
-        create_branch_url = f"{base_url}/git/repositories/{repository_id}/refs?api-version=7.0"
-        create_branch_payload = [{
-            "name": f"refs/heads/{nome_branch}",
-            "oldObjectId": "0000000000000000000000000000000000000000",
-            "newObjectId": source_commit_id
-        }]
-        print(f"[LOG][AZURE] Criando branch '{nome_branch}' a partir de '{branch_de_origem}'. Payload: {json.dumps(create_branch_payload)}")
-        branch_response = requests.post(create_branch_url, headers=headers, json=create_branch_payload, timeout=30)
-        print(f"[LOG][AZURE] branch_response.status_code: {branch_response.status_code}, branch_response.text: {branch_response.text}")
-        if branch_response.status_code in [200, 201]:
-            print(f"SUCESSO: Branch '{nome_branch}' criada.")
-            current_commit_id = source_commit_id
-        elif "already exists" in branch_response.text.lower():
-            print(f"AVISO: A branch '{nome_branch}' já existe. Buscando seu commit ID atual...")
-            refs_url_destino = f"{base_url}/git/repositories/{repository_id}/refs?filter=heads/{nome_branch}&api-version=7.0"
-            refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
-            refs_response_destino.raise_for_status()
-            refs_data_destino = refs_response_destino.json()
-            if not refs_data_destino.get('value'):
-                raise Exception(f"Branch existente '{nome_branch}' não pôde ser encontrada para obter o commit ID.")
+        # Verifica explicitamente se a branch já existe
+        refs_url_destino = f"{base_url}/git/repositories/{repository_id}/refs?filter=heads/{nome_branch}&api-version=7.0"
+        refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
+        refs_response_destino.raise_for_status()
+        refs_data_destino = refs_response_destino.json()
+        branch_exists = refs_data_destino.get('value') and len(refs_data_destino['value']) > 0
+        if branch_exists:
             current_commit_id = refs_data_destino['value'][0]['objectId']
-            print(f"[DEBUG][AZURE] Commit ID da branch existente '{nome_branch}': {current_commit_id}")
+            print(f"[DEBUG][AZURE] Branch '{nome_branch}' já existe. Commit ID: {current_commit_id}")
         else:
-            print(f"[ERRO][AZURE] Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
-            raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
+            create_branch_url = f"{base_url}/git/repositories/{repository_id}/refs?api-version=7.0"
+            create_branch_payload = [{
+                "name": f"refs/heads/{nome_branch}",
+                "oldObjectId": "0000000000000000000000000000000000000000",
+                "newObjectId": source_commit_id
+            }]
+            print(f"[LOG][AZURE] Criando branch '{nome_branch}' a partir de '{branch_de_origem}'. Payload: {json.dumps(create_branch_payload)}")
+            branch_response = requests.post(create_branch_url, headers=headers, json=create_branch_payload, timeout=30)
+            print(f"[LOG][AZURE] branch_response.status_code: {branch_response.status_code}, branch_response.text: {branch_response.text}")
+            if branch_response.status_code in [200, 201]:
+                # Confirmar se a branch foi criada
+                refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
+                refs_response_destino.raise_for_status()
+                refs_data_destino = refs_response_destino.json()
+                if not refs_data_destino.get('value'):
+                    raise Exception(f"Branch '{nome_branch}' não foi criada corretamente após POST.")
+                current_commit_id = refs_data_destino['value'][0]['objectId']
+                print(f"SUCESSO: Branch '{nome_branch}' criada. Commit ID: {current_commit_id}")
+            elif "already exists" in branch_response.text.lower():
+                print(f"AVISO: A branch '{nome_branch}' já existe. Buscando seu commit ID atual...")
+                refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
+                refs_response_destino.raise_for_status()
+                refs_data_destino = refs_response_destino.json()
+                if not refs_data_destino.get('value'):
+                    raise Exception(f"Branch existente '{nome_branch}' não pôde ser encontrada para obter o commit ID.")
+                current_commit_id = refs_data_destino['value'][0]['objectId']
+                print(f"[DEBUG][AZURE] Commit ID da branch existente '{nome_branch}': {current_commit_id}")
+            else:
+                print(f"[ERRO][AZURE] Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
+                raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
         changes = []
         mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
         mudancas_validas_filtradas = []
