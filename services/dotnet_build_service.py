@@ -9,7 +9,7 @@ class DotNetBuildService:
     def __init__(self):
         self.secret_manager = AzureSecretManager()
 
-    def build_project(self, job_id: str, repository_type: str, repo_name: str, branch_name: str, git_username: Optional[str] = None, git_token: Optional[str] = None) -> Dict[str, Any]:
+    def build_project(self, job_id: str, repository_type: str, repo_name: str, branch_name: str) -> Dict[str, Any]:
         print(f"[{job_id}] [DotNetBuildService] Iniciando build para repo={repo_name}, branch={branch_name}")
         result = {
             "success": False,
@@ -19,7 +19,8 @@ class DotNetBuildService:
         }
         local_dir = f"/tmp/{job_id}_{branch_name}"
         try:
-            clone_url, used_username, used_token, auth_method = self._get_clone_url(repository_type, repo_name, git_username, git_token)
+            print(f"[{job_id}] [DotNetBuildService] build_project: repository_type={repository_type}, repo_name={repo_name}, branch_name={branch_name}")
+            clone_url, used_username, used_token, auth_method = self._get_clone_url(repository_type, repo_name, job_id)
             print(f"[{job_id}] [DotNetBuildService] URL de clone construída (autenticação: {auth_method}): {clone_url.split('@')[0] + '@***' + clone_url.split('@')[-1] if '@' in clone_url else clone_url}")
             if os.path.exists(local_dir):
                 shutil.rmtree(local_dir)
@@ -65,83 +66,53 @@ class DotNetBuildService:
             raise ValueError(f"Nome do repositório Azure '{repo_name}' tem formato inválido. Esperado 'organization/project/repository'.")
         return parts[0], parts[1], parts[2]
 
-    def _get_clone_url(self, repository_type: str, repo_name: str, git_username: Optional[str] = None, git_token: Optional[str] = None):
-        used_username = git_username
-        used_token = git_token
+    def _get_azure_credentials(self, org: str, job_id: Optional[str] = None) -> (Optional[str], Optional[str], str, str):
+        secret_name = f"{org}-Azure-PAT"
+        token = None
+        used_username = None
+        used_token = None
         auth_method = ""
+        print(f"[{job_id}] [DotNetBuildService] Tentando obter token do SecretManager para org '{org}' (secret: {secret_name})")
+        try:
+            token = self.secret_manager.get_secret(secret_name)
+            if token:
+                used_username = "pat"
+                used_token = token
+                auth_method = f"SecretManager:{secret_name}"
+                print(f"[{job_id}] [DotNetBuildService] Token Azure DevOps lido do SecretManager para org '{org}' (secret: {secret_name}).")
+            else:
+                print(f"[{job_id}] [DotNetBuildService] Nenhum token retornado do SecretManager para org '{org}' (secret: {secret_name}).")
+        except Exception as e:
+            print(f"[{job_id}] [DotNetBuildService] Erro ao buscar token do SecretManager para org '{org}' (secret: {secret_name}): {e}")
+        return used_username, used_token, auth_method, secret_name
+
+    def _get_clone_url(self, repository_type: str, repo_name: str, job_id: Optional[str] = None):
+        used_username = None
+        used_token = None
+        auth_method = ""
+        secret_name = ""
         if repository_type == "azure":
             try:
                 org, project, repo = self._parse_azure_repo_name(repo_name)
             except Exception as e:
                 raise ValueError(f"Erro ao parsear repo_name Azure: {e}")
-            # Sempre tentar buscar do SecretManager antes de validar credenciais
-            secret_name = f"{org}-Azure-PAT"
-            token = None
-            try:
-                token = self.secret_manager.get_secret(secret_name)
-                if token:
-                    used_username = "pat"
-                    used_token = token
-                    auth_method = f"SecretManager:{secret_name}"
-                    print(f"[DotNetBuildService] Token Azure DevOps lido do SecretManager para org '{org}' (secret: {secret_name}).")
-                else:
-                    print(f"[DotNetBuildService] Nenhum token retornado do SecretManager para org '{org}' (secret: {secret_name}).")
-            except Exception as e:
-                print(f"[DotNetBuildService] Erro ao buscar token do SecretManager para org '{org}' (secret: {secret_name}): {e}")
-            # Se não encontrou no SecretManager, usar credenciais do payload se existirem
-            if not used_username or not used_token:
-                if git_username and git_token:
-                    used_username = git_username
-                    used_token = git_token
-                    auth_method = "payload"
+            used_username, used_token, auth_method, secret_name = self._get_azure_credentials(org, job_id)
             safe_username = quote(used_username, safe='') if used_username else ''
             safe_token = quote(used_token, safe='') if used_token else ''
             if safe_username and safe_token:
                 url = f"https://{safe_username}:{safe_token}@dev.azure.com/{org}/{project}/_git/{repo}"
-                print(f"[DotNetBuildService] URL de clone Azure DevOps com autenticação construída: https://{safe_username}:***@dev.azure.com/{org}/{project}/_git/{repo}")
+                print(f"[{job_id}] [DotNetBuildService] URL de clone Azure DevOps com autenticação construída: https://{safe_username}:***@dev.azure.com/{org}/{project}/_git/{repo}")
             else:
                 url = f"https://dev.azure.com/{org}/{project}/_git/{repo}"
-                print(f"[DotNetBuildService] URL de clone Azure DevOps sem autenticação construída: {url}")
-            # Remover validação prematura: só retorna erro se não houver credenciais DEPOIS de tentar buscar no SecretManager
+                print(f"[{job_id}] [DotNetBuildService] URL de clone Azure DevOps sem autenticação construída: {url}")
             if not safe_username or not safe_token:
                 error_msg = f"Falha ao obter credenciais. git_username/git_token não fornecidos E secret '{secret_name}' não encontrado no SecretManager."
-                print(f"[DotNetBuildService] {error_msg}")
+                print(f"[{job_id}] [DotNetBuildService] {error_msg}")
             return url, used_username, used_token, auth_method or "none"
-        if git_username and git_token:
-            safe_username = quote(git_username, safe='')
-            safe_token = quote(git_token, safe='')
-            if repository_type == "github":
-                url = f"https://{safe_username}:{safe_token}@github.com/{repo_name}.git"
-                auth_method = "payload"
-                print(f"[DotNetBuildService] Clonando repositório privado GitHub com autenticação.")
-                return url, git_username, git_token, auth_method
-            elif repository_type == "gitlab":
-                url = f"https://{safe_username}:{safe_token}@gitlab.com/{repo_name}.git"
-                auth_method = "payload"
-                print(f"[DotNetBuildService] Clonando repositório privado GitLab com autenticação.")
-                return url, git_username, git_token, auth_method
-            else:
-                url = f"https://{safe_username}:{safe_token}@{repo_name}"
-                auth_method = "payload"
-                print(f"[DotNetBuildService] Clonando repositório privado customizado com autenticação.")
-                return url, git_username, git_token, auth_method
         else:
-            if repository_type == "github":
-                url = f"https://github.com/{repo_name}.git"
-                auth_method = "public"
-                print(f"[DotNetBuildService] Clonando repositório público GitHub.")
-                return url, None, None, auth_method
-            elif repository_type == "gitlab":
-                url = f"https://gitlab.com/{repo_name}.git"
-                auth_method = "public"
-                print(f"[DotNetBuildService] Clonando repositório público GitLab.")
-                return url, None, None, auth_method
-            elif repository_type == "azure":
-                # Já tratado acima
-                pass
             url = repo_name
             auth_method = "public"
-            print(f"[DotNetBuildService] Clonando repositório customizado sem autenticação.")
+            print(f"[{job_id}] [DotNetBuildService] Clonando repositório customizado sem autenticação.")
             return url, None, None, auth_method
 
     def _parse_build_errors(self, stdout: str, stderr: str) -> List[str]:
