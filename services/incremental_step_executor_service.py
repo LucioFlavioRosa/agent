@@ -112,6 +112,19 @@ class IncrementalStepExecutorService:
             if isinstance(batch_mudancas, list):
                 conjunto_de_mudancas.extend(batch_mudancas)
         print(f"[INCREMENTAL][MERGE] conjunto_de_mudancas antes da consolidação: {json.dumps(conjunto_de_mudancas, default=str)}")
+        # PASSO 1: Normalização preventiva da chave 'caminho' em cada mudança
+        mudancas_normalizadas = []
+        for idx, mudanca in enumerate(conjunto_de_mudancas):
+            if 'caminho' not in mudanca:
+                if 'caminho_do_arquivo' in mudanca:
+                    mudanca['caminho'] = mudanca['caminho_do_arquivo']
+                    print(f"[MERGE][NORMALIZAÇÃO] Mudança {idx}: 'caminho' ausente, copiado de 'caminho_do_arquivo'.")
+                else:
+                    print(f"[MERGE][ERRO] Mudança {idx}: ambas as chaves 'caminho' e 'caminho_do_arquivo' ausentes. Mudança removida: {json.dumps(mudanca, default=str)}")
+                    continue
+            mudancas_normalizadas.append(mudanca)
+        conjunto_de_mudancas = mudancas_normalizadas
+        print(f"[INCREMENTAL][MERGE] conjunto_de_mudancas após normalização: {json.dumps(conjunto_de_mudancas, default=str)}")
         conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas)
         print(f"[INCREMENTAL][MERGE] conjunto_de_mudancas após consolidação: {json.dumps(conjunto_de_mudancas, default=str)}")
         return {
