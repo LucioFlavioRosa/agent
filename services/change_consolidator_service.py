@@ -1,41 +1,25 @@
-from typing import List, Dict, Any
+from typing import List, Dict
 
 class ChangeConsolidatorService:
     @staticmethod
-    def consolidate_changes(changes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def consolidate_changes(changes: List[Dict]) -> List[Dict]:
+        if not changes:
+            return []
         consolidated = {}
-        remove_paths = set()
         for change in changes:
-            path = change.get('caminho_do_arquivo') or change.get('path')
-            status = (change.get('status') or change.get('action') or '').upper()
-            conteudo = change.get('conteudo') or change.get('content')
-            if not path:
+            caminho = change.get('caminho') or change.get('caminho_do_arquivo')
+            if not caminho:
                 continue
-            if path in remove_paths:
-                continue
-            if path in consolidated:
-                prev = consolidated[path]
-                prev_status = (prev.get('status') or prev.get('action') or '').upper()
-                # ADICIONADO/CRIADO + MODIFICADO => manter ADICIONADO com conteúdo final
-                if prev_status in ('ADICIONADO', 'CRIADO') and status == 'MODIFICADO':
-                    prev['conteudo'] = conteudo
-                    prev['status'] = prev_status
-                    continue
-                # MODIFICADO + REMOVIDO => manter apenas REMOVIDO
-                if prev_status == 'MODIFICADO' and status == 'REMOVIDO':
-                    consolidated[path] = {
-                        **change,
-                        'status': 'REMOVIDO',
-                        'conteudo': None
-                    }
-                    continue
-                # ADICIONADO/CRIADO + REMOVIDO => remover ambas
-                if prev_status in ('ADICIONADO', 'CRIADO') and status == 'REMOVIDO':
-                    del consolidated[path]
-                    remove_paths.add(path)
-                    continue
-                # Para outros casos, a última operação prevalece
-                consolidated[path] = {**change, 'status': status, 'conteudo': conteudo}
+            status = change.get('status')
+            if caminho in consolidated:
+                existing = consolidated[caminho]
+                if status == 'MODIFICADO' and existing.get('status') == 'MODIFICADO':
+                    # Mesclar conteúdos (mantém o último conteúdo)
+                    existing['conteudo'] = change.get('conteudo', existing.get('conteudo'))
+                    existing['justificativa'] = change.get('justificativa', existing.get('justificativa'))
+                else:
+                    # Para outros status, mantém a última ocorrência
+                    consolidated[caminho] = change
             else:
-                consolidated[path] = {**change, 'status': status, 'conteudo': conteudo}
-        return [v for k, v in consolidated.items() if k not in remove_paths]
+                consolidated[caminho] = change
+        return list(consolidated.values())
