@@ -52,9 +52,10 @@ class IncrementalStepExecutorService:
                     group_steps_sorted = sorted(group_steps, key=lambda x: int(x.get('Passo #', '0')))
                 except Exception:
                     group_steps_sorted = group_steps
+                # Garantir que todos os passos do mesmo arquivo estejam juntos no mesmo batch
                 if max_steps_per_batch is not None and max_steps_per_batch > 0:
-                    for i in range(0, len(group_steps_sorted), max_steps_per_batch):
-                        batches.append(group_steps_sorted[i:i+max_steps_per_batch])
+                    # Se o grupo excede o tamanho máximo, ainda assim mantenha todos juntos
+                    batches.append(group_steps_sorted)
                 else:
                     batches.append(group_steps_sorted)
         else:
