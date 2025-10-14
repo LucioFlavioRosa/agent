@@ -177,8 +177,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
         dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
         self.job_handler.update_job_status(job_id, 'committing_to_github')
-        self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
-        print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
+        commit_result = self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+        branch_name = None
+        if isinstance(commit_result, dict):
+            if 'branch_name' in commit_result:
+                branch_name = commit_result['branch_name']
+            elif 'branch' in commit_result:
+                print(f"[WorkflowOrchestrator][WARNING] Resposta do committer contém chave 'branch' (formato antigo). Considere atualizar para 'branch_name'.")
+                branch_name = commit_result['branch']
+        print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}, branch_name: {branch_name}")
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
             print(f"[{job_id}] [FINALIZE] Consolidando build_errors de {len(commit_details)} commits")
@@ -197,7 +204,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_info['data']['build_errors'] = None
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
-        # Validação adicional para commit_details
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
             for idx, commit in enumerate(commit_details):
