@@ -95,12 +95,6 @@ def processar_branch_azure(
             caminho = mudanca["caminho"]
             status = mudanca["status"]
             conteudo = mudanca["conteudo"]
-            # VERIFICACAO E CONVERSAO DE STATUS MODIFICADO PARA ADICIONADO CASO O ARQUIVO NAO EXISTA NA BRANCH DE DESTINO
-            if status == "MODIFICADO":
-                get_item_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho}&versionDescriptor.version={nome_branch}&api-version=7.0"
-                item_response = requests.get(get_item_url, headers=headers, timeout=30)
-                if item_response.status_code != 200:
-                    status = "ADICIONADO"
             change_item = {
                 "item": {"path": f"/{caminho}"}
             }
