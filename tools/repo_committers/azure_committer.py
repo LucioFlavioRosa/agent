@@ -7,20 +7,13 @@ from tools.conectores.azure_conector import AzureConector
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
 from tools.repo_committers.azure_pr_url_builder import build_pr_ui_url
 from tools.repo_committers.path_normalizer import PathNormalizer
+from tools.repo_committers.path_deduplicator import PathDeduplicator
 import json
 import random
 import string
 
 def _gerar_sufixo_aleatorio(tamanho=6):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=tamanho))
-
-def _deduplicar_mudancas_por_arquivo(mudancas_validas):
-    arquivo_para_mudanca = {}
-    for mudanca in mudancas_validas:
-        caminho = mudanca.get("caminho")
-        if caminho:
-            arquivo_para_mudanca[caminho] = mudanca  # mantém a última ocorrência
-    return list(arquivo_para_mudanca.values())
 
 def _build_commit_ui_url(organization: str, project: str, repo_name: str, commit_id: str) -> str:
     return f"https://dev.azure.com/{organization}/{project}/_git/{repo_name}/commit/{commit_id}"
@@ -97,12 +90,17 @@ def processar_branch_azure(
             raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
         changes = []
         mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
-        mudancas_validas = _deduplicar_mudancas_por_arquivo(mudancas_validas)
+        # Normalizar todos os caminhos das mudanças
+        for mudanca in mudancas_validas:
+            if "caminho" in mudanca:
+                mudanca["caminho"] = PathNormalizer.normalize(mudanca["caminho"])
+        # Deduplicar mudanças por caminho
+        mudancas_validas = PathDeduplicator.deduplicate_changes(mudancas_validas)
         for mudanca in mudancas_validas:
             caminho = mudanca["caminho"]
             status = mudanca["status"]
             conteudo = mudanca["conteudo"]
-            normalized_path = PathNormalizer.normalize(caminho)
+            normalized_path = caminho
             change_item = {
                 "item": {"path": normalized_path}
             }
