@@ -43,27 +43,38 @@ class IncrementalStepExecutorService:
             print(f"[INCREMENTAL] Nenhum step encontrado no relatório para batching.")
             return []
         print(f"[INCREMENTAL] {len(steps)} steps parseados do relatório.")
-        batches = []
-        arquivo_para_batch_index = {}
+        # Nova lógica: agrupar todos os steps de um mesmo arquivo em um único batch
+        arquivo_para_steps = {}
         for idx, step in enumerate(steps):
             step_path = StepDependencyAnalyzer._normalize_path(step.get('Caminho do Arquivo', ''))
-            print(f"[INCREMENTAL][DEBUG] Iteração {idx}: step_path='{step_path}'")
-            if step_path and step_path in arquivo_para_batch_index:
-                batch_idx = arquivo_para_batch_index[step_path]
-                batches[batch_idx].append(step)
-                print(f"[INCREMENTAL][BATCHING] Step {idx+1} adicionado ao batch existente {batch_idx} para arquivo '{step_path}'")
+            if not step_path:
                 continue
-            # Tentar adicionar ao batch atual se não estourar o limite e não há conflito de arquivos
-            if batches and len(batches[-1]) < max_steps_per_batch:
-                batches[-1].append(step)
-                if step_path:
-                    arquivo_para_batch_index[step_path] = len(batches) - 1
-                print(f"[INCREMENTAL][DEBUG] Step {idx+1} adicionado ao batch atual {len(batches)-1}, tamanho atual: {len(batches[-1])}")
-            else:
-                batches.append([step])
-                if step_path:
-                    arquivo_para_batch_index[step_path] = len(batches) - 1
-                print(f"[INCREMENTAL][DEBUG] Novo batch {len(batches)-1} iniciado com step {idx+1}, arquivo: '{step_path}'")
+            if step_path not in arquivo_para_steps:
+                arquivo_para_steps[step_path] = []
+            arquivo_para_steps[step_path].append(step)
+        batches = []
+        arquivo_para_batch_index = {}
+        # Primeiro, para cada arquivo, coloque todos os steps desse arquivo juntos em um batch
+        for arquivo, steps_arquivo in arquivo_para_steps.items():
+            print(f"[INCREMENTAL][BATCHING] Agrupando {len(steps_arquivo)} steps do arquivo '{arquivo}' em um batch.")
+            batches.append(steps_arquivo)
+            arquivo_para_batch_index[arquivo] = len(batches) - 1
+        # Agora, adicione steps de arquivos não mapeados (caso existam steps sem caminho ou não agrupados)
+        steps_usados = set()
+        for steps_arquivo in arquivo_para_steps.values():
+            for s in steps_arquivo:
+                steps_usados.add(id(s))
+        outros_steps = [s for s in steps if id(s) not in steps_usados]
+        if outros_steps:
+            print(f"[INCREMENTAL][BATCHING] Encontrados {len(outros_steps)} steps sem arquivo agrupado. Distribuindo em batches.")
+            current_batch = []
+            for s in outros_steps:
+                current_batch.append(s)
+                if len(current_batch) >= max_steps_per_batch:
+                    batches.append(current_batch)
+                    current_batch = []
+            if current_batch:
+                batches.append(current_batch)
         print(f"[INCREMENTAL] {len(batches)} batches criados.")
         return batches
 
