@@ -14,6 +14,14 @@ import string
 def _gerar_sufixo_aleatorio(tamanho=6):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=tamanho))
 
+def _truncate_pr_title(title: str, max_length: int = 200) -> str:
+    if title is None:
+        return ""
+    if len(title) > max_length:
+        print(f"[azure_committer][WARN] Título do PR excede {max_length} caracteres. Será truncado.")
+        return title[:max_length].rstrip() + "..."
+    return title
+
 def _deduplicar_mudancas_por_arquivo(mudancas_validas):
     arquivo_para_mudanca = {}
     for mudanca in mudancas_validas:
@@ -70,7 +78,6 @@ def processar_branch_azure(
         source_commit_id = refs_data_origem['value'][0]['objectId']
         print(f"[DEBUG][AZURE] Commit ID da branch origem: {source_commit_id}")
         current_commit_id = ""
-        # Verifica explicitamente se a branch já existe
         refs_url_destino = f"{base_url}/git/repositories/{repository_id}/refs?filter=heads/{nome_branch}&api-version=7.0"
         refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
         refs_response_destino.raise_for_status()
@@ -90,7 +97,6 @@ def processar_branch_azure(
             branch_response = requests.post(create_branch_url, headers=headers, json=create_branch_payload, timeout=30)
             print(f"[LOG][AZURE] branch_response.status_code: {branch_response.status_code}, branch_response.text: {branch_response.text}")
             if branch_response.status_code in [200, 201]:
-                # Confirmar se a branch foi criada
                 refs_response_destino = requests.get(refs_url_destino, headers=headers, timeout=30)
                 refs_response_destino.raise_for_status()
                 refs_data_destino = refs_response_destino.json()
@@ -220,11 +226,12 @@ def processar_branch_azure(
         tentativas = 0
         while tentativas < 2:
             try:
+                mensagem_pr_truncada = _truncate_pr_title(mensagem_pr, 200)
                 pr_url = f"{base_url}/git/repositories/{repository_id}/pullrequests?api-version=7.0"
                 pr_payload = {
                     "sourceRefName": f"refs/heads/{nome_branch}",
                     "targetRefName": f"refs/heads/{branch_alvo_do_pr}",
-                    "title": mensagem_pr,
+                    "title": mensagem_pr_truncada,
                     "description": descricao_pr
                 }
                 pr_response = requests.post(pr_url, headers=headers, json=pr_payload, timeout=30)
