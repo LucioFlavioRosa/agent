@@ -13,6 +13,14 @@ class CommitHandler:
         self.conexao_geral_factory = conexao_geral_factory or ConexaoGeral.create_with_defaults
         self.dotnet_build_service = dotnet_build_service or DotNetBuildService()
     
+    def _truncate_pr_title(self, title: str, max_length: int = 200) -> str:
+        if title is None:
+            return ""
+        if len(title) > max_length:
+            print(f"[CommitHandler][WARN] Título do PR excede {max_length} caracteres. Será truncado.")
+            return title[:max_length].rstrip() + "..."
+        return title
+    
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
                       repository_type: str, repo_name: str, usuario_executor=None) -> None:
         print(f"[{job_id}] [DEBUG] INICIO execute_commits: executar_build_dotnet={job_info.get('data', {}).get('executar_build_dotnet')}")
@@ -155,7 +163,9 @@ class CommitHandler:
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
-                print(f"[{job_id}] [LOG] Processando grupo {i+1}/{len(grupos)}: titulo='{grupo_titulo}', branch_sugerida='{branch_sugerida}', num_mudancas={len(grupo.get('conjunto_de_mudancas', []))}")
+                # PASSO 1: Truncar o título do PR para no máximo 200 caracteres
+                grupo_titulo_truncado = self._truncate_pr_title(grupo_titulo, 200)
+                print(f"[{job_id}] [LOG] Processando grupo {i+1}/{len(grupos)}: titulo='{grupo_titulo_truncado}', branch_sugerida='{branch_sugerida}', num_mudancas={len(grupo.get('conjunto_de_mudancas', []))}")
                 try:
                     conjunto_de_mudancas = grupo.get("conjunto_de_mudancas", [])
                     if not isinstance(conjunto_de_mudancas, list):
@@ -197,7 +207,7 @@ class CommitHandler:
                         nome_branch=branch_sugerida,
                         branch_de_origem=branch_base_para_pr,
                         branch_alvo_do_pr=branch_base_para_pr,
-                        mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
+                        mensagem_pr=grupo_titulo_truncado,
                         descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
                         conjunto_de_mudancas=mudancas_validas,
                         repository_type=repository_type,
