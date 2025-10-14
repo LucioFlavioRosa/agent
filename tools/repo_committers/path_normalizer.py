@@ -4,6 +4,6 @@ class PathNormalizer:
         if not isinstance(path, str):
             return ''
         clean = path.strip().lstrip('/')
-        if not clean:
-            return ''
-        return '/' + clean
+        if clean:
+            return '/' + clean
+        return ''
