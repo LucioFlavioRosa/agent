@@ -90,11 +90,17 @@ def processar_branch_azure(
             raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
         changes = []
         mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
-        # Normalizar todos os caminhos das mudanças
+        mudancas_filtradas = []
+        for mudanca in mudancas_validas:
+            caminho = mudanca.get("caminho")
+            if not caminho:
+                print(f"[WARN][AZURE] Mudança sem caminho válido detectada e ignorada: {mudanca}")
+                continue
+            mudancas_filtradas.append(mudanca)
+        mudancas_validas = mudancas_filtradas
         for mudanca in mudancas_validas:
             if "caminho" in mudanca:
                 mudanca["caminho"] = PathNormalizer.normalize(mudanca["caminho"])
-        # Deduplicar mudanças por caminho
         mudancas_validas = PathDeduplicator.deduplicate_changes(mudancas_validas)
         for mudanca in mudancas_validas:
             caminho = mudanca["caminho"]
