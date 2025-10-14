@@ -56,8 +56,8 @@ def processar_branch_github(
             try:
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
-            except UnknownObjectException:
-                status = "ADICIONADO"
+            except Exception:
+                continue
         try:
             if status in ("ADICIONADO", "CRIADO"):
                 if not sha_arquivo_existente:
