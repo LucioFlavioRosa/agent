@@ -2,6 +2,7 @@ from typing import List, Dict, Optional
 from services.step_dependency_analyzer import StepDependencyAnalyzer
 from services.change_consolidator_service import ChangeConsolidatorService
 from tools.repo_committers.path_deduplicator import PathDeduplicator
+from services.path_grouping_strategy import PathGroupingStrategy
 import re
 
 class IncrementalStepExecutorService:
@@ -37,29 +38,45 @@ class IncrementalStepExecutorService:
         return result
 
     @staticmethod
-    def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3) -> List[List[Dict]]:
+    def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3, grouping_strategy: str = 'by_path') -> List[List[Dict]]:
         steps = IncrementalStepExecutorService.parse_report_table(report_text)
         if not steps:
             print(f"[INCREMENTAL] Nenhum step encontrado no relatório para batching.")
             return []
         print(f"[INCREMENTAL] {len(steps)} steps parseados do relatório.")
         batches = []
-        current_batch = []
-        for step in steps:
-            if not current_batch:
-                current_batch.append(step)
-            else:
-                dependent = any(
-                    StepDependencyAnalyzer.are_steps_dependent(step, prev_step)
-                    for prev_step in current_batch
-                )
-                if len(current_batch) < max_steps_per_batch and not dependent:
+        if grouping_strategy == 'by_path':
+            grouped = PathGroupingStrategy.group_steps_by_path(steps)
+            for group_steps in grouped.values():
+                # Ordenar por Passo # (caso exista)
+                try:
+                    group_steps_sorted = sorted(group_steps, key=lambda x: int(x.get('Passo #', '0')))
+                except Exception:
+                    group_steps_sorted = group_steps
+                # Respeitar max_steps_per_batch
+                if max_steps_per_batch is not None and max_steps_per_batch > 0:
+                    for i in range(0, len(group_steps_sorted), max_steps_per_batch):
+                        batches.append(group_steps_sorted[i:i+max_steps_per_batch])
+                else:
+                    batches.append(group_steps_sorted)
+        else:
+            # fallback para lógica antiga (dependência)
+            current_batch = []
+            for step in steps:
+                if not current_batch:
                     current_batch.append(step)
                 else:
-                    batches.append(current_batch)
-                    current_batch = [step]
-        if current_batch:
-            batches.append(current_batch)
+                    dependent = any(
+                        StepDependencyAnalyzer.are_steps_dependent(step, prev_step)
+                        for prev_step in current_batch
+                    )
+                    if len(current_batch) < max_steps_per_batch and not dependent:
+                        current_batch.append(step)
+                    else:
+                        batches.append(current_batch)
+                        current_batch = [step]
+            if current_batch:
+                batches.append(current_batch)
         print(f"[INCREMENTAL] {len(batches)} batches criados.")
         return batches
 
