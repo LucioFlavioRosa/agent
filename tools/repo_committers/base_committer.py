@@ -1,54 +1,57 @@
-from typing import List, Dict, Any
-
 class BaseCommitter:
     @staticmethod
-    def _inicializar_resultado_branch(nome_branch: str) -> Dict[str, Any]:
+    def _inicializar_resultado_branch(nome_branch):
         return {
-            "branch": nome_branch,
-            "commit_url": None,
-            "pr_url": None,
-            "success": False,
-            "error": None,
-            "message": None
+            'branch_name': nome_branch,
+            'commit_url': None,
+            'pr_url': None,
+            'message': None,
+            'success': False,
+            'error': None
         }
 
     @staticmethod
-    def _finalizar_resultado_sucesso(resultado_branch: Dict[str, Any], pr_url: str = None, message: str = None):
-        resultado_branch["success"] = True
+    def _finalizar_resultado_sucesso(resultado_branch, pr_url=None, message=None):
+        resultado_branch['success'] = True
         if pr_url:
-            resultado_branch["pr_url"] = pr_url
+            resultado_branch['pr_url'] = pr_url
         if message:
-            resultado_branch["message"] = message
+            resultado_branch['message'] = message
+        if 'branch_name' not in resultado_branch:
+            raise ValueError("Resultado de branch deve conter a chave 'branch_name'")
+        return resultado_branch
 
     @staticmethod
-    def _finalizar_resultado_erro(resultado_branch: Dict[str, Any], error: str):
-        resultado_branch["success"] = False
-        resultado_branch["error"] = error
+    def _finalizar_resultado_erro(resultado_branch, error_message):
+        resultado_branch['success'] = False
+        resultado_branch['error'] = error_message
+        if 'branch_name' not in resultado_branch:
+            raise ValueError("Resultado de branch deve conter a chave 'branch_name'")
+        return resultado_branch
 
     @staticmethod
-    def _validate_no_duplicate_paths(conjunto_de_mudancas: List[Dict]):
-        seen = set()
+    def _validate_no_duplicate_paths(conjunto_de_mudancas):
+        paths = set()
         for mudanca in conjunto_de_mudancas:
-            caminho = mudanca.get("caminho")
-            if caminho in seen:
-                raise ValueError(f"Caminho duplicado detectado no conjunto_de_mudancas: {caminho}")
-            seen.add(caminho)
+            caminho = mudanca.get('caminho')
+            if caminho in paths:
+                raise ValueError(f"Mudança duplicada detectada para o caminho: {caminho}")
+            paths.add(caminho)
 
     @staticmethod
-    def _validate_commit_url(commit_url: str) -> bool:
-        return isinstance(commit_url, str) and commit_url.startswith("https://") and "/commit/" in commit_url
-
-    @staticmethod
-    def _mesclar_conteudo(conteudo_existente: str, conteudo_novo: str) -> str:
-        return conteudo_novo if conteudo_novo is not None else conteudo_existente
-
-    @staticmethod
-    def _processar_mudancas_comuns(conjunto_de_mudancas: List[Dict], resultado_branch: Dict[str, Any]) -> List[Dict]:
-        mudancas_processadas = []
-        from tools.repo_committers.path_normalizer import PathNormalizer
+    def _processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch):
+        # Mantém apenas mudanças válidas (com caminho e status)
+        mudancas_validas = []
         for mudanca in conjunto_de_mudancas:
-            nova_mudanca = mudanca.copy()
-            if "caminho" in nova_mudanca:
-                nova_mudanca["caminho"] = PathNormalizer.normalize(nova_mudanca["caminho"])
-            mudancas_processadas.append(nova_mudanca)
-        return mudancas_processadas
+            if mudanca.get('caminho') and mudanca.get('status'):
+                mudancas_validas.append(mudanca)
+        return mudancas_validas
+
+    @staticmethod
+    def _validate_commit_url(url):
+        return url and isinstance(url, str) and url.startswith('http')
+
+    @staticmethod
+    def _mesclar_conteudo(conteudo_existente, conteudo_novo):
+        # Estratégia simplificada: prioriza o conteúdo novo
+        return conteudo_novo
