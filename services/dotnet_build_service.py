@@ -7,7 +7,7 @@ class DotNetBuildService:
     def __init__(self):
         pass
 
-    def build_project(self, job_id: str, repository_type: str, repo_name: str, branch_name: str) -> Dict[str, Any]:
+    def build_project(self, job_id: str, repository_type: str, repo_name: str, branch_name: str, access_token: Optional[str] = None) -> Dict[str, Any]:
         print(f"[{job_id}] [DotNetBuildService] Iniciando build para repo={repo_name}, branch={branch_name}")
         result = {
             "success": False,
@@ -17,7 +17,7 @@ class DotNetBuildService:
         }
         local_dir = f"/tmp/{job_id}_{branch_name}"
         try:
-            clone_url = self._get_clone_url(repository_type, repo_name)
+            clone_url = self._get_clone_url(repository_type, repo_name, access_token)
             if os.path.exists(local_dir):
                 shutil.rmtree(local_dir)
             clone_cmd = ["git", "clone", "--branch", branch_name, clone_url, local_dir]
@@ -46,13 +46,25 @@ class DotNetBuildService:
         print(f"[{job_id}] [DotNetBuildService] Build finalizado. success={result['success']}, errors={len(result['errors'])}")
         return result
 
-    def _get_clone_url(self, repository_type: str, repo_name: str) -> str:
+    def _get_clone_url(self, repository_type: str, repo_name: str, access_token: Optional[str] = None) -> str:
         if repository_type == "azure":
-            return f"https://dev.azure.com/{repo_name}"
+            base_url = f"dev.azure.com/{repo_name}"
+            if access_token:
+                return f"https://{access_token}@{base_url}"
+            else:
+                return f"https://{base_url}"
         elif repository_type == "github":
-            return f"https://github.com/{repo_name}.git"
+            base_url = f"github.com/{repo_name}.git"
+            if access_token:
+                return f"https://{access_token}@{base_url}"
+            else:
+                return f"https://{base_url}"
         elif repository_type == "gitlab":
-            return f"https://gitlab.com/{repo_name}.git"
+            base_url = f"gitlab.com/{repo_name}.git"
+            if access_token:
+                return f"https://{access_token}@{base_url}"
+            else:
+                return f"https://{base_url}"
         return repo_name
 
     def _parse_build_errors(self, stdout: str, stderr: str) -> List[str]:
