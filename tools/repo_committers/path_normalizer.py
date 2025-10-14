@@ -4,6 +4,8 @@ import re
 class PathNormalizer:
     @staticmethod
     def normalize(path: str) -> str:
+        if path is None:
+            raise ValueError("Path cannot be None")
         if not path or not isinstance(path, str):
             return ''
         path = path.replace('\\', '/').replace('//', '/')
@@ -23,6 +25,8 @@ class PathNormalizer:
 
     @staticmethod
     def normalize_for_grouping(path: str) -> str:
+        if path is None:
+            raise ValueError("Path cannot be None")
         if not path or not isinstance(path, str):
             return ''
         path = path.replace('`', '')
