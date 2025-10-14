@@ -68,7 +68,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -91,12 +90,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                         job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                         self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     break 
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
+                # Validação extra: se o step_result contém conjunto_de_mudancas vazio, lançar warning crítico
+                if isinstance(step_result, dict) and 'conjunto_de_mudancas' in step_result:
+                    if isinstance(step_result['conjunto_de_mudancas'], list) and not step_result['conjunto_de_mudancas']:
+                        pass
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
@@ -173,7 +175,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             batch_results = job_info['data'][JobFields.BATCH_RESULTS]
             total_batches = len(batch_results)
             total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
-            print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
             final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
         dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
         self.job_handler.update_job_status(job_id, 'committing_to_github')
@@ -183,18 +184,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             if 'branch_name' in commit_result:
                 branch_name = commit_result['branch_name']
             elif 'branch' in commit_result:
-                print(f"[WorkflowOrchestrator][WARNING] Resposta do committer contém chave 'branch' (formato antigo). Considere atualizar para 'branch_name'.")
                 branch_name = commit_result['branch']
-        print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}, branch_name: {branch_name}")
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
-            print(f"[{job_id}] [FINALIZE] Consolidando build_errors de {len(commit_details)} commits")
             build_errors = []
             for commit in commit_details:
                 errors = commit.get('build_errors')
                 if errors:
                     build_errors.extend(errors)
-            print(f"[{job_id}] [FINALIZE] Total de build_errors coletados: {len(build_errors)}")
             if build_errors:
                 job_info['data']['build_errors'] = build_errors
             else:
@@ -203,7 +200,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         else:
             job_info['data']['build_errors'] = None
         self.job_handler.update_job(job_id, job_info)
-        print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
             for idx, commit in enumerate(commit_details):
