@@ -14,17 +14,21 @@ from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
+from services.dotnet_build_service import DotNetBuildService
+from tools.azure_secret_manager import AzureSecretManager
+
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
                  job_handler: JobHandler = None, report_handler: ReportHandler = None,
-                 commit_handler: CommitHandler = None, data_formatter: DataFormatter = None):
+                 commit_handler: CommitHandler = None, data_formatter: DataFormatter = None, secret_manager: Optional[Any] = None):
         self.workflow_registry = workflow_registry
         self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
         self.job_handler = job_handler or JobHandler(job_manager)
         self.report_handler = report_handler or ReportHandler(blob_storage)
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
+        self.secret_manager = secret_manager or AzureSecretManager()
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
@@ -183,11 +187,18 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             commit_details = job_info['data'].get('commit_details', [])
             print(f"[{job_id}] [FINALIZE] Consolidando build_errors de {len(commit_details)} commits")
             build_errors = []
-            for commit in commit_details:
+            for idx, commit in enumerate(commit_details):
+                branch_name = commit.get('branch_name')
+                repo_name_commit = commit.get('repo_name', repo_name)
+                token = self._get_access_token(repository_type, repo_name_commit)
+                dotnet_build_service = DotNetBuildService()
+                build_result = dotnet_build_service.build_project(job_id, repository_type, repo_name_commit, branch_name, access_token=token)
+                commit['build_result'] = build_result
+                if not build_result.get('success'):
+                    commit['build_errors'] = build_result.get('errors')
                 errors = commit.get('build_errors')
                 if errors:
                     build_errors.extend(errors)
-            print(f"[{job_id}] [FINALIZE] Total de build_errors coletados: {len(build_errors)}")
             if build_errors:
                 job_info['data']['build_errors'] = build_errors
             else:
@@ -197,7 +208,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_info['data']['build_errors'] = None
         self.job_handler.update_job(job_id, job_info)
         print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
-        # Validação adicional para commit_details
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
             for idx, commit in enumerate(commit_details):
@@ -206,3 +216,29 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if 'build_errors' not in commit:
                     print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
         self.job_handler.update_job_status(job_id, 'completed')
+
+    def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
+        if repository_type == 'azure':
+            parts = repo_name.split('/')
+            if len(parts) != 3:
+                raise ValueError(f"Nome do repositório '{repo_name}' tem formato inválido para Azure.")
+            org_name = parts[0]
+            platform = 'Azure'
+        elif repository_type == 'github':
+            org_name = repo_name.strip().split('/')[0]
+            platform = 'GitHub'
+        elif repository_type == 'gitlab':
+            org_name = repo_name.strip().split('/')[0]
+            platform = 'GitLab'
+        else:
+            raise ValueError(f"Tipo de repositório '{repository_type}' não suportado para obtenção de token.")
+        token_secret_name = f"{platform.lower()}-token-{org_name}"
+        try:
+            token = self.secret_manager.get_secret(token_secret_name)
+            return token
+        except Exception:
+            try:
+                token = self.secret_manager.get_secret(f"{platform.lower()}-token")
+                return token
+            except Exception:
+                raise ValueError(f"Não foi possível obter token para {platform} ({org_name})")
