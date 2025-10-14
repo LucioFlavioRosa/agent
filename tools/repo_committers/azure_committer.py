@@ -6,6 +6,7 @@ from tools.repo_committers.base_committer import BaseCommitter
 from tools.conectores.azure_conector import AzureConector
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
 from tools.repo_committers.azure_pr_url_builder import build_pr_ui_url
+from tools.repo_committers.path_normalizer import PathNormalizer
 import json
 import random
 import string
@@ -101,15 +102,16 @@ def processar_branch_azure(
             caminho = mudanca["caminho"]
             status = mudanca["status"]
             conteudo = mudanca["conteudo"]
+            normalized_path = PathNormalizer.normalize(caminho)
             change_item = {
-                "item": {"path": f"/{caminho}"}
+                "item": {"path": normalized_path}
             }
             if status in ("ADICIONADO", "CRIAR", "CRIADO"):
                 change_item["changeType"] = "add"
                 change_item["newContent"] = {"content": conteudo or "", "contentType": "rawtext"}
             elif status == "MODIFICADO":
                 if modo_adicao_incremental:
-                    get_item_url = f"{base_url}/git/repositories/{repository_id}/items?path=/{caminho}&api-version=7.0"
+                    get_item_url = f"{base_url}/git/repositories/{repository_id}/items?path={normalized_path}&api-version=7.0"
                     item_response = requests.get(get_item_url, headers=headers, timeout=30)
                     if item_response.status_code == 200:
                         conteudo_existente = item_response.text
@@ -146,6 +148,7 @@ def processar_branch_azure(
         push_attempt = 0
         commit_url = None
         commit_id = None
+        push_response = None
         while push_attempt < max_push_attempts:
             print(f"[LOG][AZURE] Realizando push tentativa {push_attempt+1} para branch '{nome_branch}' com current_commit_id: {current_commit_id}")
             push_response = requests.post(push_url, headers=headers, json=push_payload, timeout=60)
@@ -186,6 +189,9 @@ def processar_branch_azure(
             else:
                 print(f"[ERRO][AZURE] Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
                 raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
+        # NOVA LÓGICA DE TRATAMENTO DE ERRO: aborta se push falhar
+        if push_response is None or push_response.status_code not in [200, 201]:
+            raise Exception(f"Falha crítica ao enviar alterações após {max_push_attempts} tentativas. Último erro: {push_response.status_code if push_response else 'SEM RESPOSTA'} - {push_response.text if push_response else ''}")
         if commit_url and BaseCommitter._validate_commit_url(commit_url):
             resultado_branch['commit_url'] = commit_url
         else:
