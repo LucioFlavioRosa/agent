@@ -51,9 +51,9 @@ def processar_branch_gitlab(
             commit_id = None
             if status == "MODIFICADO":
                 try:
-                    repo.files.get(file_path=caminho, ref=nome_branch)
+                    arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
                 except Exception:
-                    status = "ADICIONADO"
+                    continue
             try:
                 if status in ("ADICIONADO", "CRIADO"):
                     dados_criacao = {
