@@ -10,6 +10,8 @@ class DataFormatter:
         resumo_geral = final_result.get("resumo_geral", "")
         conjunto_de_mudancas = final_result.get("conjunto_de_mudancas", [])
         conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas)
+        if not conjunto_de_mudancas:
+            raise ValueError(f"Conjunto de mudanças vazio após formatação. Verifique a saída do agente. final_result={final_result}")
         branch_sugerida_raw = resumo_geral[:50] if resumo_geral else "refatoracao-incremental"
         branch_sugerida = BranchNameSanitizer.sanitize(branch_sugerida_raw)
         titulo_pr = resumo_geral[:72] if resumo_geral else "Refatoração incremental"
