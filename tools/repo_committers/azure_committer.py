@@ -189,7 +189,6 @@ def processar_branch_azure(
             else:
                 print(f"[ERRO][AZURE] Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
                 raise Exception(f"Erro ao fazer push (commit): {push_response.status_code} - {push_response.text}")
-        # NOVA LÓGICA DE TRATAMENTO DE ERRO: aborta se push falhar
         if push_response is None or push_response.status_code not in [200, 201]:
             raise Exception(f"Falha crítica ao enviar alterações após {max_push_attempts} tentativas. Último erro: {push_response.status_code if push_response else 'SEM RESPOSTA'} - {push_response.text if push_response else ''}")
         if commit_url and BaseCommitter._validate_commit_url(commit_url):
