@@ -68,8 +68,19 @@ class CommitHandler:
                     raise Exception(f"Objeto repo não possui métodos esperados do GitHub")
                 if repository_type == 'gitlab' and not hasattr(repo, 'branches'):
                     raise Exception(f"Objeto repo não possui atributo 'branches' do GitLab")
-                if repository_type == 'azure' and not (hasattr(repo, 'id') or hasattr(repo, '_organization')):
-                    raise Exception(f"Objeto repo não possui atributos esperados do Azure")
+                if repository_type == 'azure':
+                    # Validação explícita dos atributos do Azure DevOps
+                    missing_attrs = []
+                    for attr in ['_organization', '_project', 'id', '_provider_type']:
+                        if not hasattr(repo, attr) or getattr(repo, attr, None) is None:
+                            missing_attrs.append(attr)
+                    print(f"[{job_id}] [DEBUG] Validação do objeto repo Azure DevOps: _organization={getattr(repo, '_organization', None)}, _project={getattr(repo, '_project', None)}, id={getattr(repo, 'id', None)}, _provider_type={getattr(repo, '_provider_type', None)}")
+                    if missing_attrs:
+                        raise Exception(f"Objeto repo do Azure DevOps está malformado. Atributos ausentes ou None: "
+                                        f"_organization={getattr(repo, '_organization', None)}, "
+                                        f"_project={getattr(repo, '_project', None)}, "
+                                        f"id={getattr(repo, 'id', None)}, "
+                                        f"_provider_type={getattr(repo, '_provider_type', None)}")
                 print(f"[{job_id}] [LOG] Conexão com repositório estabelecida com sucesso.")
             except Exception as e:
                 print(f"[{job_id}] ERRO CRÍTICO: Falha ao conectar com repositório: {str(e)}")
@@ -100,7 +111,6 @@ class CommitHandler:
                         print(f"[{job_id}] [ERRO] Branch de origem '{branch_base_para_pr}' não encontrada no GitLab: {e}")
                 elif repository_type == 'azure':
                     try:
-                        # Azure: checa via API se branch existe
                         if hasattr(repo, '_organization') and hasattr(repo, '_project') and hasattr(repo, 'id'):
                             from tools.conectores.azure_conector import AzureConector
                             connector = AzureConector.create_with_defaults()
@@ -163,7 +173,6 @@ class CommitHandler:
             for i, grupo in enumerate(grupos):
                 grupo_titulo = grupo.get('titulo_pr', f'Grupo {i+1}')
                 branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
-                # PASSO 1: Truncar o título do PR para no máximo 200 caracteres
                 grupo_titulo_truncado = self._truncate_pr_title(grupo_titulo, 200)
                 print(f"[{job_id}] [LOG] Processando grupo {i+1}/{len(grupos)}: titulo='{grupo_titulo_truncado}', branch_sugerida='{branch_sugerida}', num_mudancas={len(grupo.get('conjunto_de_mudancas', []))}")
                 try:
