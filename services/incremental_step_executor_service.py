@@ -41,9 +41,7 @@ class IncrementalStepExecutorService:
     def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3, grouping_strategy: str = 'by_path') -> List[List[Dict]]:
         steps = IncrementalStepExecutorService.parse_report_table(report_text)
         if not steps:
-            print(f"[INCREMENTAL] Nenhum step encontrado no relatório para batching.")
             return []
-        print(f"[INCREMENTAL] {len(steps)} steps parseados do relatório.")
         batches = []
         if grouping_strategy == 'by_path':
             grouped = PathGroupingStrategy.group_steps_by_path(steps)
@@ -52,9 +50,7 @@ class IncrementalStepExecutorService:
                     group_steps_sorted = sorted(group_steps, key=lambda x: int(x.get('Passo #', '0')))
                 except Exception:
                     group_steps_sorted = group_steps
-                # Garantir que todos os passos do mesmo arquivo estejam juntos no mesmo batch
                 if max_steps_per_batch is not None and max_steps_per_batch > 0:
-                    # Se o grupo excede o tamanho máximo, ainda assim mantenha todos juntos
                     batches.append(group_steps_sorted)
                 else:
                     batches.append(group_steps_sorted)
@@ -75,7 +71,6 @@ class IncrementalStepExecutorService:
                         current_batch = [step]
             if current_batch:
                 batches.append(current_batch)
-        print(f"[INCREMENTAL] {len(batches)} batches criados.")
         return batches
 
     @staticmethod
@@ -91,16 +86,19 @@ class IncrementalStepExecutorService:
             batch_mudancas = batch.get("conjunto_de_mudancas")
             if isinstance(batch_mudancas, list):
                 conjunto_de_mudancas.extend(batch_mudancas)
+            else:
+                continue
         conjunto_de_mudancas_filtrado = []
         for mudanca in conjunto_de_mudancas:
             caminho = mudanca.get('caminho')
             if caminho is None or caminho == '':
-                print(f"[ERROR][MERGE_BATCHES] Mudança inválida detectada e removida: {mudanca}")
                 continue
             conjunto_de_mudancas_filtrado.append(mudanca)
         conjunto_de_mudancas = conjunto_de_mudancas_filtrado
         conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas)
         conjunto_de_mudancas = PathDeduplicator.deduplicate_changes(conjunto_de_mudancas)
+        if not conjunto_de_mudancas:
+            raise ValueError(f"Todas as mudanças foram filtradas por serem inválidas. Verifique a saída do agente. batch_results={batch_results}")
         return {
             "resumo_geral": " ".join(resumo_geral).strip(),
             "conjunto_de_mudancas": conjunto_de_mudancas
