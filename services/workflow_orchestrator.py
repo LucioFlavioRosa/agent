@@ -95,6 +95,23 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                         job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                         self.job_handler.update_job(job_id, job_info)
+                        # INÍCIO: build incremental após commit, usando token
+                        if job_info['data'].get('executar_build_dotnet', False):
+                            commit_details = job_info['data'].get('commit_details', [])
+                            repository_type = job_info['data']['repository_type']
+                            repo_name = job_info['data']['repo_name']
+                            for idx, commit in enumerate(commit_details):
+                                branch_name = commit.get('branch_name')
+                                repo_name_commit = commit.get('repo_name', repo_name)
+                                token = self._get_access_token(repository_type, repo_name_commit)
+                                dotnet_build_service = DotNetBuildService()
+                                build_result = dotnet_build_service.build_project(job_id, repository_type, repo_name_commit, branch_name, access_token=token)
+                                commit['build_result'] = build_result
+                                if not build_result.get('success'):
+                                    commit['build_errors'] = build_result.get('errors')
+                            job_info['data']['commit_details'] = commit_details
+                            self.job_handler.update_job(job_id, job_info)
+                        # FIM: build incremental após commit
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     break 
