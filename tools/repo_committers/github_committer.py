@@ -10,6 +10,14 @@ import string
 def _gerar_sufixo_aleatorio(tamanho=6):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=tamanho))
 
+def _truncate_pr_title(title: str, max_length: int = 200) -> str:
+    if title is None:
+        return ""
+    if len(title) > max_length:
+        print(f"[github_committer][WARN] Título do PR excede {max_length} caracteres. Será truncado.")
+        return title[:max_length].rstrip() + "..."
+    return title
+
 def processar_branch_github(
     repo,
     nome_branch: str,
@@ -127,8 +135,10 @@ def processar_branch_github(
         tentativas = 0
         while tentativas < 2:
             try:
+                # PASSO 2: Truncar o título do PR para no máximo 200 caracteres
+                mensagem_pr_truncada = _truncate_pr_title(mensagem_pr, 200)
                 print(f"\nCriando Pull Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
-                pr = repo.create_pull(title=mensagem_pr, body=descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA.", head=nome_branch, base=branch_alvo_do_pr)
+                pr = repo.create_pull(title=mensagem_pr_truncada, body=descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA.", head=nome_branch, base=branch_alvo_do_pr)
                 print(f"[DEBUG][GITHUB] Tipo do objeto pr: {type(pr)}")
                 print(f"[DEBUG][GITHUB] Atributos do objeto pr: {dir(pr)}")
                 print(f"[DEBUG][GITHUB] pr.__dict__: {pr.__dict__}")
@@ -148,7 +158,6 @@ def processar_branch_github(
                     novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
                     print(f"[GITHUB][RETRY] Tentando criar PR novamente com título modificado: {novo_titulo}")
                     mensagem_pr = novo_titulo
-                    tentativas += 1
                     continue
                 else:
                     raise
@@ -175,6 +184,7 @@ def processar_branch_github(
     else:
         print(f"\nNenhum commit realizado para a branch '{nome_branch}'. Pulando criação do PR.")
         try:
+            mensagem_pr_truncada = _truncate_pr_title(mensagem_pr, 200)
             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"PR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
         except ValueError as ve:
             print(f"[ERRO][GITHUB] PR vazio mas pr_url inválido. Tentando retry com sufixo aleatório.")
