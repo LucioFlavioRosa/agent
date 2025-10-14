@@ -48,19 +48,16 @@ class IncrementalStepExecutorService:
         if grouping_strategy == 'by_path':
             grouped = PathGroupingStrategy.group_steps_by_path(steps)
             for group_steps in grouped.values():
-                # Ordenar por Passo # (caso exista)
                 try:
                     group_steps_sorted = sorted(group_steps, key=lambda x: int(x.get('Passo #', '0')))
                 except Exception:
                     group_steps_sorted = group_steps
-                # Respeitar max_steps_per_batch
                 if max_steps_per_batch is not None and max_steps_per_batch > 0:
                     for i in range(0, len(group_steps_sorted), max_steps_per_batch):
                         batches.append(group_steps_sorted[i:i+max_steps_per_batch])
                 else:
                     batches.append(group_steps_sorted)
         else:
-            # fallback para lógica antiga (dependência)
             current_batch = []
             for step in steps:
                 if not current_batch:
