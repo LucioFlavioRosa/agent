@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 class BaseCommitter:
     @staticmethod
@@ -56,7 +56,22 @@ class BaseCommitter:
         if duplicates:
             raise ValueError(f"Há arquivos duplicados na lista de mudanças: {', '.join(duplicates)}")
     @staticmethod
+    def _validate_file_exists_for_modification(mudanca: Dict, repo, branch_de_origem: str, repository_type: str) -> Tuple[bool, str]:
+        status = mudanca.get("status", "").upper()
+        caminho = mudanca.get("caminho_do_arquivo")
+        if status != "MODIFICADO" or not caminho:
+            return (True, "")
+        from tools.repo_committers.branch_source_validator import BranchSourceValidator
+        exists = BranchSourceValidator.validate_file_exists_in_branch(repo, caminho, branch_de_origem, repository_type)
+        if not exists:
+            return (False, f"Arquivo '{caminho}' não existe na branch de origem '{branch_de_origem}' para modificação. Considere usar status 'ADICIONADO' ou 'CRIADO'.")
+        return (True, "")
+    @staticmethod
     def _validate_files_exist_in_source(conjunto_de_mudancas: list, repo, branch_de_origem: str, repository_type: str):
+        for mudanca in conjunto_de_mudancas:
+            valid, msg = BaseCommitter._validate_file_exists_for_modification(mudanca, repo, branch_de_origem, repository_type)
+            if not valid:
+                return (False, msg)
         from tools.repo_committers.branch_source_validator import BranchSourceValidator
         for mudanca in conjunto_de_mudancas:
             status = mudanca.get("status", "").upper()
