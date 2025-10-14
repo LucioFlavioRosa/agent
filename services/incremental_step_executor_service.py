@@ -97,7 +97,8 @@ class IncrementalStepExecutorService:
                 print(f"[ERROR][MERGE_BATCHES] Mudança inválida detectada e removida: {mudanca}")
                 continue
             conjunto_de_mudancas_filtrado.append(mudanca)
-        conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas_filtrado)
+        conjunto_de_mudancas = conjunto_de_mudancas_filtrado
+        conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas)
         conjunto_de_mudancas = PathDeduplicator.deduplicate_changes(conjunto_de_mudancas)
         return {
             "resumo_geral": " ".join(resumo_geral).strip(),
