@@ -1,4 +1,3 @@
-from gitlab import exceptions as gitlab_exceptions
 from typing import Dict, Any, List
 from tools.repo_committers.base_committer import BaseCommitter
 from tools.repo_committers.branch_name_sanitizer import BranchNameSanitizer
@@ -9,6 +8,14 @@ import string
 
 def _gerar_sufixo_aleatorio(tamanho=6):
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=tamanho))
+
+def _truncate_pr_title(title: str, max_length: int = 200) -> str:
+    if title is None:
+        return ""
+    if len(title) > max_length:
+        print(f"[gitlab_committer][WARN] Título do MR excede {max_length} caracteres. Será truncado.")
+        return title[:max_length].rstrip() + "..."
+    return title
 
 def processar_branch_gitlab(
     repo,
@@ -33,25 +40,8 @@ def processar_branch_gitlab(
     except ValueError as ve:
         BaseCommitter._finalizar_resultado_erro(resultado_branch, str(ve))
         return resultado_branch
-    # PASSO: Garantir que a branch de destino existe ou criar explicitamente
     try:
-        branches = repo.branches.list(search=nome_branch)
-        branch_exists = any(b.name == nome_branch for b in branches)
-        if not branch_exists:
-            print(f"[GITLAB] Branch '{nome_branch}' não existe. Tentando criar a partir de '{branch_de_origem}'...")
-            try:
-                repo.branches.create({'branch': nome_branch, 'ref': branch_de_origem})
-                print(f"[GITLAB] Branch '{nome_branch}' criada com sucesso a partir de '{branch_de_origem}'.")
-            except gitlab_exceptions.GitlabCreateError as e:
-                if e.response_code == 400 and 'already exists' in str(e.error_message).lower():
-                    print(f"[GITLAB] Branch '{nome_branch}' já existe (race condition). Continuando...")
-                else:
-                    msg = f"Falha ao criar branch '{nome_branch}': {e}"
-                    print(f"[ERRO][GITLAB] {msg}")
-                    BaseCommitter._finalizar_resultado_erro(resultado_branch, msg)
-                    return resultado_branch
-        else:
-            print(f"[GITLAB] Branch '{nome_branch}' já existe. Continuando...")
+        BaseCommitter._validate_branch_exists(repo, nome_branch, 'gitlab', branch_de_origem)
     except Exception as e:
         msg = f"Falha ao validar/criar branch '{nome_branch}': {e}"
         print(f"[ERRO][GITLAB] {msg}")
@@ -70,31 +60,31 @@ def processar_branch_gitlab(
         status = mudanca["status"]
         conteudo = mudanca["conteudo"]
         try:
-            file_obj = None
+            arquivo_existente = None
             try:
-                file_obj = repo.files.get(file_path=caminho_validado, ref=nome_branch)
+                arquivo_existente = repo.files.get(file_path=caminho_validado, ref=nome_branch)
             except Exception:
-                file_obj = None
+                pass
             if status in ("ADICIONADO", "CRIADO"):
-                if file_obj:
+                if arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho_validado}' marcado como ADICIONADO já existe. Será tratado como MODIFICADO.")
                     repo.files.update(file_path=caminho_validado, branch=nome_branch, content=conteudo or "", commit_message=f"refactor: {caminho_validado}")
                 else:
-                    repo.files.create({'file_path': caminho_validado, 'branch': nome_branch, 'content': conteudo or "", 'commit_message': f"feat: {caminho_validado}"})
+                    repo.files.create(file_path=caminho_validado, branch=nome_branch, content=conteudo or "", commit_message=f"feat: {caminho_validado}")
                 print(f"  [CRIADO/MODIFICADO] {caminho_validado}")
                 commits_realizados += 1
             elif status == "MODIFICADO":
-                if not file_obj:
+                if not arquivo_existente:
                     print(f"  [ERRO] Arquivo '{caminho_validado}' marcado como MODIFICADO não foi encontrado na branch. Ignorando.")
                     continue
                 if modo_adicao_incremental:
-                    conteudo_existente = file_obj.decode().decode('utf-8') if hasattr(file_obj, 'decode') else file_obj.content
+                    conteudo_existente = arquivo_existente.decode().decode('utf-8') if hasattr(arquivo_existente, 'decode') else ""
                     conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                 repo.files.update(file_path=caminho_validado, branch=nome_branch, content=conteudo or "", commit_message=f"refactor: {caminho_validado}")
                 print(f"  [MODIFICADO] {caminho_validado}")
                 commits_realizados += 1
             elif status == "REMOVIDO":
-                if not file_obj:
+                if not arquivo_existente:
                     print(f"  [AVISO] Arquivo '{caminho_validado}' marcado como REMOVIDO já não existe. Ignorando.")
                     continue
                 repo.files.delete(file_path=caminho_validado, branch=nome_branch, commit_message=f"refactor: remove {caminho_validado}")
@@ -105,24 +95,41 @@ def processar_branch_gitlab(
         except Exception as e:
             print(f"ERRO ao processar o arquivo '{caminho_validado}': {e}")
     if commits_realizados > 0:
-        try:
-            pr = repo.mergerequests.create({
-                'source_branch': nome_branch,
-                'target_branch': branch_alvo_do_pr,
-                'title': mensagem_pr,
-                'description': descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA."
-            })
-            pr_url = getattr(pr, 'web_url', None)
-            if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
-                BaseCommitter._finalizar_resultado_erro(resultado_branch, f"MR criado mas web_url inválido: {json.dumps(pr.__dict__, default=str)}")
-            else:
-                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url.strip())
-        except Exception as e:
-            print(f"ERRO ao criar Merge Request para '{nome_branch}': {e}")
-            BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar MR: {e}")
+        tentativas = 0
+        while tentativas < 2:
+            try:
+                mensagem_pr_truncada = _truncate_pr_title(mensagem_pr, 200)
+                print(f"\nCriando Merge Request de '{nome_branch}' para '{branch_alvo_do_pr}'...")
+                mr = repo.mergerequests.create({
+                    'source_branch': nome_branch,
+                    'target_branch': branch_alvo_do_pr,
+                    'title': mensagem_pr_truncada,
+                    'description': descricao_pr or "Refatoração automática gerada pela plataforma de agentes de IA."
+                })
+                if not hasattr(mr, 'web_url') or mr.web_url is None or not isinstance(mr.web_url, str) or not mr.web_url.strip():
+                    print(f"[ERRO][GITLAB] MR criado mas web_url inválido: {json.dumps(mr.__dict__, default=str)}")
+                    BaseCommitter._finalizar_resultado_erro(resultado_branch, f"MR criado mas web_url inválido: {json.dumps(mr.__dict__, default=str)}")
+                    break
+                BaseCommitter._finalizar_resultado_sucesso(resultado_branch, mr.web_url.strip())
+                break
+            except ValueError as ve:
+                print(f"[ERRO][GITLAB] Objeto MR retornado sem web_url ou web_url inválido: {getattr(mr, 'web_url', None)}")
+                print(f"[ERRO][GITLAB] Detalhes do objeto MR: {mr.__dict__}")
+                if tentativas == 0:
+                    sufixo = _gerar_sufixo_aleatorio()
+                    novo_titulo = f"{mensagem_pr}-retry-{sufixo}"
+                    mensagem_pr = novo_titulo
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                print(f"ERRO ao criar MR para '{nome_branch}': {e}")
+                BaseCommitter._finalizar_resultado_erro(resultado_branch, f"Erro ao criar MR: {str(e)}")
+                break
     else:
         print(f"\nNenhum commit realizado para a branch '{nome_branch}'. Pulando criação do MR.")
         try:
+            mensagem_pr_truncada = _truncate_pr_title(mensagem_pr, 200)
             BaseCommitter._finalizar_resultado_sucesso(resultado_branch, pr_url=f"MR criado para branch: {nome_branch}", message="Nenhuma mudança para commitar.")
         except ValueError as ve:
             print(f"[ERRO][GITLAB] MR vazio mas pr_url inválido. Tentando retry com sufixo aleatório.")
