@@ -48,19 +48,16 @@ class IncrementalStepExecutorService:
         if grouping_strategy == 'by_path':
             grouped = PathGroupingStrategy.group_steps_by_path(steps)
             for group_steps in grouped.values():
-                # Ordenar por Passo # (caso exista)
                 try:
                     group_steps_sorted = sorted(group_steps, key=lambda x: int(x.get('Passo #', '0')))
                 except Exception:
                     group_steps_sorted = group_steps
-                # Respeitar max_steps_per_batch
                 if max_steps_per_batch is not None and max_steps_per_batch > 0:
                     for i in range(0, len(group_steps_sorted), max_steps_per_batch):
                         batches.append(group_steps_sorted[i:i+max_steps_per_batch])
                 else:
                     batches.append(group_steps_sorted)
         else:
-            # fallback para lógica antiga (dependência)
             current_batch = []
             for step in steps:
                 if not current_batch:
@@ -93,7 +90,14 @@ class IncrementalStepExecutorService:
             batch_mudancas = batch.get("conjunto_de_mudancas")
             if isinstance(batch_mudancas, list):
                 conjunto_de_mudancas.extend(batch_mudancas)
-        conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas)
+        conjunto_de_mudancas_filtrado = []
+        for mudanca in conjunto_de_mudancas:
+            caminho = mudanca.get('caminho')
+            if caminho is None or caminho == '':
+                print(f"[ERROR][MERGE_BATCHES] Mudança inválida detectada e removida: {mudanca}")
+                continue
+            conjunto_de_mudancas_filtrado.append(mudanca)
+        conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas_filtrado)
         conjunto_de_mudancas = PathDeduplicator.deduplicate_changes(conjunto_de_mudancas)
         return {
             "resumo_geral": " ".join(resumo_geral).strip(),
