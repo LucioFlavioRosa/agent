@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional
 from services.step_dependency_analyzer import StepDependencyAnalyzer
 from services.change_consolidator_service import ChangeConsolidatorService
+from tools.repo_committers.path_deduplicator import PathDeduplicator
 import re
 
 class IncrementalStepExecutorService:
@@ -76,6 +77,7 @@ class IncrementalStepExecutorService:
             if isinstance(batch_mudancas, list):
                 conjunto_de_mudancas.extend(batch_mudancas)
         conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas)
+        conjunto_de_mudancas = PathDeduplicator.deduplicate_changes(conjunto_de_mudancas)
         return {
             "resumo_geral": " ".join(resumo_geral).strip(),
             "conjunto_de_mudancas": conjunto_de_mudancas
