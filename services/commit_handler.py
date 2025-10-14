@@ -12,7 +12,6 @@ class CommitHandler:
         self.repository_provider_factory = repository_provider_factory or get_repository_provider_explicit
         self.conexao_geral_factory = conexao_geral_factory or ConexaoGeral.create_with_defaults
         self.dotnet_build_service = dotnet_build_service or DotNetBuildService()
-    
     def _truncate_pr_title(self, title: str, max_length: int = 200) -> str:
         if title is None:
             return ""
@@ -20,14 +19,12 @@ class CommitHandler:
             print(f"[CommitHandler][WARN] Título do PR excede {max_length} caracteres. Será truncado.")
             return title[:max_length].rstrip() + "..."
         return title
-    
     def execute_commits(self, job_id: str, job_info: Dict[str, Any], dados_finais_formatados: Dict[str, Any], 
                       repository_type: str, repo_name: str, usuario_executor=None) -> None:
         print(f"[{job_id}] [DEBUG] INICIO execute_commits: executar_build_dotnet={job_info.get('data', {}).get('executar_build_dotnet')}")
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
         print(f"[{job_id}] DIAGNÓSTICO - Estrutura de dados_finais_formatados recebida: {dados_finais_formatados}")
         print(f"[{job_id}] [LOG] Parâmetros de conexão: repository_type={repository_type}, repo_name={repo_name}")
-        # Validação explícita dos dados antes de prosseguir
         if not dados_finais_formatados or 'grupos' not in dados_finais_formatados or not isinstance(dados_finais_formatados['grupos'], list) or len(dados_finais_formatados['grupos']) == 0:
             print(f"[{job_id}] [ERRO] Estrutura de dados_finais_formatados inválida ou grupos vazio/malformado: {dados_finais_formatados}")
             if 'data' in job_info:
@@ -52,7 +49,6 @@ class CommitHandler:
         try:
             branch_base_para_pr = job_info['data'].get('branch_name', 'main')
             print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
-            # Validação robusta da conexão do repositório
             try:
                 repository_provider = self.repository_provider_factory(repository_type)
                 conexao_geral = self.conexao_geral_factory()
@@ -63,24 +59,36 @@ class CommitHandler:
                 )
                 if repo is None:
                     raise Exception(f"Falha ao conectar ao repositório: repo=None")
-                # Validação de métodos esperados (GitHub: get_branch, get_contents, etc)
                 if repository_type == 'github' and not (hasattr(repo, 'get_branch') and hasattr(repo, 'get_contents')):
                     raise Exception(f"Objeto repo não possui métodos esperados do GitHub")
                 if repository_type == 'gitlab' and not hasattr(repo, 'branches'):
                     raise Exception(f"Objeto repo não possui atributo 'branches' do GitLab")
                 if repository_type == 'azure':
-                    # Validação explícita dos atributos do Azure DevOps
                     missing_attrs = []
-                    for attr in ['_organization', '_project', 'id', '_provider_type']:
+                    azure_required_attrs = ['_organization', '_project', 'id', '_provider_type']
+                    for attr in azure_required_attrs:
                         if not hasattr(repo, attr) or getattr(repo, attr, None) is None:
                             missing_attrs.append(attr)
-                    print(f"[{job_id}] [DEBUG] Validação do objeto repo Azure DevOps: _organization={getattr(repo, '_organization', None)}, _project={getattr(repo, '_project', None)}, id={getattr(repo, 'id', None)}, _provider_type={getattr(repo, '_provider_type', None)}")
+                    print(f"[{job_id}] [DEBUG] Validação do objeto repo Azure DevOps: type={type(repo)}, dir={dir(repo)}, __dict__={getattr(repo, '__dict__', None)}")
+                    print(f"[{job_id}] [DEBUG] Atributos esperados: _organization={getattr(repo, '_organization', None)}, _project={getattr(repo, '_project', None)}, id={getattr(repo, 'id', None)}, _provider_type={getattr(repo, '_provider_type', None)}")
                     if missing_attrs:
-                        raise Exception(f"Objeto repo do Azure DevOps está malformado. Atributos ausentes ou None: "
-                                        f"_organization={getattr(repo, '_organization', None)}, "
-                                        f"_project={getattr(repo, '_project', None)}, "
-                                        f"id={getattr(repo, 'id', None)}, "
-                                        f"_provider_type={getattr(repo, '_provider_type', None)}")
+                        error_msg = (
+                            f"Objeto repo do Azure DevOps está malformado. Atributos ausentes ou None: "
+                            + ", ".join([f"{attr}={getattr(repo, attr, None)}" for attr in missing_attrs]) + ". "
+                            "Falha na inicialização do objeto repo pelo AzureConector. "
+                            "Verifique as variáveis de ambiente AZURE_DEVOPS_ORGANIZATION e AZURE_DEVOPS_PROJECT. "
+                            f"Detalhes do objeto: type={type(repo)}, dir={dir(repo)}, __dict__={getattr(repo, '__dict__', None)}"
+                        )
+                        print(f"[{job_id}] [ERRO] {error_msg}")
+                        job_info['data']['commit_details'] = [{
+                            "branch_name": "erro-conexao",
+                            "success": False,
+                            "pr_url": f"Erro de conexão: {error_msg}",
+                            "message": f"Erro de conexão: {error_msg}",
+                            "arquivos_modificados": [],
+                            "commit_url": None
+                        }]
+                        return
                 print(f"[{job_id}] [LOG] Conexão com repositório estabelecida com sucesso.")
             except Exception as e:
                 print(f"[{job_id}] ERRO CRÍTICO: Falha ao conectar com repositório: {str(e)}")
@@ -94,7 +102,6 @@ class CommitHandler:
                 }]
                 print(f"[{job_id}] BLINDAGEM: Erro de conexão tratado, commit_details definido")
                 return
-            # Validação da existência da branch de origem
             try:
                 branch_origem_existe = False
                 if repository_type == 'github':
@@ -272,7 +279,6 @@ class CommitHandler:
                 }]
             print(f"[{job_id}] BLINDAGEM: Erro geral tratado, commit_details garantido")
             raise e
-    
     def _validate_and_fix_pr_url(self, job_id: str, resultado_branch: Dict[str, Any], grupo_num: int) -> Dict[str, Any]:
         print(f"[DEBUG][CommitHandler] _validate_and_fix_pr_url: job_id={job_id}, grupo_num={grupo_num}, pr_url={resultado_branch.get('pr_url')}, success={resultado_branch.get('success')}, branch_name={resultado_branch.get('branch_name')}")
         pr_url = resultado_branch.get('pr_url')
@@ -293,7 +299,6 @@ class CommitHandler:
             raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
         print(f"[DEBUG][CommitHandler] _validate_and_fix_pr_url (final): pr_url={resultado_branch.get('pr_url')}")
         return resultado_branch
-    
     def _is_valid_url(self, url: str) -> bool:
         if not url or not isinstance(url, str):
             return False
