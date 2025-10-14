@@ -91,12 +91,16 @@ def processar_branch_azure(
         changes = []
         mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
         # Normalizar todos os caminhos das mudanças
+        mudancas_filtradas = []
         for mudanca in mudancas_validas:
-            if "caminho" in mudanca:
-                mudanca["caminho"] = PathNormalizer.normalize(mudanca["caminho"])
+            if not mudanca.get("caminho"):
+                print(f"[WARN][AZURE] Mudança sem caminho válido detectada e ignorada: {mudanca}")
+                continue
+            mudanca["caminho"] = PathNormalizer.normalize(mudanca["caminho"])
+            mudancas_filtradas.append(mudanca)
         # Deduplicar mudanças por caminho
-        mudancas_validas = PathDeduplicator.deduplicate_changes(mudancas_validas)
-        for mudanca in mudancas_validas:
+        mudancas_filtradas = PathDeduplicator.deduplicate_changes(mudancas_filtradas)
+        for mudanca in mudancas_filtradas:
             caminho = mudanca["caminho"]
             status = mudanca["status"]
             conteudo = mudanca["conteudo"]
