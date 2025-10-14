@@ -50,19 +50,20 @@ def processar_branch_github(
         caminho = mudanca["caminho"]
         status = mudanca["status"]
         conteudo = mudanca["conteudo"]
-        try:
-            sha_arquivo_existente = None
-            arquivo_existente = None
+        sha_arquivo_existente = None
+        arquivo_existente = None
+        if status == "MODIFICADO":
             try:
                 arquivo_existente = repo.get_contents(caminho, ref=nome_branch)
                 sha_arquivo_existente = arquivo_existente.sha
             except UnknownObjectException:
-                pass
+                status = "ADICIONADO"
+        try:
             if status in ("ADICIONADO", "CRIADO"):
-                if sha_arquivo_existente:
-                    commit_response = repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
-                else:
+                if not sha_arquivo_existente:
                     commit_response = repo.create_file(path=caminho, message=f"feat: {caminho}", content=conteudo or "", branch=nome_branch)
+                else:
+                    commit_response = repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
                 commits_realizados += 1
                 if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
                     commit_url_candidate = getattr(commit_response['commit'], 'html_url', None)
