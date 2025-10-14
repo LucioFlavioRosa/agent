@@ -13,4 +13,10 @@ class PathGroupingStrategy:
             if normalized_path not in grouped:
                 grouped[normalized_path] = []
             grouped[normalized_path].append(step)
+        # Garantir que todos os passos com o mesmo caminho estejam juntos e ordenados por Passo #
+        for group in grouped.values():
+            try:
+                group.sort(key=lambda x: int(x.get('Passo #', '0')))
+            except Exception:
+                pass
         return grouped
