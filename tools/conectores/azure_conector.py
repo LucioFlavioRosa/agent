@@ -1,33 +1,40 @@
-from typing import Dict, Union
-from domain.interfaces.secret_manager_interface import ISecretManager
-from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from tools.azure_secret_manager import AzureSecretManager
+import os
 from tools.azure_repository_provider import AzureRepositoryProvider
-from tools.conectores.base_conector import BaseConector
 
-class AzureConector(BaseConector):
-    
-    def _parse_repository_name(self, repository_name: str) -> tuple:
-        parts = repository_name.split('/')
-        if len(parts) != 3:
-            raise ValueError(
-                f"Nome do repositório Azure inválido. Formato esperado: 'organization/project/repository'. Recebido: '{repository_name}'"
-            )
-        return parts[0], parts[1], parts[2]
-    
-    def _extract_org_name(self, repositorio: str) -> str:
-        try:
-            organization, project, repo_name = self._parse_repository_name(repositorio)
-            print(f"[Azure Conector] Organização Azure extraída: {organization}")
-            return organization
-        except ValueError as e:
-            print(f"[Azure Conector] ERRO: {e}")
-            raise
-    
-    def connection(self, repositorio: str) -> Union[object]:
-        org_name = self._extract_org_name(repositorio)
-        return self._handle_repository_connection(repositorio, "Azure", org_name)
-    
+class AzureConector:
+    def __init__(self, organization=None, project=None, pat=None):
+        self.organization = organization or os.getenv('AZURE_DEVOPS_ORGANIZATION')
+        self.project = project or os.getenv('AZURE_DEVOPS_PROJECT')
+        self.pat = pat or os.getenv('AZURE_DEVOPS_PAT')
+
     @classmethod
-    def create_with_defaults(cls) -> 'AzureConector':
-        return cls(repository_provider=AzureRepositoryProvider())
+    def create_with_defaults(cls):
+        return cls()
+
+    def connection(self, repositorio, repository_type=None, repository_provider=None):
+        organization = self.organization
+        project = self.project
+        pat = self.pat
+        if not organization or not project or not pat:
+            raise Exception(f"[AzureConector] Variáveis de ambiente obrigatórias ausentes. organization={organization}, project={project}, pat={'definido' if pat else 'None'}")
+        provider = repository_provider or AzureRepositoryProvider(organization, project, pat)
+        repo = provider.get_repository(repositorio)
+        # Garantir que os atributos estejam definidos
+        if not hasattr(repo, '_organization') or repo._organization is None:
+            setattr(repo, '_organization', organization)
+        if not hasattr(repo, '_project') or repo._project is None:
+            setattr(repo, '_project', project)
+        if not hasattr(repo, '_provider_type') or repo._provider_type is None:
+            setattr(repo, '_provider_type', 'azure_devops')
+        if not hasattr(repo, 'id') or getattr(repo, 'id', None) is None:
+            # Tenta obter o id do repositório via provider
+            repo_id = getattr(repo, 'id', None)
+            if not repo_id:
+                try:
+                    repo_id = provider.get_repository_id(repositorio)
+                    setattr(repo, 'id', repo_id)
+                except Exception as e:
+                    print(f"[AzureConector] Falha ao obter id do repositório '{repositorio}': {e}")
+                    setattr(repo, 'id', None)
+        print(f"[AzureConector] Objeto repo criado: type={type(repo)}, _organization={getattr(repo, '_organization', None)}, _project={getattr(repo, '_project', None)}, id={getattr(repo, 'id', None)}, _provider_type={getattr(repo, '_provider_type', None)}")
+        return repo
