@@ -19,7 +19,6 @@ class BaseCommitter:
             status = mudanca.get("status", "").upper()
             conteudo = mudanca.get("conteudo")
             if not caminho:
-                print("  [AVISO] Mudança ignorada por não ter 'caminho_do_arquivo'.")
                 continue
             mudancas_validas.append({
                 "caminho": caminho,
@@ -31,14 +30,11 @@ class BaseCommitter:
         return mudancas_validas
     @staticmethod
     def _finalizar_resultado_sucesso(resultado_branch: Dict[str, Any], pr_url: str = None, message: str = "PR criado.") -> None:
-        print(f"[DEBUG][BaseCommitter] _finalizar_resultado_sucesso RECEBEU: pr_url={repr(pr_url)}, tipo={type(pr_url)}")
         if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
             raise ValueError(f"[ERRO][BaseCommitter] pr_url inválido recebido em _finalizar_resultado_sucesso: tipo={type(pr_url)}, valor={pr_url}, repr={repr(pr_url)}")
-        print(f"[DEBUG][BaseCommitter] _finalizar_resultado_sucesso VALIDADO COM SUCESSO: pr_url={pr_url}")
         resultado_branch["success"] = True
         resultado_branch["message"] = message
         resultado_branch["pr_url"] = pr_url.strip()
-        print(f"  [SUCESSO] PR criado: {pr_url}")
     @staticmethod
     def _finalizar_resultado_erro(resultado_branch: Dict[str, Any], error_message: str) -> None:
         resultado_branch["success"] = False
@@ -46,7 +42,6 @@ class BaseCommitter:
         if not resultado_branch.get("pr_url"):
             branch_name = resultado_branch.get("branch_name", "branch-desconhecida")
             resultado_branch["pr_url"] = f"ERRO: PR não criado para branch {branch_name}. {error_message}"
-        print(f"  [ERRO] {error_message}")
     @staticmethod
     def _mesclar_conteudo(conteudo_existente: str, novo_conteudo: str) -> str:
         if conteudo_existente is None:
@@ -60,3 +55,14 @@ class BaseCommitter:
         duplicates = set([p for p in paths if paths.count(p) > 1])
         if duplicates:
             raise ValueError(f"Há arquivos duplicados na lista de mudanças: {', '.join(duplicates)}")
+    @staticmethod
+    def _validate_files_exist_in_source(conjunto_de_mudancas: list, repo, branch_de_origem: str, repository_type: str):
+        from tools.repo_committers.branch_source_validator import BranchSourceValidator
+        for mudanca in conjunto_de_mudancas:
+            status = mudanca.get("status", "").upper()
+            caminho = mudanca.get("caminho_do_arquivo")
+            if status == "MODIFICADO" and caminho:
+                exists = BranchSourceValidator.validate_file_exists_in_branch(repo, caminho, branch_de_origem, repository_type)
+                if not exists:
+                    return (False, f"Arquivo '{caminho}' não existe na branch de origem '{branch_de_origem}' para o tipo de repositório '{repository_type}'.")
+        return (True, "")
