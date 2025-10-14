@@ -41,6 +41,9 @@ def processar_branch_azure(
     except ValueError as ve:
         BaseCommitter._finalizar_resultado_erro(resultado_branch, str(ve))
         return resultado_branch
+    mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
+    if not mudancas_validas:
+        raise ValueError(f"Tentativa de commit com conjunto de mudanças vazio. Verifique a saída do agente e a formatação dos dados. conjunto_de_mudancas={conjunto_de_mudancas}")
     try:
         organization = repo['_organization']
         project = repo['_project']
@@ -89,7 +92,6 @@ def processar_branch_azure(
             print(f"[ERRO][AZURE] Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
             raise Exception(f"Erro ao criar branch: {branch_response.status_code} - {branch_response.text}")
         changes = []
-        mudancas_validas = BaseCommitter._processar_mudancas_comuns(conjunto_de_mudancas, resultado_branch)
         mudancas_filtradas = []
         for mudanca in mudancas_validas:
             caminho = mudanca.get("caminho")
