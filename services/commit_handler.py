@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from tools.conectores.conexao_geral import ConexaoGeral
 from tools.repo_committers.orchestrator import processar_branch_por_provedor
 from tools.repository_provider_factory import get_repository_provider_explicit
