@@ -1,32 +1,22 @@
 import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
-
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
 
 class AgenteRevisor:
-
-    def __init__(
-        self,
-        repository_reader: IRepositoryReader,
-        llm_provider: ILLMProvider
-    ):
+    def __init__(self, repository_reader: IRepositoryReader, llm_provider: ILLMProvider):
         self.repository_reader = repository_reader
         self.llm_provider = llm_provider
         init_logger()
-
-    def _get_code(
-        self,
-        repositorio: str,
-        nome_branch: Optional[str],
-        tipo_analise: str,
-        repository_type: str,
-        arquivos_especificos: Optional[List[str]] = None,
-        retornar_lista_arquivos: bool = False
-    ) -> Dict[str, Any]:
+    def _get_code(self, repositorio: str, nome_branch: Optional[str], tipo_analise: str, repository_type: str, arquivos_especificos: Optional[List[str]] = None, retornar_lista_arquivos: bool = False) -> Dict[str, Any]:
         try:
+            if repository_type == 'azure':
+                parts = repositorio.split('/')
+                if len(parts) != 3:
+                    raise ValueError(f"[agente_revisor] repositorio para Azure deve estar no formato organization/project/repository. Recebido: {repositorio}")
+            print(f"[DEBUG][agente_revisor] Chamando read_repository com repositorio={repositorio}, tipo={repository_type}")
             resultado = self.repository_reader.read_repository(
                 nome_repo=repositorio,
                 tipo_analise=tipo_analise,
@@ -45,27 +35,7 @@ class AgenteRevisor:
         except Exception as e:
             print(f"[Agente Revisor] ERRO durante leitura do repositório: {e}")
             raise RuntimeError(f"Falha ao ler o repositório: {e}") from e
-
-    def main(
-        self,
-        tipo_analise: str,
-        repositorio: str,
-        repository_type: str,
-        nome_branch: Optional[str] = None,
-        instrucoes_extras: str = "",
-        usar_rag: bool = False,
-        model_name: Optional[str] = None,
-        max_token_out: int = 15000,
-        arquivos_especificos: Optional[List[str]] = None,
-        job_id: Optional[str] = None,
-        projeto: Optional[str] = None,
-        status_update: Optional[str] = None,
-        retornar_lista_arquivos: bool = False,
-        modo_adicao_incremental: bool = False,
-        usuario_executor: Optional[str] = None,
-        current_batch: Optional[List[Dict[str, Any]]] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def main(self, tipo_analise: str, repositorio: str, repository_type: str, nome_branch: Optional[str] = None, instrucoes_extras: str = "", usar_rag: bool = False, model_name: Optional[str] = None, max_token_out: int = 15000, arquivos_especificos: Optional[List[str]] = None, job_id: Optional[str] = None, projeto: Optional[str] = None, status_update: Optional[str] = None, retornar_lista_arquivos: bool = False, modo_adicao_incremental: bool = False, usuario_executor: Optional[str] = None, current_batch: Optional[List[Dict[str, Any]]] = None, **kwargs) -> Dict[str, Any]:
         resultado_leitura = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,
@@ -91,7 +61,6 @@ class AgenteRevisor:
             }, indent=2, ensure_ascii=False)
         else:
             codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
-        # Suporte a processamento incremental por batch
         if current_batch is not None and isinstance(current_batch, list) and len(current_batch) > 0:
             batch_instrucao = "ATENÇÃO: Processar APENAS os passos listados abaixo. Ignorar todos os outros passos do relatório original.\n"
             batch_instrucao += json.dumps(current_batch, indent=2, ensure_ascii=False)
