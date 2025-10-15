@@ -1,83 +1,82 @@
-from typing import List, Dict, Any, Optional
-from models import JobStatus, JobFields
-from fastapi import HTTPException
-from pydantic import BaseModel
-import time
-from models import JobStatus, JobFields, FinalStatusResponse, PullRequestSummary
+from typing import Dict, Any, List, Optional
+from models import JobFields
+
+class FinalStatusResponse:
+    def __init__(self, job_id: str, status: str, summary: Optional[List[Dict]] = None, error_details: Optional[str] = None, analysis_report: Optional[str] = None, diagnostic_logs: Optional[str] = None, report_blob_url: Optional[str] = None, build_errors: Optional[List[str]] = None):
+        self.job_id = job_id
+        self.status = status
+        self.summary = summary
+        self.error_details = error_details
+        self.analysis_report = analysis_report
+        self.diagnostic_logs = diagnostic_logs
+        self.report_blob_url = report_blob_url
+        self.build_errors = build_errors
+
+    def dict(self):
+        return {
+            "job_id": self.job_id,
+            "status": self.status,
+            "summary": self.summary,
+            "error_details": self.error_details,
+            "analysis_report": self.analysis_report,
+            "diagnostic_logs": self.diagnostic_logs,
+            "report_blob_url": self.report_blob_url,
+            "build_errors": self.build_errors
+        }
 
 class ResponseBuilderService:
-    def __init__(self, pr_extractor_service, logging_service):
-        self.pr_extractor_service = pr_extractor_service
-        self.logging_service = logging_service
-    def build_completed_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
-        job_data = job.get(JobFields.DATA, {})
-        gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
-        if gerar_relatorio_apenas:
-            return self._build_report_only_response(job_id, job_data, blob_url)
-        return self._build_standard_response(job_id, job, blob_url)
-    def _build_report_only_response(self, job_id: str, job_data: dict, blob_url: Optional[str]) -> FinalStatusResponse:
-        analysis_report = job_data.get(JobFields.ANALYSIS_REPORT)
-        final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
-        if not analysis_report:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"[{job_id}] ERRO INTERNO: Relatório ausente no modo report_only após finalização do workflow."
-            )
+    def build_completed_response(self, job_id: str, job: Dict[str, Any], blob_url: Optional[str]) -> FinalStatusResponse:
+        data = job.get(JobFields.DATA, {})
+        commit_details = data.get('commit_details', [])
+        summary = []
+        build_errors_aggregate = []
+        for idx, commit in enumerate(commit_details):
+            pr_url = commit.get('pr_url')
+            branch_name = commit.get('branch_name')
+            arquivos_modificados = commit.get('arquivos_modificados', [])
+            build_result = commit.get('build_result') if 'build_result' in commit else None
+            commit_url = commit.get('commit_url') if 'commit_url' in commit else None
+            build_errors = commit.get('build_errors') if 'build_errors' in commit else None
+            # Agrega build_errors para resposta geral
+            if build_errors:
+                if isinstance(build_errors, list):
+                    build_errors_aggregate.extend(build_errors)
+                else:
+                    build_errors_aggregate.append(str(build_errors))
+            summary.append({
+                "pull_request_url": pr_url if pr_url else None,
+                "branch_name": branch_name,
+                "arquivos_modificados": arquivos_modificados,
+                "build_result": build_result,
+                "commit_url": commit_url
+            })
+        analysis_report = data.get(JobFields.ANALYSIS_REPORT, None)
+        diagnostic_logs = data.get('diagnostic_logs', None)
+        error_details = job.get('error_details', None)
         return FinalStatusResponse(
             job_id=job_id,
-            status=JobStatus.COMPLETED,
+            status=job.get(JobFields.STATUS, "completed"),
+            summary=summary,
+            error_details=error_details,
             analysis_report=analysis_report,
-            report_blob_url=final_blob_url
+            diagnostic_logs=diagnostic_logs,
+            report_blob_url=blob_url,
+            build_errors=build_errors_aggregate if build_errors_aggregate else None
         )
-    def _build_standard_response(self, job_id: str, job: dict, blob_url: Optional[str]) -> FinalStatusResponse:
-        job_data = job.get(JobFields.DATA, {})
-        summary_list = self.pr_extractor_service.extract_pull_requests(job_id, job_data)
-        print(f"[{job_id}] [DEBUG][ResponseBuilderService] commit_details: {job_data.get(JobFields.COMMIT_DETAILS)}")
-        for idx, commit in enumerate(job_data.get(JobFields.COMMIT_DETAILS, [])):
-            print(f"[{job_id}] [DEBUG][ResponseBuilderService] commit_details[{idx}] build_result presente: {'build_result' in commit}, build_errors presente: {'build_errors' in commit}, build_result={commit.get('build_result')}")
-        self.logging_service.log_completed_job(job_id, job_data, summary_list, blob_url)
-        final_blob_url = blob_url or job_data.get(JobFields.REPORT_BLOB_URL)
-        logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
-        build_errors = []
-        commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        for idx, commit in enumerate(commit_details):
-            errors = commit.get('build_errors')
-            if errors:
-                print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors encontrados em commit_details[{idx}]: {errors}")
-                build_errors.extend(errors)
-        if not build_errors:
-            build_errors = None
-        else:
-            print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors consolidados: {build_errors}")
+    def build_failed_response(self, job_id: str, job: Dict[str, Any]) -> FinalStatusResponse:
+        data = job.get(JobFields.DATA, {})
+        error_details = job.get('error_details', None)
+        analysis_report = data.get(JobFields.ANALYSIS_REPORT, None)
+        diagnostic_logs = data.get('diagnostic_logs', None)
+        blob_url = data.get(JobFields.REPORT_BLOB_URL, None)
+        build_errors = data.get('build_errors', None)
         return FinalStatusResponse(
             job_id=job_id,
-            status=JobStatus.COMPLETED,
-            summary=summary_list,
-            diagnostic_logs=logs,
-            report_blob_url=final_blob_url,
-            build_errors=build_errors
-        )
-    def build_failed_response(self, job_id: str, job: dict) -> FinalStatusResponse:
-        job_data = job.get(JobFields.DATA, {})
-        logs = job_data.get(JobFields.DIAGNOSTIC_LOGS)
-        blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
-        self.logging_service.log_failed_job(job_id, job_data, blob_url)
-        build_errors = []
-        commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        for idx, commit in enumerate(commit_details):
-            errors = commit.get('build_errors')
-            if errors:
-                print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors encontrados em commit_details[{idx}]: {errors}")
-                build_errors.extend(errors)
-        if not build_errors:
-            build_errors = None
-        else:
-            print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors consolidados: {build_errors}")
-        return FinalStatusResponse(
-            job_id=job_id,
-            status=JobStatus.FAILED,
-            error_details=job.get(JobFields.ERROR_DETAILS, "Nenhum detalhe de erro encontrado."),
-            diagnostic_logs=logs,
+            status=job.get(JobFields.STATUS, "failed"),
+            summary=None,
+            error_details=error_details,
+            analysis_report=analysis_report,
+            diagnostic_logs=diagnostic_logs,
             report_blob_url=blob_url,
             build_errors=build_errors
         )
