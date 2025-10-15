@@ -31,14 +31,16 @@ class ComparadorStepExecutor(BaseStepExecutor):
             'projeto': job_info['data']['projeto'],
             'status_update': step['status_update']
         })
-        # USO DO CACHE DE REPOSITÓRIO
         if 'repository_content_cache' in agent_params and agent_params['repository_content_cache'] is not None:
             arquivos_codigo_modernizado = agent_params['repository_content_cache']
             print(f"[{job_id}] [PERFORMANCE] Utilizando cache do repositório (ComparadorStepExecutor) com {len(arquivos_codigo_modernizado)} arquivos.")
             agent_params['arquivos_codigo_modernizado'] = arquivos_codigo_modernizado
-            # Para comparação, se necessário, pode-se adicionar lógica para arquivos_codigo_original
         else:
-            arquivos_codigo_modernizado = repo_reader.read_repository()
+            arquivos_codigo_modernizado = repo_reader.read_repository(
+                nome_repo=job_info['data']['repo_name'],
+                tipo_analise=job_info['data']['original_analysis_type'],
+                repository_type=job_info['data']['repository_type']
+            )
             print(f"[{job_id}] [PERFORMANCE] Lendo repositório normalmente (ComparadorStepExecutor) com {len(arquivos_codigo_modernizado)} arquivos.")
             agent_params['arquivos_codigo_modernizado'] = arquivos_codigo_modernizado
         agente = AgentFactory.create_agent("comparador", repo_reader, llm_provider)
