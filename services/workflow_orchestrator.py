@@ -66,27 +66,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
             arquivos_especificos = job_info['data'].get('arquivos_especificos')
-            if executar_incremental and start_from_step == 1:
-                if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
-                    report_text = job_info['data'].get('analysis_report')
-                    if not report_text or not report_text.strip():
-                        raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
-                    step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
-                    job_info['data'][JobFields.STEP_BATCHES] = step_batches
-                    job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
-                    job_info['data'][JobFields.BATCH_RESULTS] = []
-                    print(f"[{job_id}] [PERFORMANCE] Iniciando leitura única do repositório para cache...")
-                    repository_content_cache = repo_reader.read_repository(
-                        nome_repo=job_info['data']['repo_name'],
-                        tipo_analise=job_info['data']['original_analysis_type'],
-                        repository_type=job_info['data']['repository_type']
-                    )
-                    if arquivos_especificos:
-                        repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
-                    job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
-                    print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
             if start_from_step == 0:
                 print(f"[{job_id}] [PERFORMANCE] Leitura única do repositório no step 0...")
                 repository_content_cache = repo_reader.read_repository(
@@ -96,55 +75,70 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 )
                 if arquivos_especificos:
                     repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
+                    job_info['data'][JobFields.ARQUIVOS_ESPECIFICOS_CACHE] = repository_content_cache
+                    print(f"[{job_id}] [CACHE] ARQUIVOS_ESPECIFICOS_CACHE populado com {len(repository_content_cache)} arquivos.")
                 job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                 self.job_handler.update_job(job_id, job_info)
                 print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
+            if executar_incremental and start_from_step == 1:
+                if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
+                    report_text = job_info['data'].get('analysis_report')
+                    if not report_text or not report_text.strip():
+                        raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
+                    step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
+                    job_info['data'][JobFields.STEP_BATCHES] = step_batches
+                    job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
+                    job_info['data'][JobFields.BATCH_RESULTS] = []
+                    print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
+                # NUNCA ler o repositório aqui, apenas usar o cache
+                repository_content_cache = job_info['data'].get(JobFields.ARQUIVOS_ESPECIFICOS_CACHE) or job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+                if repository_content_cache is None:
+                    raise ValueError(f"[{job_id}] [ERRO] Cache de arquivos específicos ou geral não encontrado no passo 1.")
+                print(f"[{job_id}] [CACHE] Usando cache (INCREMENTAL) com {len(repository_content_cache)} arquivos.")
+                step_batches = job_info['data'][JobFields.STEP_BATCHES]
+                current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
+                batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
+                total_batches = len(step_batches)
+                for batch_idx in range(current_batch_index, total_batches):
+                    try:
+                        batch = step_batches[batch_idx]
+                        print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
+                        agent_params = steps_to_run[0].get('params', {}).copy() if steps_to_run[0].get('params') else {}
+                        agent_params['current_batch'] = batch
+                        agent_params['total_batches'] = total_batches
+                        agent_params['repository_content_cache'] = repository_content_cache
+                        print(f"[{job_id}] [CACHE] Batch {batch_idx+1}: Usando cache com {len(repository_content_cache)} arquivos.")
+                        result = self._execute_step_with_strategy(
+                            job_id, job_info, steps_to_run[0], start_from_step + 0, previous_step_result, repo_reader, batch_idx, start_from_step, agent_params_override=agent_params
+                        )
+                        batch_results.append(result)
+                    except Exception as e:
+                        error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
+                        print(f"[{job_id}] {error_message}")
+                        if 'failed_batches' not in job_info['data']:
+                            job_info['data']['failed_batches'] = []
+                        job_info['data']['failed_batches'].append({
+                            "batch_index": batch_idx + 1,
+                            "error": str(e)
+                        })
+                        continue 
+                    finally:
+                        job_info['data'][JobFields.BATCH_RESULTS] = batch_results
+                        job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
+                        self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
+                previous_step_result = {'incremental_results': batch_results}
+                return
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
-                if executar_incremental and current_step_index == 1:
-                    step_batches = job_info['data'][JobFields.STEP_BATCHES]
-                    current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
-                    batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
-                    total_batches = len(step_batches)
-                    for batch_idx in range(current_batch_index, total_batches):
-                        try:
-                            batch = step_batches[batch_idx]
-                            print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
-                            agent_params = step.get('params', {}).copy() if step.get('params') else {}
-                            agent_params['current_batch'] = batch
-                            agent_params['total_batches'] = total_batches
-                            # Passa o cache explicitamente para o step executor
-                            repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
-                            if repository_content_cache is not None:
-                                agent_params['repository_content_cache'] = repository_content_cache
-                            result = self._execute_step_with_strategy(
-                                job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
-                            )
-                            batch_results.append(result)
-                        except Exception as e:
-                            error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
-                            print(f"[{job_id}] {error_message}")
-                            if 'failed_batches' not in job_info['data']:
-                                job_info['data']['failed_batches'] = []
-                            job_info['data']['failed_batches'].append({
-                                "batch_index": batch_idx + 1,
-                                "error": str(e)
-                            })
-                            continue 
-                        finally:
-                            job_info['data'][JobFields.BATCH_RESULTS] = batch_results
-                            job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
-                            self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
-                    previous_step_result = {'incremental_results': batch_results}
-                    break
                 # Passa o cache explicitamente para o step executor
-                repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+                repository_content_cache = job_info['data'].get(JobFields.ARQUIVOS_ESPECIFICOS_CACHE) or job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
                 agent_params = step.get('params', {}).copy() if step.get('params') else {}
                 if repository_content_cache is not None:
                     agent_params['repository_content_cache'] = repository_content_cache
+                    print(f"[{job_id}] [CACHE] Step {current_step_index}: Usando cache com {len(repository_content_cache)} arquivos.")
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                 )
@@ -206,10 +200,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        # Passa o cache para todos os executores de forma centralizada
-        repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+        # Prioriza o uso do cache de arquivos específicos
+        repository_content_cache = job_info['data'].get(JobFields.ARQUIVOS_ESPECIFICOS_CACHE) or job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
         if repository_content_cache is not None:
             agent_params['repository_content_cache'] = repository_content_cache
+            print(f"[{job_id}] [CACHE] _execute_step_with_strategy: Usando cache com {len(repository_content_cache)} arquivos.")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
