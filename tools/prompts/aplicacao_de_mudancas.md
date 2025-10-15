@@ -24,9 +24,9 @@ Você deve seguir esta ordem de prioridade de forma **obrigatória**:
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
 1. A sua resposta DEVE ser um único bloco de código JSON.
-2. O JSON DEVE começar com  ```json e terminar com ````.
+2. **O JSON DEVE** começar com  ```json e terminar com ````.
 3. NÃO inclua nenhum texto, explicação ou comentário fora do bloco de código JSON.
-4. Valide CUIDADOSAMENTE o JSON antes de responder. Garanta que todas as aspas (") sejam fechadas corretamente e que qualquer caractere de aspas dentro de uma string seja devidamente escapado com uma barra invertida (\").
+4. **Alerte sobre o erro comum:** "Preste muita atenção para garantir que todas as strings dentro do JSON sejam devidamente terminadas com aspas de fechamento ("). Não interrompa a geração no meio de uma string.
 5. A falha em seguir estas regras de formatação resultará em erro do sistema. A sua resposta final deve ser apenas o JSON.
 6. Nao incluir na resposta final casos com status INALTERADO
 
