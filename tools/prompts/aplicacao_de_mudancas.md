@@ -23,8 +23,12 @@ Você deve seguir esta ordem de prioridade de forma **obrigatória**:
 -   **Agnosticismo de Linguagem:** Adapte seu conhecimento de "boas práticas" à linguagem específica (`.py`, `.java`, `.js`, `.cs`, etc.) do arquivo que está sendo modificado.
 
 ## 5. FORMATO DA SAÍDA ESPERADA (JSON)
-Sua resposta final deve ser **um único bloco de código JSON válido**, sem nenhum texto ou markdown fora dele.
-Nao incluir na resposta final casos com status INALTERADO
+1. A sua resposta DEVE ser um único bloco de código JSON.
+2. O JSON DEVE começar com  ```json e terminar com ````.
+3. NÃO inclua nenhum texto, explicação ou comentário fora do bloco de código JSON.
+4. Valide CUIDADOSAMENTE o JSON antes de responder. Garanta que todas as aspas (") sejam fechadas corretamente e que qualquer caractere de aspas dentro de uma string seja devidamente escapado com uma barra invertida (\").
+5. A falha em seguir estas regras de formatação resultará em erro do sistema. A sua resposta final deve ser apenas o JSON.
+6. Nao incluir na resposta final casos com status INALTERADO
 
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
@@ -51,4 +55,4 @@ Nao incluir na resposta final casos com status INALTERADO
       "justificativa": "Este arquivo não foi mencionado no plano de ação ou nas observações."
     }
   ]
-}
+}```
