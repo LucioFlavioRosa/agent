@@ -73,9 +73,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.STEP_BATCHES] = step_batches
                     job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
                     job_info['data'][JobFields.BATCH_RESULTS] = []
+                    # LEITURA ÚNICA DO REPOSITÓRIO PARA CACHE
+                    print(f"[{job_id}] [PERFORMANCE] Iniciando leitura única do repositório para cache...")
+                    repository_content_cache = repo_reader.read_repository()
+                    job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                     self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-                    
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -89,17 +93,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         try:
                             batch = step_batches[batch_idx]
                             print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
-                            
                             agent_params = step.get('params', {}).copy() if step.get('params') else {}
                             agent_params['current_batch'] = batch
                             agent_params['total_batches'] = total_batches
-                            
                             result = self._execute_step_with_strategy(
                                 job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                             )
-                            
                             batch_results.append(result)
-                        
                         except Exception as e:
                             error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
                             print(f"[{job_id}] {error_message}")
@@ -110,17 +110,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 "error": str(e)
                             })
                             continue 
-                        
                         finally:
                             job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                             job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                             self.job_handler.update_job(job_id, job_info)
-
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
-                    break # Sai do loop de steps, pois os batches já foram processados
-                
-                # O restante do código para steps não-incrementais
+                    break
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
@@ -182,6 +178,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
+        # INJEÇÃO DO CACHE DE REPOSITÓRIO SE DISPONÍVEL
+        repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+        if repository_content_cache is not None:
+            agent_params['repository_content_cache'] = repository_content_cache
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
