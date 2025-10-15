@@ -85,21 +85,23 @@ class CommitHandler:
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
                     if 'commit_url' not in resultado_branch:
                         resultado_branch['commit_url'] = None
-    
                     if executar_build_dotnet:
                         commit_details = job_info['data'].get('commit_details', [])
-                        for idx, commit in enumerate(commit_details):
-                            branch_name = commit.get('branch_name')
-                            repo_name_commit = commit.get('repo_name', repo_name)
+                        for idx, commit_info in enumerate(commit_details):
+                            branch_name = commit_info.get('branch_name')
+                            if not branch_name:
+                                raise ValueError(f"[{job_id}] ERRO: branch_name ausente em commit_info para build.")
+                            repo_name_commit = commit_info.get('repo_name', repo_name)
                             token = self._get_access_token(repository_type, repo_name_commit)
+                            print(f"[{job_id}] [CommitHandler] Iniciando build. repository_type={repository_type}, repo_name={repo_name_commit}, branch_name={branch_name}, access_token presente: {bool(token)}")
                             dotnet_build_service = DotNetBuildService()
                             build_result = dotnet_build_service.build_project(job_id, repository_type, repo_name_commit, branch_name, access_token=token)
-                            commit['build_result'] = build_result
+                            print(f"[{job_id}] [CommitHandler] Build finalizado. success={build_result.get('success')}, errors={len(build_result.get('errors', []))}")
+                            commit_info['build_result'] = build_result
                             if not build_result.get('success'):
-                                commit['build_errors'] = build_result.get('errors')
+                                commit_info['build_errors'] = build_result.get('errors')
                         job_info['data']['commit_details'] = commit_details
                         print(f"[{job_id}] [DEBUG] Resultado do build: success={build_result.get('success')}, errors={len(build_result.get('errors', []) )}")
-                        
                 except Exception as e:
                     print(f"[{job_id}] ERRO no processamento do grupo {i+1}: {str(e)}")
                     resultado_branch = {
