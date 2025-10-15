@@ -10,7 +10,7 @@ from tools.azure_secret_manager import AzureSecretManager
 from models import JobFields
 
 class CommitHandler:
-    def __init__(self, repository_provider_factory=None, conexao_geral_factory=None, dotnet_build_service=None):
+    def __init__(self, repository_provider_factory=None, conexao_geral_factory=None, dotnet_build_service=None, secret_manager=None):
         self.repository_provider_factory = repository_provider_factory or get_repository_provider_explicit
         self.conexao_geral_factory = conexao_geral_factory or ConexaoGeral.create_with_defaults
         self.dotnet_build_service = dotnet_build_service or DotNetBuildService()
