@@ -30,6 +30,13 @@ Você deve seguir esta ordem de prioridade de forma **obrigatória**:
 ## 6. FORMATO DA SAÍDA ESPERADA (Changeset JSON)
 Sua resposta final deve ser **um único bloco de código JSON válido**, sem nenhum texto ou explicação fora dele.
 
+1. A sua resposta DEVE ser um único bloco de código JSON.
+2. **O JSON DEVE** começar com  ```json e terminar com ````.
+3. NÃO inclua nenhum texto, explicação ou comentário fora do bloco de código JSON.
+4. **Alerte sobre o erro comum:** "Preste muita atenção para garantir que todas as strings dentro do JSON sejam devidamente terminadas com aspas de fechamento ("). Não interrompa a geração no meio de uma string.
+5. A falha em seguir estas regras de formatação resultará em erro do sistema. A sua resposta final deve ser apenas o JSON.
+6. Nao incluir na resposta final casos com status INALTERADO
+
 **SIGA ESTRITAMENTE O FORMATO ABAIXO.**
 
 ```json
