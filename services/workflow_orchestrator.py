@@ -72,10 +72,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     nome_repo=job_info['data']['repo_name'],
                     tipo_analise=job_info['data']['original_analysis_type'],
                     repository_type=job_info['data']['repository_type'],
-                    branch_name=job_info['data']['branch_name_modernizado']
+                    branch_name=job_info['data']['branch_name_modernizado'],
+                    arquivos_especificos=arquivos_especificos
                 )
-                if arquivos_especificos:
-                    repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
                 job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                 self.job_handler.update_job(job_id, job_info)
                 print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
@@ -105,7 +104,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         agent_params['current_batch'] = batch
                         agent_params['total_batches'] = total_batches
                         agent_params['repository_content_cache'] = repository_content_cache
-                        print(f"[{job_id}] [CACHE] Batch {batch_idx+1}: Usando cache com {len(repository_content_cache)} arquivos.")
+                        print(f"[{job_id}] [CACHE] Batch {batch_idx+1}: Usando cache com {len(repository_content_cache)} arquivos (SEM nova leitura do repositório).")
                         result = self._execute_step_with_strategy(
                             job_id, job_info, steps_to_run[0], start_from_step + 0, previous_step_result, repo_reader, batch_idx, start_from_step, agent_params_override=agent_params
                         )
