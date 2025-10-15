@@ -190,7 +190,19 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             for idx, commit in enumerate(commit_details):
                 branch_name = commit.get('branch_name')
                 repo_name_commit = commit.get('repo_name', repo_name)
-                token = self._get_access_token(repository_type, repo_name_commit)
+                try:
+                    token = self._get_access_token(repository_type, repo_name_commit)
+                except Exception as e:
+                    print(f"[{job_id}] [ERRO CRÍTICO] Falha ao obter token de acesso para build do repositório '{repo_name_commit}': {e}")
+                    commit['build_result'] = {
+                        'success': False,
+                        'errors': [f'Erro ao obter token de acesso: {e}'],
+                        'stdout': '',
+                        'stderr': ''
+                    }
+                    commit['build_errors'] = [f'Erro ao obter token de acesso: {e}']
+                    build_errors.append(f'Erro ao obter token de acesso: {e}')
+                    continue
                 dotnet_build_service = DotNetBuildService()
                 build_result = dotnet_build_service.build_project(job_id, repository_type, repo_name_commit, branch_name, access_token=token)
                 commit['build_result'] = build_result
