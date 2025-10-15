@@ -73,9 +73,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.STEP_BATCHES] = step_batches
                     job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
                     job_info['data'][JobFields.BATCH_RESULTS] = []
-                    # LEITURA ÚNICA DO REPOSITÓRIO PARA CACHE
                     print(f"[{job_id}] [PERFORMANCE] Iniciando leitura única do repositório para cache...")
-                    repository_content_cache = repo_reader.read_repository()
+                    repository_content_cache = repo_reader.read_repository(
+                        nome_repo=job_info['data']['repo_name'],
+                        tipo_analise=job_info['data']['original_analysis_type'],
+                        repository_type=job_info['data']['repository_type']
+                    )
                     job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
@@ -178,7 +181,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        # INJEÇÃO DO CACHE DE REPOSITÓRIO SE DISPONÍVEL
         repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
         if repository_content_cache is not None:
             agent_params['repository_content_cache'] = repository_content_cache
