@@ -29,6 +29,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
         self.secret_manager = secret_manager or AzureSecretManager()
+                     
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
@@ -48,6 +49,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
         return True
+        
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
@@ -73,6 +75,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
+                    
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -121,8 +124,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
-
-                
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
@@ -145,6 +146,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
+            
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
                                     repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
@@ -185,6 +187,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
+                                        
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         report_text = self.report_handler.extract_report_text(step_result)
@@ -192,6 +195,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
+        
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
