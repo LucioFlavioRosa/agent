@@ -25,6 +25,11 @@ class FinalStatusResponse:
         }
 
 class ResponseBuilderService:
+     def __init__(self, pr_extractor, logging_service):
+        """Inicializa o serviço com suas dependências."""
+        self.pr_extractor = pr_extractor
+        self.logging_service = logging_service
+         
     def build_completed_response(self, job_id: str, job: Dict[str, Any], blob_url: Optional[str]) -> FinalStatusResponse:
         data = job.get(JobFields.DATA, {})
         commit_details = data.get('commit_details', [])
