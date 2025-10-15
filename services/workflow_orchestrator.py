@@ -16,6 +16,7 @@ from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
 from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
+from services.repository_filter_service import RepositoryFilterService
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -64,6 +65,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
+            arquivos_especificos = job_info['data'].get('arquivos_especificos')
             if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -79,11 +81,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         tipo_analise=job_info['data']['original_analysis_type'],
                         repository_type=job_info['data']['repository_type']
                     )
+                    repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
                     job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-            # LEITURA ÚNICA DO REPOSITÓRIO NO STEP 0
             if start_from_step == 0:
                 print(f"[{job_id}] [PERFORMANCE] Leitura única do repositório no step 0...")
                 repository_content_cache = repo_reader.read_repository(
@@ -91,6 +93,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     tipo_analise=job_info['data']['original_analysis_type'],
                     repository_type=job_info['data']['repository_type']
                 )
+                repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
                 job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                 self.job_handler.update_job(job_id, job_info)
                 print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
