@@ -68,6 +68,7 @@ class JobFields:
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
     REPOSITORY_CONTENT_CACHE = 'repository_content_cache'
+    ARQUIVOS_ESPECIFICOS_CACHE = 'arquivos_especificos_cache'
 
 class JobActions:
     APPROVE = 'approve'
