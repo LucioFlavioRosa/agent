@@ -1,28 +1,16 @@
 from typing import Dict, Any, List, Optional
 from models import JobFields
+from pydantic import BaseModel
 
-class FinalStatusResponse:
-    def __init__(self, job_id: str, status: str, summary: Optional[List[Dict]] = None, error_details: Optional[str] = None, analysis_report: Optional[str] = None, diagnostic_logs: Optional[str] = None, report_blob_url: Optional[str] = None, build_errors: Optional[List[str]] = None):
-        self.job_id = job_id
-        self.status = status
-        self.summary = summary
-        self.error_details = error_details
-        self.analysis_report = analysis_report
-        self.diagnostic_logs = diagnostic_logs
-        self.report_blob_url = report_blob_url
-        self.build_errors = build_errors
-
-    def dict(self):
-        return {
-            "job_id": self.job_id,
-            "status": self.status,
-            "summary": self.summary,
-            "error_details": self.error_details,
-            "analysis_report": self.analysis_report,
-            "diagnostic_logs": self.diagnostic_logs,
-            "report_blob_url": self.report_blob_url,
-            "build_errors": self.build_errors
-        }
+class FinalStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    summary: Optional[List[Dict]] = None
+    error_details: Optional[str] = None
+    analysis_report: Optional[str] = None
+    diagnostic_logs: Optional[str] = None
+    report_blob_url: Optional[str] = None
+    build_errors: Optional[List[str]] = None
 
 class ResponseBuilderService:
     def __init__(self, pr_extractor, logging_service):
