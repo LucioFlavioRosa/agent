@@ -83,24 +83,46 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
                     total_batches = len(step_batches)
                     for batch_idx in range(current_batch_index, total_batches):
-                        batch = step_batches[batch_idx]
-                        print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
-                        agent_params = step.get('params', {}).copy() if step.get('params') else {}
-                        agent_params['current_batch'] = batch
-                        agent_params['total_batches'] = total_batches
-                        result = self._execute_step_with_strategy(
-                            job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
-                        )
-                        batch_results.append(result)
-                        job_info['data'][JobFields.BATCH_RESULTS] = batch_results
-                        job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
-                        self.job_handler.update_job(job_id, job_info)
+                        try:
+                            batch = step_batches[batch_idx]
+                            print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
+                            
+                            agent_params = step.get('params', {}).copy() if step.get('params') else {}
+                            agent_params['current_batch'] = batch
+                            agent_params['total_batches'] = total_batches
+                            
+                            result = self._execute_step_with_strategy(
+                                job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
+                            )
+                            
+                            batch_results.append(result)
+                        
+                        except Exception as e:
+                            error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
+                            print(f"[{job_id}] {error_message}")
+                            if 'failed_batches' not in job_info['data']:
+                                job_info['data']['failed_batches'] = []
+                            job_info['data']['failed_batches'].append({
+                                "batch_index": batch_idx + 1,
+                                "error": str(e)
+                            })
+                            continue 
+                        
+                        finally:
+                            job_info['data'][JobFields.BATCH_RESULTS] = batch_results
+                            job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
+                            self.job_handler.update_job(job_id, job_info)
+
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
-                    break 
+                    break # Sai do loop de steps, pois os batches já foram processados
+                
+                # O restante do código para steps não-incrementais
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
+
+                
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
