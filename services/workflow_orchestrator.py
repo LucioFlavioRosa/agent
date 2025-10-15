@@ -115,6 +115,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             agent_params = step.get('params', {}).copy() if step.get('params') else {}
                             agent_params['current_batch'] = batch
                             agent_params['total_batches'] = total_batches
+                            # Passa o cache explicitamente para o step executor
+                            repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+                            if repository_content_cache is not None:
+                                agent_params['repository_content_cache'] = repository_content_cache
                             result = self._execute_step_with_strategy(
                                 job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                             )
@@ -136,8 +140,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     break
+                # Passa o cache explicitamente para o step executor
+                repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+                agent_params = step.get('params', {}).copy() if step.get('params') else {}
+                if repository_content_cache is not None:
+                    agent_params['repository_content_cache'] = repository_content_cache
                 step_result = self._execute_step_with_strategy(
-                    job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
+                    job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                 )
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
@@ -197,6 +206,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
+        # Passa o cache para todos os executores de forma centralizada
         repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
         if repository_content_cache is not None:
             agent_params['repository_content_cache'] = repository_content_cache
