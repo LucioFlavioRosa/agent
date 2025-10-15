@@ -33,7 +33,7 @@ class ComparadorStepExecutor(BaseStepExecutor):
         })
         if 'repository_content_cache' in agent_params and agent_params['repository_content_cache'] is not None:
             arquivos_codigo_modernizado = agent_params['repository_content_cache']
-            print(f"[{job_id}] [PERFORMANCE] Utilizando cache do repositório (ComparadorStepExecutor) com {len(arquivos_codigo_modernizado)} arquivos.")
+            print(f"[{job_id}] [PERFORMANCE][ComparadorStepExecutor] Cache utilizado. Arquivos no cache: {len(arquivos_codigo_modernizado)}, arquivos_especificos fornecidos: {job_info['data'].get('arquivos_especificos')}")
             agent_params['arquivos_codigo_modernizado'] = arquivos_codigo_modernizado
         else:
             arquivos_codigo_modernizado = repo_reader.read_repository(
