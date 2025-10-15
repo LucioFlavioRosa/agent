@@ -8,13 +8,15 @@ from services.job_validation_service import JobValidationService
 class ApiServiceFactory:
     """Factory para criação e configuração de serviços da API."""
     
-    def __init__(self):
+    def __init__(self, pr_extractor, logging_service):
         self._pr_extractor_service = None
         self._logging_service = None
         self._response_builder_service = None
         self._repository_normalizer_service = None
         self._job_data_service = None
         self._job_validation_service = None
+        self.pr_extractor = pr_extractor
+        self.logging_service = logging_service
     
     def get_pr_extractor_service(self) -> PullRequestExtractorService:
         """Retorna instância do serviço de extração de PRs."""
