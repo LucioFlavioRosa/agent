@@ -18,17 +18,22 @@ class DotNetBuildService:
         local_dir = f"/tmp/{job_id}_{branch_name}"
         try:
             clone_url = self._get_clone_url(repository_type, repo_name, access_token)
+            print(f"[{job_id}] [DotNetBuildService] Clone URL gerado: {clone_url[:50]}... (token presente: {bool(access_token)})")
             if os.path.exists(local_dir):
                 shutil.rmtree(local_dir)
             clone_cmd = ["git", "clone", "--branch", branch_name, clone_url, local_dir]
+            print(f"[{job_id}] [DotNetBuildService] Executando git clone. Comando: {' '.join(clone_cmd[:3])} [BRANCH] [URL_OCULTA] {local_dir}")
             clone_proc = subprocess.run(clone_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            print(f"[{job_id}] [DotNetBuildService] Git clone finalizado. Return code: {clone_proc.returncode}, stderr: {clone_proc.stderr[:200]}")
             if clone_proc.returncode != 0:
                 result["errors"].append(f"Erro ao clonar repositório: {clone_proc.stderr}")
                 result["stderr"] = clone_proc.stderr
                 print(f"[{job_id}] [DotNetBuildService] Build finalizado. success={result['success']}, errors={len(result['errors'])}")
                 return result
             build_cmd = ["dotnet", "build"]
+            print(f"[{job_id}] [DotNetBuildService] Executando dotnet build no diretório: {local_dir}")
             build_proc = subprocess.run(build_cmd, cwd=local_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            print(f"[{job_id}] [DotNetBuildService] Dotnet build finalizado. Return code: {build_proc.returncode}, success: {build_proc.returncode == 0}")
             result["stdout"] = build_proc.stdout
             result["stderr"] = build_proc.stderr
             if build_proc.returncode == 0:
@@ -49,15 +54,12 @@ class DotNetBuildService:
     def _get_clone_url(self, repository_type: str, repo_name: str, access_token: Optional[str] = None) -> str:
         if repository_type == "azure":
             if access_token:
-                # Azure DevOps: repo_name esperado no formato 'organization/project/repository'
-                # URL correta: https://{token}@dev.azure.com/organization/project/_git/repository
                 parts = repo_name.split('/')
                 if len(parts) == 3:
                     organization, project, repository = parts
                     return f"https://{access_token}@dev.azure.com/{organization}/{project}/_git/{repository}"
                 else:
                     return f"https://{access_token}@dev.azure.com/{repo_name}"
-            # fallback sem token
             parts = repo_name.split('/')
             if len(parts) == 3:
                 organization, project, repository = parts
