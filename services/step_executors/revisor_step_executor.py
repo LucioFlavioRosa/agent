@@ -42,11 +42,34 @@ class RevisorStepExecutor(BaseStepExecutor):
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
         agente = AgentFactory.create_agent("revisor", repo_reader, llm_provider)
         agent_response = agente.main(**agent_params)
-        json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        
+        raw_response_from_llm  = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
+        #cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = None
+        # Tenta encontrar ```json ... ```
+        match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+        if match:
+            cleaned_string = match.group(1).strip()
+        else:
+            # Se não encontrar, tenta pegar o conteúdo entre o primeiro '{' e o último '}'
+            start = raw_response_from_llm.find('{')
+            end = raw_response_from_llm.rfind('}')
+            if start != -1 and end != -1:
+                cleaned_string = raw_response_from_llm[start:end+1]
+
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
-                print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
+                print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
                 return previous_step_result
-            raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
+            raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
+
+        # 2. Tentar decodificar o JSON de forma segura
+        try:
+            return json.loads(cleaned_string, strict=False) # Adicionado strict=False por segurança
+        except json.JSONDecodeError as e:
+            print(f"[{job_id}] ERRO: Falha ao decodificar JSON mesmo após limpeza: {e}")
+            print(f"[{job_id}] String que causou a falha (primeiros 500 caracteres):\n{cleaned_string[:500]}")
+            # Lança a exceção novamente para que o workflow principal saiba que falhou
+            raise e
+            
         return json.loads(cleaned_string)
