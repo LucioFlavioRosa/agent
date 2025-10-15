@@ -72,13 +72,15 @@ class CommitHandler:
                     conjunto_de_mudancas = []
                 branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
                 branch_sugerida = BranchNameSanitizer.sanitize(branch_sugerida)
-                build_result = None  # Inicializado ANTES do try
-                build_errors = None  # Inicializado ANTES do try
+                build_result = None  
+                build_errors = None 
                 resultado_branch = None
-                LIMITE_DESCRICAO = 400
-                descricao_completa=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}")
-                if len(descricao_completa) > LIMITE_DESCRICAO:
-                    descricao_pr = descricao_completa[:LIMITE_DESCRICAO] + "\n\n...(descrição truncada por exceder o limite)"
+                LIMITE_DESCRICAO_AZURE = 3900 
+                descricao_completa = grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}")
+                if len(descricao_completa) > LIMITE_DESCRICAO_AZURE:
+                    # Use a nova variável 'descricao_pr' para a versão truncada
+                    descricao_pr = descricao_completa[:LIMITE_DESCRICAO_AZURE] + "\n\n...(descrição truncada para não exceder o limite da API)..."
+                    print(f"[{job_id}] AVISO: A descrição do PR do grupo {i+1} foi truncada por ser muito longa.")
                 else:
                     descricao_pr = descricao_completa
                 try:
@@ -88,7 +90,7 @@ class CommitHandler:
                         branch_de_origem=branch_base_para_pr,
                         branch_alvo_do_pr=branch_base_para_pr,
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
-                        descricao_pr=descricao_completa,
+                        descricao_pr=descricao_pr,
                         conjunto_de_mudancas=conjunto_de_mudancas,
                         repository_type=repository_type,
                         modo_adicao_incremental=modo_adicao_incremental
