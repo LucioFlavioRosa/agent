@@ -213,6 +213,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.job_handler.update_job_status(job_id, 'completed')
 
     def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
+        print(f"[WorkflowOrchestrator] Obtendo token. repository_type={repository_type}, repo_name={repo_name}")
         if repository_type == 'azure':
             parts = repo_name.split('/')
             if len(parts) != 3:
@@ -230,10 +231,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         token_secret_name = f"{platform.lower()}-token-{org_name}"
         try:
             token = self.secret_manager.get_secret(token_secret_name)
+            print(f"[WorkflowOrchestrator] Token obtido com sucesso. secret_name={token_secret_name}, token presente: {bool(token)}")
             return token
         except Exception:
+            print(f"[WorkflowOrchestrator] Falha ao obter token. secret_name={token_secret_name}, tentando fallback...")
             try:
                 token = self.secret_manager.get_secret(f"{platform.lower()}-token")
+                print(f"[WorkflowOrchestrator] Token obtido com sucesso. secret_name={platform.lower()}-token, token presente: {bool(token)}")
                 return token
             except Exception:
                 raise ValueError(f"Não foi possível obter token para {platform} ({org_name})")
