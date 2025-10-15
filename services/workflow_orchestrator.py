@@ -81,7 +81,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         tipo_analise=job_info['data']['original_analysis_type'],
                         repository_type=job_info['data']['repository_type']
                     )
-                    repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
+                    if arquivos_especificos:
+                        repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
                     job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
@@ -93,7 +94,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     tipo_analise=job_info['data']['original_analysis_type'],
                     repository_type=job_info['data']['repository_type']
                 )
-                repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
+                if arquivos_especificos:
+                    repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
                 job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                 self.job_handler.update_job(job_id, job_info)
                 print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
