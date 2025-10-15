@@ -49,8 +49,21 @@ class DotNetBuildService:
     def _get_clone_url(self, repository_type: str, repo_name: str, access_token: Optional[str] = None) -> str:
         if repository_type == "azure":
             if access_token:
-                return f"https://{access_token}@dev.azure.com/{repo_name}"
-            return f"https://dev.azure.com/{repo_name}"
+                # Azure DevOps: repo_name esperado no formato 'organization/project/repository'
+                # URL correta: https://{token}@dev.azure.com/organization/project/_git/repository
+                parts = repo_name.split('/')
+                if len(parts) == 3:
+                    organization, project, repository = parts
+                    return f"https://{access_token}@dev.azure.com/{organization}/{project}/_git/{repository}"
+                else:
+                    return f"https://{access_token}@dev.azure.com/{repo_name}"
+            # fallback sem token
+            parts = repo_name.split('/')
+            if len(parts) == 3:
+                organization, project, repository = parts
+                return f"https://dev.azure.com/{organization}/{project}/_git/{repository}"
+            else:
+                return f"https://dev.azure.com/{repo_name}"
         elif repository_type == "github":
             if access_token:
                 return f"https://{access_token}@github.com/{repo_name}.git"
