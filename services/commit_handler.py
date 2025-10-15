@@ -72,8 +72,9 @@ class CommitHandler:
                     conjunto_de_mudancas = []
                 branch_sugerida = grupo.get("branch_sugerida", f"branch-grupo-{i+1}")
                 branch_sugerida = BranchNameSanitizer.sanitize(branch_sugerida)
-                build_result = None
-                build_errors = None
+                build_result = None  # Inicializado ANTES do try
+                build_errors = None  # Inicializado ANTES do try
+                resultado_branch = None
                 try:
                     resultado_branch = processar_branch_por_provedor(
                         repo=repo,
@@ -86,18 +87,19 @@ class CommitHandler:
                         repository_type=repository_type,
                         modo_adicao_incremental=modo_adicao_incremental
                     )
+                    print(f"[{job_id}] [DEBUG][CommitHandler] resultado_branch (após processar_branch_por_provedor): {json.dumps(resultado_branch, default=str)}")
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
                     if 'commit_url' not in resultado_branch:
                         resultado_branch['commit_url'] = None
-                    # Build .NET após commit/PR, se solicitado
                     if executar_build_dotnet:
                         branch_name = resultado_branch.get('branch_name')
                         repo_name_commit = job_info['data'].get('repo_name', repo_name)
                         token = None
                         try:
                             token = self._get_access_token(repository_type, repo_name_commit)
-                        except Exception as e:
-                            print(f"[{job_id}] [CommitHandler] Falha ao obter token: {e}")
+                        except Exception as e_token:
+                            print(f"[{job_id}] [CommitHandler] Falha ao obter token: {e_token}")
+                            build_errors = [f"Erro ao obter token: {str(e_token)}"]
                         print(f"[{job_id}] [CommitHandler][BUILD] Iniciando build. repository_type={repository_type}, repo_name={repo_name_commit}, branch_name={branch_name}, access_token presente: {bool(token)}")
                         try:
                             build_result = self.dotnet_build_service.build_project(
@@ -109,11 +111,15 @@ class CommitHandler:
                             )
                             print(f"[{job_id}] [CommitHandler][BUILD] Build finalizado. success={build_result.get('success')}, errors={len(build_result.get('errors', []))}, build_result={json.dumps(build_result, default=str)[:300]}")
                             if not build_result.get('success'):
-                                build_errors = build_result.get('errors')
-                        except Exception as e:
-                            print(f"[{job_id}] [CommitHandler][BUILD] Exceção no build: {e}")
-                            build_errors = [str(e)]
-                            build_result = {"success": False, "errors": build_errors}
+                                if build_errors is None:
+                                    build_errors = []
+                                build_errors.extend(build_result.get('errors', []))
+                        except Exception as e_build:
+                            print(f"[{job_id}] [CommitHandler][BUILD] Exceção no build: {e_build}")
+                            if build_errors is None:
+                                build_errors = []
+                            build_errors.append(str(e_build))
+                            build_result = {"success": False, "errors": [str(e_build)]}
                         print(f"[{job_id}] [CommitHandler][BUILD] build_result será adicionado ao commit_info: {json.dumps(build_result, default=str)[:300]}")
                     commit_info = {
                         "branch_name": resultado_branch.get('branch_name'),
@@ -125,15 +131,29 @@ class CommitHandler:
                         "build_result": build_result,
                         "build_errors": build_errors
                     }
+                    # Validação final da pr_url
+                    if resultado_branch.get('success') and (not commit_info.get('pr_url') or not isinstance(commit_info.get('pr_url'), str) or not commit_info.get('pr_url').strip()):
+                        print(f"[{job_id}] [ERRO CRÍTICO] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
+                        raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
                 except Exception as e:
                     print(f"[{job_id}] ERRO no processamento do grupo {i+1}: {str(e)}")
+                    pr_url = None
+                    commit_url = None
+                    if resultado_branch and isinstance(resultado_branch, dict):
+                        pr_url = resultado_branch.get('pr_url')
+                        commit_url = resultado_branch.get('commit_url')
+                    # Se pr_url válida, preserva, senão coloca mensagem de erro
+                    if pr_url and isinstance(pr_url, str) and pr_url.strip():
+                        pr_url_final = pr_url
+                    else:
+                        pr_url_final = f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}"
                     commit_info = {
                         "branch_name": branch_sugerida,
                         "success": False,
-                        "pr_url": resultado_branch.get('pr_url') if 'resultado_branch' in locals() and resultado_branch.get('pr_url') else f"ERRO: Falha no processamento do grupo {i+1}. {str(e)}",
+                        "pr_url": pr_url_final,
                         "message": f"Erro no grupo {i+1}: {str(e)}",
                         "arquivos_modificados": [arquivo.get('caminho_do_arquivo', '') for arquivo in conjunto_de_mudancas],
-                        "commit_url": resultado_branch.get('commit_url') if 'resultado_branch' in locals() else None,
+                        "commit_url": commit_url,
                         "build_result": build_result,
                         "build_errors": build_errors if build_errors else [str(e)]
                     }
@@ -172,7 +192,6 @@ class CommitHandler:
             if not pr_url or not isinstance(pr_url, str) or not pr_url.strip():
                 raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
             if self._is_valid_url(pr_url):
-                # Não altera pr_url se for válida
                 pass
             else:
                 print(f"[{job_id}] AVISO: Grupo {grupo_num} tem pr_url que não é uma URL válida: '{pr_url}'")
