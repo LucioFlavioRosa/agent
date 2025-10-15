@@ -75,6 +75,12 @@ class CommitHandler:
                 build_result = None  # Inicializado ANTES do try
                 build_errors = None  # Inicializado ANTES do try
                 resultado_branch = None
+                LIMITE_DESCRICAO = 400
+                descricao_completa=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}")
+                if len(descricao_completa) > LIMITE_DESCRICAO:
+                    descricao_pr = descricao_completa[:LIMITE_DESCRICAO] + "\n\n...(descrição truncada por exceder o limite)"
+                else:
+                    descricao_pr = descricao_completa
                 try:
                     resultado_branch = processar_branch_por_provedor(
                         repo=repo,
@@ -82,7 +88,7 @@ class CommitHandler:
                         branch_de_origem=branch_base_para_pr,
                         branch_alvo_do_pr=branch_base_para_pr,
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
-                        descricao_pr=grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}"),
+                        descricao_pr=descricao_completa,
                         conjunto_de_mudancas=conjunto_de_mudancas,
                         repository_type=repository_type,
                         modo_adicao_incremental=modo_adicao_incremental
