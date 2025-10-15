@@ -37,7 +37,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
 
         if 'repository_content_cache' in agent_params and agent_params['repository_content_cache'] is not None:
             arquivos_codigo = agent_params['repository_content_cache']
-            print(f"[{job_id}] [PERFORMANCE] Utilizando cache do repositório (ProcessadorStepExecutor) com {len(arquivos_codigo)} arquivos.")
+            print(f"[{job_id}] [PERFORMANCE][ProcessadorStepExecutor] Cache utilizado. Arquivos no cache: {len(arquivos_codigo)}, arquivos_especificos fornecidos: {job_info['data'].get('arquivos_especificos')}")
             agent_params['arquivos_codigo'] = arquivos_codigo
         else:
             arquivos_codigo = repo_reader.read_repository(
@@ -51,7 +51,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         agente = AgentFactory.create_agent("processador", None, llm_provider)
         agent_response = agente.main(**agent_params)
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
                 print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
