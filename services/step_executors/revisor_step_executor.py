@@ -43,7 +43,7 @@ class RevisorStepExecutor(BaseStepExecutor):
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
         if 'repository_content_cache' in agent_params and agent_params['repository_content_cache'] is not None:
             arquivos_codigo = agent_params['repository_content_cache']
-            print(f"[{job_id}] [PERFORMANCE] Utilizando cache do repositório (RevisorStepExecutor) com {len(arquivos_codigo)} arquivos.")
+            print(f"[{job_id}] [PERFORMANCE][RevisorStepExecutor] Cache utilizado. Arquivos no cache: {len(arquivos_codigo)}, arquivos_especificos fornecidos: {job_info['data'].get('arquivos_especificos')}")
             agent_params['arquivos_codigo'] = arquivos_codigo
         else:
             arquivos_codigo = repo_reader.read_repository(
@@ -60,7 +60,7 @@ class RevisorStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params)
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
