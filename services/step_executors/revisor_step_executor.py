@@ -71,5 +71,3 @@ class RevisorStepExecutor(BaseStepExecutor):
             print(f"[{job_id}] String que causou a falha (primeiros 500 caracteres):\n{cleaned_string[:500]}")
             # Lança a exceção novamente para que o workflow principal saiba que falhou
             raise e
-            
-        return json.loads(cleaned_string)
