@@ -35,23 +35,15 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
 
-        if 'repository_content_cache' in agent_params and agent_params['repository_content_cache'] is not None:
-            arquivos_codigo = agent_params['repository_content_cache']
-            print(f"[{job_id}] [PERFORMANCE] Utilizando cache do repositório (ProcessadorStepExecutor) com {len(arquivos_codigo)} arquivos.")
-            agent_params['arquivos_codigo'] = arquivos_codigo
-        else:
-            arquivos_codigo = repo_reader.read_repository(
-                nome_repo=job_info['data']['repo_name'],
-                tipo_analise=job_info['data']['original_analysis_type'],
-                repository_type=job_info['data']['repository_type']
-            )
-            print(f"[{job_id}] [PERFORMANCE] Lendo repositório normalmente (ProcessadorStepExecutor) com {len(arquivos_codigo)} arquivos.")
-            agent_params['arquivos_codigo'] = arquivos_codigo
+        if 'repository_content_cache' not in agent_params or agent_params['repository_content_cache'] is None:
+            raise ValueError(f"[{job_id}] [ProcessadorStepExecutor] repository_content_cache é obrigatório.")
+        arquivos_codigo = agent_params['repository_content_cache']
+        print(f"[{job_id}] [CACHE][ProcessadorStepExecutor] Usando cache com {len(arquivos_codigo)} arquivos.")
 
         agente = AgentFactory.create_agent("processador", None, llm_provider)
         agent_response = agente.main(**agent_params)
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
                 print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
