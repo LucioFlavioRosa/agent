@@ -13,13 +13,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from services.dependency_container import DependencyContainer
 from services.workflow_registry_service import WorkflowRegistryService
 from services.api_service_factory import ApiServiceFactory
+from services.pull_request_extractor_service import PullRequestExtractorService
+from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
 from models import JobStatus, JobFields, JobActions
 
 container = DependencyContainer()
-api_service_factory = ApiServiceFactory()
+pr_extractor = PullRequestExtractorService()
+logging_service = JobLoggingService()
+
+api_service_factory = ApiServiceFactory(pr_extractor, logging_service)
+
 workflow_registry_service = container.get_workflow_registry_service()
 ValidAnalysisTypes = workflow_registry_service.get_valid_analysis_types()
+
 response_builder_service = api_service_factory.get_response_builder_service()
 repository_normalizer_service = api_service_factory.get_repository_normalizer_service()
 job_data_service = api_service_factory.get_job_data_service()
