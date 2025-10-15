@@ -25,7 +25,7 @@ class FinalStatusResponse:
         }
 
 class ResponseBuilderService:
-     def __init__(self, pr_extractor, logging_service):
+    def __init__(self, pr_extractor, logging_service):
         """Inicializa o serviço com suas dependências."""
         self.pr_extractor = pr_extractor
         self.logging_service = logging_service
