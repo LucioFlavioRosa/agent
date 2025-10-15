@@ -41,13 +41,16 @@ class RevisorStepExecutor(BaseStepExecutor):
         })
         agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
-        # USO DO CACHE DE REPOSITÓRIO
         if 'repository_content_cache' in agent_params and agent_params['repository_content_cache'] is not None:
             arquivos_codigo = agent_params['repository_content_cache']
             print(f"[{job_id}] [PERFORMANCE] Utilizando cache do repositório (RevisorStepExecutor) com {len(arquivos_codigo)} arquivos.")
             agent_params['arquivos_codigo'] = arquivos_codigo
         else:
-            arquivos_codigo = repo_reader.read_repository()
+            arquivos_codigo = repo_reader.read_repository(
+                nome_repo=job_info['data']['repo_name'],
+                tipo_analise=job_info['data']['original_analysis_type'],
+                repository_type=job_info['data']['repository_type']
+            )
             print(f"[{job_id}] [PERFORMANCE] Lendo repositório normalmente (RevisorStepExecutor) com {len(arquivos_codigo)} arquivos.")
             agent_params['arquivos_codigo'] = arquivos_codigo
         max_retries = 3
@@ -57,7 +60,7 @@ class RevisorStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params)
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
