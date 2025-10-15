@@ -71,12 +71,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 repository_content_cache = repo_reader.read_repository(
                     nome_repo=job_info['data']['repo_name'],
                     tipo_analise=job_info['data']['original_analysis_type'],
-                    repository_type=job_info['data']['repository_type']
+                    repository_type=job_info['data']['repository_type'],
+                    branch_name=job_info['data']['branch_name_modernizado']
                 )
                 if arquivos_especificos:
                     repository_content_cache = RepositoryFilterService.filter_by_specific_files(repository_content_cache, arquivos_especificos)
-                    job_info['data'][JobFields.ARQUIVOS_ESPECIFICOS_CACHE] = repository_content_cache
-                    print(f"[{job_id}] [CACHE] ARQUIVOS_ESPECIFICOS_CACHE populado com {len(repository_content_cache)} arquivos.")
                 job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
                 self.job_handler.update_job(job_id, job_info)
                 print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
@@ -90,10 +89,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-                # NUNCA ler o repositório aqui, apenas usar o cache
-                repository_content_cache = job_info['data'].get(JobFields.ARQUIVOS_ESPECIFICOS_CACHE) or job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+                repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
                 if repository_content_cache is None:
-                    raise ValueError(f"[{job_id}] [ERRO] Cache de arquivos específicos ou geral não encontrado no passo 1.")
+                    raise ValueError(f"[{job_id}] [ERRO] Cache de arquivos do repositório não encontrado no passo 1.")
                 print(f"[{job_id}] [CACHE] Usando cache (INCREMENTAL) com {len(repository_content_cache)} arquivos.")
                 step_batches = job_info['data'][JobFields.STEP_BATCHES]
                 current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
@@ -133,8 +131,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
-                # Passa o cache explicitamente para o step executor
-                repository_content_cache = job_info['data'].get(JobFields.ARQUIVOS_ESPECIFICOS_CACHE) or job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+                repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
                 agent_params = step.get('params', {}).copy() if step.get('params') else {}
                 if repository_content_cache is not None:
                     agent_params['repository_content_cache'] = repository_content_cache
@@ -200,8 +197,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        # Prioriza o uso do cache de arquivos específicos
-        repository_content_cache = job_info['data'].get(JobFields.ARQUIVOS_ESPECIFICOS_CACHE) or job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
+        repository_content_cache = job_info['data'].get(JobFields.REPOSITORY_CONTENT_CACHE)
         if repository_content_cache is not None:
             agent_params['repository_content_cache'] = repository_content_cache
             print(f"[{job_id}] [CACHE] _execute_step_with_strategy: Usando cache com {len(repository_content_cache)} arquivos.")
