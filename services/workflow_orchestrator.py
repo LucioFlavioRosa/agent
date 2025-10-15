@@ -185,30 +185,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
         if job_info['data'].get('executar_build_dotnet', False):
             commit_details = job_info['data'].get('commit_details', [])
-            print(f"[{job_id}] [FINALIZE] Consolidando build_errors de {len(commit_details)} commits")
             build_errors = []
             for idx, commit in enumerate(commit_details):
-                branch_name = commit.get('branch_name')
-                repo_name_commit = commit.get('repo_name', repo_name)
-                try:
-                    token = self._get_access_token(repository_type, repo_name_commit)
-                    dotnet_build_service = DotNetBuildService()
-                    build_result = dotnet_build_service.build_project(job_id, repository_type, repo_name_commit, branch_name, access_token=token)
-                    commit['build_result'] = build_result
-                    if build_result.get('success'):
-                        commit['build_errors'] = None
-                    else:
-                        commit['build_errors'] = build_result.get('errors')
-                except Exception as e:
-                    commit['build_result'] = {
-                        'success': False,
-                        'errors': [f'Erro ao obter token de acesso: {e}'],
-                        'stdout': '',
-                        'stderr': ''
-                    }
-                    commit['build_errors'] = [f'Erro ao obter token de acesso: {e}']
-                    build_errors.append(f'Erro ao obter token de acesso: {e}')
-                    continue
+                if 'build_result' not in commit:
+                    print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                if 'build_errors' not in commit:
+                    print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
                 errors = commit.get('build_errors')
                 if errors:
                     build_errors.extend(errors)
