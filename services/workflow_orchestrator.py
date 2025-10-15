@@ -83,6 +83,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
+            # LEITURA ÚNICA DO REPOSITÓRIO NO STEP 0
+            if start_from_step == 0:
+                print(f"[{job_id}] [PERFORMANCE] Leitura única do repositório no step 0...")
+                repository_content_cache = repo_reader.read_repository(
+                    nome_repo=job_info['data']['repo_name'],
+                    tipo_analise=job_info['data']['original_analysis_type'],
+                    repository_type=job_info['data']['repository_type']
+                )
+                job_info['data'][JobFields.REPOSITORY_CONTENT_CACHE] = repository_content_cache
+                self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] [PERFORMANCE] Cache do repositório populado com {len(repository_content_cache)} arquivos.")
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
