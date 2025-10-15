@@ -41,7 +41,7 @@ class ResponseBuilderService:
         build_errors = []
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
         for idx, commit in enumerate(commit_details):
-            errors = commit.get("build_errors")
+            errors = commit.get('build_errors')
             if errors:
                 print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors encontrados em commit_details[{idx}]: {errors}")
                 build_errors.extend(errors)
@@ -65,7 +65,7 @@ class ResponseBuilderService:
         build_errors = []
         commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
         for idx, commit in enumerate(commit_details):
-            errors = commit.get("build_errors")
+            errors = commit.get('build_errors')
             if errors:
                 print(f"[{job_id}] [DEBUG][ResponseBuilderService] build_errors encontrados em commit_details[{idx}]: {errors}")
                 build_errors.extend(errors)
