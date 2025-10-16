@@ -63,6 +63,16 @@ class ReaderGeral(IRepositoryReader):
         cache_resultado = {}
         cache_ttl = 3600
         arquivos_para_ler = arquivos_especificos if arquivos_especificos is not None else None
+        # --- CACHE DA LISTA DE ARQUIVOS ---
+        lista_arquivos_cache_key = f"repo_file_list:{repository_type}:{nome_repo}:{nome_branch}"
+        lista_arquivos_do_cache = None
+        if retornar_lista_arquivos and self.cache_service:
+            lista_arquivos_do_cache = self.cache_service.get(lista_arquivos_cache_key)
+            if lista_arquivos_do_cache is not None:
+                print(f"[Reader Geral] CACHE HIT (lista de arquivos): {lista_arquivos_cache_key}")
+            else:
+                print(f"[Reader Geral] CACHE MISS (lista de arquivos): {lista_arquivos_cache_key}")
+        # --- CACHE DE ARQUIVOS ESPECÍFICOS ---
         if arquivos_para_ler is not None and self.cache_service:
             print(f"[Reader Geral] Usando cache para leitura de arquivos específicos.")
             arquivos_lidos = {}
@@ -99,6 +109,14 @@ class ReaderGeral(IRepositoryReader):
                 resultado = self.github_reader.read_repository_internal(
                     repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
                 )
+            # --- SALVAR NO CACHE A LISTA DE ARQUIVOS SE RETORNAR_LISTA_ARQUIVOS ---
+            if self.cache_service and retornar_lista_arquivos and isinstance(resultado, dict) and 'lista_arquivos' in resultado:
+                if lista_arquivos_do_cache is None:
+                    self.cache_service.set(lista_arquivos_cache_key, resultado['lista_arquivos'], ttl=cache_ttl)
+                    print(f"[Reader Geral] Lista de arquivos salva no cache: {lista_arquivos_cache_key}")
+                else:
+                    print(f"[Reader Geral] Lista de arquivos já estava no cache: {lista_arquivos_cache_key}")
+            # --- SALVAR NO CACHE OS ARQUIVOS DE CÓDIGO LIDOS (CASO NÃO SEJA ARQUIVOS ESPECÍFICOS) ---
             if self.cache_service and isinstance(resultado, dict):
                 codigo_dict = resultado['codigo'] if retornar_lista_arquivos and 'codigo' in resultado else resultado
                 for file_path, file_content in codigo_dict.items():
