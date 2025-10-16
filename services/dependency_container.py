@@ -3,7 +3,7 @@ from services.workflow_registry_service import WorkflowRegistryService
 from services.job_logging_service import JobLoggingService
 from services.pull_request_extractor_service import PullRequestExtractorService
 from services.api_service_factory import ApiServiceFactory
-from services.analysis_name_service import AnalysisNameService
+from services.analysis_name_service import AnalysisNameService, AnalysisNameCache
 from services.job_data_service import JobDataService
 from services.job_validation_service import JobValidationService
 from services.repository_normalizer_service import RepositoryNormalizerService
@@ -33,6 +33,8 @@ class DependencyContainer:
         self._response_builder_service = ResponseBuilderService(pr_extractor=self._pull_request_extractor_service, logging_service=self._job_logging_service)
         self._job_store = RedisJobStore()
         self._job_manager = JobManager(job_store=self._job_store)
+        self._analysis_name_cache = AnalysisNameCache(job_store=self._job_store)
+        self._analysis_name_service = AnalysisNameService(cache=self._analysis_name_cache)
 
     def get_workflow_registry_service(self):
         return self._workflow_registry_service
@@ -46,6 +48,9 @@ class DependencyContainer:
     def get_api_service_factory(self):
         return self._api_service_factory
 
+    def get_analysis_name_service(self):
+        return self._analysis_name_service
+    
     def get_analysis_name_service(self):
         return self._analysis_name_service
 
