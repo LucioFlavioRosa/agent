@@ -7,7 +7,7 @@ from services.analysis_name_service import AnalysisNameService
 from services.job_data_service import JobDataService
 from services.job_validation_service import JobValidationService
 from services.repository_normalizer_service import RepositoryNormalizerService
-from services.response_builder_service import FinalStatusResponseBuilder
+from services.response_builder_service import ResponseBuilderService
 from services.job_manager import JobManager
 from services.blob_storage_service import BlobStorageService
 from services.workflow_orchestrator import WorkflowOrchestrator
