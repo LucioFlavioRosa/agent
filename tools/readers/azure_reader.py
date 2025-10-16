@@ -8,8 +8,8 @@ import base64
 
 class AzureReader(BaseReader):
     
-    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        super().__init__(repository_provider or AzureRepositoryProvider())
+    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None, cache_service=None):
+        super().__init__(repository_provider or AzureRepositoryProvider(), cache_service=cache_service)
 
     def _get_base_api_url(self, repositorio_dict: dict) -> str:
         organization = repositorio_dict.get('_organization')
@@ -27,73 +27,92 @@ class AzureReader(BaseReader):
             "Authorization": f"Basic {credentials}"
         }
 
-    # --- MÉTODO ADICIONADO E ESSENCIAL ---
+    def _extract_repo_info(self, repositorio_dict: dict):
+        organization = repositorio_dict.get('_organization', '')
+        project = repositorio_dict.get('_project', '')
+        repository = repositorio_dict.get('_repository', '')
+        return organization, project, repository
+
     def read_single_file(self, repositorio_dict: dict, file_path: str, branch: Optional[str] = None) -> Optional[str]:
-        """Lê o conteúdo de um único arquivo de um repositório Azure de forma eficiente."""
         branch_a_ler = branch or repositorio_dict.get('default_branch', 'main')
         print(f"[Azure Reader] Lendo arquivo específico: '{file_path}'")
-        
         headers = self._get_azure_auth_headers(repositorio_dict)
         base_url = self._get_base_api_url(repositorio_dict)
-        
-        # Endpoint específico para buscar um item por seu caminho e formato de texto
         file_url = f"{base_url}/items?path={file_path}&versionDescriptor.version={branch_a_ler}&$format=text&api-version=7.0"
-        
-        try:
-            response = requests.get(file_url, headers=headers, timeout=30)
-            response.raise_for_status()
-            return response.text
-        except requests.exceptions.HTTPError as http_err:
-            if http_err.response.status_code == 404:
-                print(f"[Azure Reader] AVISO: Arquivo não encontrado (404): '{file_path}'")
-                return None
-            print(f"[Azure Reader] ERRO HTTP ao ler arquivo '{file_path}': {http_err}")
-            raise
-        except Exception as e:
-            print(f"[Azure Reader] ERRO CRÍTICO ao ler arquivo '{file_path}': {e}")
-            raise
+        organization, project, repository = self._extract_repo_info(repositorio_dict)
+        platform = 'azure'
+        def ler_callback():
+            try:
+                response = requests.get(file_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                return response.text
+            except requests.exceptions.HTTPError as http_err:
+                if http_err.response.status_code == 404:
+                    print(f"[Azure Reader] AVISO: Arquivo não encontrado (404): '{file_path}'")
+                    return None
+                print(f"[Azure Reader] ERRO HTTP ao ler arquivo '{file_path}': {http_err}")
+                raise
+            except Exception as e:
+                print(f"[Azure Reader] ERRO CRÍTICO ao ler arquivo '{file_path}': {e}")
+                raise
+        if self.cache_service:
+            return self._ler_conteudo_arquivo_com_cache(
+                platform, organization, project, repository, branch_a_ler, file_path, ler_callback
+            )
+        else:
+            return ler_callback()
 
     def _obter_lista_todos_arquivos(self, repositorio_dict: dict, branch_a_ler: str) -> List[str]:
         print(f"[Azure Reader] Obtendo lista completa de arquivos...")
         headers = self._get_azure_auth_headers(repositorio_dict)
         base_url = self._get_base_api_url(repositorio_dict)
-        try:
-            items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
-            response = requests.get(items_url, headers=headers, timeout=60)
-            response.raise_for_status()
-            all_items = response.json().get('value', [])
-            lista_arquivos = [item.get('path') for item in all_items if not item.get('isFolder') and item.get('path')]
-            print(f"[Azure Reader] Lista completa obtida: {len(lista_arquivos)} arquivos encontrados.")
-            return lista_arquivos
-        except Exception as e:
-            print(f"[Azure Reader] ERRO ao obter lista completa de arquivos Azure DevOps: {e}")
-            raise
+        organization, project, repository = self._extract_repo_info(repositorio_dict)
+        platform = 'azure'
+        def obter_lista_callback():
+            try:
+                items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
+                response = requests.get(items_url, headers=headers, timeout=60)
+                response.raise_for_status()
+                all_items = response.json().get('value', [])
+                lista_arquivos = [item.get('path') for item in all_items if not item.get('isFolder') and item.get('path')]
+                print(f"[Azure Reader] Lista completa obtida: {len(lista_arquivos)} arquivos encontrados.")
+                return lista_arquivos
+            except Exception as e:
+                print(f"[Azure Reader] ERRO ao obter lista completa de arquivos Azure DevOps: {e}")
+                raise
+        if self.cache_service:
+            return self._obter_lista_todos_arquivos_com_cache(platform, organization, project, repository, branch_a_ler, obter_lista_callback)
+        else:
+            return obter_lista_callback()
 
     def _ler_repositorio_completo(self, repositorio_dict: dict, branch_a_ler: str, extensoes_alvo: List[str], arquivos_especificos: Optional[List[str]] = None) -> Dict[str, str]:
         arquivos_do_repo = {}
         headers = self._get_azure_auth_headers(repositorio_dict)
         base_url = self._get_base_api_url(repositorio_dict)
+        organization, project, repository = self._extract_repo_info(repositorio_dict)
+        platform = 'azure'
         try:
             print(f"[Azure Reader] Obtendo árvore de arquivos da branch '{branch_a_ler}'...")
             items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
             response = requests.get(items_url, headers=headers, timeout=60)
             response.raise_for_status()
             all_items = response.json().get('value', [])
-            
             if arquivos_especificos:
                 arquivos_para_ler = [item for item in all_items if not item.get('isFolder') and item.get('path') in arquivos_especificos]
             else:
                 arquivos_para_ler = [item for item in all_items if not item.get('isFolder') and any(item.get('path', '').endswith(ext) for ext in extensoes_alvo)]
-            
             print(f"[Azure Reader] {len(arquivos_para_ler)} arquivos selecionados para leitura de conteúdo.")
             for item in arquivos_para_ler:
                 file_path = item.get('path')
                 if file_path:
-                    # Reutiliza o método de ler um único arquivo
-                    content = self.read_single_file(repositorio_dict, file_path, branch_a_ler)
-                    if content is not None:
-                        arquivos_do_repo[file_path] = content
-
+                    def ler_callback():
+                        return self.read_single_file(repositorio_dict, file_path, branch_a_ler)
+                    if self.cache_service:
+                        conteudo = self._ler_conteudo_arquivo_com_cache(platform, organization, project, repository, branch_a_ler, file_path, ler_callback)
+                    else:
+                        conteudo = ler_callback()
+                    if conteudo is not None:
+                        arquivos_do_repo[file_path] = conteudo
         except Exception as e:
             print(f"[Azure Reader] ERRO CRÍTICO ao ler repositório Azure DevOps: {e}")
             raise
@@ -106,14 +125,12 @@ class AzureReader(BaseReader):
             extensoes_alvo = mapeamento_tipo_extensoes.get(tipo_analise.lower())
             if extensoes_alvo is None:
                 raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado no mapeamento")
-        
         arquivos_lidos = self._ler_repositorio_completo(
             repositorio_dict=repositorio,
             branch_a_ler=branch_a_ler,
             extensoes_alvo=extensoes_alvo,
             arquivos_especificos=arquivos_especificos
         )
-        
         if retornar_lista_arquivos:
             lista_todos_arquivos = self._obter_lista_todos_arquivos(repositorio, branch_a_ler)
             return {'codigo': arquivos_lidos, 'lista_arquivos': lista_todos_arquivos}
