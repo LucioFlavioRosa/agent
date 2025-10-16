@@ -16,12 +16,13 @@ from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
 from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
+from services.cache_service import CacheService
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
                  job_handler: JobHandler = None, report_handler: ReportHandler = None,
-                 commit_handler: CommitHandler = None, data_formatter: DataFormatter = None, secret_manager: Optional[Any] = None):
+                 commit_handler: CommitHandler = None, data_formatter: DataFormatter = None, secret_manager: Optional[Any] = None, cache_service: Optional[CacheService] = None):
         self.workflow_registry = workflow_registry
         self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
         self.job_handler = job_handler or JobHandler(job_manager)
@@ -29,7 +30,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
         self.secret_manager = secret_manager or AzureSecretManager()
-                     
+        self.cache_service = cache_service or CacheService()
+
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
@@ -49,7 +51,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
         return True
-        
+
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
@@ -64,6 +66,48 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
+            # Passo 0: leitura dos arquivos do repositório e cache
+            if start_from_step == 0:
+                arquivos_especificos = job_info['data'].get('arquivos_especificos')
+                branch_modernizado = job_info['data'].get('branch_name_modernizado')
+                retornar_lista_arquivos = job_info['data'].get('retornar_lista_arquivos', False)
+                use_cache = False
+                arquivos_lidos = None
+                lista_arquivos = None
+                if arquivos_especificos:
+                    arquivos_lidos = repo_reader.read_repository(
+                        repositorio=repository_provider.get_repository(repo_name),
+                        tipo_analise=job_info['data']['original_analysis_type'],
+                        nome_branch=branch_modernizado,
+                        arquivos_especificos=arquivos_especificos,
+                        mapeamento_tipo_extensoes=None,
+                        retornar_lista_arquivos=retornar_lista_arquivos,
+                        use_cache=use_cache,
+                        cache_service=self.cache_service,
+                        job_id=job_id
+                    )
+                    if retornar_lista_arquivos and isinstance(arquivos_lidos, dict):
+                        lista_arquivos = arquivos_lidos.get('lista_arquivos')
+                        arquivos_lidos = arquivos_lidos.get('codigo')
+                else:
+                    arquivos_lidos = repo_reader.read_repository(
+                        repositorio=repository_provider.get_repository(repo_name),
+                        tipo_analise=job_info['data']['original_analysis_type'],
+                        nome_branch=branch_modernizado,
+                        arquivos_especificos=None,
+                        mapeamento_tipo_extensoes=None,
+                        retornar_lista_arquivos=retornar_lista_arquivos,
+                        use_cache=use_cache,
+                        cache_service=self.cache_service,
+                        job_id=job_id
+                    )
+                    if retornar_lista_arquivos and isinstance(arquivos_lidos, dict):
+                        lista_arquivos = arquivos_lidos.get('lista_arquivos')
+                        arquivos_lidos = arquivos_lidos.get('codigo')
+                self.cache_service.set_repository_files(job_id, arquivos_lidos)
+                if retornar_lista_arquivos and lista_arquivos:
+                    self.cache_service.set_file_list(job_id, lista_arquivos)
+            # Inicialização incremental
             if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -75,7 +119,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-                    
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -89,17 +132,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         try:
                             batch = step_batches[batch_idx]
                             print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
-                            
                             agent_params = step.get('params', {}).copy() if step.get('params') else {}
                             agent_params['current_batch'] = batch
                             agent_params['total_batches'] = total_batches
-                            
                             result = self._execute_step_with_strategy(
                                 job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                             )
-                            
                             batch_results.append(result)
-                        
                         except Exception as e:
                             error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
                             print(f"[{job_id}] {error_message}")
@@ -110,17 +149,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 "error": str(e)
                             })
                             continue 
-                        
                         finally:
                             job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                             job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                             self.job_handler.update_job(job_id, job_info)
-
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
-                    break # Sai do loop de steps, pois os batches já foram processados
-                
-                # O restante do código para steps não-incrementais
+                    break
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
@@ -146,7 +181,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
-            
+
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
                                     repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
@@ -182,12 +217,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+        # Passo 3: uso do cache para steps subsequentes
+        use_cache = False
+        if job_info['data'].get('gerar_novo_relatorio') is False and current_step_index > 0:
+            use_cache = True
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
-            previous_step_result, repo_reader, llm_provider, agent_params
+            previous_step_result, repo_reader, llm_provider, agent_params,
+            use_cache=use_cache,
+            cache_service=self.cache_service
         )
-                                        
+
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         report_text = self.report_handler.extract_report_text(step_result)
@@ -195,7 +235,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
-        
+
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
