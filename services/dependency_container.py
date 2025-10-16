@@ -50,9 +50,6 @@ class DependencyContainer:
 
     def get_analysis_name_service(self):
         return self._analysis_name_service
-    
-    def get_analysis_name_service(self):
-        return self._analysis_name_service
 
     def get_job_data_service(self):
         return self._job_data_service
