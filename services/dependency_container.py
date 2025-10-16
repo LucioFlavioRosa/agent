@@ -64,6 +64,9 @@ class DependencyContainer:
     def get_job_manager(self):
         return self._job_manager
 
+    def get_job_store(self):
+        return self._job_store
+
     def get_blob_storage(self):
         return self._blob_storage_service
 
