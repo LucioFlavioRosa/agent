@@ -1,122 +1,74 @@
-import requests
 from typing import Dict, Optional, List, Union
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_repository_provider import AzureRepositoryProvider
-from tools.conectores.azure_conector import AzureConector
 from tools.readers.base_reader import BaseReader
-import base64
 
 class AzureReader(BaseReader):
-    
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
         super().__init__(repository_provider or AzureRepositoryProvider())
 
-    def _get_azure_auth_headers(self, repositorio_dict: dict) -> dict:
-        connector = AzureConector.create_with_defaults()
-        organization = repositorio_dict.get('_organization')
-        token = connector._get_token_for_org(organization, platform='azure')
-        credentials = base64.b64encode(f":{token}".encode()).decode()
-        return {
-            "Content-Type": "application/json",
-            "Authorization": f"Basic {credentials}"
-        }
+    def _read_azure_file(self, repositorio, caminho_arquivo: str, branch_a_ler: str) -> str:
+        file_content = repositorio.get_file_content(caminho_arquivo, branch_a_ler)
+        return file_content
 
-    def _obter_lista_todos_arquivos(self, repositorio_dict: dict, branch_a_ler: str) -> List[str]:
-        organization = repositorio_dict.get('_organization')
-        project = repositorio_dict.get('_project')
-        repository = repositorio_dict.get('_repository')
-        print(f"[Azure Reader] Obtendo lista completa de arquivos: {organization}/{project}/{repository}")
-        headers = self._get_azure_auth_headers(repositorio_dict)
-        base_url = f"https://dev.azure.com/{organization}/{project}/_apis/git/repositories/{repository}"
-        try:
-            items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
-            response = requests.get(items_url, headers=headers, timeout=60)
-            response.raise_for_status()
-            all_items = response.json().get('value', [])
-            lista_arquivos = [
-                item.get('path') for item in all_items
-                if not item.get('isFolder') and item.get('path')
-            ]
-            print(f"[Azure Reader] Lista completa obtida: {len(lista_arquivos)} arquivos encontrados.")
-            return lista_arquivos
-        except Exception as e:
-            print(f"[Azure Reader] ERRO ao obter lista completa de arquivos Azure DevOps: {e}")
-            raise
+    def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
+        return self._ler_arquivos_especificos_base(
+            repositorio, branch_a_ler, arquivos_especificos, "Azure", self._read_azure_file
+        )
 
-    def _ler_repositorio_completo(self, repositorio_dict: dict, branch_a_ler: str, extensoes_alvo: List[str], arquivos_especificos: Optional[List[str]] = None) -> Dict[str, str]:
+    def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
+        lista_arquivos = repositorio.list_files(branch_a_ler)
+        return lista_arquivos
+
+    def _ler_repositorio_completo(self, repositorio, branch_a_ler: str, tipo_analise: str, extensoes_alvo: List[str]) -> Dict[str, str]:
         arquivos_do_repo = {}
-        organization = repositorio_dict.get('_organization')
-        project = repositorio_dict.get('_project')
-        repository = repositorio_dict.get('_repository')
-        print(f"[Azure Reader] Lendo repo: {organization}/{project}/{repository}")
-        headers = self._get_azure_auth_headers(repositorio_dict)
-        base_url = f"https://dev.azure.com/{organization}/{project}/_apis/git/repositories/{repository}"
-        try:
-            print(f"[Azure Reader] Obtendo árvore de arquivos da branch '{branch_a_ler}'...")
-            items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_a_ler}&api-version=7.0"
-            response = requests.get(items_url, headers=headers, timeout=60)
-            response.raise_for_status()
-            all_items = response.json().get('value', [])
-            print(f"[Azure Reader] Árvore obtida. {len(all_items)} itens totais encontrados.")
-            if arquivos_especificos:
-                print(f"[Azure Reader] Filtrando por {len(arquivos_especificos)} arquivos específicos.")
-                arquivos_para_ler = [
-                    item for item in all_items
-                    if not item.get('isFolder') and item.get('path') in arquivos_especificos
-                ]
-            else:
-                print(f"[Azure Reader] Filtrando por extensões: {extensoes_alvo}")
-                arquivos_para_ler = [
-                    item for item in all_items
-                    if not item.get('isFolder') and any(item.get('path', '').endswith(ext) for ext in extensoes_alvo)
-                ]
-            print(f"[Azure Reader] {len(arquivos_para_ler)} arquivos selecionados para leitura de conteúdo.")
-            for item in arquivos_para_ler:
-                file_path = item.get('path')
-                try:
-                    content_url = item.get('url')
-                    if not content_url:
-                        continue
-                    content_headers = headers.copy()
-                    content_headers['Accept'] = 'application/octet-stream'
-                    content_response = requests.get(content_url, headers=content_headers, timeout=30)
-                    content_response.raise_for_status()
-                    arquivos_do_repo[file_path] = content_response.text
-                    print(f"[Azure Reader] Conteúdo de '{file_path}' lido com sucesso.")
-                except Exception as e:
-                    print(f"[Azure Reader] AVISO: Falha ao ler conteúdo de '{file_path}'. Erro: {e}")
-        except Exception as e:
-            print(f"[Azure Reader] ERRO CRÍTICO ao ler repositório Azure DevOps: {e}")
-            raise
+        lista_arquivos = repositorio.list_files(branch_a_ler)
+        arquivos_para_ler = [
+            caminho for caminho in lista_arquivos
+            if any(caminho.endswith(ext) for ext in extensoes_alvo)
+        ]
+        for caminho_arquivo in arquivos_para_ler:
+            try:
+                conteudo = repositorio.get_file_content(caminho_arquivo, branch_a_ler)
+                arquivos_do_repo[caminho_arquivo] = conteudo
+            except Exception:
+                continue
         return arquivos_do_repo
 
     def read_repository_internal(
-        self, 
-        repositorio, 
-        tipo_analise: str, 
+        self,
+        repositorio,
+        tipo_analise: str,
         nome_branch: str = None,
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None,
         retornar_lista_arquivos: bool = False
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
-        branch_a_ler = nome_branch or repositorio.get('default_branch', 'main')
-        extensoes_alvo = []
-        if not arquivos_especificos:
-            extensoes_alvo = mapeamento_tipo_extensoes.get(tipo_analise.lower())
-            if extensoes_alvo is None:
-                raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado no mapeamento")
-        arquivos_lidos = self._ler_repositorio_completo(
-            repositorio_dict=repositorio,
-            branch_a_ler=branch_a_ler,
-            extensoes_alvo=extensoes_alvo,
-            arquivos_especificos=arquivos_especificos
-        )
+        branch_a_ler = self._validar_parametros_leitura(repositorio, nome_branch, "Azure")
+        if arquivos_especificos and len(arquivos_especificos) > 0:
+            arquivos_lidos = self._ler_arquivos_especificos(repositorio, branch_a_ler, arquivos_especificos)
+        else:
+            extensoes_alvo = self._validar_extensoes_alvo(tipo_analise, mapeamento_tipo_extensoes)
+            arquivos_lidos = self._ler_repositorio_completo(repositorio, branch_a_ler, tipo_analise, extensoes_alvo)
         if retornar_lista_arquivos:
-            print("Flag retornar_lista_arquivos ativada - obtendo lista completa de arquivos Azure.")
             lista_todos_arquivos = self._obter_lista_todos_arquivos(repositorio, branch_a_ler)
             return {
                 'codigo': arquivos_lidos,
                 'lista_arquivos': lista_todos_arquivos
+            }
+        else:
+            return arquivos_lidos
+
+    def read_from_cache(self, job_id: str, cache_service, retornar_lista_arquivos: bool = False) -> Optional[Dict]:
+        arquivos_lidos = cache_service.get_repository_files(job_id)
+        if arquivos_lidos is None:
+            print(f"[AzureReader] Nenhum arquivo encontrado no cache para job_id={job_id}")
+            return None
+        if retornar_lista_arquivos:
+            lista_arquivos = cache_service.get_file_list(job_id)
+            return {
+                'codigo': arquivos_lidos,
+                'lista_arquivos': lista_arquivos
             }
         else:
             return arquivos_lidos
