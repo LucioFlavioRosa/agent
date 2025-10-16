@@ -1,7 +1,7 @@
 import time
 import yaml
 import os
-from typing import Dict, Optional, List, Union
+from typing import Dict, Optional, List, Union, Any
 from domain.interfaces.repository_reader_interface import IRepositoryReader
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
@@ -11,13 +11,13 @@ from .gitlab_reader import GitLabReader
 from .azure_reader import AzureReader
 
 class ReaderGeral(IRepositoryReader):
-    
-    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
+    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None, cache_service: Optional[Any] = None):
         self.repository_provider = repository_provider or GitHubRepositoryProvider()
         self._mapeamento_tipo_extensoes = self._carregar_config_workflows()
         self.github_reader = GitHubReader(repository_provider)
         self.gitlab_reader = GitLabReader(repository_provider)
         self.azure_reader = AzureReader(repository_provider)
+        self.cache_service = cache_service
 
     def _carregar_config_workflows(self):
         try:
@@ -60,23 +60,56 @@ class ReaderGeral(IRepositoryReader):
         repositorio = conexao_geral.connection(repositorio=nome_repo, repository_type=repository_type, repository_provider=self.repository_provider)
         print(f"[Reader Geral] Objeto repositório recebido: {type(repositorio)}")
         resultado = None
-        if repository_type == 'azure':
-            print(f"[Reader Geral] Delegando para Azure Reader")
-            resultado = self.azure_reader.read_repository_internal(
-                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
-            )
-        elif repository_type == 'gitlab':
-            print(f"[Reader Geral] Delegando para GitLab Reader")
-            resultado = self.gitlab_reader.read_repository_internal(
-                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
-            )
+        cache_resultado = {}
+        cache_ttl = 3600
+        arquivos_para_ler = arquivos_especificos if arquivos_especificos is not None else None
+        if arquivos_para_ler is not None and self.cache_service:
+            print(f"[Reader Geral] Usando cache para leitura de arquivos específicos.")
+            arquivos_lidos = {}
+            for file_path in arquivos_para_ler:
+                cache_key = f"repo_files:{repository_type}:{nome_repo}:{nome_branch}:{file_path}"
+                cached_content = self.cache_service.get(cache_key)
+                if cached_content is not None:
+                    print(f"[Reader Geral] CACHE HIT: {cache_key}")
+                    arquivos_lidos[file_path] = cached_content
+                else:
+                    print(f"[Reader Geral] CACHE MISS: {cache_key}")
+                    if repository_type == 'azure':
+                        file_content = self.azure_reader.read_single_file(repositorio, file_path, nome_branch)
+                    elif repository_type == 'gitlab':
+                        file_content = self.gitlab_reader.read_single_file(repositorio, file_path, nome_branch)
+                    else:
+                        file_content = self.github_reader.read_single_file(repositorio, file_path, nome_branch)
+                    arquivos_lidos[file_path] = file_content
+                    self.cache_service.set(cache_key, file_content, ttl=cache_ttl)
+            resultado = arquivos_lidos
         else:
-            print(f"[Reader Geral] Delegando para GitHub Reader")
-            resultado = self.github_reader.read_repository_internal(
-                repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
-            )
+            if repository_type == 'azure':
+                print(f"[Reader Geral] Delegando para Azure Reader")
+                resultado = self.azure_reader.read_repository_internal(
+                    repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
+                )
+            elif repository_type == 'gitlab':
+                print(f"[Reader Geral] Delegando para GitLab Reader")
+                resultado = self.gitlab_reader.read_repository_internal(
+                    repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
+                )
+            else:
+                print(f"[Reader Geral] Delegando para GitHub Reader")
+                resultado = self.github_reader.read_repository_internal(
+                    repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
+                )
+            if self.cache_service and isinstance(resultado, dict):
+                codigo_dict = resultado['codigo'] if retornar_lista_arquivos and 'codigo' in resultado else resultado
+                for file_path, file_content in codigo_dict.items():
+                    cache_key = f"repo_files:{repository_type}:{nome_repo}:{nome_branch}:{file_path}"
+                    if self.cache_service.get(cache_key) is not None:
+                        print(f"[Reader Geral] CACHE HIT: {cache_key}")
+                    else:
+                        print(f"[Reader Geral] CACHE MISS: {cache_key}")
+                        self.cache_service.set(cache_key, file_content, ttl=cache_ttl)
         if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
-            print(f"[Reader Geral] Resultado da leitura: {len(resultado['codigo']) if resultado['codigo'] else 0} arquivos de código, {len(resultado['lista_arquivos']) if resultado.get('lista_arquivos') else 0} arquivos totais")
+            print(f"[Reader Geral] Resultado da leitura: {len(resultado['codigo']) if resultado['codigo'] else 0} arquivos de código, {len(resultado.get('lista_arquivos', [])) if resultado.get('lista_arquivos') else 0} arquivos totais")
         else:
             print(f"[Reader Geral] Resultado da leitura: {len(resultado) if resultado else 0} arquivos")
         if not resultado:
