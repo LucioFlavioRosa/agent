@@ -2,39 +2,8 @@ class ReportHandler:
     def __init__(self, blob_storage):
         self.blob_storage = blob_storage
 
-    def try_read_existing_report(self, job_id, job_info, current_step_index):
-        projeto = job_info['data'].get('projeto')
-        analysis_type = job_info['data'].get('original_analysis_type')
-        repository_type = job_info['data'].get('repository_type')
-        repo_name = job_info['data'].get('repo_name')
-        branch_name = job_info['data'].get('branch_name')
-        analysis_name = job_info['data'].get('analysis_name')
-        report_blob_url = None
-        try:
-            # Tenta ler o relatório
-            report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            # Se relatório existe, constrói a URL do blob
-            from tools.blob_report_path_builder import build_report_blob_path
-            from os import getenv
-            blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
-            account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
-            if account_url and container_name:
-                report_blob_url = f"{account_url}/{container_name}/{blob_path}"
-            elif container_name:
-                report_blob_url = f"/{container_name}/{blob_path}"
-            # Atualiza o tracker de jobs se a URL estiver disponível
-            if report_blob_url:
-                try:
-                    self.blob_storage.update_job_tracker(report_blob_url, job_id)
-                except Exception as e:
-                    print(f"[ReportHandler] Warning: Failed to update job tracker after reading report: {e}")
-            return report_text
-        except Exception as e:
-            print(f"[ReportHandler] Warning: Failed to read report or update tracker: {e}")
-            return None
-
-    def extract_report_text(self, step_result):
+    @staticmethod
+    def extract_report_text(step_result):
         if not step_result:
             return None
         if isinstance(step_result, dict):
@@ -45,7 +14,37 @@ class ReportHandler:
                     return step_result['resultado']['relatorio']
         return None
 
+    def try_read_existing_report(self, job_id, job_info, current_step_index):
+        projeto = job_info['data'].get('projeto')
+        analysis_type = job_info['data'].get('original_analysis_type')
+        repository_type = job_info['data'].get('repository_type')
+        repo_name = job_info['data'].get('repo_name')
+        branch_name = job_info['data'].get('branch_name')
+        analysis_name = job_info['data'].get('analysis_name')
+        report_blob_url = None
+        try:
+            report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            from tools.blob_report_path_builder import build_report_blob_path
+            from os import getenv
+            blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
+            account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
+            if account_url and container_name:
+                report_blob_url = f"{account_url}/{container_name}/{blob_path}"
+            elif container_name:
+                report_blob_url = f"/{container_name}/{blob_path}"
+            if report_blob_url:
+                try:
+                    self.blob_storage.update_job_tracker(report_blob_url, job_id)
+                except Exception as e:
+                    print(f"[ReportHandler] Warning: Failed to update job tracker after reading report: {e}")
+            return report_text
+        except Exception as e:
+            print(f"[ReportHandler] Warning: Failed to read report or update tracker: {e}")
+            return None
+
     def save_report_to_blob(self, job_id, job_info, report_text, report_generated_by_agent=False):
+        print(f"[{job_id}] [save_report_to_blob] Iniciando salvamento. Tamanho do relatório: {len(report_text)}, report_generated_by_agent: {report_generated_by_agent}")
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
@@ -55,12 +54,12 @@ class ReportHandler:
         if report_generated_by_agent:
             print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
         url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        print(f"[{job_id}] [save_report_to_blob] Upload concluído. URL retornada: {url}")
         if not url:
             raise ValueError(f"[{job_id}] ERRO: Blob Storage não retornou URL válida")
         job_info['data']['report_blob_url'] = url
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] Relatório salvo no Blob Storage: {url} (tamanho: {len(report_text)} chars)")
-        # Atualiza o tracker de jobs após salvar o relatório
         try:
             self.blob_storage.update_job_tracker(url, job_id)
         except Exception as e:
