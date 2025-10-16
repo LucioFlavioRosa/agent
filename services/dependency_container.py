@@ -80,7 +80,9 @@ class DependencyContainer:
     
     def get_redis_cache_service(self) -> RedisCacheService:
         if self._redis_cache_service is None:
-            self._redis_cache_service = RedisCacheService()
+            # Pega a instância única do job_store e a injeta no RedisCacheService
+            job_store_instance = self.get_job_store()
+            self._redis_cache_service = RedisCacheService(job_store=job_store_instance)
         return self._redis_cache_service
     
     def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
@@ -96,7 +98,7 @@ class DependencyContainer:
                 self.get_commit_handler(),
                 self.get_data_formatter(),
                 self.get_redis_cache_service(),
-                self
+                self # Passando a instância do próprio container
             )
         return self._workflow_orchestrator
     
