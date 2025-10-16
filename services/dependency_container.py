@@ -35,6 +35,7 @@ class DependencyContainer:
         self._job_manager = JobManager(job_store=self._job_store)
         self._analysis_name_cache = AnalysisNameCache(job_store=self._job_store)
         self._analysis_name_service = AnalysisNameService(cache=self._analysis_name_cache)
+        self._blob_storage_service = BlobStorageService()
 
     def get_workflow_registry_service(self):
         return self._workflow_registry_service
