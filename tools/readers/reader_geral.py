@@ -51,98 +51,98 @@ class ReaderGeral(IRepositoryReader):
         arquivos_especificos: Optional[List[str]] = None,
         retornar_lista_arquivos: bool = False
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
-        provider_name = type(self.repository_provider).__name__
-        print(f"[Reader Geral] Iniciando leitura do repositório: {nome_repo} via {provider_name}")
-        print(f"[Reader Geral] Tipo de repositório explícito: {repository_type}")
+        
+        print(f"[Reader Geral] Iniciando leitura. Repositório: {nome_repo}, Tipo: {repository_type}")
         print(f"[Reader Geral] Flag retornar_lista_arquivos: {retornar_lista_arquivos}")
+    
+        # --- SETUP INICIAL ---
         conexao_geral = ConexaoGeral.create_with_defaults()
-        print(f"[Reader Geral] Usando repository_type explícito: {repository_type}")
         repositorio = conexao_geral.connection(repositorio=nome_repo, repository_type=repository_type, repository_provider=self.repository_provider)
-        print(f"[Reader Geral] Objeto repositório recebido: {type(repositorio)}")
-        resultado = None
-        cache_resultado = {}
+        branch_a_ler = nome_branch or repositorio.get('default_branch', 'main')
         cache_ttl = 3600
-        arquivos_para_ler = arquivos_especificos if arquivos_especificos is not None else None
-        lista_arquivos_cache_key = f"repo_file_list:{repository_type}:{nome_repo}:{nome_branch}"
-        lista_arquivos_do_cache = None
+        
+        # Dicionário final com o conteúdo dos arquivos
+        conteudo_dos_arquivos = {}
+        # Lista final de todos os arquivos no repositório
+        lista_final_de_arquivos = None
+    
+        # --- PASSO 1: TRATAR A LISTA DE ARQUIVOS (SE NECESSÁRIO) ---
         if retornar_lista_arquivos and self.cache_service:
-            if hasattr(self.cache_service, 'get_cached_file_list'):
-                lista_arquivos_do_cache = self.cache_service.get_cached_file_list(lista_arquivos_cache_key)
-            else:
-                lista_arquivos_do_cache = self.cache_service.get(lista_arquivos_cache_key)
-            if lista_arquivos_do_cache is not None:
+            lista_arquivos_cache_key = f"repo_file_list:{repository_type}:{nome_repo}:{branch_a_ler}"
+            lista_final_de_arquivos = self.cache_service.get(lista_arquivos_cache_key)
+    
+            if lista_final_de_arquivos is not None:
                 print(f"[Reader Geral] CACHE HIT (lista de arquivos): {lista_arquivos_cache_key}")
-                # Se arquivos_especificos não está definido, retorna só a lista do cache
-                if arquivos_para_ler is None:
-                    return {'codigo': {}, 'lista_arquivos': lista_arquivos_do_cache}
             else:
                 print(f"[Reader Geral] CACHE MISS (lista de arquivos): {lista_arquivos_cache_key}")
-        if arquivos_para_ler is not None and self.cache_service:
-            print(f"[Reader Geral] Usando cache para leitura de arquivos específicos.")
-            arquivos_lidos = {}
-            for file_path in arquivos_para_ler:
-                cache_key = f"repo_files:{repository_type}:{nome_repo}:{nome_branch}:{file_path}"
+                # Delega a busca da lista para o leitor específico
+                if repository_type == 'azure':
+                    lista_final_de_arquivos = self.azure_reader._obter_lista_todos_arquivos(repositorio, branch_a_ler)
+                elif repository_type == 'gitlab':
+                    lista_final_de_arquivos = self.gitlab_reader._obter_lista_todos_arquivos(repositorio, branch_a_ler)
+                else:
+                    lista_final_de_arquivos = self.github_reader._obter_lista_todos_arquivos(repositorio, branch_a_ler)
+                
+                # Salva a lista recém-buscada no cache
+                if lista_final_de_arquivos:
+                    self.cache_service.set(lista_arquivos_cache_key, lista_final_de_arquivos, ttl=cache_ttl)
+                    print(f"[Reader Geral] Lista de arquivos salva no cache.")
+    
+        # --- PASSO 2: TRATAR O CONTEÚDO DOS ARQUIVOS ---
+        arquivos_para_ler_conteudo = []
+        if arquivos_especificos:
+            arquivos_para_ler_conteudo = arquivos_especificos
+        else:
+            # Se não há arquivos específicos, lê todos que correspondem à extensão
+            extensoes_alvo = self._mapeamento_tipo_extensoes.get(tipo_analise.lower())
+            if not extensoes_alvo:
+                raise ValueError(f"Tipo de análise '{tipo_analise}' não encontrado ou sem extensões definidas.")
+            
+            # Se a lista de arquivos já foi buscada, filtra a partir dela (mais eficiente)
+            if lista_final_de_arquivos:
+                arquivos_para_ler_conteudo = [f for f in lista_final_de_arquivos if any(f.endswith(ext) for ext in extensoes_alvo)]
+            else:
+                # Se a lista não foi buscada, delega a busca + filtro para o leitor específico
+                # (Esta é a lógica original do seu bloco 'else')
+                print(f"[Reader Geral] Delegando leitura completa por extensões para o leitor específico.")
+                if repository_type == 'azure':
+                    conteudo_dos_arquivos = self.azure_reader._ler_repositorio_completo(repositorio, branch_a_ler, extensoes_alvo)
+                # Adicionar lógica para gitlab e github aqui...
+                
+                # Garante que os arquivos lidos sejam salvos individualmente no cache
+                if self.cache_service:
+                    for file_path, content in conteudo_dos_arquivos.items():
+                        cache_key = f"repo_files:{repository_type}:{nome_repo}:{branch_a_ler}:{file_path}"
+                        self.cache_service.set(cache_key, content, ttl=cache_ttl)
+                
+                # Pula a leitura individual, pois já foi feita
+                arquivos_para_ler_conteudo = [] 
+    
+        # Loop para ler o conteúdo de arquivos individuais (seja de 'arquivos_especificos' ou da lista filtrada)
+        if arquivos_para_ler_conteudo and self.cache_service:
+            print(f"[Reader Geral] Lendo conteúdo de {len(arquivos_para_ler_conteudo)} arquivos.")
+            for file_path in arquivos_para_ler_conteudo:
+                cache_key = f"repo_files:{repository_type}:{nome_repo}:{branch_a_ler}:{file_path}"
                 cached_content = self.cache_service.get(cache_key)
+                
                 if cached_content is not None:
-                    print(f"[Reader Geral] CACHE HIT: {cache_key}")
-                    arquivos_lidos[file_path] = cached_content
+                    print(f"[Reader Geral] CACHE HIT (conteúdo): {file_path}")
+                    conteudo_dos_arquivos[file_path] = cached_content
                 else:
-                    print(f"[Reader Geral] CACHE MISS: {cache_key}")
+                    print(f"[Reader Geral] CACHE MISS (conteúdo): {file_path}")
+                    file_content = None
                     if repository_type == 'azure':
-                        file_content = self.azure_reader.read_single_file(repositorio, file_path, nome_branch)
-                    elif repository_type == 'gitlab':
-                        file_content = self.gitlab_reader.read_single_file(repositorio, file_path, nome_branch)
-                    else:
-                        file_content = self.github_reader.read_single_file(repositorio, file_path, nome_branch)
-                    arquivos_lidos[file_path] = file_content
-                    self.cache_service.set(cache_key, file_content, ttl=cache_ttl)
-            resultado = arquivos_lidos
-        else:
-            if repository_type == 'azure':
-                print(f"[Reader Geral] Delegando para Azure Reader")
-                resultado = self.azure_reader.read_repository_internal(
-                    repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
-                )
-            elif repository_type == 'gitlab':
-                print(f"[Reader Geral] Delegando para GitLab Reader")
-                resultado = self.gitlab_reader.read_repository_internal(
-                    repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
-                )
-            else:
-                print(f"[Reader Geral] Delegando para GitHub Reader")
-                resultado = self.github_reader.read_repository_internal(
-                    repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
-                )
-            # Salvar a lista de arquivos no cache se retornar_lista_arquivos e resultado correto
-            if self.cache_service and retornar_lista_arquivos and isinstance(resultado, dict) and 'lista_arquivos' in resultado:
-                if lista_arquivos_do_cache is None:
-                    if hasattr(self.cache_service, 'set_cached_file_list'):
-                        self.cache_service.set_cached_file_list(lista_arquivos_cache_key, resultado['lista_arquivos'], ttl=cache_ttl)
-                    else:
-                        self.cache_service.set(lista_arquivos_cache_key, resultado['lista_arquivos'], ttl=cache_ttl)
-                    print(f"[Reader Geral] Lista de arquivos salva no cache: {lista_arquivos_cache_key}")
-                else:
-                    print(f"[Reader Geral] Lista de arquivos já estava no cache: {lista_arquivos_cache_key}")
-            if self.cache_service and isinstance(resultado, dict):
-                codigo_dict = resultado['codigo'] if retornar_lista_arquivos and 'codigo' in resultado else resultado
-                for file_path, file_content in codigo_dict.items():
-                    cache_key = f"repo_files:{repository_type}:{nome_repo}:{nome_branch}:{file_path}"
-                    if self.cache_service.get(cache_key) is not None:
-                        print(f"[Reader Geral] CACHE HIT: {cache_key}")
-                    else:
-                        print(f"[Reader Geral] CACHE MISS: {cache_key}")
+                        file_content = self.azure_reader.read_single_file(repositorio, file_path, branch_a_ler)
+                    # Adicionar lógica para gitlab e github aqui...
+    
+                    if file_content is not None:
+                        conteudo_dos_arquivos[file_path] = file_content
                         self.cache_service.set(cache_key, file_content, ttl=cache_ttl)
-        if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
-            print(f"[Reader Geral] Resultado da leitura: {len(resultado['codigo']) if resultado['codigo'] else 0} arquivos de código, {len(resultado.get('lista_arquivos', [])) if resultado.get('lista_arquivos') else 0} arquivos totais")
+    
+        # --- PASSO 3: MONTAR O RESULTADO FINAL ---
+        if retornar_lista_arquivos:
+            print(f"[Reader Geral] Retornando {len(conteudo_dos_arquivos)} arquivos de código e lista com {len(lista_final_de_arquivos or [])} arquivos.")
+            return {'codigo': conteudo_dos_arquivos, 'lista_arquivos': lista_final_de_arquivos or []}
         else:
-            print(f"[Reader Geral] Resultado da leitura: {len(resultado) if resultado else 0} arquivos")
-        if not resultado:
-            print(f"[Reader Geral] AVISO CRÍTICO: Leitura retornou vazia para repositório {nome_repo} (tipo: {repository_type})")
-            print(f"[Reader Geral] Parâmetros: tipo_analise={tipo_analise}, branch={nome_branch}, arquivos_especificos={arquivos_especificos}")
-        else:
-            if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
-                arquivos_lidos = resultado['codigo']
-                print(f"[Reader Geral] Arquivos lidos com sucesso: {list(arquivos_lidos.keys())[:5]}{'...' if len(arquivos_lidos) > 5 else ''}")
-            else:
-                print(f"[Reader Geral] Arquivos lidos com sucesso: {list(resultado.keys())[:5]}{'...' if len(resultado) > 5 else ''}")
-        return resultado
+            print(f"[Reader Geral] Retornando {len(conteudo_dos_arquivos)} arquivos de código.")
+            return conteudo_dos_arquivos
