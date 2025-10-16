@@ -95,18 +95,18 @@ class DependencyContainer:
     def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
         if self._workflow_orchestrator is None:
             workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
+            
             self._workflow_orchestrator = WorkflowOrchestrator(
-                self.get_job_manager(), 
-                self.get_blob_storage(), 
-                workflow_registry,
-                self.get_rag_retriever(),
-                self.get_job_handler(),
-                self.get_report_handler(),
-                self.get_commit_handler(),
-                self.get_data_formatter(),
+                job_manager=self.get_job_manager(), 
+                blob_storage=self.get_blob_storage(), 
+                workflow_registry=workflow_registry,
+                rag_retriever=self.get_rag_retriever(),
+                job_handler=self.get_job_handler(),
+                report_handler=self.get_report_handler(),
+                commit_handler=self.get_commit_handler(),
+                data_formatter=self.get_data_formatter(),
                 secret_manager=self.get_secret_manager(),
-                self.get_redis_cache_service(),
-                self # Passando a instância do próprio container
+                cache_service=self.get_redis_cache_service()
             )
         return self._workflow_orchestrator
     
