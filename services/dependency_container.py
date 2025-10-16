@@ -16,6 +16,8 @@ class DependencyContainer:
     _cache_service_instance = None
 
     def __init__(self):
+        self._cache_service = CacheService()
+        self._analysis_name_service = AnalysisNameService(cache=self._cache_service)
         self._workflow_registry_service = WorkflowRegistryService()
         self._job_logging_service = JobLoggingService()
         self._pull_request_extractor_service = PullRequestExtractorService()
