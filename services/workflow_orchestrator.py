@@ -21,7 +21,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
                  job_handler: JobHandler = None, report_handler: ReportHandler = None,
-                 commit_handler: CommitHandler = None, data_formatter: DataFormatter = None, secret_manager: Optional[Any] = None):
+                 commit_handler: CommitHandler = None, data_formatter: DataFormatter = None, secret_manager: Optional[Any] = None,
+                 cache_service=None, dependency_container=None):
         self.workflow_registry = workflow_registry
         self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
         self.job_handler = job_handler or JobHandler(job_manager)
@@ -29,6 +30,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
         self.secret_manager = secret_manager or AzureSecretManager()
+        self.cache_service = cache_service
+        self.dependency_container = dependency_container
                      
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         report_text = self.report_handler.extract_report_text(step_result)
@@ -59,7 +62,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data']['repo_name']
             repository_provider = get_repository_provider_explicit(repository_type)
-            repo_reader = ReaderGeral(repository_provider=repository_provider)
+            cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
+            repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service)
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
