@@ -82,6 +82,6 @@ class DependencyContainer:
         return WorkflowOrchestrator(
             job_manager=self.get_job_manager(),
             blob_storage=self.get_blob_storage(),
-            workflow_registry=self.get_workflow_registry_service(),
+            workflow_registry=self.get_workflow_registry_service().get_workflow_registry(),
             cache_service=self.get_cache_service()
         )
