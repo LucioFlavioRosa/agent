@@ -72,7 +72,6 @@ class ReaderGeral(IRepositoryReader):
                 lista_arquivos_do_cache = self.cache_service.get(lista_arquivos_cache_key)
             if lista_arquivos_do_cache is not None:
                 print(f"[Reader Geral] CACHE HIT (lista de arquivos): {lista_arquivos_cache_key}")
-                # Se arquivos_especificos não está definido, retorna só a lista do cache
                 if arquivos_para_ler is None:
                     return {'codigo': {}, 'lista_arquivos': lista_arquivos_do_cache}
             else:
@@ -113,7 +112,6 @@ class ReaderGeral(IRepositoryReader):
                 resultado = self.github_reader.read_repository_internal(
                     repositorio, tipo_analise, nome_branch, arquivos_especificos, self._mapeamento_tipo_extensoes, retornar_lista_arquivos
                 )
-            # Salvar a lista de arquivos no cache se retornar_lista_arquivos e resultado correto
             if self.cache_service and retornar_lista_arquivos and isinstance(resultado, dict) and 'lista_arquivos' in resultado:
                 if lista_arquivos_do_cache is None:
                     if hasattr(self.cache_service, 'set_cached_file_list'):
