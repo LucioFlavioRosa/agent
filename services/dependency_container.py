@@ -10,6 +10,7 @@ from services.commit_handler import CommitHandler
 from services.data_formatter import DataFormatter
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
+from services.redis_cache_service import RedisCacheService
 
 class DependencyContainer:
     def __init__(self):
@@ -25,6 +26,7 @@ class DependencyContainer:
         self._data_formatter = None
         self._rag_retriever = None
         self._changeset_filler = None
+        self._redis_cache_service = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -76,6 +78,11 @@ class DependencyContainer:
             self._data_formatter = DataFormatter(self.get_changeset_filler())
         return self._data_formatter
     
+    def get_redis_cache_service(self) -> RedisCacheService:
+        if self._redis_cache_service is None:
+            self._redis_cache_service = RedisCacheService()
+        return self._redis_cache_service
+    
     def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
         if self._workflow_orchestrator is None:
             workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
@@ -87,7 +94,9 @@ class DependencyContainer:
                 self.get_job_handler(),
                 self.get_report_handler(),
                 self.get_commit_handler(),
-                self.get_data_formatter()
+                self.get_data_formatter(),
+                self.get_redis_cache_service(),
+                self
             )
         return self._workflow_orchestrator
     
