@@ -7,12 +7,30 @@ from tools.readers.base_reader import BaseReader
 
 class GitHubReader(BaseReader):
     
-    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
-        super().__init__(repository_provider or GitHubRepositoryProvider())
+    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None, cache_service=None):
+        super().__init__(repository_provider or GitHubRepositoryProvider(), cache_service=cache_service)
+
+    def _extract_repo_info(self, repositorio):
+        owner = getattr(repositorio, 'owner', None)
+        repo_name = getattr(repositorio, 'name', None)
+        if hasattr(repositorio, 'full_name') and repositorio.full_name:
+            parts = repositorio.full_name.split('/')
+            if len(parts) == 2:
+                owner, repo_name = parts
+        return owner or '', '', repo_name or ''
 
     def _read_github_file(self, repositorio, caminho_arquivo: str, branch_a_ler: str) -> str:
-        file_content = repositorio.get_contents(caminho_arquivo, ref=branch_a_ler)
-        return base64.b64decode(file_content.content).decode('utf-8')
+        owner, _, repo_name = self._extract_repo_info(repositorio)
+        platform = 'github'
+        def ler_callback():
+            file_content = repositorio.get_contents(caminho_arquivo, ref=branch_a_ler)
+            return base64.b64decode(file_content.content).decode('utf-8')
+        if self.cache_service:
+            return self._ler_conteudo_arquivo_com_cache(
+                platform, owner, '', repo_name, branch_a_ler, caminho_arquivo, ler_callback
+            )
+        else:
+            return ler_callback()
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         return self._ler_arquivos_especificos_base(
@@ -20,7 +38,9 @@ class GitHubReader(BaseReader):
         )
 
     def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
-        try:
+        owner, _, repo_name = self._extract_repo_info(repositorio)
+        platform = 'github'
+        def obter_lista_callback():
             print(f"Obtendo lista completa de arquivos GitHub da branch '{branch_a_ler}'...")
             try:
                 ref = repositorio.get_git_ref(f"heads/{branch_a_ler}")
@@ -35,12 +55,15 @@ class GitHubReader(BaseReader):
             ]
             print(f"Lista completa GitHub obtida: {len(lista_arquivos)} arquivos encontrados.")
             return lista_arquivos
-        except GithubException as e:
-            print(f"ERRO ao obter lista completa de arquivos GitHub: {e}")
-            raise
+        if self.cache_service:
+            return self._obter_lista_todos_arquivos_com_cache(platform, owner, '', repo_name, branch_a_ler, obter_lista_callback)
+        else:
+            return obter_lista_callback()
 
     def _ler_repositorio_completo(self, repositorio, branch_a_ler: str, tipo_analise: str, extensoes_alvo: List[str]) -> Dict[str, str]:
         arquivos_do_repo = {}
+        owner, _, repo_name = self._extract_repo_info(repositorio)
+        platform = 'github'
         try:
             print(f"Obtendo a árvore de arquivos GitHub completa da branch '{branch_a_ler}'...")
             try:
@@ -61,12 +84,15 @@ class GitHubReader(BaseReader):
             for i, element in enumerate(arquivos_para_ler):
                 if (i + 1) % 50 == 0:
                     print(f"  ...lendo arquivo {i + 1} de {len(arquivos_para_ler)} ({element.path})")
-                try:
+                def ler_callback():
                     blob_content = repositorio.get_git_blob(element.sha).content
-                    decoded_content = base64.b64decode(blob_content).decode('utf-8')
-                    arquivos_do_repo[element.path] = decoded_content
-                except Exception as e:
-                    print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{element.path}'. Pulando. Erro: {e}")
+                    return base64.b64decode(blob_content).decode('utf-8')
+                if self.cache_service:
+                    conteudo = self._ler_conteudo_arquivo_com_cache(platform, owner, '', repo_name, branch_a_ler, element.path, ler_callback)
+                else:
+                    conteudo = ler_callback()
+                if conteudo is not None:
+                    arquivos_do_repo[element.path] = conteudo
         except GithubException as e:
             print(f"ERRO CRÍTICO durante a comunicação com a API GitHub: {e}")
             raise
