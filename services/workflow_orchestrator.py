@@ -80,7 +80,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         repository_type=repository_type,
                         nome_branch=branch_modernizado,
                         arquivos_especificos=arquivos_especificos,
-                        mapeamento_tipo_extensoes=None,
                         retornar_lista_arquivos=retornar_lista_arquivos,
                         use_cache=use_cache,
                         cache_service=self.cache_service,
