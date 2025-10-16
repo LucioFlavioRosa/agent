@@ -1,9 +1,7 @@
 import re
 import json
 import time
-
-from typing import Dict, Any
-
+from typing import Dict, Any, Optional
 from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
 from tools.readers.reader_geral import ReaderGeral
@@ -14,7 +12,8 @@ class RevisorStepExecutor(BaseStepExecutor):
     
     def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                 current_step_index: int, previous_step_result: Dict[str, Any], 
-                repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
+                repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any],
+                access_token: str, access_token_original: Optional[str] = None) -> Dict[str, Any]:
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
@@ -25,7 +24,6 @@ class RevisorStepExecutor(BaseStepExecutor):
             print(f"[{job_id}] Aplicando instruções extras de aprovação na etapa {current_step_index}: {observacoes_humanas[:100]}...")
             self.job_handler.clear_approval_instructions(job_info)
             self.job_handler.update_job(job_id, job_info)
-        # Suporte a processamento incremental por batch
         if 'current_batch' in agent_params and agent_params['current_batch']:
             batch_steps = agent_params['current_batch']
             instrucoes_formatadas += "\n\n---\n\nExecutar APENAS os seguintes passos do relatório:\n"
@@ -50,9 +48,8 @@ class RevisorStepExecutor(BaseStepExecutor):
                 agente = AgentFactory.create_agent("revisor", repo_reader, llm_provider)
                 agent_response = agente.main(**agent_params)
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
@@ -60,24 +57,17 @@ class RevisorStepExecutor(BaseStepExecutor):
                     end = raw_response_from_llm.rfind('}')
                     if start != -1 and end != -1:
                         cleaned_string = raw_response_from_llm[start:end+1]
-
                 if not cleaned_string:
-                    # Se não encontrar JSON, não adianta tentar de novo. Usa o resultado anterior ou falha.
                     if previous_step_result and isinstance(previous_step_result, dict):
                         print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
                         return previous_step_result
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
-
                 result = json.loads(cleaned_string, strict=False)
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
                 return result
-
             except (json.JSONDecodeError, ValueError) as e:
-                # Se o try falhar, o except é ativado.
                 print(f"[{job_id}] Tentativa {attempt + 1}/{max_retries} falhou: {e}")
                 if attempt + 1 == max_retries:
-                    # Se esta foi a última tentativa, desiste e lança o erro.
                     print(f"[{job_id}] ERRO: Máximo de tentativas atingido. Falhando o step.")
                     raise e
-                    
                 time.sleep(2)
