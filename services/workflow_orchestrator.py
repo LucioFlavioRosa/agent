@@ -76,8 +76,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 lista_arquivos = None
                 if arquivos_especificos:
                     arquivos_lidos = repo_reader.read_repository(
-                        repositorio=repository_provider.get_repository(repo_name, access_token),
-                        tipo_analise=job_info['data']['original_analysis_type'],
+                        nome_repo=repo_name,
+                        repository_type=repository_type,
                         nome_branch=branch_modernizado,
                         arquivos_especificos=arquivos_especificos,
                         mapeamento_tipo_extensoes=None,
