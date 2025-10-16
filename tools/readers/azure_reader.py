@@ -27,16 +27,13 @@ class AzureReader(BaseReader):
             "Authorization": f"Basic {credentials}"
         }
 
-    # --- MÉTODO ADICIONADO E ESSENCIAL ---
     def read_single_file(self, repositorio_dict: dict, file_path: str, branch: Optional[str] = None) -> Optional[str]:
-        """Lê o conteúdo de um único arquivo de um repositório Azure de forma eficiente."""
         branch_a_ler = branch or repositorio_dict.get('default_branch', 'main')
         print(f"[Azure Reader] Lendo arquivo específico: '{file_path}'")
         
         headers = self._get_azure_auth_headers(repositorio_dict)
         base_url = self._get_base_api_url(repositorio_dict)
         
-        # Endpoint específico para buscar um item por seu caminho e formato de texto
         file_url = f"{base_url}/items?path={file_path}&versionDescriptor.version={branch_a_ler}&$format=text&api-version=7.0"
         
         try:
@@ -89,7 +86,6 @@ class AzureReader(BaseReader):
             for item in arquivos_para_ler:
                 file_path = item.get('path')
                 if file_path:
-                    # Reutiliza o método de ler um único arquivo
                     content = self.read_single_file(repositorio_dict, file_path, branch_a_ler)
                     if content is not None:
                         arquivos_do_repo[file_path] = content
