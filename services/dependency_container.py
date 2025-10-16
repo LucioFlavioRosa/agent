@@ -11,11 +11,16 @@ from services.response_builder_service import ResponseBuilderService
 from services.job_manager import JobManager
 from services.blob_storage_service import BlobStorageService
 from services.workflow_orchestrator import WorkflowOrchestrator
+from services.job_manager import JobManager
+from services.blob_storage_service import BlobStorageService
+from services.workflow_orchestrator import WorkflowOrchestrator
+from tools.job_store import RedisJobStore
 
 class DependencyContainer:
     _cache_service_instance = None
 
     def __init__(self):
+       
         self._cache_service = CacheService()
         self._analysis_name_service = AnalysisNameService(cache=self._cache_service)
         self._workflow_registry_service = WorkflowRegistryService()
@@ -26,8 +31,8 @@ class DependencyContainer:
         self._job_validation_service = JobValidationService()
         self._repository_normalizer_service = RepositoryNormalizerService()
         self._response_builder_service = ResponseBuilderService(pr_extractor=self._pull_request_extractor_service, logging_service=self._job_logging_service)
-        self._job_manager = JobManager()
-        self._blob_storage_service = BlobStorageService()
+        self._job_store = RedisJobStore()
+        self._job_manager = JobManager(job_store=self._job_store)
 
     def get_workflow_registry_service(self):
         return self._workflow_registry_service
