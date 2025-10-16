@@ -25,7 +25,7 @@ class DependencyContainer:
         self._job_data_service = JobDataService()
         self._job_validation_service = JobValidationService()
         self._repository_normalizer_service = RepositoryNormalizerService()
-        self._response_builder_service = FinalStatusResponseBuilder()
+        self._response_builder_service = ResponseBuilderService()
         self._job_manager = JobManager()
         self._blob_storage_service = BlobStorageService()
 
