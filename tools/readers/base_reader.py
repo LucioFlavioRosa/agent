@@ -74,3 +74,7 @@ class BaseReader(ABC):
         retornar_lista_arquivos: bool
     ) -> Dict:
         pass
+
+    @abstractmethod
+    def read_from_cache(self, job_id: str, cache_service, retornar_lista_arquivos: bool = False) -> Optional[Dict]:
+        pass
