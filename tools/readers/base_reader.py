@@ -1,76 +1,44 @@
-from abc import ABC, abstractmethod
-from typing import Dict, Optional, List, Callable
+from typing import Dict, Optional, List, Union
 
-class BaseReader(ABC):
-    
-    def __init__(self, repository_provider):
+class BaseReader:
+    def __init__(self, repository_provider, cache_service=None):
         self.repository_provider = repository_provider
+        self.cache_service = cache_service
 
-    def _validar_parametros_leitura(self, repositorio, nome_branch: Optional[str], provider_name: str) -> str:
-        if nome_branch:
-            print(f"Branch especificada pelo usuário: '{nome_branch}'")
-            return nome_branch
-        
-        if hasattr(repositorio, 'default_branch'):
-            branch_padrao = repositorio.default_branch
-        elif isinstance(repositorio, dict) and 'default_branch' in repositorio:
-            branch_padrao = repositorio['default_branch']
+    def _gerar_cache_key_lista_arquivos(self, platform: str, org: str, project: str, repo: str, branch: str) -> str:
+        key = f"repo_file_list:{platform}:{org}/{project}/{repo}:{branch}"
+        print(f"[CACHE][ListaArquivos] Chave gerada: {key}")
+        return key
+
+    def _gerar_cache_key_conteudo_arquivo(self, platform: str, org: str, project: str, repo: str, branch: str, file_path: str) -> str:
+        key = f"repo_file_content:{platform}:{org}/{project}/{repo}:{branch}:{file_path}"
+        print(f"[CACHE][ConteudoArquivo] Chave gerada: {key}")
+        return key
+
+    def _obter_lista_todos_arquivos_com_cache(self, platform: str, org: str, project: str, repo: str, branch: str, obter_lista_callback, ttl: int = 3600) -> List[str]:
+        if self.cache_service:
+            cache_key = self._gerar_cache_key_lista_arquivos(platform, org, project, repo, branch)
+            cached = self.cache_service.get_cached_file_list(cache_key)
+            if cached is not None:
+                print(f"[CACHE][ListaArquivos] Cache HIT para {cache_key}")
+                return cached
+            print(f"[CACHE][ListaArquivos] Cache MISS para {cache_key}")
+            lista = obter_lista_callback()
+            self.cache_service.set_cached_file_list(cache_key, lista, ttl=ttl)
+            return lista
         else:
-            branch_padrao = 'main'
-            print(f"AVISO: Branch padrão não encontrada no repositório {provider_name}. Usando 'main' como fallback.")
-        
-        print(f"Usando branch padrão do repositório {provider_name}: '{branch_padrao}'")
-        return branch_padrao
+            return obter_lista_callback()
 
-    def _validar_extensoes_alvo(self, tipo_analise: str, mapeamento_tipo_extensoes: Dict) -> List[str]:
-        extensoes_alvo = mapeamento_tipo_extensoes.get(tipo_analise.lower())
-        if extensoes_alvo is None:
-            raise ValueError(
-                f"Tipo de análise '{tipo_analise}' não encontrado no mapeamento de extensões. "
-                f"Tipos válidos: {list(mapeamento_tipo_extensoes.keys())}"
-            )
-        return extensoes_alvo
-
-    def _ler_arquivos_especificos_base(
-        self, 
-        repositorio, 
-        branch_a_ler: str, 
-        arquivos_especificos: List[str],
-        provider_name: str,
-        read_file_func: Callable
-    ) -> Dict[str, str]:
-        arquivos_lidos = {}
-        print(f"Iniciando leitura de {len(arquivos_especificos)} arquivos específicos do repositório {provider_name}...")
-        
-        for i, caminho_arquivo in enumerate(arquivos_especificos):
-            if (i + 1) % 10 == 0:
-                print(f"  ...lendo arquivo {i + 1} de {len(arquivos_especificos)} ({caminho_arquivo})")
-            
-            try:
-                conteudo = read_file_func(repositorio, caminho_arquivo, branch_a_ler)
-                arquivos_lidos[caminho_arquivo] = conteudo
-            except FileNotFoundError:
-                print(f"AVISO: Arquivo '{caminho_arquivo}' não encontrado na branch '{branch_a_ler}'. Pulando.")
-            except PermissionError:
-                print(f"AVISO: Sem permissão para ler o arquivo '{caminho_arquivo}'. Pulando.")
-            except Exception as e:
-                print(f"AVISO: Falha ao ler o arquivo '{caminho_arquivo}'. Erro: {e}. Pulando.")
-        
-        print(f"Leitura de arquivos específicos {provider_name} concluída. {len(arquivos_lidos)} de {len(arquivos_especificos)} arquivos lidos com sucesso.")
-        return arquivos_lidos
-
-    @abstractmethod
-    def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
-        pass
-
-    @abstractmethod
-    def read_repository_internal(
-        self, 
-        repositorio, 
-        tipo_analise: str, 
-        nome_branch: str,
-        arquivos_especificos: Optional[List[str]],
-        mapeamento_tipo_extensoes: Dict,
-        retornar_lista_arquivos: bool
-    ) -> Dict:
-        pass
+    def _ler_conteudo_arquivo_com_cache(self, platform: str, org: str, project: str, repo: str, branch: str, file_path: str, ler_callback, ttl: int = 1800):
+        if self.cache_service:
+            cache_key = self._gerar_cache_key_conteudo_arquivo(platform, org, project, repo, branch, file_path)
+            cached = self.cache_service.get(cache_key)
+            if cached is not None:
+                print(f"[CACHE][ConteudoArquivo] Cache HIT para {cache_key}")
+                return cached
+            print(f"[CACHE][ConteudoArquivo] Cache MISS para {cache_key}")
+            conteudo = ler_callback()
+            self.cache_service.set(cache_key, conteudo, ttl=ttl)
+            return conteudo
+        else:
+            return ler_callback()
