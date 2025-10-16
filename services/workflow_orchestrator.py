@@ -122,9 +122,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
-                    break # Sai do loop de steps, pois os batches já foram processados
-                
-                # O restante do código para steps não-incrementais
+                    break
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
@@ -147,6 +145,21 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if strategy.should_pause_for_approval(job_info, step):
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
+            # INSTRUÇÃO DO USUÁRIO: Após o loop de steps, garantir que o relatório do step 0 seja salvo
+            if (
+                steps_to_run and
+                start_from_step == 0 and
+                job_info['data'].get('analysis_report') and
+                not job_info['data'].get('report_blob_url')
+            ):
+                url = self.report_handler.save_report_to_blob(
+                    job_id,
+                    job_info,
+                    job_info['data']['analysis_report'],
+                    report_generated_by_agent=True
+                )
+                job_info['data']['report_blob_url'] = url
+                self.job_handler.update_job(job_id, job_info)
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
