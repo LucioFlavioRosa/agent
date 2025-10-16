@@ -120,3 +120,17 @@ class AzureReader(BaseReader):
             }
         else:
             return arquivos_lidos
+    
+    def read_from_cache(self, job_id: str, cache_service, retornar_lista_arquivos: bool = False) -> Optional[Dict]:
+        arquivos_lidos = cache_service.get_repository_files(job_id)
+        if arquivos_lidos is None:
+            print(f"[AzureReader] Nenhum arquivo encontrado no cache para job_id={job_id}")
+            return None
+        if retornar_lista_arquivos:
+            lista_arquivos = cache_service.get_file_list(job_id)
+            return {
+                'codigo': arquivos_lidos,
+                'lista_arquivos': lista_arquivos
+            }
+        else:
+            return arquivos_lidos
