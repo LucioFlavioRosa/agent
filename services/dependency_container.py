@@ -11,6 +11,7 @@ from services.data_formatter import DataFormatter
 from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
 from services.redis_cache_service import RedisCacheService
+from tools.azure_secret_manager import AzureSecretManager
 
 class DependencyContainer:
     def __init__(self):
@@ -77,6 +78,11 @@ class DependencyContainer:
         if self._data_formatter is None:
             self._data_formatter = DataFormatter(self.get_changeset_filler())
         return self._data_formatter
+
+    def get_secret_manager(self) -> AzureSecretManager:
+        if self._secret_manager is None:
+             self._secret_manager = AzureSecretManager()
+        return self._secret_manager
     
     def get_redis_cache_service(self) -> RedisCacheService:
         if self._redis_cache_service is None:
