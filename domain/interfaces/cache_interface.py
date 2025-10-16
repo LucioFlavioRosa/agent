@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 class ICacheService(ABC):
     @abstractmethod
@@ -16,4 +16,12 @@ class ICacheService(ABC):
 
     @abstractmethod
     def exists(self, key: str) -> bool:
+        pass
+
+    @abstractmethod
+    def get_cached_file_list(self, cache_key: str) -> Optional[List[str]]:
+        pass
+
+    @abstractmethod
+    def set_cached_file_list(self, cache_key: str, file_list: List[str], ttl: Optional[int] = 3600):
         pass
