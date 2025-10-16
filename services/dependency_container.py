@@ -1,98 +1,75 @@
-from tools.job_store import RedisJobStore
-from services.workflow_orchestrator import WorkflowOrchestrator
+from services.cache_service import CacheService
+from services.workflow_registry_service import WorkflowRegistryService
+from services.job_logging_service import JobLoggingService
+from services.pull_request_extractor_service import PullRequestExtractorService
+from services.api_service_factory import ApiServiceFactory
+from services.analysis_name_service import AnalysisNameService
+from services.job_data_service import JobDataService
+from services.job_validation_service import JobValidationService
+from services.repository_normalizer_service import RepositoryNormalizerService
+from services.response_builder_service import FinalStatusResponseBuilder
 from services.job_manager import JobManager
 from services.blob_storage_service import BlobStorageService
-from services.analysis_name_service import AnalysisNameService, AnalysisNameCache
-from services.workflow_registry_service import WorkflowRegistryService
-from services.job_handler import JobHandler
-from services.report_handler import ReportHandler
-from services.commit_handler import CommitHandler
-from services.data_formatter import DataFormatter
-from tools.rag_retriever import AzureAISearchRAGRetriever
-from tools.preenchimento import ChangesetFiller
+from services.workflow_orchestrator import WorkflowOrchestrator
 
 class DependencyContainer:
+    _cache_service_instance = None
+
     def __init__(self):
-        self._job_store = None
-        self._job_manager = None
-        self._blob_storage = None
-        self._workflow_registry_service = None
-        self._workflow_orchestrator = None
-        self._analysis_name_service = None
-        self._job_handler = None
-        self._report_handler = None
-        self._commit_handler = None
-        self._data_formatter = None
-        self._rag_retriever = None
-        self._changeset_filler = None
-    
-    def get_job_store(self) -> RedisJobStore:
-        if self._job_store is None:
-            self._job_store = RedisJobStore()
-        return self._job_store
-    
-    def get_job_manager(self) -> JobManager:
-        if self._job_manager is None:
-            self._job_manager = JobManager(self.get_job_store())
-        return self._job_manager
-    
-    def get_blob_storage(self) -> BlobStorageService:
-        if self._blob_storage is None:
-            self._blob_storage = BlobStorageService()
-        return self._blob_storage
-    
-    def get_workflow_registry_service(self) -> WorkflowRegistryService:
-        if self._workflow_registry_service is None:
-            self._workflow_registry_service = WorkflowRegistryService()
+        self._workflow_registry_service = WorkflowRegistryService()
+        self._job_logging_service = JobLoggingService()
+        self._pull_request_extractor_service = PullRequestExtractorService()
+        self._api_service_factory = ApiServiceFactory(self._pull_request_extractor_service, self._job_logging_service)
+        self._analysis_name_service = AnalysisNameService()
+        self._job_data_service = JobDataService()
+        self._job_validation_service = JobValidationService()
+        self._repository_normalizer_service = RepositoryNormalizerService()
+        self._response_builder_service = FinalStatusResponseBuilder()
+        self._job_manager = JobManager()
+        self._blob_storage_service = BlobStorageService()
+
+    def get_workflow_registry_service(self):
         return self._workflow_registry_service
-    
-    def get_rag_retriever(self) -> AzureAISearchRAGRetriever:
-        if self._rag_retriever is None:
-            self._rag_retriever = AzureAISearchRAGRetriever()
-        return self._rag_retriever
-    
-    def get_changeset_filler(self) -> ChangesetFiller:
-        if self._changeset_filler is None:
-            self._changeset_filler = ChangesetFiller()
-        return self._changeset_filler
-    
-    def get_job_handler(self) -> JobHandler:
-        if self._job_handler is None:
-            self._job_handler = JobHandler(self.get_job_manager())
-        return self._job_handler
-    
-    def get_report_handler(self) -> ReportHandler:
-        if self._report_handler is None:
-            self._report_handler = ReportHandler(self.get_blob_storage())
-        return self._report_handler
-    
-    def get_commit_handler(self) -> CommitHandler:
-        if self._commit_handler is None:
-            self._commit_handler = CommitHandler()
-        return self._commit_handler
-    
-    def get_data_formatter(self) -> DataFormatter:
-        if self._data_formatter is None:
-            self._data_formatter = DataFormatter(self.get_changeset_filler())
-        return self._data_formatter
-    
-    def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
-        if self._workflow_orchestrator is None:
-            workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
-            self._workflow_orchestrator = WorkflowOrchestrator(
-                self.get_job_manager(), 
-                self.get_blob_storage(), 
-                workflow_registry,
-                self.get_rag_retriever(),
-                self.get_job_handler(),
-                self.get_report_handler(),
-                self.get_commit_handler(),
-                self.get_data_formatter()
-            )
-        return self._workflow_orchestrator
-    
-    def get_analysis_name_service(self) -> AnalysisNameService:
-        if self._analysis_name_service is None:
-            cache = AnalysisNameCache(self.get_job_store())
-            self._analysis_name_service = AnalysisNameService(cache)
+
+    def get_job_logging_service(self):
+        return self._job_logging_service
+
+    def get_pull_request_extractor_service(self):
+        return self._pull_request_extractor_service
+
+    def get_api_service_factory(self):
+        return self._api_service_factory
+
+    def get_analysis_name_service(self):
         return self._analysis_name_service
+
+    def get_job_data_service(self):
+        return self._job_data_service
+
+    def get_job_validation_service(self):
+        return self._job_validation_service
+
+    def get_repository_normalizer_service(self):
+        return self._repository_normalizer_service
+
+    def get_response_builder_service(self):
+        return self._response_builder_service
+
+    def get_job_manager(self):
+        return self._job_manager
+
+    def get_blob_storage(self):
+        return self._blob_storage_service
+
+    def get_cache_service(self):
+        if DependencyContainer._cache_service_instance is None:
+            DependencyContainer._cache_service_instance = CacheService()
+        return DependencyContainer._cache_service_instance
+
+    def get_workflow_orchestrator(self):
+        return WorkflowOrchestrator(
+            job_manager=self.get_job_manager(),
+            blob_storage=self.get_blob_storage(),
+            workflow_registry=self.get_workflow_registry_service().get_registry(),
+            cache_service=self.get_cache_service()
+        )
