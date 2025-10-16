@@ -67,8 +67,6 @@ class JobFields:
     EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
-    REPOSITORY_CONTENT_CACHE = 'repository_content_cache'
-    ARQUIVOS_ESPECIFICOS_CACHE = 'arquivos_especificos_cache'
 
 class JobActions:
     APPROVE = 'approve'
