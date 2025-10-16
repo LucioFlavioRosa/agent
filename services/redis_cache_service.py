@@ -5,11 +5,9 @@ from domain.interfaces.cache_interface import ICacheService
 from tools.job_store import RedisJobStore
 
 class RedisCacheService(ICacheService):
-    def __init__(self, redis_conn=None):
-        if redis_conn is None:
-            self.redis_conn = RedisJobStore().get_connection()
-        else:
-            self.redis_conn = redis_conn
+    # O construtor agora exige que o 'job_store' seja injetado.
+    def __init__(self, job_store: RedisJobStore):
+        self.redis_conn = job_store.get_connection()
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         try:
