@@ -22,7 +22,6 @@ class DependencyContainer:
         self._job_logging_service = JobLoggingService()
         self._pull_request_extractor_service = PullRequestExtractorService()
         self._api_service_factory = ApiServiceFactory(self._pull_request_extractor_service, self._job_logging_service)
-        self._analysis_name_service = AnalysisNameService()
         self._job_data_service = JobDataService()
         self._job_validation_service = JobValidationService()
         self._repository_normalizer_service = RepositoryNormalizerService()
