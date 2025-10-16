@@ -61,12 +61,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data']['repo_name']
             repository_provider = get_repository_provider_explicit(repository_type)
+            access_token = self._get_access_token(repository_type, repo_name)
             repo_reader = ReaderGeral(repository_provider=repository_provider)
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
-            # Passo 0: leitura dos arquivos do repositório e cache
             if start_from_step == 0:
                 arquivos_especificos = job_info['data'].get('arquivos_especificos')
                 branch_modernizado = job_info['data'].get('branch_name_modernizado')
@@ -76,7 +76,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 lista_arquivos = None
                 if arquivos_especificos:
                     arquivos_lidos = repo_reader.read_repository(
-                        repositorio=repository_provider.get_repository(repo_name),
+                        repositorio=repository_provider.get_repository(repo_name, access_token),
                         tipo_analise=job_info['data']['original_analysis_type'],
                         nome_branch=branch_modernizado,
                         arquivos_especificos=arquivos_especificos,
@@ -91,7 +91,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         arquivos_lidos = arquivos_lidos.get('codigo')
                 else:
                     arquivos_lidos = repo_reader.read_repository(
-                        repositorio=repository_provider.get_repository(repo_name),
+                        repositorio=repository_provider.get_repository(repo_name, access_token),
                         tipo_analise=job_info['data']['original_analysis_type'],
                         nome_branch=branch_modernizado,
                         arquivos_especificos=None,
@@ -107,7 +107,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.cache_service.set_repository_files(job_id, arquivos_lidos)
                 if retornar_lista_arquivos and lista_arquivos:
                     self.cache_service.set_file_list(job_id, lista_arquivos)
-            # Inicialização incremental
             if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -217,15 +216,25 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        # Passo 3: uso do cache para steps subsequentes
         use_cache = False
         if job_info['data'].get('gerar_novo_relatorio') is False and current_step_index > 0:
             use_cache = True
+        repository_type = job_info['data']['repository_type']
+        repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
+        access_token = self._get_access_token(repository_type, repo_name_modernizado)
+        access_token_original = None
+        if is_comparador_agent:
+            repo_name_original = job_info['data'].get('repo_name_original')
+            if repo_name_original:
+                access_token_original = self._get_access_token(repository_type, repo_name_original)
+        strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params,
             use_cache=use_cache,
-            cache_service=self.cache_service
+            cache_service=self.cache_service,
+            access_token=access_token,
+            access_token_original=access_token_original
         )
 
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
