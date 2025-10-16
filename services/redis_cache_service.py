@@ -51,9 +51,12 @@ class RedisCacheService(ICacheService):
             print(f"[RedisCacheService] Erro ao obter lista de arquivos do cache {cache_key}: {e}")
             return None
 
-    def set_cached_file_list(self, cache_key: str, file_list: List[str], ttl: Optional[int] = 3600):
+    def set_cached_file_list(self, cache_key: str, file_list: List[str], ttl: Optional[int] = None):
         try:
             val = json.dumps(file_list)
-            self.redis_conn.setex(cache_key, ttl, val)
+            if ttl:
+                self.redis_conn.setex(cache_key, ttl, val)
+            else:
+                self.redis_conn.set(cache_key, val)
         except Exception as e:
             print(f"[RedisCacheService] Erro ao salvar lista de arquivos no cache {cache_key}: {e}")
