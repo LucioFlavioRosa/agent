@@ -10,14 +10,49 @@ class GitHubReader(BaseReader):
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
         super().__init__(repository_provider or GitHubRepositoryProvider())
 
-    def _read_github_file(self, repositorio, caminho_arquivo: str, branch_a_ler: str) -> str:
-        file_content = repositorio.get_contents(caminho_arquivo, ref=branch_a_ler)
-        return base64.b64decode(file_content.content).decode('utf-8')
+    def read_single_file(self, repositorio, file_path: str, branch: str) -> Optional[str]:
+        print(f"[GitHubReader] Lendo arquivo específico: '{file_path}' na branch '{branch}'")
+        try:
+            file_content = repositorio.get_contents(file_path, ref=branch)
+            print(f"[GitHubReader] Conteúdo bruto retornado para '{file_path}': {type(file_content.content)}")
+            decoded = base64.b64decode(file_content.content).decode('utf-8')
+            print(f"[GitHubReader] Decodificação bem-sucedida para '{file_path}'")
+            return decoded
+        except UnknownObjectException:
+            print(f"[GitHubReader] AVISO: Arquivo '{file_path}' não encontrado na branch '{branch}'.")
+            return None
+        except GithubException as e:
+            if hasattr(e, 'status') and e.status == 404:
+                print(f"[GitHubReader] AVISO: Arquivo '{file_path}' não encontrado (404) na branch '{branch}'.")
+                return None
+            elif hasattr(e, 'status') and e.status == 403:
+                print(f"[GitHubReader] AVISO: Sem permissão para acessar o arquivo '{file_path}' na branch '{branch}'.")
+                raise PermissionError(f"Sem permissão para acessar o arquivo '{file_path}' na branch '{branch}'.") from e
+            else:
+                print(f"[GitHubReader] ERRO inesperado ao ler arquivo '{file_path}' na branch '{branch}': {e}")
+                raise RuntimeError(f"Erro inesperado ao ler arquivo '{file_path}' na branch '{branch}': {e}") from e
+        except Exception as e:
+            print(f"[GitHubReader] ERRO CRÍTICO ao ler arquivo '{file_path}' na branch '{branch}': {e}")
+            raise
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
-        return self._ler_arquivos_especificos_base(
-            repositorio, branch_a_ler, arquivos_especificos, "GitHub", self._read_github_file
-        )
+        arquivos_lidos = {}
+        for file_path in arquivos_especificos:
+            try:
+                content = self.read_single_file(repositorio, file_path, branch_a_ler)
+                if content is not None:
+                    arquivos_lidos[file_path] = content
+                else:
+                    print(f"[GitHubReader] AVISO: Arquivo '{file_path}' não encontrado ou vazio na branch '{branch_a_ler}'.")
+            except PermissionError as e:
+                print(f"[GitHubReader] AVISO: Sem permissão para ler o arquivo '{file_path}': {e}")
+            except Exception as e:
+                print(f"[GitHubReader] AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{file_path}'. Pulando. Erro: {e}")
+        return arquivos_lidos
+
+    def _read_github_file(self, repositorio, caminho_arquivo: str, branch_a_ler: str) -> str:
+        # Mantido para compatibilidade, mas agora não é usado diretamente em leitura de arquivos específicos
+        return self.read_single_file(repositorio, caminho_arquivo, branch_a_ler)
 
     def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
         try:
