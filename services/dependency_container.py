@@ -28,6 +28,7 @@ class DependencyContainer:
         self._rag_retriever = None
         self._changeset_filler = None
         self._redis_cache_service = None
+        self._secret_manager = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -103,6 +104,7 @@ class DependencyContainer:
                 self.get_report_handler(),
                 self.get_commit_handler(),
                 self.get_data_formatter(),
+                secret_manager=self.get_secret_manager(),
                 self.get_redis_cache_service(),
                 self # Passando a instância do próprio container
             )
