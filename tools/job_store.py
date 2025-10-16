@@ -14,6 +14,10 @@ class RedisJobStore(JobStoreInterface):
         self.redis_client = redis.from_url(REDIS_URL, decode_responses=True)
         self.JOB_KEY_PREFIX = "mcp_job"
 
+    def get_connection(self):
+        """Retorna o cliente de conexão Redis."""
+        return self.redis_client
+
     def set_job(self, job_id: str, job_data: Dict[str, Any], ttl: int = 86400):
         key = f"{self.JOB_KEY_PREFIX}:{job_id}"
         try:
