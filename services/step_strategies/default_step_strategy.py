@@ -1,4 +1,4 @@
-from .IStepStrategy import IStepStrategy
+from services.step_strategies.step_strategy_interface import IStepStrategy
 from services.job_handler import JobHandler
 from typing import Dict, Any
 from services.step_executors.step_executor_factory import StepExecutorFactory
