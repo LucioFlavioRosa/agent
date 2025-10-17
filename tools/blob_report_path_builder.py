@@ -14,4 +14,6 @@ def build_report_blob_path(projeto: str, analysis_type: str, repository_type: st
     repo_name_clean = sanitize_path_component(repo_name)
     branch_name_clean = sanitize_path_component(branch_name)
     analysis_name_clean = sanitize_path_component(analysis_name)
+    if branch_name_clean == 'unknown':
+        print(f'[WARNING][build_report_blob_path] branch_name resultou em unknown. Valor original: {branch_name}')
     return f"{projeto_clean}/{analysis_type_clean}/{repository_type_clean}/{repo_name_clean}/{branch_name_clean}/{analysis_name_clean}.md"
