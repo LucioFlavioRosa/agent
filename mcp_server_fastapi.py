@@ -105,9 +105,11 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
+    payload_dict['repo_name_modernizado'] = normalized_repo_name
+    payload_dict['branch_name_modernizado'] = branch_name
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     initial_job_data = job_data_service.create_initial_job_data(
-        payload_dict, normalized_repo_name, analysis_name
+        payload_dict, normalized_repo_name, analysis_name, branch_name
     )
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
@@ -171,17 +173,18 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     report = job_validation_service.get_report_from_job(original_job, None)
     original_data = original_job[JobFields.DATA]
     original_repo_name = original_data[JobFields.REPO_NAME]
+    original_branch_name = original_data.get(JobFields.BRANCH_NAME)
     original_repository_type = original_data[JobFields.REPOSITORY_TYPE]
     print(f"[DEBUG][start_code_generation_from_report] original_repo_name: {original_repo_name}")
-    print(f"[DEBUG][start_code_generation_from_report] branch_name: {original_data.get(JobFields.BRANCH_NAME)}")
+    print(f"[DEBUG][start_code_generation_from_report] branch_name: {original_branch_name}")
     normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         original_repo_name, original_repository_type
     )
     print(f"[DEBUG][start_code_generation_from_report] normalized_repo_name: {normalized_repo_name}")
-    print(f"[DEBUG][start_code_generation_from_report] branch_name (não normalizado): {original_data.get(JobFields.BRANCH_NAME)}")
+    print(f"[DEBUG][start_code_generation_from_report] branch_name (não normalizado): {original_branch_name}")
     new_job_id = str(uuid.uuid4())
     new_job_data = job_data_service.create_derived_job_data(
-        original_job, analysis_name, normalized_repo_name, report
+        original_job, analysis_name, normalized_repo_name, report, original_branch_name
     )
     job_store.set_job(new_job_id, new_job_data)
     analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
