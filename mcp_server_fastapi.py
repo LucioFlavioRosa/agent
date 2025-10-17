@@ -94,14 +94,17 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     analysis_service = container.get_analysis_name_service()
     repo_name = payload.repo_name_modernizado
     branch_name = payload.branch_name_modernizado
+    print(f"[DEBUG][start_analysis] repo_name_modernizado recebido: {repo_name}")
+    print(f"[DEBUG][start_analysis] branch_name_modernizado recebido: {branch_name}")
     normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         repo_name, payload.repository_type
     )
+    print(f"[DEBUG][start_analysis] normalized_repo_name: {normalized_repo_name}")
+    print(f"[DEBUG][start_analysis] branch_name (não normalizado): {branch_name}")
     job_id = str(uuid.uuid4())
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
-    # DEBUG: Logar o valor de executar_build_dotnet recebido
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
@@ -169,9 +172,13 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     original_data = original_job[JobFields.DATA]
     original_repo_name = original_data[JobFields.REPO_NAME]
     original_repository_type = original_data[JobFields.REPOSITORY_TYPE]
+    print(f"[DEBUG][start_code_generation_from_report] original_repo_name: {original_repo_name}")
+    print(f"[DEBUG][start_code_generation_from_report] branch_name: {original_data.get(JobFields.BRANCH_NAME)}")
     normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         original_repo_name, original_repository_type
     )
+    print(f"[DEBUG][start_code_generation_from_report] normalized_repo_name: {normalized_repo_name}")
+    print(f"[DEBUG][start_code_generation_from_report] branch_name (não normalizado): {original_data.get(JobFields.BRANCH_NAME)}")
     new_job_id = str(uuid.uuid4())
     new_job_data = job_data_service.create_derived_job_data(
         original_job, analysis_name, normalized_repo_name, report
@@ -187,12 +194,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
-    
-    # ✅ CORREÇÃO APLICADA AQUI
-    # Garante que 'status' sempre tenha um valor string, fornecendo "PROCESSING" como padrão
-    # se a chave não existir ou seu valor for None/vazio.
     status = job.get(JobFields.STATUS) or "PROCESSING"
-    
     job_data = job.get(JobFields.DATA, {})
     blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
@@ -208,7 +210,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             return response_builder_service.build_failed_response(job_id, job)
         else:
             return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, build_errors=job_data.get('build_errors'))
-            
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
