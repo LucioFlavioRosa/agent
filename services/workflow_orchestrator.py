@@ -128,7 +128,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 )
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
-                 = StepFactory.create_(step, self.job_handler)
+                strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
@@ -199,7 +199,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)      
+        strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
