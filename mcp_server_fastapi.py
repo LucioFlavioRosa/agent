@@ -106,9 +106,12 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
+    # Garantir que branch_name_modernizado seja passado corretamente
+    payload_dict['branch_name_modernizado'] = branch_name
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
+    print(f"[{job_id}] [DEBUG] Valor de branch_name_modernizado passado para create_initial_job_data: {branch_name}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
