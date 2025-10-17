@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Dict, Any
 from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
@@ -38,14 +39,41 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         
         agente = AgentFactory.create_agent("processador", None, llm_provider)
         agent_response = agente.main(**agent_params)
-        
-        json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
-        
-        if not cleaned_string:
-            if previous_step_result and isinstance(previous_step_result, dict):
-                print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
-                return previous_step_result
-            raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
-        
-        return json.loads(cleaned_string)
+
+        max_retries = 1
+        for attempt in range(max_retries):
+            try:
+                agente = AgentFactory.create_agent("revisor", repo_reader, llm_provider)
+                agent_response = agente.main(**agent_params)
+                raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
+
+                cleaned_string = None
+                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                if match:
+                    cleaned_string = match.group(1).strip()
+                else:
+                    start = raw_response_from_llm.find('{')
+                    end = raw_response_from_llm.rfind('}')
+                    if start != -1 and end != -1:
+                        cleaned_string = raw_response_from_llm[start:end+1]
+
+                if not cleaned_string:
+                    # Se não encontrar JSON, não adianta tentar de novo. Usa o resultado anterior ou falha.
+                    if previous_step_result and isinstance(previous_step_result, dict):
+                        print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
+                        return previous_step_result
+                    raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
+
+                result = json.loads(cleaned_string, strict=False)
+                print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
+                return result
+                
+             except (json.JSONDecodeError, ValueError) as e:
+                # Se o try falhar, o except é ativado.
+                print(f"[{job_id}] Tentativa {attempt + 1}/{max_retries} falhou: {e}")
+                if attempt + 1 == max_retries:
+                    # Se esta foi a última tentativa, desiste e lança o erro.
+                    print(f"[{job_id}] ERRO: Máximo de tentativas atingido. Falhando o step.")
+                    raise e
+                    
+                time.sleep(2)
