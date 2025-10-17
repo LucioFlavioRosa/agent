@@ -1,8 +1,10 @@
 from typing import Dict, Any
-from .IStepStrategy import IStepStrategy
+from services.step_strategies.step_strategy_interface import IStepStrategy
 from services.step_strategies.default_step_strategy import DefaultStepStrategy
 from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
+
+
 
 class StepStrategyFactory:
     @staticmethod
