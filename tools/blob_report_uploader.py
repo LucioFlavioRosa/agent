@@ -21,7 +21,13 @@ def upload_report_to_blob(report_text: str, projeto: str, analysis_type: str, re
     original_analysis_name = analysis_name
     counter = 1
     while True:
-        print(f"[DEBUG][upload_report_to_blob] Parâmetros recebidos: projeto={projeto}, analysis_type={analysis_type}, repository_type={repository_type}, repo_name={repo_name}, branch_name={branch_name}, analysis_name={analysis_name}")
+        print(f"[DEBUG][upload_report_to_blob] Parâmetros recebidos:")
+        print(f"  projeto={projeto}")
+        print(f"  analysis_type={analysis_type}")
+        print(f"  repository_type={repository_type}")
+        print(f"  repo_name={repo_name}")
+        print(f"  branch_name={branch_name}")
+        print(f"  analysis_name={analysis_name}")
         blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         print(f"[DEBUG][upload_report_to_blob] blob_path construído: {blob_path}")
         blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_path)
