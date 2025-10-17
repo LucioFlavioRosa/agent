@@ -68,8 +68,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
                 return result
                 
-             except (json.JSONDecodeError, ValueError) as e:
-                # Se o try falhar, o except é ativado.
+            except (json.JSONDecodeError, ValueError) as e:
                 print(f"[{job_id}] Tentativa {attempt + 1}/{max_retries} falhou: {e}")
                 if attempt + 1 == max_retries:
                     # Se esta foi a última tentativa, desiste e lança o erro.
