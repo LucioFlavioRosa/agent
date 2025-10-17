@@ -123,7 +123,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     break
-                step_result = self._execute_step_with_(
+                step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
