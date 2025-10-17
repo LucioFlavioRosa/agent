@@ -123,12 +123,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     break
-                step_result = self._execute_step_with_strategy(
+                step_result = self._execute_step_with_(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
-                strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+                 = StepFactory.create_(step, self.job_handler)
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
@@ -199,7 +199,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+        strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)      
         return strategy.execute_step(
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
