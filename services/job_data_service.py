@@ -28,7 +28,10 @@ class JobDataService:
         data[JobFields.ARQUIVOS_ESPECIFICOS] = payload_dict.get('arquivos_especificos')
         data[JobFields.REPOSITORY_TYPE] = payload_dict.get('repository_type')
         data[JobFields.REPO_NAME_MODERNIZADO] = payload_dict.get('repo_name_modernizado')
-        data[JobFields.BRANCH_NAME_MODERNIZADO] = payload_dict.get('branch_name_modernizado')
+        # Corrigir para garantir que branch_name_modernizado seja armazenado corretamente
+        branch_name_modernizado = payload_dict.get('branch_name_modernizado')
+        data[JobFields.BRANCH_NAME] = branch_name_modernizado
+        data[JobFields.BRANCH_NAME_MODERNIZADO] = branch_name_modernizado
         data[JobFields.REPO_NAME_ORIGINAL] = payload_dict.get('repo_name_original')
         data[JobFields.BRANCH_NAME_ORIGINAL] = payload_dict.get('branch_name_original')
         data[JobFields.RETORNAR_LISTA_ARQUIVOS] = payload_dict.get('retornar_lista_arquivos', False)
@@ -40,7 +43,6 @@ class JobDataService:
         if not isinstance(executar_build_dotnet, bool):
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
-        
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
@@ -53,7 +55,8 @@ class JobDataService:
                 JobFields.REPO_NAME: normalized_repo_name,
                 JobFields.ORIGINAL_REPO_NAME: original_data[JobFields.REPO_NAME],
                 JobFields.PROJETO: original_data[JobFields.PROJETO],
-                JobFields.BRANCH_NAME: original_data[JobFields.BRANCH_NAME],
+                JobFields.BRANCH_NAME: original_data.get(JobFields.BRANCH_NAME),
+                JobFields.BRANCH_NAME_MODERNIZADO: original_data.get(JobFields.BRANCH_NAME_MODERNIZADO),
                 JobFields.ORIGINAL_ANALYSIS_TYPE: 'implementacao',
                 JobFields.INSTRUCOES_EXTRAS: f"Gerar código baseado no seguinte relatório:\n\n{report}",
                 JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
