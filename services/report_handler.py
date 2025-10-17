@@ -1,7 +1,6 @@
 class ReportHandler:
     def __init__(self, blob_storage):
         self.blob_storage = blob_storage
-
     @staticmethod
     def extract_report_text(step_result):
         if not step_result:
@@ -13,7 +12,6 @@ class ReportHandler:
                 if 'relatorio' in step_result['resultado']:
                     return step_result['resultado']['relatorio']
         return None
-
     def try_read_existing_report(self, job_id, job_info, current_step_index):
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
@@ -42,15 +40,15 @@ class ReportHandler:
         except Exception as e:
             print(f"[ReportHandler] Warning: Failed to read report or update tracker: {e}")
             return None
-
     def save_report_to_blob(self, job_id, job_info, report_text, report_generated_by_agent=False):
-        print(f"[{job_id}] [save_report_to_blob] Iniciando salvamento. Tamanho do relatório: {len(report_text)}, report_generated_by_agent: {report_generated_by_agent}")
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
         repo_name = job_info['data'].get('repo_name')
         branch_name = job_info['data'].get('branch_name')
         analysis_name = job_info['data'].get('analysis_name')
+        print(f"[DEBUG][ReportHandler.save_report_to_blob] Parâmetros: projeto={projeto}, analysis_type={analysis_type}, repository_type={repository_type}, repo_name={repo_name}, branch_name={branch_name}, analysis_name={analysis_name}")
+        print(f"[{job_id}] [save_report_to_blob] Iniciando salvamento. Tamanho do relatório: {len(report_text)}, report_generated_by_agent: {report_generated_by_agent}")
         if report_generated_by_agent:
             print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
         url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
@@ -65,7 +63,6 @@ class ReportHandler:
         except Exception as e:
             print(f"[ReportHandler] Warning: Failed to update job tracker after saving report: {e}")
         return url
-
     def handle_report_only_mode(self, job_id, job_info, step_result):
         report_text = self.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
@@ -74,7 +71,6 @@ class ReportHandler:
         url = self.save_report_to_blob(job_id, job_info, report_text)
         print(f"[{job_id}] Modo report_only: Relatório salvo com sucesso ({len(report_text)} chars)")
         return url
-
     def validate_and_parse_blob_report(self, report_text, job_id):
         if not report_text or not isinstance(report_text, str):
             print(f"[{job_id}] ERRO: Relatório lido do Blob é inválido. Tipo: {type(report_text)}")
