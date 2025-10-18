@@ -34,6 +34,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.dependency_container = dependency_container
                      
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
+        print(f"[{job_id}] [_save_generated_report] ENTRADA: analysis_report presente={bool(job_info['data'].get('analysis_report'))}, tamanho={len(job_info['data'].get('analysis_report', ''))}, report_blob_url={job_info['data'].get('report_blob_url')}, gerar_relatorio_apenas={job_info['data'].get('gerar_relatorio_apenas')}")
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
             print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
@@ -134,6 +135,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
+                if strategy.should_pause_for_approval(job_info, step):
+                    if not job_info['data'].get('report_blob_url'):
+                        raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+                    self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                    return
                 if strategy.should_finalize_workflow(job_info, current_step_index):
                     print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
                     print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
@@ -146,9 +152,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     self.job_handler.update_job_status(job_id, 'completed')
                     print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                     print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                    return
-                if strategy.should_pause_for_approval(job_info, step):
-                    self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
             # INSTRUÇÃO DO USUÁRIO: Após o loop de steps, garantir que o relatório do step 0 seja salvo
             if (
@@ -219,6 +222,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório gerado.")
+        if not job_info['data'].get('report_blob_url'):
+            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
         job_info['data']['analysis_report'] = report_text
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
