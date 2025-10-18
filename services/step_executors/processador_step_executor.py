@@ -68,6 +68,15 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
 
                 result = json.loads(cleaned_string, strict=False)
+                relatorio = None
+                if isinstance(result, dict):
+                    relatorio = result.get('relatorio')
+                if relatorio:
+                    job_info['data']['analysis_report'] = relatorio
+                    self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] Relatório salvo no job_info. Tamanho: {len(job_info['data'].get('analysis_report', ''))} caracteres")
+                else:
+                    print(f"[{job_id}] Nenhum relatório encontrado no resultado da IA.")
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
                 return result
                 
