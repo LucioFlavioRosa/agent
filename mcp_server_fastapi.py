@@ -145,9 +145,17 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
+    print(f"[{job_id}] [get_job_report] Conteúdo de job['data']: {job.get('data', {})}")
     job_validation_service.validate_job_exists(job, job_id)
     report = job_validation_service.get_report_from_job(job, job_id)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
+    if not report:
+        analysis_report_present = bool(job.get('data', {}).get('analysis_report'))
+        report_blob_url_present = bool(job.get('data', {}).get('report_blob_url'))
+        raise HTTPException(
+            status_code=404,
+            detail=f"Relatório não encontrado. analysis_report presente: {analysis_report_present}, report_blob_url presente: {report_blob_url_present}. Status do job: {job.get('status')}."
+        )
     return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
