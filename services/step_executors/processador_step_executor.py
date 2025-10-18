@@ -37,19 +37,22 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         if isinstance(previous_step_result, dict) and 'lista_arquivos' in previous_step_result:
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
-        
-        agente = AgentFactory.create_agent("processador", None, llm_provider)
-        agent_response = agente.main(**agent_params)
 
         max_retries = 1
         for attempt in range(max_retries):
             try:
-                agente = AgentFactory.create_agent("revisor", repo_reader, llm_provider)
+                agente = AgentFactory.create_agent("processador", None, llm_provider)
                 agent_response = agente.main(**agent_params)
+                if not agent_response or not agent_response.get('resultado', {}).get('reposta_final'):
+                    print(f"[{job_id}] AVISO: agent_response não contém 'resultado.reposta_final'. Resposta: {agent_response}")
+                    if previous_step_result and isinstance(previous_step_result, dict):
+                        print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
+                        return previous_step_result
+                    raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
@@ -59,7 +62,6 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                         cleaned_string = raw_response_from_llm[start:end+1]
 
                 if not cleaned_string:
-                    # Se não encontrar JSON, não adianta tentar de novo. Usa o resultado anterior ou falha.
                     if previous_step_result and isinstance(previous_step_result, dict):
                         print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
                         return previous_step_result
@@ -72,8 +74,6 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             except (json.JSONDecodeError, ValueError) as e:
                 print(f"[{job_id}] Tentativa {attempt + 1}/{max_retries} falhou: {e}")
                 if attempt + 1 == max_retries:
-                    # Se esta foi a última tentativa, desiste e lança o erro.
                     print(f"[{job_id}] ERRO: Máximo de tentativas atingido. Falhando o step.")
                     raise e
-                    
                 time.sleep(2)
