@@ -52,7 +52,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
@@ -73,8 +73,8 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                     relatorio = result.get('relatorio')
                 if relatorio:
                     job_info['data']['analysis_report'] = relatorio
+                    print(f"[{job_id}] [ProcessadorStepExecutor] Relatório salvo em job_info['data']['analysis_report']. Tamanho: {len(job_info['data']['analysis_report'])} caracteres. report_blob_url presente: {bool(job_info['data'].get('report_blob_url'))}")
                     self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] Relatório salvo no job_info. Tamanho: {len(job_info['data'].get('analysis_report', ''))} caracteres")
                 else:
                     print(f"[{job_id}] Nenhum relatório encontrado no resultado da IA.")
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
