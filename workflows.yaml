@@ -412,3 +412,20 @@ suporte_dot_net:
         tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 32000
 
+geracao_epicos_a_partir_de_reuniao:
+  description: "gerar epicos a partir de uma descrição de reunião"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
+  steps:
+    - status_update: "analisando a transcrição"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "processador"
+      params:
+        tipo_analise: "criacao_epicos"
+      requires_approval: true
+    - status_update: "escrita_codigo"
+      model_name: "gpt-4.1"
+      agent_type: "processador"
+      params:
+        tipo_analise: "criando_codigos"
+        max_token_out: 32000
+  
