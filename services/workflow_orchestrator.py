@@ -101,7 +101,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             result = self._execute_step_with_strategy(
                                 job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                             )
-                            
+                            # Salvar relatório do batch se gerado
+                            if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
+                                self._save_generated_report(job_id, job_info, result, current_step_index)
                             batch_results.append(result)
                         
                         except Exception as e:
@@ -126,6 +128,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
+                # Salvar relatório imediatamente após geração
+                if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
+                    self._save_generated_report(job_id, job_info, step_result, current_step_index)
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
@@ -200,14 +205,20 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if agent_params_override:
             agent_params.update(agent_params_override)
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
-        return strategy.execute_step(
+        result = strategy.execute_step(
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
+        # Salvar relatório imediatamente após geração
+        if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
+            self._save_generated_report(job_id, job_info, result, current_step_index)
+        return result
                                         
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         report_text = self.report_handler.extract_report_text(step_result)
+        if not report_text or len(report_text.strip()) == 0:
+            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório gerado.")
         job_info['data']['analysis_report'] = report_text
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
