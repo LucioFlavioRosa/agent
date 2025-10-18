@@ -37,8 +37,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] [_save_generated_report] ENTRADA: analysis_report presente={bool(job_info['data'].get('analysis_report'))}, tamanho={len(job_info['data'].get('analysis_report', ''))}, report_blob_url={job_info['data'].get('report_blob_url')}, gerar_relatorio_apenas={job_info['data'].get('gerar_relatorio_apenas')}")
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
-            print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
-            return False
+            report_text = job_info['data'].get('analysis_report', '')
+            if not report_text or len(report_text.strip()) == 0:
+                print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
+                return False
         print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente. gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho do relatório: {len(report_text)}")
         job_info['data']['analysis_report'] = report_text
         url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
