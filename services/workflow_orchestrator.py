@@ -131,15 +131,18 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
-                # Salvar relatório imediatamente após geração
-                if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
-                    self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                # REMOVIDO: Salvar relatório imediatamente após geração (agora responsabilidade dos executores)
+                # if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
+                #     self._save_generated_report(job_id, job_info, step_result, current_step_index)
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
                 if strategy.should_pause_for_approval(job_info, step):
                     if not job_info['data'].get('report_blob_url'):
-                        raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+                        # Tentar salvar o relatório antes de lançar exceção
+                        saved = self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                        if not job_info['data'].get('report_blob_url'):
+                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                     self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                     return
                 if strategy.should_finalize_workflow(job_info, current_step_index):
@@ -214,18 +217,26 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
-        # Salvar relatório imediatamente após geração
-        if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
-            self._save_generated_report(job_id, job_info, result, current_step_index)
+        # REMOVIDO: Salvar relatório imediatamente após geração (agora responsabilidade dos executores)
+        # if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
+        #     self._save_generated_report(job_id, job_info, result, current_step_index)
         return result
                                         
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
-        report_text = self.report_handler.extract_report_text(step_result)
-        if not report_text or len(report_text.strip()) == 0:
-            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório gerado.")
+        # Validação: report_blob_url deve estar presente antes de verificar o texto do relatório
+        if job_info['data'].get('report_blob_url'):
+            report_text = self.report_handler.extract_report_text(step_result)
+            job_info['data']['analysis_report'] = report_text
+            job_info['status'] = 'pending_approval'
+            self.job_handler.set_paused_step(job_info, step_index)
+            self.job_handler.update_job(job_id, job_info)
+            return
+        # Tentar salvar o relatório antes de lançar exceção
+        saved = self._save_generated_report(job_id, job_info, step_result, step_index)
         if not job_info['data'].get('report_blob_url'):
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+        report_text = self.report_handler.extract_report_text(step_result)
         job_info['data']['analysis_report'] = report_text
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
