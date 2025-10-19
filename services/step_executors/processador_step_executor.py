@@ -5,6 +5,7 @@ from typing import Dict, Any
 from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
 from tools.readers.reader_geral import ReaderGeral
+from services.report_handler import ReportHandler
 
 class ProcessadorStepExecutor(BaseStepExecutor):
     def __init__(self, job_handler):
@@ -45,14 +46,14 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params)
                 if not agent_response or not agent_response.get('resultado', {}).get('reposta_final'):
                     print(f"[{job_id}] AVISO: agent_response não contém 'resultado.reposta_final'. Resposta: {agent_response}")
-                    if previous_step_result and isinstance(previous_step_result, dict):
+                    if previous_step_result and isinstance(previous_step_result, dict) and previous_step_result:
                         print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
                         return previous_step_result
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
@@ -62,13 +63,25 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                         cleaned_string = raw_response_from_llm[start:end+1]
 
                 if not cleaned_string:
-                    if previous_step_result and isinstance(previous_step_result, dict):
+                    if previous_step_result and isinstance(previous_step_result, dict) and previous_step_result:
                         print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
                         return previous_step_result
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
 
                 result = json.loads(cleaned_string, strict=False)
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
+
+                # EXTRAÇÃO E SALVAMENTO DO RELATÓRIO
+                try:
+                    report_text = ReportHandler.extract_report_text(result)
+                    if report_text and isinstance(report_text, str) and report_text.strip():
+                        job_info['data']['analysis_report'] = report_text
+                        self.job_handler.update_job(job_id, job_info)
+                        print(f"[{job_id}] Relatório extraído e salvo em job_info['data']['analysis_report'].")
+                    else:
+                        print(f"[{job_id}] AVISO: ReportHandler.extract_report_text retornou vazio ou None. Nenhum relatório salvo.")
+                except Exception as e:
+                    print(f"[{job_id}] AVISO: Falha ao extrair/salvar relatório: {e}")
                 return result
                 
             except (json.JSONDecodeError, ValueError) as e:
