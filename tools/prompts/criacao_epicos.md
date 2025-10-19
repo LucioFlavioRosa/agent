@@ -25,7 +25,7 @@ Seu plano DEVE seguir estes princípios:
 
 1.  **SAÍDA EXCLUSIVAMENTE EM JSON:** Sua resposta final **DEVE** ser um único e válido bloco de código JSON. **NADA PODE EXISTIR FORA DO BLOCO ```json ... ```**, nem antes, nem depois.
 
-2.  **ESTRUTURA DO JSON:** O objeto JSON deve conter **UMA ÚNICA CHAVE** no nível raiz chamada `plano_de_epicos`.
+2.  **ESTRUTURA DO JSON:** O objeto JSON deve conter **UMA ÚNICA CHAVE** no nível raiz chamada `relatorio`.
 
 3.  **CONTEÚDO DA CHAVE:** O valor da chave `plano_de_epicos` deve ser uma string contendo **APENAS E SOMENTE A TABELA MARKDOWN**.
     * A string **DEVE** começar imediatamente com o cabeçalho da tabela: `| ID | ...`
