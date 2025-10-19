@@ -5,7 +5,6 @@ from typing import Dict, Any
 from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
 from tools.readers.reader_geral import ReaderGeral
-from services.report_handler import ReportHandler
 
 class ProcessadorStepExecutor(BaseStepExecutor):
     def __init__(self, job_handler):
@@ -53,7 +52,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
@@ -69,14 +68,6 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
 
                 result = json.loads(cleaned_string, strict=False)
-                # CORREÇÃO CRÍTICA: SEMPRE extrair e salvar o relatório após decodificação do JSON
-                report_text = ReportHandler.extract_report_text(result)
-                if report_text and isinstance(report_text, str) and report_text.strip():
-                    job_info['data']['analysis_report'] = report_text
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] Relatório extraído e salvo no job_info pelo ProcessadorStepExecutor. Tamanho: {len(report_text)} caracteres")
-                else:
-                    print(f"[{job_id}] AVISO: Nenhum relatório válido foi extraído do resultado da IA pelo ProcessadorStepExecutor.")
                 return result
                 
             except (json.JSONDecodeError, ValueError) as e:
