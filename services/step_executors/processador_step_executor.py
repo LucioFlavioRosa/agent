@@ -5,6 +5,7 @@ from typing import Dict, Any
 from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
 from tools.readers.reader_geral import ReaderGeral
+from services.report_handler import ReportHandler
 
 class ProcessadorStepExecutor(BaseStepExecutor):
     def __init__(self, job_handler):
@@ -38,7 +39,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
 
-        max_retries = 1
+        max_retries = 2
         for attempt in range(max_retries):
             try:
                 agente = AgentFactory.create_agent("processador", None, llm_provider)
@@ -68,6 +69,11 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
 
                 result = json.loads(cleaned_string, strict=False)
+                # EXTRAÇÃO E SALVAMENTO DO RELATÓRIO
+                report_text = ReportHandler.extract_report_text(result)
+                if report_text and isinstance(report_text, str) and report_text.strip():
+                    job_info['data']['analysis_report'] = report_text
+                    self.job_handler.update_job(job_id, job_info)
                 return result
                 
             except (json.JSONDecodeError, ValueError) as e:
@@ -75,4 +81,4 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 if attempt + 1 == max_retries:
                     print(f"[{job_id}] ERRO: Máximo de tentativas atingido. Falhando o step.")
                     raise e
-                time.sleep(2)
+                time.sleep(5)
