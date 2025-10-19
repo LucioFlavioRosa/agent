@@ -54,6 +54,7 @@ class ReportHandler:
             print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
         url = None
         try:
+            print(f"[{job_id}] [save_report_to_blob] Chamando upload_report...")
             url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
             print(f"[{job_id}] [save_report_to_blob] Upload concluído. URL retornada: {url}")
         except Exception as upload_error:
@@ -66,6 +67,7 @@ class ReportHandler:
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] Relatório salvo no Blob Storage: {url} (tamanho: {len(report_text) if report_text else 0} chars)")
         try:
+            print(f"[{job_id}] [save_report_to_blob] Atualizando job tracker...")
             self.blob_storage.update_job_tracker(url, job_id)
             print(f"[{job_id}] [save_report_to_blob] Job tracker atualizado com sucesso para o relatório: {url}")
         except Exception as tracker_error:
