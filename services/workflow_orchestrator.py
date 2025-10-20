@@ -74,8 +74,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
 
-            # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT)
-            if job_info['data'].get('gerar_epicos', False) or job_info['data'].get('gerar_tarefas', False):
+            # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT/PR)
+            if job_info['data']['original_analysis_type'] == 'geracao_epicos_a_partir_de_reuniao':
                 for i, step in enumerate(steps_to_run):
                     current_step_index = start_from_step + i
                     print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -93,7 +93,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                         return
-                # Após steps, finalize workflow (não faz commit)
+                # Após steps, finalize workflow (não faz commit/PR)
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
                 return
 
@@ -255,8 +255,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT)
-        if job_info['data'].get('gerar_epicos') is True and job_info['data'].get('criar_cards_azure') is True:
+        # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT/PR)
+        if job_info['data'].get('original_analysis_type') == 'geracao_epicos_a_partir_de_reuniao':
             try:
                 analysis_report = job_info['data'].get('analysis_report')
                 epicos = EpicoParserService.parse_epicos_from_report(analysis_report)
@@ -277,11 +277,22 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 cards_criados = azure_boards_service.criar_multiplos_cards(epicos)
                 job_info['data']['cards_criados'] = cards_criados
                 job_info['data']['cards_creation_errors'] = [c for c in cards_criados if c.get('erro')] if cards_criados else []
+                tarefas_criadas = []
+                tarefas_creation_errors = []
+                epicos_aprovados = [c['id'] for c in cards_criados if c.get('id')] if cards_criados else []
+                for epico_id in epicos_aprovados:
+                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
+                    resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
+                    tarefas_criadas.extend(resultado)
+                    tarefas_creation_errors.extend([r for r in resultado if r.get('erro')])
+                job_info['data']['tarefas_criadas'] = tarefas_criadas
+                job_info['data']['tarefas_creation_errors'] = tarefas_creation_errors
                 self.job_handler.update_job_status(job_id, 'completed')
                 self.job_handler.update_job(job_id, job_info)
                 return
             except Exception as e:
                 job_info['data']['cards_creation_errors'] = [str(e)]
+                job_info['data']['tarefas_creation_errors'] = [str(e)]
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
