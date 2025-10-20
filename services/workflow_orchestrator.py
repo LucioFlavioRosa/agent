@@ -99,22 +99,32 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
             # FLUXO PADRÃO (COM COMMIT)
             if executar_incremental and start_from_step == 1:
-                if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
-                    report_text = job_info['data'].get('analysis_report')
-                    if not report_text or not report_text.strip():
-                        raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
-                    step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
-                    job_info['data'][JobFields.STEP_BATCHES] = step_batches
-                    job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
-                    job_info['data'][JobFields.BATCH_RESULTS] = []
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
+                if (
+                    (job_info['data'].get('gerar_epicos', False) or job_info['data'].get('gerar_tarefas', False))
+                ):
+                    print(f"[{job_id}] [DEBUG] Execução incremental ignorada pois gerar_epicos ou gerar_tarefas está ativo.")
+                else:
+                    if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
+                        report_text = job_info['data'].get('analysis_report')
+                        if not report_text or not report_text.strip():
+                            raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
+                        step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
+                        job_info['data'][JobFields.STEP_BATCHES] = step_batches
+                        job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
+                        job_info['data'][JobFields.BATCH_RESULTS] = []
+                        self.job_handler.update_job(job_id, job_info)
+                        print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
 
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
                 if executar_incremental and current_step_index == 1:
+                    if (
+                        job_info['data'].get('gerar_epicos', False) or job_info['data'].get('gerar_tarefas', False)
+                    ):
+                        print(f"[{job_id}] [DEBUG] Execução incremental ignorada pois gerar_epicos ou gerar_tarefas está ativo.")
+                        break
                     step_batches = job_info['data'][JobFields.STEP_BATCHES]
                     current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
                     batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
@@ -329,6 +339,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
             final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
         dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
+        print(f"[{job_id}] [DEBUG] Antes de execute_commits: gerar_epicos={job_info['data'].get('gerar_epicos')}, gerar_tarefas={job_info['data'].get('gerar_tarefas')}, branch_name={job_info['data'].get('branch_name')}, repo_name={job_info['data'].get('repo_name')}")
         self.job_handler.update_job_status(job_id, 'committing_to_github')
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
         print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
