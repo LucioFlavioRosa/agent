@@ -17,6 +17,7 @@ from services.incremental_step_executor_service import IncrementalStepExecutorSe
 from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
 from services.epico_parser_service import EpicoParserService
+from services.tarefa_parser_service import TarefaParserService
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -33,7 +34,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.secret_manager = secret_manager or AzureSecretManager()
         self.cache_service = cache_service
         self.dependency_container = dependency_container
-                     
+
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         print(f"[{job_id}] [_save_generated_report] ENTRADA: analysis_report presente={bool(job_info['data'].get('analysis_report'))}, tamanho={len(job_info['data'].get('analysis_report', ''))}, report_blob_url={job_info['data'].get('report_blob_url')}, gerar_relatorio_apenas={job_info['data'].get('gerar_relatorio_apenas')}")
         report_text = self.report_handler.extract_report_text(step_result)
@@ -56,7 +57,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
         return True
-        
+
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
@@ -72,6 +73,31 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
+
+            # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT)
+            if job_info['data'].get('gerar_epicos', False) or job_info['data'].get('gerar_tarefas', False):
+                for i, step in enumerate(steps_to_run):
+                    current_step_index = start_from_step + i
+                    print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
+                    self.job_handler.update_job_status(job_id, step['status_update'])
+                    step_result = self._execute_step_with_strategy(
+                        job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
+                    )
+                    self.job_handler.save_step_result(job_info, current_step_index, step_result)
+                    previous_step_result = step_result
+                    strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
+                    if strategy.should_pause_for_approval(job_info, step):
+                        if not job_info['data'].get('report_blob_url'):
+                            saved = self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                            if not job_info['data'].get('report_blob_url'):
+                                raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
+                        self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                        return
+                # Após steps, finalize workflow (não faz commit)
+                self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
+                return
+
+            # FLUXO PADRÃO (COM COMMIT)
             if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -83,7 +109,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-                    
+
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -97,19 +123,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         try:
                             batch = step_batches[batch_idx]
                             print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
-                            
                             agent_params = step.get('params', {}).copy() if step.get('params') else {}
                             agent_params['current_batch'] = batch
                             agent_params['total_batches'] = total_batches
-                            
                             result = self._execute_step_with_strategy(
                                 job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                             )
-                            # Salvar relatório do batch se gerado
                             if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
                                 self._save_generated_report(job_id, job_info, result, current_step_index)
                             batch_results.append(result)
-                        
                         except Exception as e:
                             error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
                             print(f"[{job_id}] {error_message}")
@@ -119,13 +141,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 "batch_index": batch_idx + 1,
                                 "error": str(e)
                             })
-                            continue 
-                        
+                            continue
                         finally:
                             job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                             job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                             self.job_handler.update_job(job_id, job_info)
-
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     break
@@ -172,7 +192,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
-            
+
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
                                     repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
@@ -214,7 +234,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             previous_step_result, repo_reader, llm_provider, agent_params
         )
         return result
-                                        
+
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         if job_info['data'].get('report_blob_url'):
@@ -232,18 +252,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
-        
+
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+        # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT)
         if job_info['data'].get('gerar_epicos') is True and job_info['data'].get('criar_cards_azure') is True:
             try:
                 analysis_report = job_info['data'].get('analysis_report')
                 epicos = EpicoParserService.parse_epicos_from_report(analysis_report)
                 organization_url = None
                 project_name = None
-                # Tenta obter organization_url e project_name
                 if repository_type == 'azure':
-                    # repo_name formato: organization/project/repository
                     parts = repo_name.split('/')
                     if len(parts) >= 2:
                         organization_url = f"https://dev.azure.com/{parts[0]}"
@@ -263,6 +282,42 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 return
             except Exception as e:
                 job_info['data']['cards_creation_errors'] = [str(e)]
+                self.job_handler.update_job_status(job_id, 'failed')
+                self.job_handler.update_job(job_id, job_info)
+                return
+        # FLUXO DE GERAÇÃO DE TAREFAS PARA EPICOS APROVADOS (SEM COMMIT)
+        if job_info['data'].get('gerar_tarefas') is True and job_info['data'].get('criar_cards_azure') is True:
+            try:
+                analysis_report = job_info['data'].get('analysis_report')
+                epicos_aprovados = job_info['data'].get('epicos_aprovados', [])
+                organization_url = None
+                project_name = None
+                if repository_type == 'azure':
+                    parts = repo_name.split('/')
+                    if len(parts) >= 2:
+                        organization_url = f"https://dev.azure.com/{parts[0]}"
+                        project_name = job_info['data'].get('azure_project_name') or parts[1]
+                if not organization_url:
+                    organization_url = job_info['data'].get('organization_url')
+                if not project_name:
+                    project_name = job_info['data'].get('azure_project_name')
+                if not organization_url or not project_name:
+                    raise ValueError("organization_url e project_name são obrigatórios para criar cards no Azure Boards.")
+                azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
+                tarefas_criadas = []
+                tarefas_creation_errors = []
+                for epico_id in epicos_aprovados:
+                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
+                    resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
+                    tarefas_criadas.extend(resultado)
+                    tarefas_creation_errors.extend([r for r in resultado if r.get('erro')])
+                job_info['data']['tarefas_criadas'] = tarefas_criadas
+                job_info['data']['tarefas_creation_errors'] = tarefas_creation_errors
+                self.job_handler.update_job_status(job_id, 'completed')
+                self.job_handler.update_job(job_id, job_info)
+                return
+            except Exception as e:
+                job_info['data']['tarefas_creation_errors'] = [str(e)]
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
