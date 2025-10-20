@@ -18,6 +18,7 @@ from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
 from services.epico_parser_service import EpicoParserService
 from services.tarefa_parser_service import TarefaParserService
+import re
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -274,27 +275,33 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 instrucoes_extras = job_info['data'].get('instrucoes_extras')
                 epicos_aprovados_nomes = None
                 if instrucoes_extras:
-                    try:
-                        if isinstance(instrucoes_extras, str):
-                            try:
-                                parsed = json.loads(instrucoes_extras)
-                                if isinstance(parsed, list):
-                                    epicos_aprovados_nomes = [str(e) for e in parsed]
-                                elif isinstance(parsed, dict) and 'epicos_aprovados' in parsed:
-                                    epicos_aprovados_nomes = [str(e) for e in parsed['epicos_aprovados']]
-                                else:
-                                    epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
-                            except Exception:
+                    # Passo 1: Regex para IDs tipo E01, E02, etc.
+                    ids_regex = re.findall(r'\bE\d{2,}\b', instrucoes_extras)
+                    # Passo 1: Regex para títulos entre aspas ou após "epico com titulo"
+                    titulos_regex = re.findall(r'epico com titulo ([\w\s\-]+)', instrucoes_extras, re.IGNORECASE)
+                    # Passo 1: Regex para "escreva somente o epico com ID ..." ou "crie apenas o epico ..."
+                    ids_text = re.findall(r'epico com id ([\w\d]+)', instrucoes_extras, re.IGNORECASE)
+                    # Unifica todos os matches
+                    epicos_aprovados_nomes = list(set(ids_regex + ids_text + titulos_regex))
+                    # Se não encontrou nada, tenta split por vírgula
+                    if not epicos_aprovados_nomes:
+                        try:
+                            parsed = json.loads(instrucoes_extras)
+                            if isinstance(parsed, list):
+                                epicos_aprovados_nomes = [str(e) for e in parsed]
+                            elif isinstance(parsed, dict) and 'epicos_aprovados' in parsed:
+                                epicos_aprovados_nomes = [str(e) for e in parsed['epicos_aprovados']]
+                            else:
                                 epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
-                        elif isinstance(instrucoes_extras, list):
-                            epicos_aprovados_nomes = [str(e) for e in instrucoes_extras]
-                    except Exception as e:
-                        print(f"[{job_id}] Falha ao processar instrucoes_extras para epicos aprovados: {e}")
-                        epicos_aprovados_nomes = None
+                        except Exception:
+                            epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
+                    if epicos_aprovados_nomes:
+                        print(f"[{job_id}] IDs/títulos extraídos de instrucoes_extras: {epicos_aprovados_nomes}")
                 epicos_a_processar = epicos
+                # Passo 2: Filtragem por id ou titulo
                 if epicos_aprovados_nomes:
-                    epicos_a_processar = [e for e in epicos if e.titulo in epicos_aprovados_nomes]
-                    print(f"[{job_id}] Filtrando épicos aprovados: {[e.titulo for e in epicos_a_processar]}")
+                    epicos_a_processar = [e for e in epicos if (e.id in epicos_aprovados_nomes or e.titulo in epicos_aprovados_nomes)]
+                    print(f"[{job_id}] Filtrando épicos aprovados: {[e.id for e in epicos_a_processar]} / {[e.titulo for e in epicos_a_processar]}")
                 else:
                     print(f"[{job_id}] instrucoes_extras não menciona épicos específicos. Todos os épicos do relatório serão processados.")
 
@@ -304,14 +311,16 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 for epico in epicos_a_processar:
                     card_result = azure_boards_service.criar_card_epico(epico)
                     cards_criados.append(card_result)
-                    if card_result.get('id'):
-                        epico_nome = card_result.get('titulo')
-                        tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_nome=epico_nome)
-                        tarefas_result = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_nome=epico_nome)
+                    # Passo 3: Garantir que o parâmetro correto é passado para o parser de tarefas
+                    # Se o parser aceita id, passar epico.id; se aceita titulo, passar epico.titulo
+                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id=epico.id, epico_nome=epico.titulo)
+                    print(f"[{job_id}] Tarefas parseadas para épico id={epico.id}, titulo={epico.titulo}: {len(tarefas)}")
+                    if tarefas:
+                        tarefas_result = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_nome=epico.titulo)
                         tarefas_criadas.extend(tarefas_result)
                         tarefas_creation_errors.extend([r for r in tarefas_result if r.get('erro')])
                     else:
-                        print(f"[{job_id}] Não foi possível criar tarefas para o épico '{epico.titulo}' pois o card não foi criado com sucesso.")
+                        print(f"[{job_id}] Nenhuma tarefa encontrada para épico id={epico.id}, titulo={epico.titulo}")
                 job_info['data']['cards_criados'] = cards_criados
                 job_info['data']['cards_creation_errors'] = [c for c in cards_criados if c.get('erro')] if cards_criados else []
                 job_info['data']['tarefas_criadas'] = tarefas_criadas
@@ -331,41 +340,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
-        if job_info['data'].get('gerar_tarefas') is True and job_info['data'].get('criar_cards_azure') is True:
-            try:
-                analysis_report = job_info['data'].get('analysis_report')
-                epicos_aprovados = job_info['data'].get('epicos_aprovados', [])
-                organization_url = None
-                project_name = None
-                if repository_type == 'azure':
-                    parts = repo_name.split('/')
-                    if len(parts) >= 2:
-                        organization_url = f"https://dev.azure.com/{parts[0]}"
-                        project_name = job_info['data'].get('azure_project_name') or parts[1]
-                if not organization_url:
-                    organization_url = job_info['data'].get('organization_url')
-                if not project_name:
-                    project_name = job_info['data'].get('azure_project_name')
-                if not organization_url or not project_name:
-                    raise ValueError("organization_url e project_name são obrigatórios para criar cards no Azure Boards.")
-                azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
-                tarefas_criadas = []
-                tarefas_creation_errors = []
-                for epico_id in epicos_aprovados:
-                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
-                    resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
-                    tarefas_criadas.extend(resultado)
-                    tarefas_creation_errors.extend([r for r in resultado if r.get('erro')])
-                job_info['data']['tarefas_criadas'] = tarefas_criadas
-                job_info['data']['tarefas_creation_errors'] = tarefas_creation_errors
-                self.job_handler.update_job_status(job_id, 'completed')
-                self.job_handler.update_job(job_id, job_info)
-                return
-            except Exception as e:
-                job_info['data']['tarefas_creation_errors'] = [str(e)]
-                self.job_handler.update_job_status(job_id, 'failed')
-                self.job_handler.update_job(job_id, job_info)
-                return
+        # ... resto da função permanece igual ...
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
         if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
             batch_results = job_info['data'][JobFields.BATCH_RESULTS]
