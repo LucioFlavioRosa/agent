@@ -26,10 +26,23 @@ class EpicoCard(BaseModel):
     perfis_envolvidos: str
     estimativa_esforco: str
 
+class TarefaCard(BaseModel):
+    id: str
+    titulo_tarefa: str
+    descricao_tarefa: str
+    epico_id: str
+    estimativa_tempo: str
+    criterios_aceite: str
+
 class EpicoResponse(BaseModel):
     job_id: str
     epicos: List[EpicoCard]
     cards_criados: Optional[List[Dict[str, Any]]] = None
+
+class TarefaResponse(BaseModel):
+    job_id: str
+    tarefas: List[TarefaCard]
+    tarefas_criadas: Optional[List[Dict[str, Any]]] = None
 
 class JobStatus:
     STARTING = 'starting'
@@ -86,6 +99,10 @@ class JobFields:
     AZURE_PROJECT_NAME = 'azure_project_name'
     CARDS_CRIADOS = 'cards_criados'
     CARDS_CREATION_ERRORS = 'cards_creation_errors'
+    GERAR_TAREFAS = 'gerar_tarefas'
+    EPICOS_APROVADOS = 'epicos_aprovados'
+    TAREFAS_CRIADAS = 'tarefas_criadas'
+    TAREFAS_CREATION_ERRORS = 'tarefas_creation_errors'
 
 class JobActions:
     APPROVE = 'approve'
@@ -116,3 +133,4 @@ class StartAnalysisPayload(BaseModel):
     gerar_epicos: bool = False
     criar_cards_azure: bool = False
     azure_project_name: Optional[str] = None
+    gerar_tarefas: bool = False
