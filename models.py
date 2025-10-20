@@ -38,6 +38,8 @@ class EpicoResponse(BaseModel):
     job_id: str
     epicos: List[EpicoCard]
     cards_criados: Optional[List[Dict[str, Any]]] = None
+    tarefas: Optional[List[TarefaCard]] = None
+    tarefas_criadas: Optional[List[Dict[str, Any]]] = None
 
 class TarefaResponse(BaseModel):
     job_id: str
