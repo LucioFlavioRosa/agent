@@ -74,7 +74,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
 
-            # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT/PR)
             if job_info['data']['original_analysis_type'] == 'geracao_epicos_a_partir_de_reuniao':
                 for i, step in enumerate(steps_to_run):
                     current_step_index = start_from_step + i
@@ -93,11 +92,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                         return
-                # Após steps, finalize workflow (não faz commit/PR)
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
                 return
 
-            # FLUXO PADRÃO (COM COMMIT)
             if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -255,7 +252,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT/PR)
         if job_info['data'].get('original_analysis_type') == 'geracao_epicos_a_partir_de_reuniao':
             try:
                 analysis_report = job_info['data'].get('analysis_report')
@@ -274,29 +270,67 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if not organization_url or not project_name:
                     raise ValueError("organization_url e project_name são obrigatórios para criar cards no Azure Boards.")
                 azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
-                cards_criados = azure_boards_service.criar_multiplos_cards(epicos)
-                job_info['data']['cards_criados'] = cards_criados
-                job_info['data']['cards_creation_errors'] = [c for c in cards_criados if c.get('erro')] if cards_criados else []
+
+                instrucoes_extras = job_info['data'].get('instrucoes_extras')
+                epicos_aprovados_nomes = None
+                if instrucoes_extras:
+                    try:
+                        if isinstance(instrucoes_extras, str):
+                            try:
+                                parsed = json.loads(instrucoes_extras)
+                                if isinstance(parsed, list):
+                                    epicos_aprovados_nomes = [str(e) for e in parsed]
+                                elif isinstance(parsed, dict) and 'epicos_aprovados' in parsed:
+                                    epicos_aprovados_nomes = [str(e) for e in parsed['epicos_aprovados']]
+                                else:
+                                    epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
+                            except Exception:
+                                epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
+                        elif isinstance(instrucoes_extras, list):
+                            epicos_aprovados_nomes = [str(e) for e in instrucoes_extras]
+                    except Exception as e:
+                        print(f"[{job_id}] Falha ao processar instrucoes_extras para epicos aprovados: {e}")
+                        epicos_aprovados_nomes = None
+                epicos_a_processar = epicos
+                if epicos_aprovados_nomes:
+                    epicos_a_processar = [e for e in epicos if e.titulo in epicos_aprovados_nomes]
+                    print(f"[{job_id}] Filtrando épicos aprovados: {[e.titulo for e in epicos_a_processar]}")
+                else:
+                    print(f"[{job_id}] instrucoes_extras não menciona épicos específicos. Todos os épicos do relatório serão processados.")
+
+                cards_criados = []
                 tarefas_criadas = []
                 tarefas_creation_errors = []
-                epicos_aprovados = [c['id'] for c in cards_criados if c.get('id')] if cards_criados else []
-                for epico_id in epicos_aprovados:
-                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
-                    resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
-                    tarefas_criadas.extend(resultado)
-                    tarefas_creation_errors.extend([r for r in resultado if r.get('erro')])
+                for epico in epicos_a_processar:
+                    card_result = azure_boards_service.criar_card_epico(epico)
+                    cards_criados.append(card_result)
+                    if card_result.get('id'):
+                        epico_nome = card_result.get('titulo')
+                        tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_nome=epico_nome)
+                        tarefas_result = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_nome=epico_nome)
+                        tarefas_criadas.extend(tarefas_result)
+                        tarefas_creation_errors.extend([r for r in tarefas_result if r.get('erro')])
+                    else:
+                        print(f"[{job_id}] Não foi possível criar tarefas para o épico '{epico.titulo}' pois o card não foi criado com sucesso.")
+                job_info['data']['cards_criados'] = cards_criados
+                job_info['data']['cards_creation_errors'] = [c for c in cards_criados if c.get('erro')] if cards_criados else []
                 job_info['data']['tarefas_criadas'] = tarefas_criadas
                 job_info['data']['tarefas_creation_errors'] = tarefas_creation_errors
+                print(f"[{job_id}] cards_criados: {cards_criados}")
+                print(f"[{job_id}] tarefas_criadas: {tarefas_criadas}")
+                print(f"[{job_id}] tarefas_creation_errors: {tarefas_creation_errors}")
+                print(f"[{job_id}] Atualizando status do job para completed...")
                 self.job_handler.update_job_status(job_id, 'completed')
                 self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] Status do job atualizado para completed.")
                 return
             except Exception as e:
+                print(f"[{job_id}] ERRO CRÍTICO durante a criação de épicos/tarefas: {e}")
                 job_info['data']['cards_creation_errors'] = [str(e)]
                 job_info['data']['tarefas_creation_errors'] = [str(e)]
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
-        # FLUXO DE GERAÇÃO DE TAREFAS PARA EPICOS APROVADOS (SEM COMMIT)
         if job_info['data'].get('gerar_tarefas') is True and job_info['data'].get('criar_cards_azure') is True:
             try:
                 analysis_report = job_info['data'].get('analysis_report')
