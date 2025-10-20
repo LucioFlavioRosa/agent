@@ -28,7 +28,6 @@ class JobDataService:
         data[JobFields.ARQUIVOS_ESPECIFICOS] = payload_dict.get('arquivos_especificos')
         data[JobFields.REPOSITORY_TYPE] = payload_dict.get('repository_type')
         data[JobFields.REPO_NAME_MODERNIZADO] = payload_dict.get('repo_name_modernizado')
-        # Corrigir para garantir que branch_name_modernizado seja armazenado corretamente
         branch_name_modernizado = payload_dict.get('branch_name_modernizado')
         data[JobFields.BRANCH_NAME] = branch_name_modernizado
         data[JobFields.BRANCH_NAME_MODERNIZADO] = branch_name_modernizado
@@ -43,6 +42,11 @@ class JobDataService:
         if not isinstance(executar_build_dotnet, bool):
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
+        # Adiciona campos para fluxo de épicos
+        data[JobFields.TRANSCRICAO_REUNIAO] = payload_dict.get('transcricao_reuniao')
+        data[JobFields.GERAR_EPICOS] = payload_dict.get('gerar_epicos', False)
+        data[JobFields.CRIAR_CARDS_AZURE] = payload_dict.get('criar_cards_azure', False)
+        data[JobFields.AZURE_PROJECT_NAME] = payload_dict.get('azure_project_name')
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
