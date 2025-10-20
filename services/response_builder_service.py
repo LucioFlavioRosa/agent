@@ -14,6 +14,8 @@ class FinalStatusResponse(BaseModel):
     epicos: Optional[List[Any]] = None
     cards_criados: Optional[List[Dict]] = None
     cards_creation_errors: Optional[List[Any]] = None
+    tarefas_criadas: Optional[List[Dict]] = None
+    tarefas_creation_errors: Optional[List[Any]] = None
 
 class ResponseBuilderService:
     def __init__(self, pr_extractor, logging_service):
@@ -50,10 +52,15 @@ class ResponseBuilderService:
         epicos = None
         cards_criados = None
         cards_creation_errors = None
+        tarefas_criadas = None
+        tarefas_creation_errors = None
         if data.get('gerar_epicos', False):
             epicos = data.get('epicos', None)
             cards_criados = data.get('cards_criados', None)
             cards_creation_errors = data.get('cards_creation_errors', None)
+        if data.get('gerar_tarefas', False):
+            tarefas_criadas = data.get('tarefas_criadas', None)
+            tarefas_creation_errors = data.get('tarefas_creation_errors', None)
         return FinalStatusResponse(
             job_id=job_id,
             status=job.get(JobFields.STATUS, "completed"),
@@ -65,7 +72,9 @@ class ResponseBuilderService:
             build_errors=build_errors_aggregate if build_errors_aggregate else None,
             epicos=epicos,
             cards_criados=cards_criados,
-            cards_creation_errors=cards_creation_errors
+            cards_creation_errors=cards_creation_errors,
+            tarefas_criadas=tarefas_criadas,
+            tarefas_creation_errors=tarefas_creation_errors
         )
     def build_failed_response(self, job_id: str, job: Dict[str, Any]) -> FinalStatusResponse:
         data = job.get(JobFields.DATA, {})
@@ -74,6 +83,8 @@ class ResponseBuilderService:
         diagnostic_logs = data.get('diagnostic_logs', None)
         blob_url = data.get(JobFields.REPORT_BLOB_URL, None)
         build_errors = data.get('build_errors', None)
+        tarefas_criadas = data.get('tarefas_criadas', None)
+        tarefas_creation_errors = data.get('tarefas_creation_errors', None)
         return FinalStatusResponse(
             job_id=job_id,
             status=job.get(JobFields.STATUS, "failed"),
@@ -82,5 +93,7 @@ class ResponseBuilderService:
             analysis_report=analysis_report,
             diagnostic_logs=diagnostic_logs,
             report_blob_url=blob_url,
-            build_errors=build_errors
+            build_errors=build_errors,
+            tarefas_criadas=tarefas_criadas,
+            tarefas_creation_errors=tarefas_creation_errors
         )
