@@ -5,12 +5,12 @@ from models import TarefaCard
 class TarefaParserService:
     @staticmethod
     def parse_tarefas_from_report(report_text: str, epico_id: str) -> List[TarefaCard]:
-        if not report_text or '| ID |' not in report_text:
+        if not report_text or '| Épico ID |' not in report_text:
             return []
         lines = [line.strip() for line in report_text.splitlines() if line.strip()]
         table_start = None
         for idx, line in enumerate(lines):
-            if line.startswith('| ID |'):
+            if line.startswith('| ID') and 'Épico ID' in line:
                 table_start = idx
                 break
         if table_start is None:
