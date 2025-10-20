@@ -93,6 +93,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                         return
+                # Após steps, finalize workflow (não faz commit)
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
                 return
 
@@ -254,6 +255,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+        # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT)
         if job_info['data'].get('gerar_epicos') is True and job_info['data'].get('criar_cards_azure') is True:
             try:
                 analysis_report = job_info['data'].get('analysis_report')
@@ -283,10 +285,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
+        # FLUXO DE GERAÇÃO DE TAREFAS PARA EPICOS APROVADOS (SEM COMMIT)
         if job_info['data'].get('gerar_tarefas') is True and job_info['data'].get('criar_cards_azure') is True:
             try:
                 analysis_report = job_info['data'].get('analysis_report')
-                epicos_aprovados = job_info['data'].get('epicos_aprovados', [])
+                observacoes_aprovacao = job_info['data'].get('instrucoes_extras_aprovacao', '')
                 organization_url = None
                 project_name = None
                 if repository_type == 'azure':
@@ -301,9 +304,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if not organization_url or not project_name:
                     raise ValueError("organization_url e project_name são obrigatórios para criar cards no Azure Boards.")
                 azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
+                # Determinar épicos aprovados a partir de observacoes_aprovacao
+                epicos_aprovados_ids = self._extract_epicos_aprovados_from_observacoes(observacoes_aprovacao)
                 tarefas_criadas = []
                 tarefas_creation_errors = []
-                for epico_id in epicos_aprovados:
+                for epico_id in epicos_aprovados_ids:
                     tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
                     resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
                     tarefas_criadas.extend(resultado)
@@ -357,6 +362,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if 'build_errors' not in commit:
                     print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
         self.job_handler.update_job_status(job_id, 'completed')
+
+    def _extract_epicos_aprovados_from_observacoes(self, observacoes_aprovacao: str):
+        # Implementação simples: procurar padrões tipo 'E01', 'E02', etc.
+        import re
+        if not observacoes_aprovacao:
+            return []
+        return re.findall(r'E\d+', observacoes_aprovacao)
 
     def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
         print(f"[WorkflowOrchestrator] Obtendo token. repository_type={repository_type}, repo_name={repo_name}")
