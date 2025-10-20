@@ -15,7 +15,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 current_step_index: int, previous_step_result: Dict[str, Any], 
                 repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
         
-        instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
+        instrucoes_formatadas = job_info['data'].get('instrucoes_extras') or ''
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
 
@@ -39,9 +39,8 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
 
-        # Passo 14: Adiciona transcricao_reuniao se presente
-        transcricao_reuniao = job_info['data'].get('transcricao_reuniao')
-        if transcricao_reuniao:
+        transcricao_reuniao = job_info['data'].get('transcricao_reuniao') or None
+        if transcricao_reuniao is not None:
             agent_params['transcricao_reuniao'] = transcricao_reuniao
 
         max_retries = 2
@@ -58,7 +57,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                     print(f"[{job_id}] {cleaned_string}")
