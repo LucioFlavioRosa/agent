@@ -44,7 +44,6 @@ class JobDataService:
         data[JobFields.CRIAR_CARDS_AZURE] = payload_dict.get('criar_cards_azure', False)
         data[JobFields.AZURE_PROJECT_NAME] = payload_dict.get('azure_project_name')
         data[JobFields.GERAR_TAREFAS] = payload_dict.get('gerar_tarefas', False)
-        data[JobFields.EPICOS_APROVADOS] = payload_dict.get('epicos_aprovados')
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
