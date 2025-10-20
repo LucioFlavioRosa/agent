@@ -17,6 +17,9 @@ class FinalStatusResponse(BaseModel):
     diagnostic_logs: Optional[Dict[str, Any]] = None
     report_blob_url: Optional[str] = None
     build_errors: Optional[List[str]] = None
+    epicos: Optional[List[Any]] = None
+    cards_criados: Optional[List[Dict[str, Any]]] = None
+    cards_creation_errors: Optional[List[Any]] = None
 
 class EpicoCard(BaseModel):
     id: str
