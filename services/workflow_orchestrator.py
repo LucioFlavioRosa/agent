@@ -93,7 +93,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                         return
-                # Após steps, finalize workflow (não faz commit)
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
                 return
 
@@ -255,7 +254,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        # FLUXO EXCLUSIVO PARA GERAÇÃO DE EPICOS E TAREFAS (SEM COMMIT)
         if job_info['data'].get('gerar_epicos') is True and job_info['data'].get('criar_cards_azure') is True:
             try:
                 analysis_report = job_info['data'].get('analysis_report')
@@ -285,7 +283,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
-        # FLUXO DE GERAÇÃO DE TAREFAS PARA EPICOS APROVADOS (SEM COMMIT)
         if job_info['data'].get('gerar_tarefas') is True and job_info['data'].get('criar_cards_azure') is True:
             try:
                 analysis_report = job_info['data'].get('analysis_report')
