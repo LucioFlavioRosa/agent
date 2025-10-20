@@ -80,7 +80,6 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 if report_text and isinstance(report_text, str) and report_text.strip():
                     job_info['data']['analysis_report'] = report_text
                     self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] Relatório extraído e salvo em job_info['data']['analysis_report'].")
                 else:
                     print(f"[{job_id}] AVISO: ReportHandler.extract_report_text retornou vazio ou None. Nenhum relatório salvo.")
                 return result
