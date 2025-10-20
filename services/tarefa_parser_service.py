@@ -25,11 +25,13 @@ class TarefaParserService:
             columns = [col.strip() for col in line.strip('|').split('|')]
             if len(columns) < 6:
                 continue
+            if columns[3] != epico_id:
+                continue
             tarefa = TarefaCard(
                 id=columns[0],
                 titulo_tarefa=columns[1],
                 descricao_tarefa=columns[2],
-                epico_id=epico_id,
+                epico_id=columns[3],
                 estimativa_tempo=columns[4],
                 criterios_aceite=columns[5]
             )
