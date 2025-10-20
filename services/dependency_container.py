@@ -12,6 +12,7 @@ from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
 from services.redis_cache_service import RedisCacheService
 from tools.azure_secret_manager import AzureSecretManager
+from services.azure_boards_service import AzureBoardsService
 
 class DependencyContainer:
     def __init__(self):
@@ -29,6 +30,7 @@ class DependencyContainer:
         self._changeset_filler = None
         self._redis_cache_service = None
         self._secret_manager = None
+        self._azure_boards_services = {}  # cache por (organization_url, project_name)
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -87,7 +89,6 @@ class DependencyContainer:
     
     def get_redis_cache_service(self) -> RedisCacheService:
         if self._redis_cache_service is None:
-            # Pega a instância única do job_store e a injeta no RedisCacheService
             job_store_instance = self.get_job_store()
             self._redis_cache_service = RedisCacheService(job_store=job_store_instance)
         return self._redis_cache_service
@@ -95,7 +96,6 @@ class DependencyContainer:
     def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
         if self._workflow_orchestrator is None:
             workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
-            
             self._workflow_orchestrator = WorkflowOrchestrator(
                 job_manager=self.get_job_manager(), 
                 blob_storage=self.get_blob_storage(), 
@@ -106,7 +106,8 @@ class DependencyContainer:
                 commit_handler=self.get_commit_handler(),
                 data_formatter=self.get_data_formatter(),
                 secret_manager=self.get_secret_manager(),
-                cache_service=self.get_redis_cache_service()
+                cache_service=self.get_redis_cache_service(),
+                dependency_container=self
             )
         return self._workflow_orchestrator
     
@@ -115,3 +116,13 @@ class DependencyContainer:
             cache = AnalysisNameCache(self.get_job_store())
             self._analysis_name_service = AnalysisNameService(cache)
         return self._analysis_name_service
+
+    def get_azure_boards_service(self, organization_url: str, project_name: str) -> AzureBoardsService:
+        cache_key = f"{organization_url}:{project_name}"
+        if cache_key in self._azure_boards_services:
+            return self._azure_boards_services[cache_key]
+        org_name = organization_url.strip().split('/')[-1]
+        token = self.get_secret_manager().get_secret(f"azure-token-{org_name}")
+        service = AzureBoardsService(organization_url, project_name, token)
+        self._azure_boards_services[cache_key] = service
+        return service
