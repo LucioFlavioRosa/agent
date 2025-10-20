@@ -134,3 +134,4 @@ class StartAnalysisPayload(BaseModel):
     criar_cards_azure: bool = False
     azure_project_name: Optional[str] = None
     gerar_tarefas: bool = False
+    epicos_aprovados: Optional[List[str]] = None
