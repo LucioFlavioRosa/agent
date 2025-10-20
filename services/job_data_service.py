@@ -44,7 +44,6 @@ class JobDataService:
         data[JobFields.CRIAR_CARDS_AZURE] = payload_dict.get('criar_cards_azure', False)
         data[JobFields.AZURE_PROJECT_NAME] = payload_dict.get('azure_project_name')
         data[JobFields.GERAR_TAREFAS] = payload_dict.get('gerar_tarefas', False)
-        # Adicionando campo para compatibilidade, mas não será usado no novo fluxo
         data[JobFields.EPICOS_APROVADOS] = payload_dict.get('epicos_aprovados')
         return {
             JobFields.STATUS: None,
@@ -72,7 +71,9 @@ class JobDataService:
                 JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
                 JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
                 JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
-                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: original_data.get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
+                JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: original_data.get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False),
+                JobFields.GERAR_TAREFAS: original_data.get(JobFields.GERAR_TAREFAS, False),
+                JobFields.EPICOS_APROVADOS: original_data.get(JobFields.EPICOS_APROVADOS)
             },
             JobFields.ERROR_DETAILS: None
         }
