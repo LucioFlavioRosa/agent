@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 from azure.devops.v7_1.work_item_tracking.models import JsonPatchOperation
@@ -14,7 +14,6 @@ class AzureBoardsService:
         self.connection = Connection(base_url=organization_url, creds=credentials)
         self.project_name = project_name
         self.wit_client = self.connection.clients.get_work_item_tracking_client()
-        # Validação da conexão e existência do projeto
         try:
             projects = self.connection.clients.get_core_client().get_projects()
             project_names = [p.name for p in projects]
@@ -48,6 +47,23 @@ class AzureBoardsService:
         with AzureBoardsService._state_cache_lock:
             AzureBoardsService._state_cache[cache_key] = 'New'
         return 'New'
+
+    def buscar_epico_por_nome(self, nome_epico: str) -> Optional[int]:
+        try:
+            wiql_query = {
+                "query": f"SELECT [System.Id], [System.Title], [System.CreatedDate] FROM WorkItems WHERE [System.TeamProject] = '{self.project_name}' AND [System.WorkItemType] = 'Epic' AND [System.Title] = '{nome_epico}' ORDER BY [System.CreatedDate] DESC"
+            }
+            result = self.wit_client.query_by_wiql(wiql_query["query"])
+            work_items = result.work_items if hasattr(result, 'work_items') else []
+            if not work_items:
+                print(f"[AzureBoardsService] Nenhum épico encontrado com o nome '{nome_epico}' no projeto '{self.project_name}'.")
+                return None
+            epic_id = work_items[0].id
+            print(f"[AzureBoardsService] Épico encontrado para nome '{nome_epico}': id={epic_id}")
+            return epic_id
+        except Exception as e:
+            print(f"[AzureBoardsService] Erro ao buscar épico por nome '{nome_epico}': {e}")
+            return None
 
     def criar_card_epico(self, epico) -> Dict[str, Any]:
         initial_state = self._get_valid_initial_state('Epic')
@@ -94,8 +110,13 @@ class AzureBoardsService:
                 resultados.append({"id": None, "url": None, "titulo": getattr(epico, 'titulo', '?'), "erro": error_message})
         return resultados
 
-    def criar_card_tarefa(self, tarefa, epico_id: int) -> Dict[str, Any]:
+    def criar_card_tarefa(self, tarefa, epico_nome: str) -> Dict[str, Any]:
         initial_state = self._get_valid_initial_state('Task')
+        epico_id = self.buscar_epico_por_nome(epico_nome)
+        if not epico_id:
+            error_message = f"Erro: Não foi possível encontrar o épico com nome '{epico_nome}' para criar a tarefa '{tarefa.titulo_tarefa}'."
+            print(f"[AzureBoardsService] {error_message}")
+            return {"id": None, "url": None, "titulo": tarefa.titulo_tarefa, "erro": error_message}
         patch_document = [
             JsonPatchOperation(op="add", path="/fields/System.Title", value=tarefa.titulo_tarefa),
             JsonPatchOperation(op="add", path="/fields/System.Description", value=tarefa.descricao_tarefa),
@@ -112,7 +133,7 @@ class AzureBoardsService:
                 "attributes": {"comment": "Relacionamento com épico pai"}
             }
         ]
-        print(f"[AzureBoardsService] Preparando para criar Task: Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', Projeto='{self.project_name}', EpicId='{epico_id}', Campos: {[{'path': op.path, 'value': op.value} for op in patch_document]}")
+        print(f"[AzureBoardsService] Preparando para criar Task: Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', Projeto='{self.project_name}', EpicNome='{epico_nome}', EpicId='{epico_id}', Campos: {[{'path': op.path, 'value': op.value} for op in patch_document]}")
         try:
             new_work_item = self.wit_client.create_work_item(
                 document=patch_document,
@@ -127,13 +148,13 @@ class AzureBoardsService:
                 "titulo": tarefa.titulo_tarefa
             }
         except Exception as e:
-            error_message = f"Erro ao criar card tarefa: {e} (Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', EpicId='{epico_id}')"
+            error_message = f"Erro ao criar card tarefa: {e} (Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', EpicNome='{epico_nome}', EpicId='{epico_id}')"
             print(f"[AzureBoardsService] {error_message}")
             return {"id": None, "url": None, "titulo": tarefa.titulo_tarefa, "erro": error_message}
 
-    def criar_multiplas_tarefas(self, tarefas: List[Any], epico_id: int) -> List[Dict[str, Any]]:
+    def criar_multiplas_tarefas(self, tarefas: List[Any], epico_nome: str) -> List[Dict[str, Any]]:
         resultados = []
         for tarefa in tarefas:
-            resultado = self.criar_card_tarefa(tarefa, epico_id)
+            resultado = self.criar_card_tarefa(tarefa, epico_nome)
             resultados.append(resultado)
         return resultados
