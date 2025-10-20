@@ -16,6 +16,7 @@ from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
 from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
+from services.epico_parser_service import EpicoParserService
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -131,15 +132,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
-                # REMOVIDO: Salvar relatório imediatamente após geração (agora responsabilidade dos executores)
-                # if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
-                #     self._save_generated_report(job_id, job_info, step_result, current_step_index)
                 self.job_handler.save_step_result(job_info, current_step_index, step_result)
                 previous_step_result = step_result
                 strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
                 if strategy.should_pause_for_approval(job_info, step):
                     if not job_info['data'].get('report_blob_url'):
-                        # Tentar salvar o relatório antes de lançar exceção
                         saved = self._save_generated_report(job_id, job_info, step_result, current_step_index)
                         if not job_info['data'].get('report_blob_url'):
                             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
@@ -158,7 +155,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                     print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
                     return
-            # INSTRUÇÃO DO USUÁRIO: Após o loop de steps, garantir que o relatório do step 0 seja salvo
             if (
                 steps_to_run and
                 start_from_step == 0 and
@@ -217,14 +213,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
-        # REMOVIDO: Salvar relatório imediatamente após geração (agora responsabilidade dos executores)
-        # if job_info['data'].get('analysis_report') and not job_info['data'].get('report_blob_url'):
-        #     self._save_generated_report(job_id, job_info, result, current_step_index)
         return result
                                         
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
-        # Validação: report_blob_url deve estar presente antes de verificar o texto do relatório
         if job_info['data'].get('report_blob_url'):
             report_text = self.report_handler.extract_report_text(step_result)
             job_info['data']['analysis_report'] = report_text
@@ -232,7 +224,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             self.job_handler.set_paused_step(job_info, step_index)
             self.job_handler.update_job(job_id, job_info)
             return
-        # Tentar salvar o relatório antes de lançar exceção
         saved = self._save_generated_report(job_id, job_info, step_result, step_index)
         if not job_info['data'].get('report_blob_url'):
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
@@ -251,6 +242,46 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
             print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
             final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
+        # --- INÍCIO NOVO FLUXO DE CRIAÇÃO DE CARDS DE ÉPICOS NO AZURE BOARDS ---
+        if job_info['data'].get('gerar_epicos') and job_info['data'].get('criar_cards_azure'):
+            try:
+                report_text = job_info['data'].get('analysis_report')
+                if not report_text:
+                    raise ValueError(f"[{job_id}] Não há relatório de épicos aprovado para criar cards.")
+                epicos = EpicoParserService.parse_epicos_from_report(report_text)
+                organization_url = job_info['data'].get('organization_url')
+                project_name = job_info['data'].get('azure_project_name')
+                if not organization_url:
+                    if repository_type == 'azure':
+                        # Exemplo: https://dev.azure.com/ORG/PROJECT/_git/REPO
+                        parts = repo_name.split('/')
+                        if len(parts) >= 3:
+                            organization_url = f"https://dev.azure.com/{parts[0]}"
+                        else:
+                            raise ValueError(f"[{job_id}] Não foi possível extrair organization_url do repo_name: {repo_name}")
+                    else:
+                        raise ValueError(f"[{job_id}] organization_url não informado e não é Azure repo.")
+                if not project_name:
+                    if repository_type == 'azure':
+                        parts = repo_name.split('/')
+                        if len(parts) >= 2:
+                            project_name = parts[1]
+                        else:
+                            raise ValueError(f"[{job_id}] Não foi possível extrair azure_project_name do repo_name: {repo_name}")
+                    else:
+                        raise ValueError(f"[{job_id}] azure_project_name não informado e não é Azure repo.")
+                azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
+                cards_criados = azure_boards_service.criar_multiplos_cards(epicos)
+                job_info['data']['cards_criados'] = cards_criados
+                self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] Cards de épicos criados no Azure Boards: {cards_criados}")
+            except Exception as e:
+                print(f"[{job_id}] Erro ao criar cards de épicos no Azure Boards: {e}")
+                job_info['data']['cards_creation_errors'] = str(e)
+                self.job_handler.update_job(job_id, job_info)
+            self.job_handler.update_job_status(job_id, 'completed')
+            return
+        # --- FIM NOVO FLUXO DE CRIAÇÃO DE CARDS DE ÉPICOS NO AZURE BOARDS ---
         dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
         self.job_handler.update_job_status(job_id, 'committing_to_github')
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
