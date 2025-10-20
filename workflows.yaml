@@ -422,10 +422,10 @@ geracao_epicos_a_partir_de_reuniao:
       params:
         tipo_analise: "criacao_epicos"
       requires_approval: true
-    - status_update: "escrita_codigo"
+    - status_update: "escrita_tarefas"
       model_name: "gpt-4.1"
       agent_type: "processador"
       params:
-        tipo_analise: "criando_codigos"
+        tipo_analise: "cricao_tarefas"
         max_token_out: 32000
   
