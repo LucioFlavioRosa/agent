@@ -3,17 +3,14 @@ from typing import Optional
 from models import JobStatus, JobFields
 
 class JobDataService:
-
     def __init__(self):
         pass
-        
     def generate_analysis_name(self, provided_name: Optional[str], job_id: str) -> str:
         if provided_name:
             return provided_name
         analysis_name = f"analysis-{str(uuid.uuid4())[:8]}"
         print(f"[{job_id}] Nome de análise gerado automaticamente: {analysis_name}")
         return analysis_name
-    
     def create_initial_job_data(self, payload_dict, normalized_repo_name, analysis_name):
         data = {}
         data[JobFields.REPO_NAME] = normalized_repo_name
@@ -42,11 +39,12 @@ class JobDataService:
         if not isinstance(executar_build_dotnet, bool):
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
-        # Adiciona campos para fluxo de épicos
         data[JobFields.TRANSCRICAO_REUNIAO] = payload_dict.get('transcricao_reuniao')
         data[JobFields.GERAR_EPICOS] = payload_dict.get('gerar_epicos', False)
         data[JobFields.CRIAR_CARDS_AZURE] = payload_dict.get('criar_cards_azure', False)
         data[JobFields.AZURE_PROJECT_NAME] = payload_dict.get('azure_project_name')
+        data[JobFields.GERAR_TAREFAS] = payload_dict.get('gerar_tarefas', False)
+        data[JobFields.EPICOS_APROVADOS] = payload_dict.get('epicos_aprovados')
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
