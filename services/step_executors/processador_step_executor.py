@@ -39,6 +39,11 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
 
+        # Passo 14: Adiciona transcricao_reuniao se presente
+        transcricao_reuniao = job_info['data'].get('transcricao_reuniao')
+        if transcricao_reuniao:
+            agent_params['transcricao_reuniao'] = transcricao_reuniao
+
         max_retries = 2
         for attempt in range(max_retries):
             try:
@@ -53,7 +58,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                     print(f"[{job_id}] {cleaned_string}")
