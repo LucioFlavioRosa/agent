@@ -16,7 +16,8 @@ from services.api_service_factory import ApiServiceFactory
 from services.pull_request_extractor_service import PullRequestExtractorService
 from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions
+from models import JobStatus, JobFields, JobActions, EpicoResponse
+from services.epico_parser_service import EpicoParserService
 
 container = DependencyContainer()
 pr_extractor = PullRequestExtractorService()
@@ -53,6 +54,10 @@ class StartAnalysisPayload(BaseModel):
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    transcricao_reuniao: Optional[str] = None
+    gerar_epicos: bool = False
+    criar_cards_azure: bool = False
+    azure_project_name: Optional[str] = None
     
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -106,8 +111,15 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
-    # Garantir que branch_name_modernizado seja passado corretamente
     payload_dict['branch_name_modernizado'] = branch_name
+    # Validação para geração de épicos
+    if payload_dict.get('gerar_epicos', False):
+        if not payload_dict.get('transcricao_reuniao'):
+            raise HTTPException(status_code=400, detail="transcricao_reuniao deve ser fornecida quando gerar_epicos=True")
+        # Força o analysis_type para um tipo de workflow de geração de épicos se necessário
+        # Exemplo: 'geracao_epicos' deve existir no workflow_registry
+        if 'geracao_epicos' in workflow_registry_service.get_valid_analysis_types():
+            payload_dict['analysis_type'] = 'geracao_epicos'
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
@@ -239,3 +251,19 @@ def get_jobs_for_report(report_name: str):
     except Exception as e:
         print(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar jobs associados ao relatório.")
+
+@app.get("/jobs/{job_id}/epicos", response_model=EpicoResponse, tags=["Epicos"])
+def get_epicos(job_id: str = Path(..., title="O ID do Job para buscar os épicos")):
+    job_store = container.get_job_store()
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job_data = job.get(JobFields.DATA, {})
+    if not job_data.get('gerar_epicos', False):
+        raise HTTPException(status_code=400, detail="Este job não é do tipo geração de épicos.")
+    analysis_report = job_data.get('analysis_report')
+    if not analysis_report:
+        raise HTTPException(status_code=404, detail="Relatório de épicos não encontrado para este job.")
+    epicos = EpicoParserService.parse_epicos_from_report(analysis_report)
+    cards_criados = job_data.get('cards_criados', None)
+    return EpicoResponse(job_id=job_id, epicos=epicos, cards_criados=cards_criados)
