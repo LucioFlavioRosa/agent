@@ -28,6 +28,7 @@ class AgenteProcessador:
         usuario_executor: Optional[str] = None,
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
+        transcricao_reuniao =  Optional[str] = None,
     ) -> Dict[str, Any]:
         if lista_arquivos:
             print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
