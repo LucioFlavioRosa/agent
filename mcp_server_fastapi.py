@@ -60,6 +60,7 @@ class StartAnalysisPayload(BaseModel):
     criar_cards_azure: bool = False
     azure_project_name: Optional[str] = None
     gerar_tarefas: bool = False
+    epicos_aprovados: Optional[List[str]] = None
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -261,3 +262,22 @@ def get_epicos(job_id: str = Path(..., title="O ID do Job para buscar os épicos
     epicos = EpicoParserService.parse_epicos_from_report(analysis_report)
     cards_criados = job_data.get('cards_criados', None)
     return EpicoResponse(job_id=job_id, epicos=epicos, cards_criados=cards_criados)
+
+@app.get("/jobs/{job_id}/tarefas", response_model=TarefaResponse, tags=["Tarefas"])
+def get_tarefas(job_id: str = Path(..., title="O ID do Job para buscar as tarefas")):
+    job_store = container.get_job_store()
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job_data = job.get(JobFields.DATA, {})
+    if not job_data.get('gerar_tarefas', False):
+        raise HTTPException(status_code=400, detail="Este job não é do tipo geração de tarefas.")
+    analysis_report = job_data.get('analysis_report')
+    if not analysis_report:
+        raise HTTPException(status_code=404, detail="Relatório de tarefas não encontrado para este job.")
+    epicos_aprovados = job_data.get('epicos_aprovados', [])
+    tarefas = []
+    for epico_id in epicos_aprovados:
+        tarefas.extend(TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id))
+    tarefas_criadas = job_data.get('tarefas_criadas', None)
+    return TarefaResponse(job_id=job_id, tarefas=tarefas, tarefas_criadas=tarefas_criadas)
