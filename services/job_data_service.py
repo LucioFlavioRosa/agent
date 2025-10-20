@@ -42,7 +42,6 @@ class JobDataService:
         if not isinstance(executar_build_dotnet, bool):
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
-        # Adiciona campos para fluxo de épicos
         data[JobFields.TRANSCRICAO_REUNIAO] = payload_dict.get('transcricao_reuniao')
         data[JobFields.GERAR_EPICOS] = payload_dict.get('gerar_epicos', False)
         data[JobFields.CRIAR_CARDS_AZURE] = payload_dict.get('criar_cards_azure', False)
