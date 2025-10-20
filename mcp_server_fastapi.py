@@ -16,8 +16,9 @@ from services.api_service_factory import ApiServiceFactory
 from services.pull_request_extractor_service import PullRequestExtractorService
 from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions, EpicoResponse
+from models import JobStatus, JobFields, JobActions, EpicoResponse, TarefaResponse, TarefaCard
 from services.epico_parser_service import EpicoParserService
+from services.tarefa_parser_service import TarefaParserService
 
 container = DependencyContainer()
 pr_extractor = PullRequestExtractorService()
@@ -58,7 +59,8 @@ class StartAnalysisPayload(BaseModel):
     gerar_epicos: bool = False
     criar_cards_azure: bool = False
     azure_project_name: Optional[str] = None
-    
+    gerar_tarefas: bool = False
+
 class StartAnalysisResponse(BaseModel):
     job_id: str
     
@@ -112,14 +114,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict['analysis_type'] = payload.analysis_type.value
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     payload_dict['branch_name_modernizado'] = branch_name
-    # Validação para geração de épicos
-    if payload_dict.get('gerar_epicos', False):
-        if not payload_dict.get('transcricao_reuniao'):
-            raise HTTPException(status_code=400, detail="transcricao_reuniao deve ser fornecida quando gerar_epicos=True")
-        # Força o analysis_type para um tipo de workflow de geração de épicos se necessário
-        # Exemplo: 'geracao_epicos' deve existir no workflow_registry
-        if 'geracao_epicos' in workflow_registry_service.get_valid_analysis_types():
-            payload_dict['analysis_type'] = 'geracao_epicos'
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
