@@ -61,7 +61,6 @@ class AzureBoardsService:
             patch_document.append(JsonPatchOperation(op="add", path="/fields/Microsoft.VSTS.Common.AcceptanceCriteria", value=tarefa.criterios_aceite))
         if tarefa.estimativa_tempo:
             patch_document.append(JsonPatchOperation(op="add", path="/fields/Microsoft.VSTS.Scheduling.OriginalEstimate", value=tarefa.estimativa_tempo))
-        # Relacionamento com épico pai
         relations = [
             {
                 "rel": "System.LinkTypes.Hierarchy-Reverse",
