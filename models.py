@@ -33,6 +33,7 @@ class TarefaCard(BaseModel):
     epico_id: str
     estimativa_tempo: str
     criterios_aceite: str
+    epico_nome: Optional[str] = None
 
 class EpicoResponse(BaseModel):
     job_id: str
