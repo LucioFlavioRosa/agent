@@ -50,3 +50,44 @@ class AzureBoardsService:
                 print(f"Erro ao criar card para épico {getattr(epico, 'id', '?')}: {e}")
                 resultados.append({"id": None, "url": None, "titulo": getattr(epico, 'titulo', '?'), "erro": str(e)})
         return resultados
+
+    def criar_card_tarefa(self, tarefa, epico_id: int) -> Dict[str, Any]:
+        patch_document = [
+            JsonPatchOperation(op="add", path="/fields/System.Title", value=tarefa.titulo_tarefa),
+            JsonPatchOperation(op="add", path="/fields/System.Description", value=tarefa.descricao_tarefa),
+            JsonPatchOperation(op="add", path="/fields/System.State", value="To Do")
+        ]
+        if tarefa.criterios_aceite:
+            patch_document.append(JsonPatchOperation(op="add", path="/fields/Microsoft.VSTS.Common.AcceptanceCriteria", value=tarefa.criterios_aceite))
+        if tarefa.estimativa_tempo:
+            patch_document.append(JsonPatchOperation(op="add", path="/fields/Microsoft.VSTS.Scheduling.OriginalEstimate", value=tarefa.estimativa_tempo))
+        # Relacionamento com épico pai
+        relations = [
+            {
+                "rel": "System.LinkTypes.Hierarchy-Reverse",
+                "url": f"{self.connection.base_url}/{self.project_name}/_apis/wit/workItems/{epico_id}",
+                "attributes": {"comment": "Relacionamento com épico pai"}
+            }
+        ]
+        try:
+            new_work_item = self.wit_client.create_work_item(
+                document=patch_document,
+                project=self.project_name,
+                type="Task",
+                relations=relations
+            )
+            return {
+                "id": new_work_item.id,
+                "url": new_work_item.url,
+                "titulo": tarefa.titulo_tarefa
+            }
+        except Exception as e:
+            print(f"Erro ao criar card tarefa: {e}")
+            return {"id": None, "url": None, "titulo": tarefa.titulo_tarefa, "erro": str(e)}
+
+    def criar_multiplas_tarefas(self, tarefas: List[Any], epico_id: int) -> List[Dict[str, Any]]:
+        resultados = []
+        for tarefa in tarefas:
+            resultado = self.criar_card_tarefa(tarefa, epico_id)
+            resultados.append(resultado)
+        return resultados
