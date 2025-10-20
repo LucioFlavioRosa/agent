@@ -11,10 +11,12 @@ class FinalStatusResponse(BaseModel):
     diagnostic_logs: Optional[str] = None
     report_blob_url: Optional[str] = None
     build_errors: Optional[List[str]] = None
+    epicos: Optional[List[Any]] = None
+    cards_criados: Optional[List[Dict]] = None
+    cards_creation_errors: Optional[List[Any]] = None
 
 class ResponseBuilderService:
     def __init__(self, pr_extractor, logging_service):
-        """Inicializa o serviço com suas dependências."""
         self.pr_extractor = pr_extractor
         self.logging_service = logging_service
          
@@ -30,7 +32,6 @@ class ResponseBuilderService:
             build_result = commit.get('build_result') if 'build_result' in commit else None
             commit_url = commit.get('commit_url') if 'commit_url' in commit else None
             build_errors = commit.get('build_errors') if 'build_errors' in commit else None
-            # Agrega build_errors para resposta geral
             if build_errors:
                 if isinstance(build_errors, list):
                     build_errors_aggregate.extend(build_errors)
@@ -46,6 +47,13 @@ class ResponseBuilderService:
         analysis_report = data.get(JobFields.ANALYSIS_REPORT, None)
         diagnostic_logs = data.get('diagnostic_logs', None)
         error_details = job.get('error_details', None)
+        epicos = None
+        cards_criados = None
+        cards_creation_errors = None
+        if data.get('gerar_epicos', False):
+            epicos = data.get('epicos', None)
+            cards_criados = data.get('cards_criados', None)
+            cards_creation_errors = data.get('cards_creation_errors', None)
         return FinalStatusResponse(
             job_id=job_id,
             status=job.get(JobFields.STATUS, "completed"),
@@ -54,7 +62,10 @@ class ResponseBuilderService:
             analysis_report=analysis_report,
             diagnostic_logs=diagnostic_logs,
             report_blob_url=blob_url,
-            build_errors=build_errors_aggregate if build_errors_aggregate else None
+            build_errors=build_errors_aggregate if build_errors_aggregate else None,
+            epicos=epicos,
+            cards_criados=cards_criados,
+            cards_creation_errors=cards_creation_errors
         )
     def build_failed_response(self, job_id: str, job: Dict[str, Any]) -> FinalStatusResponse:
         data = job.get(JobFields.DATA, {})
