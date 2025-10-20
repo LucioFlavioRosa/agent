@@ -5,9 +5,12 @@ import re
 
 class IncrementalStepExecutorService:
     @staticmethod
-    def parse_report_table(report_text: str) -> List[Dict]:
+    def parse_report_table(report_text: str, transcricao_reuniao: Optional[str] = None) -> List[Dict]:
         if not report_text or '|' not in report_text:
             return []
+        # Detecta se é uma tabela de épicos pelo cabeçalho
+        if '| ID | Épico | Objetivo de Negócio |' in report_text:
+            return IncrementalStepExecutorService.parse_epicos_table(report_text)
         lines = [line.strip() for line in report_text.splitlines() if line.strip()]
         table_lines = []
         header_found = False
@@ -36,8 +39,33 @@ class IncrementalStepExecutorService:
         return result
 
     @staticmethod
-    def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3) -> List[List[Dict]]:
-        steps = IncrementalStepExecutorService.parse_report_table(report_text)
+    def parse_epicos_table(report_text: str) -> List[Dict]:
+        lines = [line.strip() for line in report_text.splitlines() if line.strip()]
+        table_start = None
+        for idx, line in enumerate(lines):
+            if line.startswith('| ID |'):
+                table_start = idx
+                break
+        if table_start is None:
+            return []
+        header = lines[table_start]
+        separator = lines[table_start + 1] if table_start + 1 < len(lines) else ''
+        data_lines = lines[table_start + 2:]
+        headers = [h.strip() for h in header.strip('|').split('|')]
+        epicos = []
+        for line in data_lines:
+            if not line.startswith('|') or line == separator:
+                continue
+            cols = [col.strip() for col in line.strip('|').split('|')]
+            if len(cols) != len(headers):
+                continue
+            epico_dict = dict(zip(headers, cols))
+            epicos.append(epico_dict)
+        return epicos
+
+    @staticmethod
+    def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3, transcricao_reuniao: Optional[str] = None) -> List[List[Dict]]:
+        steps = IncrementalStepExecutorService.parse_report_table(report_text, transcricao_reuniao=transcricao_reuniao)
         if not steps:
             print(f"[INCREMENTAL] Nenhum step encontrado no relatório para batching.")
             return []
