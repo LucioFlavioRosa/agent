@@ -81,8 +81,9 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value if hasattr(payload.analysis_type, 'value') else payload.analysis_type
     if payload.workflow_mode:
+        if payload.workflow_mode not in [None, '', 'code_generation', 'epic_task_creation']:
+            raise HTTPException(status_code=400, detail=f"workflow_mode inválido: {payload.workflow_mode}")
         payload_dict['workflow_mode'] = payload.workflow_mode
-    # DEBUG: Logar o valor de executar_build_dotnet recebido
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
@@ -168,12 +169,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
-    
-    # ✅ CORREÇÃO APLICADA AQUI
-    # Garante que 'status' sempre tenha um valor string, fornecendo "PROCESSING" como padrão
-    # se a chave não existir ou seu valor for None/vazio.
     status = job.get(JobFields.STATUS) or "PROCESSING"
-    
     job_data = job.get(JobFields.DATA, {})
     blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
@@ -189,7 +185,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             return response_builder_service.build_failed_response(job_id, job)
         else:
             return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, build_errors=job_data.get('build_errors'))
-            
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
