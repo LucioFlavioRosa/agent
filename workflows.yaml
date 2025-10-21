@@ -411,34 +411,3 @@ suporte_dot_net:
       params:
         tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 32000
-
-kanban_epic_planning:
-  description: "Planejamento de épicos e tarefas Kanban: gera épicos, pausa para aprovação, gera tarefas e cria épico/tarefas no Azure DevOps."
-  extensions: [".md", ".yaml", ".txt"]
-  steps:
-    - status_update: "gerando_epico_kanban"
-      model_name: "claude-sonnet-4-5"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "criacao_epicos"
-      requires_approval: true
-      step_type: "GENERATE_REPORT"
-    - status_update: "aprovando_epico_kanban"
-      model_name: "claude-sonnet-4.5"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "criacao_epicos"
-      requires_approval: true
-      step_type: "GENERATE_REPORT"
-    - status_update: "gerando_tarefas_kanban"
-      model_name: "gpt-4.1"
-      agent_type: "task_generator"
-      params:
-        tipo_analise: "criacao_tarefas"
-      step_type: "GENERATE_TASKS"
-    - status_update: "criando_epico_e_tarefas_azure"
-      model_name: "gpt-4.1"
-      agent_type: "azure_devops"
-      params:
-        tipo_analise: "azure_devops_epic_creator"
-      step_type: "CREATE_EPIC_AND_TASKS"
