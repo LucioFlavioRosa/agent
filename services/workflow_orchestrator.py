@@ -191,155 +191,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
 
-    def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
-                                    current_step_index: int, previous_step_result: Dict[str, Any], 
-                                    repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
-        model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
-        llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
-        agent_params = step.get('params', {}).copy() if step.get('params') else {}
-        is_comparador_agent = step.get('agent') == 'comparador'
-        if is_comparador_agent:
-            agent_params.update({
-                'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
-                'branch_name_modernizado': job_info['data'].get('branch_name_modernizado'),
-                'repo_name_original': job_info['data'].get('repo_name_original'),
-                'branch_name_original': job_info['data'].get('branch_name_original')
-            })
-        else:
-            repo_name = job_info['data'].get('repo_name_modernizado')
-            branch_name = job_info['data'].get('branch_name_modernizado')
-            agent_params.update({
-                'repositorio': repo_name,
-                'nome_branch': branch_name
-            })
-        retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
-        agent_params.update({
-            'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
-            'model_name': model_para_etapa,
-            'repository_type': job_info['data']['repository_type'],
-            'retornar_lista_arquivos': retornar_lista_arquivos,
-            'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False),
-            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
-        })
-        agent_params['job_id'] = job_id
-        if batch_steps is not None:
-            agent_params['current_batch'] = batch_steps
-        if agent_params_override:
-            agent_params.update(agent_params_override)
-        strategy = StepStrategyFactory.create_strategy(step, self.job_handler, self.report_handler)
-        result = strategy.execute_step(
-            job_id, job_info, step, current_step_index, 
-            previous_step_result, repo_reader, llm_provider, agent_params
-        )
-        return result
-
-    def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
-        print(f"[{job_id}] Etapa requer aprovação.")
-        if job_info['data'].get('report_blob_url'):
-            report_text = self.report_handler.extract_report_text(step_result)
-            job_info['data']['analysis_report'] = report_text
-            job_info['status'] = 'pending_approval'
-            self.job_handler.set_paused_step(job_info, step_index)
-            self.job_handler.update_job(job_id, job_info)
-            return
-        saved = self._save_generated_report(job_id, job_info, step_result, step_index)
-        if not job_info['data'].get('report_blob_url'):
-            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-        report_text = self.report_handler.extract_report_text(step_result)
-        job_info['data']['analysis_report'] = report_text
-        job_info['status'] = 'pending_approval'
-        self.job_handler.set_paused_step(job_info, step_index)
-        self.job_handler.update_job(job_id, job_info)
-
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        if job_info['data'].get('original_analysis_type') == 'geracao_epicos_a_partir_de_reuniao':
-            try:
-                analysis_report = job_info['data'].get('analysis_report')
-                epicos = EpicoParserService.parse_epicos_from_report(analysis_report)
-                organization_url = None
-                project_name = None
-                if repository_type == 'azure':
-                    parts = repo_name.split('/')
-                    if len(parts) >= 2:
-                        organization_url = f"https://dev.azure.com/{parts[0]}"
-                        project_name = job_info['data'].get('azure_project_name') or parts[1]
-                if not organization_url:
-                    organization_url = job_info['data'].get('organization_url')
-                if not project_name:
-                    project_name = job_info['data'].get('azure_project_name')
-                if not organization_url or not project_name:
-                    raise ValueError("organization_url e project_name são obrigatórios para criar cards no Azure Boards.")
-                azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
-
-                instrucoes_extras = job_info['data'].get('instrucoes_extras')
-                epicos_aprovados_nomes = None
-                if instrucoes_extras:
-                    # Passo 1: Regex para IDs tipo E01, E02, etc.
-                    ids_regex = re.findall(r'\bE\d{2,}\b', instrucoes_extras)
-                    # Passo 1: Regex para títulos entre aspas ou após "epico com titulo"
-                    titulos_regex = re.findall(r'epico com titulo ([\w\s\-]+)', instrucoes_extras, re.IGNORECASE)
-                    # Passo 1: Regex para "escreva somente o epico com ID ..." ou "crie apenas o epico ..."
-                    ids_text = re.findall(r'epico com id ([\w\d]+)', instrucoes_extras, re.IGNORECASE)
-                    # Unifica todos os matches
-                    epicos_aprovados_nomes = list(set(ids_regex + ids_text + titulos_regex))
-                    # Se não encontrou nada, tenta split por vírgula
-                    if not epicos_aprovados_nomes:
-                        try:
-                            parsed = json.loads(instrucoes_extras)
-                            if isinstance(parsed, list):
-                                epicos_aprovados_nomes = [str(e) for e in parsed]
-                            elif isinstance(parsed, dict) and 'epicos_aprovados' in parsed:
-                                epicos_aprovados_nomes = [str(e) for e in parsed['epicos_aprovados']]
-                            else:
-                                epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
-                        except Exception:
-                            epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
-                    if epicos_aprovados_nomes:
-                        print(f"[{job_id}] IDs/títulos extraídos de instrucoes_extras: {epicos_aprovados_nomes}")
-                epicos_a_processar = epicos
-                # Passo 2: Filtragem por id ou titulo
-                if epicos_aprovados_nomes:
-                    epicos_a_processar = [e for e in epicos if (e.id in epicos_aprovados_nomes or e.titulo in epicos_aprovados_nomes)]
-                    print(f"[{job_id}] Filtrando épicos aprovados: {[e.id for e in epicos_a_processar]} / {[e.titulo for e in epicos_a_processar]}")
-                else:
-                    print(f"[{job_id}] instrucoes_extras não menciona épicos específicos. Todos os épicos do relatório serão processados.")
-
-                cards_criados = []
-                tarefas_criadas = []
-                tarefas_creation_errors = []
-                for epico in epicos_a_processar:
-                    card_result = azure_boards_service.criar_card_epico(epico)
-                    cards_criados.append(card_result)
-                    # Passo 3: Garantir que o parâmetro correto é passado para o parser de tarefas
-                    # Se o parser aceita id, passar epico.id; se aceita titulo, passar epico.titulo
-                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id=epico.id, epico_nome=epico.titulo)
-                    print(f"[{job_id}] Tarefas parseadas para épico id={epico.id}, titulo={epico.titulo}: {len(tarefas)}")
-                    if tarefas:
-                        tarefas_result = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_nome=epico.titulo)
-                        tarefas_criadas.extend(tarefas_result)
-                        tarefas_creation_errors.extend([r for r in tarefas_result if r.get('erro')])
-                    else:
-                        print(f"[{job_id}] Nenhuma tarefa encontrada para épico id={epico.id}, titulo={epico.titulo}")
-                job_info['data']['cards_criados'] = cards_criados
-                job_info['data']['cards_creation_errors'] = [c for c in cards_criados if c.get('erro')] if cards_criados else []
-                job_info['data']['tarefas_criadas'] = tarefas_criadas
-                job_info['data']['tarefas_creation_errors'] = tarefas_creation_errors
-                print(f"[{job_id}] cards_criados: {cards_criados}")
-                print(f"[{job_id}] tarefas_criadas: {tarefas_criadas}")
-                print(f"[{job_id}] tarefas_creation_errors: {tarefas_creation_errors}")
-                print(f"[{job_id}] Atualizando status do job para completed...")
-                self.job_handler.update_job_status(job_id, 'completed')
-                self.job_handler.update_job(job_id, job_info)
-                print(f"[{job_id}] Status do job atualizado para completed.")
-                return
-            except Exception as e:
-                print(f"[{job_id}] ERRO CRÍTICO durante a criação de épicos/tarefas: {e}")
-                job_info['data']['cards_creation_errors'] = [str(e)]
-                job_info['data']['tarefas_creation_errors'] = [str(e)]
-                self.job_handler.update_job_status(job_id, 'failed')
-                self.job_handler.update_job(job_id, job_info)
-                return
         if job_info['data'].get('gerar_tarefas') is True and job_info['data'].get('criar_cards_azure') is True:
             try:
                 analysis_report = job_info['data'].get('analysis_report')
@@ -360,8 +213,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
                 tarefas_criadas = []
                 tarefas_creation_errors = []
+                # Passo 2: se final_result for dict e tiver lista_de_tarefas, usar diretamente
+                tarefas_to_parse = None
+                if isinstance(final_result, dict) and 'lista_de_tarefas' in final_result:
+                    tarefas_to_parse = final_result
+                else:
+                    tarefas_to_parse = analysis_report
                 for epico_id in epicos_aprovados:
-                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
+                    tarefas = TarefaParserService.parse_tarefas_from_report(tarefas_to_parse, epico_id)
                     resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
                     tarefas_criadas.extend(resultado)
                     tarefas_creation_errors.extend([r for r in resultado if r.get('erro')])
@@ -375,6 +234,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
+        # ... resto do método permanece igual ...
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
         if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
             batch_results = job_info['data'][JobFields.BATCH_RESULTS]
@@ -414,33 +274,3 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if 'build_errors' not in commit:
                     print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
         self.job_handler.update_job_status(job_id, 'completed')
-
-    def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
-        print(f"[WorkflowOrchestrator] Obtendo token. repository_type={repository_type}, repo_name={repo_name}")
-        if repository_type == 'azure':
-            parts = repo_name.split('/')
-            if len(parts) != 3:
-                raise ValueError(f"Nome do repositório '{repo_name}' tem formato inválido para Azure.")
-            org_name = parts[0]
-            platform = 'Azure'
-        elif repository_type == 'github':
-            org_name = repo_name.strip().split('/')[0]
-            platform = 'GitHub'
-        elif repository_type == 'gitlab':
-            org_name = repo_name.strip().split('/')[0]
-            platform = 'GitLab'
-        else:
-            raise ValueError(f"Tipo de repositório '{repository_type}' não suportado para obtenção de token.")
-        token_secret_name = f"{platform.lower()}-token-{org_name}"
-        try:
-            token = self.secret_manager.get_secret(token_secret_name)
-            print(f"[WorkflowOrchestrator] Token obtido com sucesso. secret_name={token_secret_name}, token presente: {bool(token)}")
-            return token
-        except Exception:
-            print(f"[WorkflowOrchestrator] Falha ao obter token. secret_name={token_secret_name}, tentando fallback...")
-            try:
-                token = self.secret_manager.get_secret(f"{platform.lower()}-token")
-                print(f"[WorkflowOrchestrator] Token obtido com sucesso. secret_name={platform.lower()}-token, token presente: {bool(token)}")
-                return token
-            except Exception:
-                raise ValueError(f"Não foi possível obter token para {platform} ({org_name})")
