@@ -1,10 +1,9 @@
-from domain.interfaces.workflow_execution_strategy_interface import IWorkflowExecutionStrategy
+from services.workflow_execution_strategies.base_workflow_strategy import BaseWorkflowStrategy
 from services.step_strategies.step_strategy_factory import StepStrategyFactory
 
-class DefaultWorkflowStrategy(IWorkflowExecutionStrategy):
+class DefaultWorkflowStrategy(BaseWorkflowStrategy):
     def __init__(self, job_handler, report_handler, commit_and_build_service, llm_provider_factory):
-        self.job_handler = job_handler
-        self.report_handler = report_handler
+        super().__init__(job_handler, report_handler)
         self.commit_and_build_service = commit_and_build_service
         self.llm_provider_factory = llm_provider_factory
 
@@ -26,14 +25,7 @@ class DefaultWorkflowStrategy(IWorkflowExecutionStrategy):
             self.job_handler.save_step_result(job_info, current_step_index, step_result)
             previous_step_result = step_result
             if strategy.should_pause_for_approval(job_info, step):
-                if not job_info['data'].get('report_blob_url'):
-                    report_text = self.report_handler.extract_report_text(step_result)
-                    job_info['data']['analysis_report'] = report_text
-                    url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-                    job_info['data']['report_blob_url'] = url
-                    self.job_handler.update_job(job_id, job_info)
-                self.job_handler.set_paused_step(job_info, current_step_index)
-                self.job_handler.update_job(job_id, job_info)
+                self._handle_approval_pause(job_id, job_info, step_result, current_step_index)
                 return
             if strategy.should_finalize_workflow(job_info, current_step_index):
                 self.job_handler.update_job_status(job_id, 'completed')
