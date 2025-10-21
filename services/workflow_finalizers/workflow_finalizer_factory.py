@@ -11,5 +11,14 @@ class WorkflowFinalizerFactory:
 
     def get_finalizer(self, workflow_mode):
         if workflow_mode == 'epic_task_creation':
-            return AzureDevOpsWorkflowFinalizer(self.azure_devops_service, self.job_handler)
-        return CommitWorkflowFinalizer(self.data_formatter, self.job_handler, self.commit_handler, self.dotnet_build_service)
+            return AzureDevOpsWorkflowFinalizer(
+                azure_devops_service=self.azure_devops_service,
+                job_handler=self.job_handler
+            )
+        # default: code_generation
+        return CommitWorkflowFinalizer(
+            data_formatter=self.data_formatter,
+            job_handler=self.job_handler,
+            commit_handler=self.commit_handler,
+            dotnet_build_service=self.dotnet_build_service
+        )
