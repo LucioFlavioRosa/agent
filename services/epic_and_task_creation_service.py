@@ -10,23 +10,7 @@ class EpicAndTaskCreationService:
     def create_epics_and_tasks_from_report(self, job_id, job_info, analysis_report, organization_url, project_name):
         epicos = self.epico_parser_service.parse_epicos_from_report(analysis_report)
         instrucoes_extras = job_info['data'].get('instrucoes_extras')
-        epicos_aprovados_nomes = None
-        if instrucoes_extras:
-            ids_regex = re.findall(r'\bE\d{2,}\b', instrucoes_extras)
-            titulos_regex = re.findall(r'epico com titulo ([\w\s\-]+)', instrucoes_extras, re.IGNORECASE)
-            ids_text = re.findall(r'epico com id ([\w\d]+)', instrucoes_extras, re.IGNORECASE)
-            epicos_aprovados_nomes = list(set(ids_regex + ids_text + titulos_regex))
-            if not epicos_aprovados_nomes:
-                try:
-                    parsed = json.loads(instrucoes_extras)
-                    if isinstance(parsed, list):
-                        epicos_aprovados_nomes = [str(e) for e in parsed]
-                    elif isinstance(parsed, dict) and 'epicos_aprovados' in parsed:
-                        epicos_aprovados_nomes = [str(e) for e in parsed['epicos_aprovados']]
-                    else:
-                        epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
-                except Exception:
-                    epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
+        epicos_aprovados_nomes = self._parse_approved_epics(instrucoes_extras) if instrucoes_extras else None
         epicos_a_processar = epicos
         if epicos_aprovados_nomes:
             epicos_a_processar = [e for e in epicos if (e.id in epicos_aprovados_nomes or e.titulo in epicos_aprovados_nomes)]
@@ -70,3 +54,21 @@ class EpicAndTaskCreationService:
             'tarefas_creation_errors': tarefas_creation_errors,
             'tarefas_parsing_errors': tarefas_parsing_errors
         }
+
+    def _parse_approved_epics(self, instrucoes_extras):
+        ids_regex = re.findall(r'\bE\d{2,}\b', instrucoes_extras)
+        titulos_regex = re.findall(r'epico com titulo ([\w\s\-]+)', instrucoes_extras, re.IGNORECASE)
+        ids_text = re.findall(r'epico com id ([\w\d]+)', instrucoes_extras, re.IGNORECASE)
+        epicos_aprovados_nomes = list(set(ids_regex + ids_text + titulos_regex))
+        if not epicos_aprovados_nomes:
+            try:
+                parsed = json.loads(instrucoes_extras)
+                if isinstance(parsed, list):
+                    epicos_aprovados_nomes = [str(e) for e in parsed]
+                elif isinstance(parsed, dict) and 'epicos_aprovados' in parsed:
+                    epicos_aprovados_nomes = [str(e) for e in parsed['epicos_aprovados']]
+                else:
+                    epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
+            except Exception:
+                epicos_aprovados_nomes = [s.strip() for s in instrucoes_extras.split(',') if s.strip()]
+        return epicos_aprovados_nomes
