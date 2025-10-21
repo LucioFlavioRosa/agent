@@ -87,9 +87,10 @@ class AzureBoardsService:
                 project=self.project_name,
                 type="Epic"
             )
-            print(f"[AzureBoardsService] Epic criado com sucesso: id={new_work_item.id}, url={new_work_item.url}")
+            epic_id = new_work_item.id
+            print(f"[AzureBoardsService] Epic criado com sucesso: id={epic_id}, url={new_work_item.url}")
             return {
-                "id": new_work_item.id,
+                "id": epic_id,
                 "url": new_work_item.url,
                 "titulo": epico.titulo
             }
@@ -110,10 +111,13 @@ class AzureBoardsService:
                 resultados.append({"id": None, "url": None, "titulo": getattr(epico, 'titulo', '?'), "erro": error_message})
         return resultados
 
-    def criar_card_tarefa(self, tarefa, epico_nome: str) -> Dict[str, Any]:
+    def criar_card_tarefa(self, tarefa, epico_nome: str, epic_id: Optional[int] = None) -> Dict[str, Any]:
         initial_state = self._get_valid_initial_state('Task')
-        epico_id = self.buscar_epico_por_nome(epico_nome)
-        if not epico_id:
+        if epic_id is not None:
+            rel_epic_id = epic_id
+        else:
+            rel_epic_id = self.buscar_epico_por_nome(epico_nome)
+        if not rel_epic_id:
             error_message = f"Erro: Não foi possível encontrar o épico com nome '{epico_nome}' para criar a tarefa '{tarefa.titulo_tarefa}'."
             print(f"[AzureBoardsService] {error_message}")
             return {"id": None, "url": None, "titulo": tarefa.titulo_tarefa, "erro": error_message}
@@ -129,11 +133,11 @@ class AzureBoardsService:
         relations = [
             {
                 "rel": "System.LinkTypes.Hierarchy-Reverse",
-                "url": f"{self.connection.base_url}/{self.project_name}/_apis/wit/workItems/{epico_id}",
+                "url": f"{self.connection.base_url}/{self.project_name}/_apis/wit/workItems/{rel_epic_id}",
                 "attributes": {"comment": "Relacionamento com épico pai"}
             }
         ]
-        print(f"[AzureBoardsService] Preparando para criar Task: Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', Projeto='{self.project_name}', EpicNome='{epico_nome}', EpicId='{epico_id}', Campos: {[{'path': op.path, 'value': op.value} for op in patch_document]}")
+        print(f"[AzureBoardsService] Preparando para criar Task: Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', Projeto='{self.project_name}', EpicNome='{epico_nome}', EpicId='{rel_epic_id}', Campos: {[{'path': op.path, 'value': op.value} for op in patch_document]}")
         try:
             new_work_item = self.wit_client.create_work_item(
                 document=patch_document,
@@ -148,16 +152,16 @@ class AzureBoardsService:
                 "titulo": tarefa.titulo_tarefa
             }
         except Exception as e:
-            error_message = f"Erro ao criar card tarefa: {e} (Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', EpicNome='{epico_nome}', EpicId='{epico_id}')"
+            error_message = f"Erro ao criar card tarefa: {e} (Título='{tarefa.titulo_tarefa}', Estado='{initial_state}', EpicNome='{epico_nome}', EpicId='{rel_epic_id}')"
             print(f"[AzureBoardsService] {error_message}")
             return {"id": None, "url": None, "titulo": tarefa.titulo_tarefa, "erro": error_message}
 
-    def criar_multiplas_tarefas(self, tarefas: List[Any], epico_nome: str) -> List[Dict[str, Any]]:
+    def criar_multiplas_tarefas(self, tarefas: List[Any], epico_nome: str, epic_id: Optional[int] = None) -> List[Dict[str, Any]]:
         resultados = []
         print(f"[AzureBoardsService] Iniciando criação de múltiplas tarefas para epico_nome='{epico_nome}'. Total de tarefas: {len(tarefas)}")
         for tarefa in tarefas:
-            print(f"[AzureBoardsService] Tentando criar tarefa: id='{getattr(tarefa, 'id', None)}', titulo='{getattr(tarefa, 'titulo_tarefa', None)}', epico_nome='{epico_nome}'")
-            resultado = self.criar_card_tarefa(tarefa, epico_nome)
+            print(f"[AzureBoardsService] Tentando criar tarefa: id='{getattr(tarefa, 'id', None)}', titulo='{getattr(tarefa, 'titulo_tarefa', None)}', epico_nome='{epico_nome}', epic_id='{epic_id}'")
+            resultado = self.criar_card_tarefa(tarefa, epico_nome, epic_id=epic_id)
             if resultado.get('id'):
                 print(f"[AzureBoardsService] Tarefa criada com sucesso: id={resultado.get('id')}, titulo={resultado.get('titulo')}")
             else:
