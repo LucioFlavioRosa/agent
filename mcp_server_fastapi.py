@@ -84,6 +84,14 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         if payload.workflow_mode not in [None, '', 'code_generation', 'epic_task_creation']:
             raise HTTPException(status_code=400, detail=f"workflow_mode inválido: {payload.workflow_mode}")
         payload_dict['workflow_mode'] = payload.workflow_mode
+    # Passo 5: Validação condicional de branch_name_modernizado
+    if payload.workflow_mode == 'epic_task_creation':
+        if branch_name:
+            print(f"[{job_id}] [AVISO] branch_name_modernizado foi fornecido, mas não é necessário para workflow_mode=epic_task_creation.")
+        payload_dict.pop('branch_name_modernizado', None)
+    elif payload.workflow_mode == 'code_generation':
+        if not branch_name:
+            raise HTTPException(status_code=400, detail="branch_name_modernizado é obrigatório quando workflow_mode é 'code_generation'.")
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
