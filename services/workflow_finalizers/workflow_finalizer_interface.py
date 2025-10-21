@@ -1,6 +1,3 @@
-from abc import ABC, abstractmethod
-
-class IWorkflowFinalizer(ABC):
-    @abstractmethod
+class IWorkflowFinalizer:
     def finalize(self, job_id, job_info, workflow, final_result, repository_type, repo_name):
-        pass
+        raise NotImplementedError()
