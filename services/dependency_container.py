@@ -15,6 +15,7 @@ from tools.azure_secret_manager import AzureSecretManager
 from services.azure_devops_service import AzureDevOpsService
 from services.dotnet_build_service import DotNetBuildService
 from services.workflow_finalizers.workflow_finalizer_factory import WorkflowFinalizerFactory
+from tools.epic_markdown_parser import EpicMarkdownParser
 
 class DependencyContainer:
     def __init__(self):
@@ -35,11 +36,17 @@ class DependencyContainer:
         self._azure_devops_service = None
         self._dotnet_build_service = None
         self._workflow_finalizer_factory = None
+        self._epic_parser = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
             self._job_store = RedisJobStore()
         return self._job_store
+        
+    def get_epic_parser(self):
+        if self._epic_parser is None:
+            self._epic_parser = EpicMarkdownParser()
+        return self._epic_parser
     
     def get_job_manager(self) -> JobManager:
         if self._job_manager is None:
