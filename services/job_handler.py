@@ -8,7 +8,7 @@ class JobHandler:
         return self.job_manager.get_job(job_id)
 
     def update_job(self, job_id: str, job_info: Dict[str, Any]) -> None:
-        self.job_manager.set_job(job_id, job_info)
+        self.job_manager.update_job(job_id, job_info)
 
     def update_job_status(self, job_id: str, status: str) -> None:
         job_info = self.get_job_info(job_id)
