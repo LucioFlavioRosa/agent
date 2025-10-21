@@ -275,15 +275,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 instrucoes_extras = job_info['data'].get('instrucoes_extras')
                 epicos_aprovados_nomes = None
                 if instrucoes_extras:
-                    # Passo 1: Regex para IDs tipo E01, E02, etc.
                     ids_regex = re.findall(r'\bE\d{2,}\b', instrucoes_extras)
-                    # Passo 1: Regex para títulos entre aspas ou após "epico com titulo"
                     titulos_regex = re.findall(r'epico com titulo ([\w\s\-]+)', instrucoes_extras, re.IGNORECASE)
-                    # Passo 1: Regex para "escreva somente o epico com ID ..." ou "crie apenas o epico ..."
                     ids_text = re.findall(r'epico com id ([\w\d]+)', instrucoes_extras, re.IGNORECASE)
-                    # Unifica todos os matches
                     epicos_aprovados_nomes = list(set(ids_regex + ids_text + titulos_regex))
-                    # Se não encontrou nada, tenta split por vírgula
                     if not epicos_aprovados_nomes:
                         try:
                             parsed = json.loads(instrucoes_extras)
@@ -298,7 +293,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     if epicos_aprovados_nomes:
                         print(f"[{job_id}] IDs/títulos extraídos de instrucoes_extras: {epicos_aprovados_nomes}")
                 epicos_a_processar = epicos
-                # Passo 2: Filtragem por id ou titulo
                 if epicos_aprovados_nomes:
                     epicos_a_processar = [e for e in epicos if (e.id in epicos_aprovados_nomes or e.titulo in epicos_aprovados_nomes)]
                     print(f"[{job_id}] Filtrando épicos aprovados: {[e.id for e in epicos_a_processar]} / {[e.titulo for e in epicos_a_processar]}")
@@ -308,13 +302,38 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 cards_criados = []
                 tarefas_criadas = []
                 tarefas_creation_errors = []
+                tarefas_parsing_errors = []
                 for epico in epicos_a_processar:
                     card_result = azure_boards_service.criar_card_epico(epico)
                     cards_criados.append(card_result)
-                    # Passo 3: Garantir que o parâmetro correto é passado para o parser de tarefas
-                    # Se o parser aceita id, passar epico.id; se aceita titulo, passar epico.titulo
-                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id=epico.id, epico_nome=epico.titulo)
-                    print(f"[{job_id}] Tarefas parseadas para épico id={epico.id}, titulo={epico.titulo}: {len(tarefas)}")
+                    tarefas = None
+                    try:
+                        tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id=epico.id, epico_nome=epico.titulo)
+                        print(f"[{job_id}] [DEBUG] Tarefas parseadas para épico id={epico.id}, titulo={epico.titulo}: {len(tarefas)}")
+                        print(f"[{job_id}] [DEBUG] Conteúdo das tarefas parseadas: {tarefas}")
+                        if not tarefas:
+                            print(f"[{job_id}] [WARNING] Nenhuma tarefa encontrada para épico id={epico.id}, titulo={epico.titulo} usando epico_id. Tentando fallback usando epico_nome...")
+                            tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id=None, epico_nome=epico.titulo)
+                            print(f"[{job_id}] [DEBUG] Resultado do fallback por epico_nome: {len(tarefas)} tarefas")
+                        if not tarefas:
+                            print(f"[{job_id}] [WARNING] Nenhuma tarefa encontrada para épico id={epico.id}, titulo={epico.titulo} mesmo após fallback. Salvando relatório completo para diagnóstico.")
+                            if 'failed_tarefa_parsing_report' not in job_info['data']:
+                                job_info['data']['failed_tarefa_parsing_report'] = {}
+                            job_info['data']['failed_tarefa_parsing_report'][epico.id] = analysis_report
+                            tarefas_parsing_errors.append({
+                                'epico_id': epico.id,
+                                'epico_nome': epico.titulo,
+                                'analysis_report': analysis_report
+                            })
+                    except Exception as e:
+                        print(f"[{job_id}] [ERROR] Erro ao parsear tarefas para épico id={epico.id}, titulo={epico.titulo}: {e}")
+                        tarefas_parsing_errors.append({
+                            'epico_id': epico.id,
+                            'epico_nome': epico.titulo,
+                            'error': str(e),
+                            'analysis_report': analysis_report
+                        })
+                        tarefas = []
                     if tarefas:
                         tarefas_result = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_nome=epico.titulo)
                         tarefas_criadas.extend(tarefas_result)
@@ -325,9 +344,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 job_info['data']['cards_creation_errors'] = [c for c in cards_criados if c.get('erro')] if cards_criados else []
                 job_info['data']['tarefas_criadas'] = tarefas_criadas
                 job_info['data']['tarefas_creation_errors'] = tarefas_creation_errors
+                job_info['data']['tarefas_parsing_errors'] = tarefas_parsing_errors
                 print(f"[{job_id}] cards_criados: {cards_criados}")
                 print(f"[{job_id}] tarefas_criadas: {tarefas_criadas}")
                 print(f"[{job_id}] tarefas_creation_errors: {tarefas_creation_errors}")
+                print(f"[{job_id}] tarefas_parsing_errors: {tarefas_parsing_errors}")
                 print(f"[{job_id}] Atualizando status do job para completed...")
                 self.job_handler.update_job_status(job_id, 'completed')
                 self.job_handler.update_job(job_id, job_info)
@@ -337,6 +358,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] ERRO CRÍTICO durante a criação de épicos/tarefas: {e}")
                 job_info['data']['cards_creation_errors'] = [str(e)]
                 job_info['data']['tarefas_creation_errors'] = [str(e)]
+                job_info['data']['tarefas_parsing_errors'] = [{'error': str(e)}]
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
