@@ -1,6 +1,9 @@
+from tools.blob_url_builder import BlobUrlBuilder
+
 class ReportHandler:
-    def __init__(self, blob_storage):
+    def __init__(self, blob_storage, blob_url_builder=None):
         self.blob_storage = blob_storage
+        self.blob_url_builder = blob_url_builder or BlobUrlBuilder()
     @staticmethod
     def extract_report_text(step_result):
         if not step_result:
@@ -22,15 +25,8 @@ class ReportHandler:
         report_blob_url = None
         try:
             report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            from tools.blob_report_path_builder import build_report_blob_path
-            from os import getenv
-            blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
-            account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
-            if account_url and container_name:
-                report_blob_url = f"{account_url}/{container_name}/{blob_path}"
-            elif container_name:
-                report_blob_url = f"/{container_name}/{blob_path}"
+            blob_path = self.blob_url_builder.build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            report_blob_url = self.blob_url_builder.build_full_url(blob_path)
             if report_blob_url:
                 try:
                     self.blob_storage.update_job_tracker(report_blob_url, job_id)
