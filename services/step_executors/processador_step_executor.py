@@ -6,6 +6,7 @@ from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
 from tools.readers.reader_geral import ReaderGeral
 from services.report_handler import ReportHandler
+from models import JobFields
 
 class ProcessadorStepExecutor(BaseStepExecutor):
     def __init__(self, job_handler):
@@ -57,7 +58,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                     print(f"[{job_id}] {cleaned_string}")
@@ -76,12 +77,18 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 result = json.loads(cleaned_string, strict=False)
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
 
-                report_text = ReportHandler.extract_report_text(result)
-                if report_text and isinstance(report_text, str) and report_text.strip():
-                    job_info['data']['analysis_report'] = report_text
+                # Passo 3: Salvar JSON de tarefas diretamente no analysis_report se tipo de análise for geração de tarefas
+                tipo_analise = job_info['data'].get('original_analysis_type')
+                if tipo_analise and ('tarefa' in tipo_analise or 'geracao_tarefas' in tipo_analise or 'tasks' in tipo_analise):
+                    job_info['data']['analysis_report'] = json.dumps(result, ensure_ascii=False)
                     self.job_handler.update_job(job_id, job_info)
                 else:
-                    print(f"[{job_id}] AVISO: ReportHandler.extract_report_text retornou vazio ou None. Nenhum relatório salvo.")
+                    report_text = ReportHandler.extract_report_text(result)
+                    if report_text and isinstance(report_text, str) and report_text.strip():
+                        job_info['data']['analysis_report'] = report_text
+                        self.job_handler.update_job(job_id, job_info)
+                    else:
+                        print(f"[{job_id}] AVISO: ReportHandler.extract_report_text retornou vazio ou None. Nenhum relatório salvo.")
                 return result
                 
             except (json.JSONDecodeError, ValueError) as e:
