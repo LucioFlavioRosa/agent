@@ -411,3 +411,20 @@ suporte_dot_net:
       params:
         tipo_analise: "agrupamento_commits_simplificado"
         max_token_out: 32000
+
+criacao_epicos_azure_devops:
+  description: "Gerar épicos de metodologia kanban e criar no Azure DevOps."
+  extensions: [".md", ".yaml", ".txt"]
+  workflow_mode: "epic_task_creation"
+  steps:
+    - status_update: "gerando_relatorio_epicos"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "criacao_epicos"
+      requires_approval: true
+    - status_update: "criando_epico_azure_devops"
+      model_name: "gpt-4.1"
+      agent_type: "epic_creator"
+      params:
+        tipo_analise: "criacao_epicos_azure"
