@@ -1,9 +1,8 @@
-from domain.interfaces.workflow_execution_strategy_interface import IWorkflowExecutionStrategy
+from services.workflow_execution_strategies.base_workflow_strategy import BaseWorkflowStrategy
 
-class EpicGenerationWorkflowStrategy(IWorkflowExecutionStrategy):
+class EpicGenerationWorkflowStrategy(BaseWorkflowStrategy):
     def __init__(self, job_handler, report_handler, epic_and_task_creation_service):
-        self.job_handler = job_handler
-        self.report_handler = report_handler
+        super().__init__(job_handler, report_handler)
         self.epic_and_task_creation_service = epic_and_task_creation_service
 
     def execute(self, job_id, job_info, workflow, start_from_step, repo_reader):
@@ -23,14 +22,7 @@ class EpicGenerationWorkflowStrategy(IWorkflowExecutionStrategy):
             self.job_handler.save_step_result(job_info, current_step_index, step_result)
             previous_step_result = step_result
             if strategy.should_pause_for_approval(job_info, step):
-                if not job_info['data'].get('report_blob_url'):
-                    report_text = self.report_handler.extract_report_text(step_result)
-                    job_info['data']['analysis_report'] = report_text
-                    url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
-                    job_info['data']['report_blob_url'] = url
-                    self.job_handler.update_job(job_id, job_info)
-                self.job_handler.set_paused_step(job_info, current_step_index)
-                self.job_handler.update_job(job_id, job_info)
+                self._handle_approval_pause(job_id, job_info, step_result, current_step_index)
                 return
         repository_type = job_info['data']['repository_type']
         repo_name = job_info['data']['repo_name']
