@@ -1,7 +1,6 @@
 from typing import Dict
 from services.step_strategies.default_step_strategy import DefaultStepStrategy
 from services.step_strategies.step_strategy_interface import IStepStrategy
-from services.step_strategies.step_strategy_factory import StepStrategyFactory as _StepStrategyFactory
 from services.job_handler import JobHandler
 
 class StepStrategyFactory:
