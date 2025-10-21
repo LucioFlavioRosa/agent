@@ -60,7 +60,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             raise ValueError("Workflow não encontrado.")
         try:
             repository_type = job_info['data']['repository_type']
-            repo_name = job_info['data']['repo_name']
+            repo_name = job_info['data']['repo_name'] if 'repo_name' in job_info['data'] else None
             repository_provider = get_repository_provider_explicit(repository_type)
             cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
             repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service)
@@ -165,12 +165,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 'branch_name_original': job_info['data'].get('branch_name_original')
             })
         else:
-            repo_name = job_info['data'].get('repo_name_modernizado')
-            branch_name = job_info['data'].get('branch_name_modernizado')
-            agent_params.update({
-                'repositorio': repo_name,
-                'nome_branch': branch_name
-            })
+            workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
+            if workflow_mode == 'code_generation':
+                repo_name = job_info['data'].get('repo_name_modernizado')
+                branch_name = job_info['data'].get('branch_name_modernizado')
+                agent_params.update({
+                    'repositorio': repo_name,
+                    'nome_branch': branch_name
+                })
+            # Para epic_task_creation, não adiciona repo_name/branch_name
         retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
