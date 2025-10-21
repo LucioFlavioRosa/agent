@@ -87,7 +87,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     # Passo 5: Validação condicional de branch_name_modernizado
     if payload.workflow_mode == 'epic_task_creation':
         if branch_name:
-            print(f"[{job_id}] [AVISO] branch_name_modernizado foi fornecido, mas não é necessário para workflow_mode=epic_task_creation.")
+            raise HTTPException(status_code=400, detail="branch_name_modernizado não deve ser fornecido quando workflow_mode é 'epic_task_creation'.")
         payload_dict.pop('branch_name_modernizado', None)
     elif payload.workflow_mode == 'code_generation':
         if not branch_name:
