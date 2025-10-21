@@ -16,7 +16,7 @@ from services.api_service_factory import ApiServiceFactory
 from services.pull_request_extractor_service import PullRequestExtractorService
 from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions, StartAnalysisPayload
+from models import JobStatus, JobFields, JobActions, StartAnalysisPayload, EpicSummary
 
 container = DependencyContainer()
 pr_extractor = PullRequestExtractorService()
@@ -182,13 +182,36 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
     analysis_report = job_data.get(JobFields.ANALYSIS_REPORT, None)
+    epics_list = []
+    if job_data.get(JobFields.WORKFLOW_MODE) == "epic_task_creation" and status == JobStatus.COMPLETED:
+        epic_ids = job_data.get(JobFields.EPIC_IDS, [])
+        epics_data = job_data.get(JobFields.EPICS, [])
+        if epics_data and isinstance(epics_data, list):
+            for epic in epics_data:
+                epic_id = epic.get("epic_id") or epic.get("id")
+                epic_url = epic.get("epic_url") or epic.get("url")
+                epic_title = epic.get("epic_title") or epic.get("title")
+                epics_list.append(EpicSummary(epic_id=epic_id, epic_url=epic_url, epic_title=epic_title))
+        elif epic_ids and isinstance(epic_ids, list):
+            for eid in epic_ids:
+                epics_list.append(EpicSummary(epic_id=str(eid)))
     print(f"[{job_id}] [get_status] status: {status}")
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
     print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
     try:
         if status == JobStatus.COMPLETED:
-            return response_builder_service.build_completed_response(job_id, job, blob_url)
+            return FinalStatusResponse(
+                job_id=job_id,
+                status=status,
+                summary=job.get('summary'),
+                error_details=job.get('error_details'),
+                analysis_report=analysis_report,
+                diagnostic_logs=job_data.get(JobFields.DIAGNOSTIC_LOGS),
+                report_blob_url=blob_url,
+                build_errors=job_data.get('build_errors'),
+                epics=epics_list if epics_list else None
+            )
         elif status == JobStatus.FAILED:
             return response_builder_service.build_failed_response(job_id, job)
         else:
