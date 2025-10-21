@@ -24,12 +24,16 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             self.job_handler.update_job(job_id, job_info)
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
-        agent_params.update({
-            'codigo': previous_step_result,
-            'repositorio': job_info['data']['repo_name'],
-            'nome_branch': job_info['data']['branch_name'],
-            'repository_type': job_info['data']['repository_type']
-        })
+        workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
+        if workflow_mode == 'code_generation':
+            if 'repo_name' in job_info['data']:
+                agent_params['repositorio'] = job_info['data'].get('repo_name')
+            if 'branch_name' in job_info['data']:
+                agent_params['nome_branch'] = job_info['data'].get('branch_name')
+        else:
+            # Para epic_task_creation, não adiciona repo_name/branch_name
+            pass
+        agent_params['repository_type'] = job_info['data']['repository_type']
         
         agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
         if isinstance(previous_step_result, dict) and 'lista_arquivos' in previous_step_result:
@@ -40,7 +44,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         agent_response = agente.main(**agent_params)
         
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
