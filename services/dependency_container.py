@@ -12,6 +12,9 @@ from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.preenchimento import ChangesetFiller
 from services.redis_cache_service import RedisCacheService
 from tools.azure_secret_manager import AzureSecretManager
+from services.azure_devops_service import AzureDevOpsService
+from services.dotnet_build_service import DotNetBuildService
+from services.workflow_finalizers.workflow_finalizer_factory import WorkflowFinalizerFactory
 
 class DependencyContainer:
     def __init__(self):
@@ -29,6 +32,9 @@ class DependencyContainer:
         self._changeset_filler = None
         self._redis_cache_service = None
         self._secret_manager = None
+        self._azure_devops_service = None
+        self._dotnet_build_service = None
+        self._workflow_finalizer_factory = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -87,15 +93,34 @@ class DependencyContainer:
     
     def get_redis_cache_service(self) -> RedisCacheService:
         if self._redis_cache_service is None:
-            # Pega a instância única do job_store e a injeta no RedisCacheService
             job_store_instance = self.get_job_store()
             self._redis_cache_service = RedisCacheService(job_store=job_store_instance)
         return self._redis_cache_service
     
+    def get_azure_devops_service(self) -> AzureDevOpsService:
+        if self._azure_devops_service is None:
+            self._azure_devops_service = AzureDevOpsService()
+        return self._azure_devops_service
+
+    def get_dotnet_build_service(self) -> DotNetBuildService:
+        if self._dotnet_build_service is None:
+            self._dotnet_build_service = DotNetBuildService()
+        return self._dotnet_build_service
+
+    def get_workflow_finalizer_factory(self) -> WorkflowFinalizerFactory:
+        if self._workflow_finalizer_factory is None:
+            self._workflow_finalizer_factory = WorkflowFinalizerFactory(
+                data_formatter=self.get_data_formatter(),
+                job_handler=self.get_job_handler(),
+                commit_handler=self.get_commit_handler(),
+                azure_devops_service=self.get_azure_devops_service(),
+                dotnet_build_service=self.get_dotnet_build_service()
+            )
+        return self._workflow_finalizer_factory
+
     def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
         if self._workflow_orchestrator is None:
             workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
-            
             self._workflow_orchestrator = WorkflowOrchestrator(
                 job_manager=self.get_job_manager(), 
                 blob_storage=self.get_blob_storage(), 
@@ -106,7 +131,8 @@ class DependencyContainer:
                 commit_handler=self.get_commit_handler(),
                 data_formatter=self.get_data_formatter(),
                 secret_manager=self.get_secret_manager(),
-                cache_service=self.get_redis_cache_service()
+                cache_service=self.get_redis_cache_service(),
+                dependency_container=self
             )
         return self._workflow_orchestrator
     
