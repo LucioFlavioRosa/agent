@@ -16,9 +16,7 @@ from services.api_service_factory import ApiServiceFactory
 from services.pull_request_extractor_service import PullRequestExtractorService
 from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions, EpicoResponse, TarefaResponse, TarefaCard
-from services.epico_parser_service import EpicoParserService
-from services.tarefa_parser_service import TarefaParserService
+from models import JobStatus, JobFields, JobActions
 
 container = DependencyContainer()
 pr_extractor = PullRequestExtractorService()
@@ -55,13 +53,7 @@ class StartAnalysisPayload(BaseModel):
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    transcricao_reuniao: Optional[str] = None
-    gerar_epicos: bool = False
-    criar_cards_azure: bool = False
-    azure_project_name: Optional[str] = None
-    gerar_tarefas: bool = False
-    epicos_aprovados: Optional[List[str]] = None
-
+    
 class StartAnalysisResponse(BaseModel):
     job_id: str
     
@@ -102,23 +94,18 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     analysis_service = container.get_analysis_name_service()
     repo_name = payload.repo_name_modernizado
     branch_name = payload.branch_name_modernizado
-    print(f"[DEBUG][start_analysis] repo_name_modernizado recebido: {repo_name}")
-    print(f"[DEBUG][start_analysis] branch_name_modernizado recebido: {branch_name}")
     normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         repo_name, payload.repository_type
     )
-    print(f"[DEBUG][start_analysis] normalized_repo_name: {normalized_repo_name}")
-    print(f"[DEBUG][start_analysis] branch_name (não normalizado): {branch_name}")
     job_id = str(uuid.uuid4())
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
+    # DEBUG: Logar o valor de executar_build_dotnet recebido
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
-    payload_dict['branch_name_modernizado'] = branch_name
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
-    print(f"[{job_id}] [DEBUG] Valor de branch_name_modernizado passado para create_initial_job_data: {branch_name}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
@@ -152,17 +139,9 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
-    print(f"[{job_id}] [get_job_report] Conteúdo de job['data']: {job.get('data', {})}")
     job_validation_service.validate_job_exists(job, job_id)
     report = job_validation_service.get_report_from_job(job, job_id)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
-    if not report:
-        analysis_report_present = bool(job.get('data', {}).get('analysis_report'))
-        report_blob_url_present = bool(job.get('data', {}).get('report_blob_url'))
-        raise HTTPException(
-            status_code=404,
-            detail=f"Relatório não encontrado. analysis_report presente: {analysis_report_present}, report_blob_url presente: {report_blob_url_present}. Status do job: {job.get('status')}."
-        )
     return ReportResponse(job_id=job_id, analysis_report=report, report_blob_url=blob_url)
 @app.get("/analyses/by-name/{analysis_name}", response_model=AnalysisByNameResponse, tags=["Jobs"])
 def get_analysis_by_name(analysis_name: str = Path(..., title="Nome da análise para buscar")):
@@ -190,13 +169,9 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     original_data = original_job[JobFields.DATA]
     original_repo_name = original_data[JobFields.REPO_NAME]
     original_repository_type = original_data[JobFields.REPOSITORY_TYPE]
-    print(f"[DEBUG][start_code_generation_from_report] original_repo_name: {original_repo_name}")
-    print(f"[DEBUG][start_code_generation_from_report] branch_name: {original_data.get(JobFields.BRANCH_NAME)}")
     normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         original_repo_name, original_repository_type
     )
-    print(f"[DEBUG][start_code_generation_from_report] normalized_repo_name: {normalized_repo_name}")
-    print(f"[DEBUG][start_code_generation_from_report] branch_name (não normalizado): {original_data.get(JobFields.BRANCH_NAME)}")
     new_job_id = str(uuid.uuid4())
     new_job_data = job_data_service.create_derived_job_data(
         original_job, analysis_name, normalized_repo_name, report
@@ -212,7 +187,12 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
+    
+    # ✅ CORREÇÃO APLICADA AQUI
+    # Garante que 'status' sempre tenha um valor string, fornecendo "PROCESSING" como padrão
+    # se a chave não existir ou seu valor for None/vazio.
     status = job.get(JobFields.STATUS) or "PROCESSING"
+    
     job_data = job.get(JobFields.DATA, {})
     blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
@@ -228,6 +208,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             return response_builder_service.build_failed_response(job_id, job)
         else:
             return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, build_errors=job_data.get('build_errors'))
+            
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
@@ -246,38 +227,3 @@ def get_jobs_for_report(report_name: str):
     except Exception as e:
         print(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar jobs associados ao relatório.")
-
-@app.get("/jobs/{job_id}/epicos", response_model=EpicoResponse, tags=["Epicos"])
-def get_epicos(job_id: str = Path(..., title="O ID do Job para buscar os épicos")):
-    job_store = container.get_job_store()
-    job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    job_data = job.get(JobFields.DATA, {})
-    if not job_data.get('gerar_epicos', False):
-        raise HTTPException(status_code=400, detail="Este job não é do tipo geração de épicos.")
-    analysis_report = job_data.get('analysis_report')
-    if not analysis_report:
-        raise HTTPException(status_code=404, detail="Relatório de épicos não encontrado para este job.")
-    epicos = EpicoParserService.parse_epicos_from_report(analysis_report)
-    cards_criados = job_data.get('cards_criados', None)
-    return EpicoResponse(job_id=job_id, epicos=epicos, cards_criados=cards_criados)
-
-@app.get("/jobs/{job_id}/tarefas", response_model=TarefaResponse, tags=["Tarefas"])
-def get_tarefas(job_id: str = Path(..., title="O ID do Job para buscar as tarefas")):
-    job_store = container.get_job_store()
-    job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    job_data = job.get(JobFields.DATA, {})
-    if not job_data.get('gerar_tarefas', False):
-        raise HTTPException(status_code=400, detail="Este job não é do tipo geração de tarefas.")
-    analysis_report = job_data.get('analysis_report')
-    if not analysis_report:
-        raise HTTPException(status_code=404, detail="Relatório de tarefas não encontrado para este job.")
-    epicos_aprovados = job_data.get('epicos_aprovados', [])
-    tarefas = []
-    for epico_id in epicos_aprovados:
-        tarefas.extend(TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id))
-    tarefas_criadas = job_data.get('tarefas_criadas', None)
-    return TarefaResponse(job_id=job_id, tarefas=tarefas, tarefas_criadas=tarefas_criadas)

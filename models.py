@@ -18,33 +18,6 @@ class FinalStatusResponse(BaseModel):
     report_blob_url: Optional[str] = None
     build_errors: Optional[List[str]] = None
 
-class EpicoCard(BaseModel):
-    id: str
-    titulo: str
-    objetivo_negocio: str
-    criterios_aceite: str
-    perfis_envolvidos: str
-    estimativa_esforco: str
-
-class TarefaCard(BaseModel):
-    id: str
-    titulo_tarefa: str
-    descricao_tarefa: str
-    epico_id: str
-    estimativa_tempo: str
-    criterios_aceite: str
-    epico_nome: Optional[str] = None
-
-class EpicoResponse(BaseModel):
-    job_id: str
-    epicos: List[EpicoCard]
-    cards_criados: Optional[List[Dict[str, Any]]] = None
-
-class TarefaResponse(BaseModel):
-    job_id: str
-    tarefas: List[TarefaCard]
-    tarefas_criadas: Optional[List[Dict[str, Any]]] = None
-
 class JobStatus:
     STARTING = 'starting'
     PENDING_APPROVAL = 'pending_approval'
@@ -94,16 +67,6 @@ class JobFields:
     EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
-    TRANSCRICAO_REUNIAO = 'transcricao_reuniao'
-    GERAR_EPICOS = 'gerar_epicos'
-    CRIAR_CARDS_AZURE = 'criar_cards_azure'
-    AZURE_PROJECT_NAME = 'azure_project_name'
-    CARDS_CRIADOS = 'cards_criados'
-    CARDS_CREATION_ERRORS = 'cards_creation_errors'
-    GERAR_TAREFAS = 'gerar_tarefas'
-    EPICOS_APROVADOS = 'epicos_aprovados'
-    TAREFAS_CRIADAS = 'tarefas_criadas'
-    TAREFAS_CREATION_ERRORS = 'tarefas_creation_errors'
 
 class JobActions:
     APPROVE = 'approve'
@@ -130,9 +93,3 @@ class StartAnalysisPayload(BaseModel):
     executar_steps_incrementalmente: bool = False
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    transcricao_reuniao: Optional[str] = None
-    gerar_epicos: bool = False
-    criar_cards_azure: bool = False
-    azure_project_name: Optional[str] = None
-    gerar_tarefas: bool = False
-    epicos_aprovados: Optional[List[str]] = None
