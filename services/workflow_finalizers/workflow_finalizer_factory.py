@@ -2,7 +2,7 @@ from services.workflow_finalizers.commit_workflow_finalizer import CommitWorkflo
 from services.workflow_finalizers.azure_devops_workflow_finalizer import AzureDevOpsWorkflowFinalizer
 
 class WorkflowFinalizerFactory:
-    def __init__(self, data_formatter, job_handler, commit_handler, azure_devops_service, dotnet_build_service=None):
+    def __init__(self, data_formatter, job_handler, commit_handler, azure_devops_service, dotnet_build_service):
         self.data_formatter = data_formatter
         self.job_handler = job_handler
         self.commit_handler = commit_handler
@@ -15,10 +15,10 @@ class WorkflowFinalizerFactory:
                 azure_devops_service=self.azure_devops_service,
                 job_handler=self.job_handler
             )
-        # default: code_generation
-        return CommitWorkflowFinalizer(
-            data_formatter=self.data_formatter,
-            job_handler=self.job_handler,
-            commit_handler=self.commit_handler,
-            dotnet_build_service=self.dotnet_build_service
-        )
+        else:
+            return CommitWorkflowFinalizer(
+                data_formatter=self.data_formatter,
+                job_handler=self.job_handler,
+                commit_handler=self.commit_handler,
+                dotnet_build_service=self.dotnet_build_service
+            )
