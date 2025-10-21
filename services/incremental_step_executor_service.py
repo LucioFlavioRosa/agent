@@ -1,71 +1,14 @@
 from typing import List, Dict, Optional
 from services.step_dependency_analyzer import StepDependencyAnalyzer
 from services.change_consolidator_service import ChangeConsolidatorService
-import re
+from services.report_table_parser import ReportTableParser
 
 class IncrementalStepExecutorService:
-    @staticmethod
-    def parse_report_table(report_text: str, transcricao_reuniao: Optional[str] = None) -> List[Dict]:
-        if not report_text or '|' not in report_text:
-            return []
-        # Detecta se é uma tabela de épicos pelo cabeçalho
-        if '| ID | Épico | Objetivo de Negócio |' in report_text:
-            return IncrementalStepExecutorService.parse_epicos_table(report_text)
-        lines = [line.strip() for line in report_text.splitlines() if line.strip()]
-        table_lines = []
-        header_found = False
-        for line in lines:
-            if re.match(r'^\|.*\|$', line):
-                if re.match(r'^\|[\s\-\|]+\|$', line):
-                    continue
-                if not header_found:
-                    header_found = True
-                table_lines.append(line)
-            elif header_found:
-                break
-        if len(table_lines) < 2:
-            return []
-        headers = [h.strip() for h in table_lines[0].strip('|').split('|')]
-        rows = table_lines[1:]
-        result = []
-        for row in rows:
-            if re.match(r'^\|[\s\-\|]+\|$', row):
-                continue
-            cols = [c.strip() for c in row.strip('|').split('|')]
-            if len(cols) != len(headers):
-                continue
-            row_dict = dict(zip(headers, cols))
-            result.append(row_dict)
-        return result
+    def __init__(self, report_table_parser=None):
+        self.report_table_parser = report_table_parser or ReportTableParser()
 
-    @staticmethod
-    def parse_epicos_table(report_text: str) -> List[Dict]:
-        lines = [line.strip() for line in report_text.splitlines() if line.strip()]
-        table_start = None
-        for idx, line in enumerate(lines):
-            if line.startswith('| ID |'):
-                table_start = idx
-                break
-        if table_start is None:
-            return []
-        header = lines[table_start]
-        separator = lines[table_start + 1] if table_start + 1 < len(lines) else ''
-        data_lines = lines[table_start + 2:]
-        headers = [h.strip() for h in header.strip('|').split('|')]
-        epicos = []
-        for line in data_lines:
-            if not line.startswith('|') or line == separator:
-                continue
-            cols = [col.strip() for col in line.strip('|').split('|')]
-            if len(cols) != len(headers):
-                continue
-            epico_dict = dict(zip(headers, cols))
-            epicos.append(epico_dict)
-        return epicos
-
-    @staticmethod
-    def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3, transcricao_reuniao: Optional[str] = None) -> List[List[Dict]]:
-        steps = IncrementalStepExecutorService.parse_report_table(report_text, transcricao_reuniao=transcricao_reuniao)
+    def get_step_batches_from_report(self, report_text: str, max_steps_per_batch: int = 3, transcricao_reuniao: Optional[str] = None) -> List[List[Dict]]:
+        steps = self.report_table_parser.parse_report_table(report_text, transcricao_reuniao=transcricao_reuniao)
         if not steps:
             print(f"[INCREMENTAL] Nenhum step encontrado no relatório para batching.")
             return []
@@ -90,8 +33,7 @@ class IncrementalStepExecutorService:
         print(f"[INCREMENTAL] {len(batches)} batches criados.")
         return batches
 
-    @staticmethod
-    def merge_all_batches(batch_results: List[Dict]) -> Dict[str, any]:
+    def merge_all_batches(self, batch_results: List[Dict]) -> Dict[str, any]:
         resumo_geral = []
         conjunto_de_mudancas = []
         for batch in batch_results:
