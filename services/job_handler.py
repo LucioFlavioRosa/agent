@@ -22,6 +22,9 @@ class JobHandler:
 
     def set_paused_step(self, job_info: Dict[str, Any], step_index: int) -> None:
         job_info['data']['paused_at_step'] = step_index
+        
+    def get_step_result(self, job_info: Dict[str, Any], step_index: int) -> Dict[str, Any]:
+        return job_info['data'].get(f'step_{step_index - 1}_result', {})
 
     def handle_job_error(self, job_id: str, error: Exception, context: str = None) -> None:
         job_info = self.get_job_info(job_id)
