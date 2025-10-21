@@ -423,3 +423,8 @@ criacao_epicos_azure_devops:
       params:
         tipo_analise: "criacao_epicos"
       requires_approval: true
+    - status_update: "criando_epicos_azure_devops"
+      model_name: "gpt-4.1"
+      agent_type: "epic_azure_writer"
+      params:
+        tipo_analise: "criacao_epicos_azure"
