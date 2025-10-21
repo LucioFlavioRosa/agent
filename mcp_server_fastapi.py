@@ -183,7 +183,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
     analysis_report = job_data.get(JobFields.ANALYSIS_REPORT, None)
     epics_list = []
-    if job_data.get(JobFields.WORKFLOW_MODE) == "epic_task_creation" and status == JobStatus.COMPLETED:
+    workflow_mode = job_data.get(JobFields.WORKFLOW_MODE)
+    if workflow_mode == "epic_task_creation" and status == JobStatus.COMPLETED:
         epic_ids = job_data.get(JobFields.EPIC_IDS, [])
         epics_data = job_data.get(JobFields.EPICS, [])
         if epics_data and isinstance(epics_data, list):
@@ -195,6 +196,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         elif epic_ids and isinstance(epic_ids, list):
             for eid in epic_ids:
                 epics_list.append(EpicSummary(epic_id=str(eid)))
+        print(f"[{job_id}] [get_status] epics_list: {epics_list}")
     print(f"[{job_id}] [get_status] status: {status}")
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
