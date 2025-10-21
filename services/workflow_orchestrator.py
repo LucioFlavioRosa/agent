@@ -124,7 +124,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     previous_step_result = {'incremental_results': batch_results}
                     break # Sai do loop de steps, pois os batches já foram processados
                 
-                # O restante do código para steps não-incrementais
                 step_result = self._execute_step_with_strategy(
                     job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                 )
@@ -202,45 +201,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
-        if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
-            batch_results = job_info['data'][JobFields.BATCH_RESULTS]
-            total_batches = len(batch_results)
-            total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
-            print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
-            final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
-        dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
-        self.job_handler.update_job_status(job_id, 'committing_to_github')
-        self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
-        print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
-        if job_info['data'].get('executar_build_dotnet', False):
-            commit_details = job_info['data'].get('commit_details', [])
-            build_errors = []
-            for idx, commit in enumerate(commit_details):
-                if 'build_result' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                if 'build_errors' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                errors = commit.get('build_errors')
-                if errors:
-                    build_errors.extend(errors)
-            if build_errors:
-                job_info['data']['build_errors'] = build_errors
-            else:
-                job_info['data']['build_errors'] = None
-            self.job_handler.update_job(job_id, job_info)
-        else:
-            job_info['data']['build_errors'] = None
-        self.job_handler.update_job(job_id, job_info)
-        print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
-        if job_info['data'].get('executar_build_dotnet', False):
-            commit_details = job_info['data'].get('commit_details', [])
-            for idx, commit in enumerate(commit_details):
-                if 'build_result' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                if 'build_errors' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-        self.job_handler.update_job_status(job_id, 'completed')
+        workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
+        workflow_finalizer_factory = self.dependency_container.get_workflow_finalizer_factory() if self.dependency_container else None
+        if not workflow_finalizer_factory:
+            raise RuntimeError("WorkflowFinalizerFactory não disponível na dependency_container.")
+        finalizer = workflow_finalizer_factory.get_finalizer(workflow_mode)
+        finalizer.finalize(job_id, job_info, workflow, final_result, repository_type, repo_name)
 
     def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
         print(f"[WorkflowOrchestrator] Obtendo token. repository_type={repository_type}, repo_name={repo_name}")
