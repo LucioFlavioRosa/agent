@@ -417,7 +417,7 @@ geracao_epicos_a_partir_de_reuniao:
   extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
     - status_update: "analisando a transcrição"
-      model_name: "claude-sonnet-4-5"
+      model_name: "gpt-4.1"
       agent_type: "processador"
       params:
         tipo_analise: "criacao_epicos"
