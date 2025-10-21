@@ -1,6 +1,6 @@
 import re
 from typing import List, Dict, Any
-from domain/interfaces/epic_parser_interface import IEpicParser
+from domain.interfaces.epic_parser_interface import IEpicParser
 
 class EpicMarkdownParser(IEpicParser):
     def parse_epic_table(self, markdown_table: str) -> List[Dict[str, Any]]:
