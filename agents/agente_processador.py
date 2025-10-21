@@ -1,7 +1,6 @@
 import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
-
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
 
@@ -12,7 +11,6 @@ class AgenteProcessador:
     def main(
         self,
         tipo_analise: str,
-        codigo: Dict[str, Any],
         repository_type: str,
         repositorio: Optional[str] = None,
         nome_branch: Optional[str] = None,
@@ -26,7 +24,12 @@ class AgenteProcessador:
         usuario_executor: Optional[str] = None,
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
+        workflow_mode: str = "code_generation",
+        codigo: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
+        if workflow_mode == "code_generation":
+            if codigo is None:
+                raise TypeError("O parâmetro 'codigo' é obrigatório para workflow_mode='code_generation'.")
         if lista_arquivos:
             print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
             codigo_str = json.dumps({
@@ -34,8 +37,7 @@ class AgenteProcessador:
                 'lista_todos_arquivos': lista_arquivos
             }, indent=2, ensure_ascii=False)
         else:
-            codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
-
+            codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False) if codigo is not None else ""
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
             prompt_principal=codigo_str,
@@ -44,7 +46,6 @@ class AgenteProcessador:
             model_name=model_name,
             max_token_out=max_token_out
         )
-
         log_custom_data(
             job_id=job_id,
             projeto=projeto,
@@ -58,5 +59,4 @@ class AgenteProcessador:
             modo_adicao_incremental=modo_adicao_incremental,
             usuario_executor=usuario_executor
         )
-
         return {"resultado": {"reposta_final": resultado_da_ia}}
