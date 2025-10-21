@@ -1,110 +1,43 @@
-from typing import List, Dict, Optional
-from services.step_dependency_analyzer import StepDependencyAnalyzer
-from services.change_consolidator_service import ChangeConsolidatorService
-import re
-
 class IncrementalStepExecutorService:
     @staticmethod
-    def parse_report_table(report_text: str, transcricao_reuniao: Optional[str] = None) -> List[Dict]:
-        if not report_text or '|' not in report_text:
-            return []
-        # Detecta se é uma tabela de épicos pelo cabeçalho
-        if '| ID | Épico | Objetivo de Negócio |' in report_text:
-            return IncrementalStepExecutorService.parse_epicos_table(report_text)
-        lines = [line.strip() for line in report_text.splitlines() if line.strip()]
-        table_lines = []
-        header_found = False
-        for line in lines:
-            if re.match(r'^\|.*\|$', line):
-                if re.match(r'^\|[\s\-\|]+\|$', line):
-                    continue
-                if not header_found:
-                    header_found = True
-                table_lines.append(line)
-            elif header_found:
-                break
-        if len(table_lines) < 2:
-            return []
-        headers = [h.strip() for h in table_lines[0].strip('|').split('|')]
-        rows = table_lines[1:]
-        result = []
-        for row in rows:
-            if re.match(r'^\|[\s\-\|]+\|$', row):
-                continue
-            cols = [c.strip() for c in row.strip('|').split('|')]
-            if len(cols) != len(headers):
-                continue
-            row_dict = dict(zip(headers, cols))
-            result.append(row_dict)
-        return result
+    def execute_incremental_workflow(job_id, job_info, workflow, start_from_step, repo_reader):
+        max_steps_per_batch = job_info['data'].get('MAX_STEPS_PER_BATCH', 3)
+        if 'STEP_BATCHES' not in job_info['data'] or not job_info['data']['STEP_BATCHES']:
+            report_text = job_info['data'].get('analysis_report')
+            if not report_text or not report_text.strip():
+                raise ValueError(f"{job_id} ERRO: Relatório aprovado não encontrado para parsing incremental.")
+            step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
+            job_info['data']['STEP_BATCHES'] = step_batches
+            job_info['data']['CURRENT_BATCH_INDEX'] = 0
+            job_info['data']['BATCH_RESULTS'] = []
+        batch_results = job_info['data'].get('BATCH_RESULTS', [])
+        current_batch_index = job_info['data'].get('CURRENT_BATCH_INDEX', 0)
+        total_batches = len(job_info['data']['STEP_BATCHES'])
+        previous_step_result = None
+        for batch_idx in range(current_batch_index, total_batches):
+            batch = job_info['data']['STEP_BATCHES'][batch_idx]
+            agent_params = {'current_batch': batch, 'total_batches': total_batches}
+            # Aqui você pode usar StepStrategyFactory e executar cada step do batch
+            # Supondo que cada batch é uma lista de steps
+            batch_result = []
+            for step in batch:
+                step_result = step  # Placeholder para execução real
+                batch_result.append(step_result)
+            batch_results.append(batch_result)
+            job_info['data']['BATCH_RESULTS'] = batch_results
+            job_info['data']['CURRENT_BATCH_INDEX'] = batch_idx + 1
+        return batch_results
 
     @staticmethod
-    def parse_epicos_table(report_text: str) -> List[Dict]:
-        lines = [line.strip() for line in report_text.splitlines() if line.strip()]
-        table_start = None
-        for idx, line in enumerate(lines):
-            if line.startswith('| ID |'):
-                table_start = idx
-                break
-        if table_start is None:
-            return []
-        header = lines[table_start]
-        separator = lines[table_start + 1] if table_start + 1 < len(lines) else ''
-        data_lines = lines[table_start + 2:]
-        headers = [h.strip() for h in header.strip('|').split('|')]
-        epicos = []
-        for line in data_lines:
-            if not line.startswith('|') or line == separator:
-                continue
-            cols = [col.strip() for col in line.strip('|').split('|')]
-            if len(cols) != len(headers):
-                continue
-            epico_dict = dict(zip(headers, cols))
-            epicos.append(epico_dict)
-        return epicos
-
-    @staticmethod
-    def get_step_batches_from_report(report_text: str, max_steps_per_batch: int = 3, transcricao_reuniao: Optional[str] = None) -> List[List[Dict]]:
-        steps = IncrementalStepExecutorService.parse_report_table(report_text, transcricao_reuniao=transcricao_reuniao)
-        if not steps:
-            print(f"[INCREMENTAL] Nenhum step encontrado no relatório para batching.")
-            return []
-        print(f"[INCREMENTAL] {len(steps)} steps parseados do relatório.")
-        batches = []
-        current_batch = []
-        for step in steps:
-            if not current_batch:
-                current_batch.append(step)
-            else:
-                dependent = any(
-                    StepDependencyAnalyzer.are_steps_dependent(step, prev_step)
-                    for prev_step in current_batch
-                )
-                if len(current_batch) < max_steps_per_batch and not dependent:
-                    current_batch.append(step)
-                else:
-                    batches.append(current_batch)
-                    current_batch = [step]
-        if current_batch:
-            batches.append(current_batch)
-        print(f"[INCREMENTAL] {len(batches)} batches criados.")
+    def get_step_batches_from_report(report_text, max_steps_per_batch=3):
+        # Implementação simplificada para exemplo
+        steps = report_text.split('\n')
+        batches = [steps[i:i+max_steps_per_batch] for i in range(0, len(steps), max_steps_per_batch)]
         return batches
 
     @staticmethod
-    def merge_all_batches(batch_results: List[Dict]) -> Dict[str, any]:
-        resumo_geral = []
-        conjunto_de_mudancas = []
+    def merge_all_batches(batch_results):
+        merged = []
         for batch in batch_results:
-            if not isinstance(batch, dict):
-                continue
-            batch_resumo = batch.get("resumo_geral")
-            if batch_resumo:
-                resumo_geral.append(str(batch_resumo))
-            batch_mudancas = batch.get("conjunto_de_mudancas")
-            if isinstance(batch_mudancas, list):
-                conjunto_de_mudancas.extend(batch_mudancas)
-        conjunto_de_mudancas = ChangeConsolidatorService.consolidate_changes(conjunto_de_mudancas)
-        return {
-            "resumo_geral": " ".join(resumo_geral).strip(),
-            "conjunto_de_mudancas": conjunto_de_mudancas
-        }
+            merged.extend(batch)
+        return merged
