@@ -157,6 +157,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         is_comparador_agent = step.get('agent') == 'comparador'
+        workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
         if is_comparador_agent:
             agent_params.update({
                 'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
@@ -165,7 +166,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 'branch_name_original': job_info['data'].get('branch_name_original')
             })
         else:
-            workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
             if workflow_mode == 'code_generation':
                 repo_name = job_info['data'].get('repo_name_modernizado')
                 branch_name = job_info['data'].get('branch_name_modernizado')
@@ -173,7 +173,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     'repositorio': repo_name,
                     'nome_branch': branch_name
                 })
-            # Para epic_task_creation, não adiciona repo_name/branch_name
+            # Para epic_task_creation, não adiciona repo_name/branch_name/codigo
         retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
@@ -181,7 +181,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'repository_type': job_info['data']['repository_type'],
             'retornar_lista_arquivos': retornar_lista_arquivos,
             'modo_adicao_incremental': job_info.get('data', {}).get('modo_adicao_incremental', False),
-            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
+            'usuario_executor': job_info.get('data', {}).get('usuario_executor'),
+            'workflow_mode': workflow_mode
         })
         agent_params['job_id'] = job_id
         if batch_steps is not None:
