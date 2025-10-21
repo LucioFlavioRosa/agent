@@ -1,14 +1,15 @@
 from services.workflow_finalizers.workflow_finalizer_interface import IWorkflowFinalizer
 
 class AzureDevOpsWorkflowFinalizer(IWorkflowFinalizer):
-    def __init__(self, azure_devops_service, job_handler):
-        self.azure_devops_service = azure_devops_service
+    def __init__(self, data_formatter, job_handler, azure_devops_service):
+        self.data_formatter = data_formatter
         self.job_handler = job_handler
+        self.azure_devops_service = azure_devops_service
 
     def finalize(self, job_id, job_info, workflow, final_result, repository_type, repo_name):
         epic_title = job_info['data'].get('epic_title') or 'Épico gerado pelo MCP'
         epic_description = job_info['data'].get('epic_description') or ''
-        tasks_json = final_result.get('tasks_json') if isinstance(final_result, dict) else None
+        tasks_json = final_result.get('tasks_json')
         organization = job_info['data'].get('azure_organization')
         project = job_info['data'].get('azure_project')
         board = job_info['data'].get('azure_board')
@@ -19,6 +20,7 @@ class AzureDevOpsWorkflowFinalizer(IWorkflowFinalizer):
             title=epic_title,
             description=epic_description
         )
+        job_info['data']['epic_id'] = epic_id
         task_ids = []
         if tasks_json and isinstance(tasks_json, dict) and 'lista_de_tarefas' in tasks_json:
             for task in tasks_json['lista_de_tarefas']:
@@ -34,7 +36,5 @@ class AzureDevOpsWorkflowFinalizer(IWorkflowFinalizer):
                     estimativa_sp=task['estimativa_sp']
                 )
                 task_ids.append(task_id)
-        job_info['data']['epic_id'] = epic_id
         job_info['data']['task_ids'] = task_ids
         self.job_handler.update_job(job_id, job_info)
-        self.job_handler.update_job_status(job_id, 'completed')
