@@ -340,7 +340,41 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'failed')
                 self.job_handler.update_job(job_id, job_info)
                 return
-        # ... resto da função permanece igual ...
+        if job_info['data'].get('gerar_tarefas') is True and job_info['data'].get('criar_cards_azure') is True:
+            try:
+                analysis_report = job_info['data'].get('analysis_report')
+                epicos_aprovados = job_info['data'].get('epicos_aprovados', [])
+                organization_url = None
+                project_name = None
+                if repository_type == 'azure':
+                    parts = repo_name.split('/')
+                    if len(parts) >= 2:
+                        organization_url = f"https://dev.azure.com/{parts[0]}"
+                        project_name = job_info['data'].get('azure_project_name') or parts[1]
+                if not organization_url:
+                    organization_url = job_info['data'].get('organization_url')
+                if not project_name:
+                    project_name = job_info['data'].get('azure_project_name')
+                if not organization_url or not project_name:
+                    raise ValueError("organization_url e project_name são obrigatórios para criar cards no Azure Boards.")
+                azure_boards_service = self.dependency_container.get_azure_boards_service(organization_url, project_name)
+                tarefas_criadas = []
+                tarefas_creation_errors = []
+                for epico_id in epicos_aprovados:
+                    tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
+                    resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
+                    tarefas_criadas.extend(resultado)
+                    tarefas_creation_errors.extend([r for r in resultado if r.get('erro')])
+                job_info['data']['tarefas_criadas'] = tarefas_criadas
+                job_info['data']['tarefas_creation_errors'] = tarefas_creation_errors
+                self.job_handler.update_job_status(job_id, 'completed')
+                self.job_handler.update_job(job_id, job_info)
+                return
+            except Exception as e:
+                job_info['data']['tarefas_creation_errors'] = [str(e)]
+                self.job_handler.update_job_status(job_id, 'failed')
+                self.job_handler.update_job(job_id, job_info)
+                return
         executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
         if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
             batch_results = job_info['data'][JobFields.BATCH_RESULTS]
