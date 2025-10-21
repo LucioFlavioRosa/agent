@@ -76,6 +76,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, step['status_update'])
                 # PASSO 3: Se workflow_mode for epic_task_creation e step de aprovação de épicos foi concluído, chama EpicAzureDevOpsStepExecutor
                 if workflow_mode == 'epic_task_creation' and current_step_index == 1 and step.get('agent_type') == 'epic_azure_writer':
+                    print(f"[{job_id}] [DEBUG] Chamando EpicAzureDevOpsStepExecutor para criação dos épicos no Azure DevOps.")
                     executor = StepExecutorFactory.create_executor(
                         agent_type='epic_azure_writer',
                         job_handler=self.job_handler,
@@ -85,6 +86,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     step_result = executor.execute(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, {}
                     )
+                    print(f"[{job_id}] [DEBUG] Resultado da criação dos épicos: {step_result}")
                     self.job_handler.save_step_result(job_info, current_step_index, step_result)
                     previous_step_result = step_result
                     continue
