@@ -154,7 +154,14 @@ class AzureBoardsService:
 
     def criar_multiplas_tarefas(self, tarefas: List[Any], epico_nome: str) -> List[Dict[str, Any]]:
         resultados = []
+        print(f"[AzureBoardsService] Iniciando criação de múltiplas tarefas para epico_nome='{epico_nome}'. Total de tarefas: {len(tarefas)}")
         for tarefa in tarefas:
+            print(f"[AzureBoardsService] Tentando criar tarefa: id='{getattr(tarefa, 'id', None)}', titulo='{getattr(tarefa, 'titulo_tarefa', None)}', epico_nome='{epico_nome}'")
             resultado = self.criar_card_tarefa(tarefa, epico_nome)
+            if resultado.get('id'):
+                print(f"[AzureBoardsService] Tarefa criada com sucesso: id={resultado.get('id')}, titulo={resultado.get('titulo')}")
+            else:
+                print(f"[AzureBoardsService] Falha ao criar tarefa: titulo={resultado.get('titulo')}, erro={resultado.get('erro')}")
             resultados.append(resultado)
+        print(f"[AzureBoardsService] Total de tarefas criadas (sucesso): {len([r for r in resultados if r.get('id')])}. Total de falhas: {len([r for r in resultados if r.get('erro')])}")
         return resultados
