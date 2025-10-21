@@ -57,7 +57,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
 
                 cleaned_string = None
-                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
+                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                     print(f"[{job_id}] {cleaned_string}")
@@ -75,11 +75,6 @@ class ProcessadorStepExecutor(BaseStepExecutor):
 
                 result = json.loads(cleaned_string, strict=False)
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
-
-                # Validação do campo 'lista_de_tarefas'
-                if 'lista_de_tarefas' not in result or not isinstance(result['lista_de_tarefas'], list) or len(result['lista_de_tarefas']) == 0:
-                    print(f"[{job_id}] ERRO: O campo 'lista_de_tarefas' está ausente ou vazio no JSON retornado pela IA. JSON completo retornado: {json.dumps(result, indent=2, ensure_ascii=False)}")
-                    raise ValueError(f"O campo 'lista_de_tarefas' está ausente ou vazio no JSON retornado pela IA. Veja o JSON completo nos logs.")
 
                 report_text = ReportHandler.extract_report_text(result)
                 if report_text and isinstance(report_text, str) and report_text.strip():
