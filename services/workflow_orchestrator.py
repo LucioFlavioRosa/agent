@@ -201,10 +201,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
         workflow_finalizer_factory = self.dependency_container.get_workflow_finalizer_factory() if self.dependency_container else None
         if not workflow_finalizer_factory:
             raise RuntimeError("WorkflowFinalizerFactory não disponível na dependency_container.")
+        workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
         finalizer = workflow_finalizer_factory.get_finalizer(workflow_mode)
         finalizer.finalize(job_id, job_info, workflow, final_result, repository_type, repo_name)
 
