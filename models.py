@@ -7,6 +7,12 @@ class PullRequestSummary(BaseModel):
     arquivos_modificados: List[str]
     build_result: Optional[Dict[str, Any]] = None
     commit_url: Optional[str] = None
+    build_errors: Optional[List[str]] = None
+
+class EpicSummary(BaseModel):
+    epic_id: str
+    epic_url: Optional[str] = None
+    epic_title: Optional[str] = None
 
 class FinalStatusResponse(BaseModel):
     job_id: str
@@ -17,6 +23,7 @@ class FinalStatusResponse(BaseModel):
     diagnostic_logs: Optional[Dict[str, Any]] = None
     report_blob_url: Optional[str] = None
     build_errors: Optional[List[str]] = None
+    epics: Optional[List[EpicSummary]] = None
 
 class JobStatus:
     STARTING = 'starting'
@@ -70,6 +77,8 @@ class JobFields:
     WORKFLOW_MODE = 'workflow_mode'
     EPIC_ID = 'epic_id'
     TASK_IDS = 'task_ids'
+    EPIC_IDS = 'epic_ids'
+    EPICS = 'epics'
 
 class JobActions:
     APPROVE = 'approve'
