@@ -419,7 +419,7 @@ criacao_epicos_azure_devops:
   steps:
     - status_update: "gerando_relatorio_epicos"
       model_name: "claude-sonnet-4-5"
-      agent_type: "revisor"
+      agent_type: "processador"
       params:
         tipo_analise: "criacao_epicos"
       requires_approval: true
