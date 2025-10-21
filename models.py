@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 from typing import List, Dict, Any, Optional
 
 class PullRequestSummary(BaseModel):
@@ -76,7 +76,7 @@ class JobActions:
     REJECT = 'reject'
 
 class StartAnalysisPayload(BaseModel):
-    repo_name_modernizado: str
+    repo_name_modernizado: Optional[str] = None
     branch_name_modernizado: Optional[str] = None
     projeto: str
     analysis_type: Any
@@ -104,3 +104,12 @@ class StartAnalysisPayload(BaseModel):
         if workflow_mode == 'code_generation' and (v is None or v == ''):
             raise ValueError("branch_name_modernizado é obrigatório quando workflow_mode é 'code_generation'.")
         return v
+
+    @root_validator(pre=True)
+    def remove_fields_for_epic_task_creation(cls, values):
+        workflow_mode = values.get('workflow_mode')
+        if workflow_mode == 'epic_task_creation':
+            values['branch_name_modernizado'] = None
+            values['repo_name_original'] = None
+            values['branch_name_original'] = None
+        return values
