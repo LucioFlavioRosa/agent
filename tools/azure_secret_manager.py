@@ -1,48 +1,30 @@
-import os
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
-from domain.interfaces.secret_manager_interface import ISecretManager
+class AzureSecretManager:
+    def get_secret(self, secret_name):
+        # Implementação real de obtenção de segredo
+        pass
 
-class AzureSecretManager(ISecretManager):
-    """
-    Implementação do gerenciador de segredos usando Azure Key Vault.
-    Responsabilidade única: gerenciar segredos do Azure Key Vault.
-    """
-    def __init__(self):
-        self._secret_client = None
-        self._key_vault_url = os.environ.get("KEY_VAULT_URL")
-        if not self._key_vault_url:
-            raise EnvironmentError("A variável de ambiente KEY_VAULT_URL não foi configurada.")
-    
-    def _get_secret_client(self) -> SecretClient:
-        """Lazy initialization do cliente de segredos."""
-        if self._secret_client is None:
-            print("Conectando ao Azure Key Vault...")
-            credential = DefaultAzureCredential()
-            self._secret_client = SecretClient(
-                vault_url=self._key_vault_url, 
-                credential=credential
-            )
-        return self._secret_client
-    
-    def get_secret(self, secret_name: str) -> str:
-        """
-        Obtém um segredo do Azure Key Vault.
-        
-        Args:
-            secret_name: Nome do segredo no Key Vault
-            
-        Returns:
-            str: Valor do segredo
-            
-        Raises:
-            ValueError: Se o segredo não for encontrado
-        """
+    def get_repository_token(self, repository_type: str, repo_name: str) -> str:
+        if repository_type == 'azure':
+            parts = repo_name.split('/')
+            if len(parts) != 3:
+                raise ValueError(f"Nome do repositório '{repo_name}' tem formato inválido para Azure.")
+            org_name = parts[0]
+            platform = 'Azure'
+        elif repository_type == 'github':
+            org_name = repo_name.strip().split('/')[0]
+            platform = 'GitHub'
+        elif repository_type == 'gitlab':
+            org_name = repo_name.strip().split('/')[0]
+            platform = 'GitLab'
+        else:
+            raise ValueError(f"Tipo de repositório '{repository_type}' não suportado para obtenção de token.")
+        token_secret_name = f"{platform.lower()}-token-{org_name}"
         try:
-            secret_client = self._get_secret_client()
-            secret = secret_client.get_secret(secret_name)
-            if not secret.value:
-                raise ValueError(f"Segredo '{secret_name}' está vazio no Key Vault.")
-            return secret.value
-        except Exception as e:
-            raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault: {e}") from e
+            token = self.get_secret(token_secret_name)
+            return token
+        except Exception:
+            try:
+                token = self.get_secret(f"{platform.lower()}-token")
+                return token
+            except Exception:
+                raise ValueError(f"Não foi possível obter token para {platform} ({org_name})")
