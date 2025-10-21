@@ -11,7 +11,6 @@ class ProcessadorStepExecutor(BaseStepExecutor):
     def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                 current_step_index: int, previous_step_result: Dict[str, Any], 
                 repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
-        
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
@@ -24,32 +23,27 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             self.job_handler.update_job(job_id, job_info)
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
-        workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
+        workflow_mode = agent_params.get('workflow_mode', job_info['data'].get('workflow_mode', 'code_generation'))
         if workflow_mode == 'code_generation':
             if 'repo_name' in job_info['data']:
                 agent_params['repositorio'] = job_info['data'].get('repo_name')
             if 'branch_name' in job_info['data']:
                 agent_params['nome_branch'] = job_info['data'].get('branch_name')
-        else:
-            # Para epic_task_creation, não adiciona repo_name/branch_name
-            pass
+            # codigo é obrigatório para code_generation
+            agent_params['codigo'] = job_info.get('arquivos_codigo', {})
+        # Para epic_task_creation, não adiciona repositorio, nome_branch, codigo
         agent_params['repository_type'] = job_info['data']['repository_type']
-        
         agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
         if isinstance(previous_step_result, dict) and 'lista_arquivos' in previous_step_result:
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
-        
         agente = AgentFactory.create_agent("processador", None, llm_provider)
         agent_response = agente.main(**agent_params)
-        
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
-        
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
                 print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
                 return previous_step_result
             raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
-        
         return json.loads(cleaned_string)
