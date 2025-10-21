@@ -80,6 +80,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value if hasattr(payload.analysis_type, 'value') else payload.analysis_type
+    # Permitir workflow_mode None, '', 'code_generation', 'epic_task_creation'
     if payload.workflow_mode:
         if payload.workflow_mode not in [None, '', 'code_generation', 'epic_task_creation']:
             raise HTTPException(status_code=400, detail=f"workflow_mode inválido: {payload.workflow_mode}")
