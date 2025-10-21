@@ -1,28 +1,30 @@
 import re
-from typing import List, Dict, Any
-from domain.interfaces.epic_parser_interface import IEpicParser
 
-class EpicMarkdownParser(IEpicParser):
-    def parse_epic_table(self, markdown_table: str) -> List[Dict[str, Any]]:
+class EpicMarkdownParser:
+    def parse(self, markdown_table):
         lines = markdown_table.strip().split('\n')
-        header_found = False
-        header = []
+        if not lines or len(lines) < 3:
+            return []
+        header = lines[0]
+        columns = [col.strip() for col in header.split('|') if col.strip()]
         epics = []
-        for line in lines:
-            if not header_found and line.startswith('|') and 'Passo' in line:
-                header = [h.strip() for h in line.split('|')[1:-1]]
-                header_found = True
+        for line in lines[2:]:
+            cells = [cell.strip() for cell in line.split('|') if cell.strip()]
+            if len(cells) != len(columns):
                 continue
-            if header_found and line.startswith('|') and not line.startswith('|---'):
-                cols = [c.strip() for c in line.split('|')[1:-1]]
-                if len(cols) != len(header):
-                    continue
-                epics.append({
-                    'passo': cols[0],
-                    'epico': cols[1],
-                    'objetivo_negocio': cols[2],
-                    'criterios_aceite': cols[3],
-                    'perfis_envolvidos': cols[4],
-                    'estimativa_esforco': cols[5]
-                })
+            epic_dict = {}
+            for idx, col in enumerate(columns):
+                key = col.replace(' ', '_').replace('/', '').lower()
+                epic_dict[key] = cells[idx]
+            # Map required fields
+            epic_dict['epic_id'] = epic_dict.get('passo', epic_dict.get('id'))
+            epic_dict['epic_title'] = epic_dict.get('epico')
+            epic_dict['objetivo_negocio'] = epic_dict.get('objetivo_de_negocio')
+            epic_dict['criterios_aceite'] = epic_dict.get('criterios_de_aceite__atividades_chave')
+            epic_dict['perfis_envolvidos'] = epic_dict.get('perfis_envolvidos')
+            epic_dict['estimativa_esforco'] = epic_dict.get('estimativa_de_esforco')
+            # Validation
+            required = ['epic_id', 'epic_title', 'objetivo_negocio']
+            if all(epic_dict.get(field) for field in required):
+                epics.append(epic_dict)
         return epics
