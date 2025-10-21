@@ -1,6 +1,3 @@
-import re
-import json
-
 class EpicAndTaskCreationService:
     def __init__(self, azure_boards_service, epico_parser_service, tarefa_parser_service):
         self.azure_boards_service = azure_boards_service
@@ -12,6 +9,7 @@ class EpicAndTaskCreationService:
         instrucoes_extras = job_info['data'].get('instrucoes_extras')
         epicos_aprovados_nomes = None
         if instrucoes_extras:
+            import re, json
             ids_regex = re.findall(r'\bE\d{2,}\b', instrucoes_extras)
             titulos_regex = re.findall(r'epico com titulo ([\w\s\-]+)', instrucoes_extras, re.IGNORECASE)
             ids_text = re.findall(r'epico com id ([\w\d]+)', instrucoes_extras, re.IGNORECASE)
@@ -44,9 +42,6 @@ class EpicAndTaskCreationService:
                 if not tarefas:
                     tarefas = self.tarefa_parser_service.parse_tarefas_from_report(analysis_report, epico_id=None, epico_nome=epico.titulo)
                 if not tarefas:
-                    if 'failed_tarefa_parsing_report' not in job_info['data']:
-                        job_info['data']['failed_tarefa_parsing_report'] = {}
-                    job_info['data']['failed_tarefa_parsing_report'][epico.id] = analysis_report
                     tarefas_parsing_errors.append({
                         'epico_id': epico.id,
                         'epico_nome': epico.titulo,
