@@ -16,6 +16,7 @@ from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
 from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
+from services.step_executors.step_executor_factory import StepExecutorFactory
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -84,6 +85,29 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
+                # INICIO DA MODIFICACAO PARA EPIC AZURE DEVOPS
+                workflow_mode = job_info['data'].get('workflow_mode', 'code_generation')
+                if workflow_mode == 'epic_task_creation' and current_step_index == 0 and step.get('requires_approval', False):
+                    print(f"[{job_id}] [EPIC AZURE DEVOPS] Step de aprovação de épicos detectado. Invocando EpicAzureDevOpsStepExecutor após aprovação.")
+                    executor = StepExecutorFactory.create_executor(
+                        agent_type="epic_azure_writer",
+                        job_handler=self.job_handler,
+                        workflow_mode=workflow_mode,
+                        dependency_container=self.dependency_container
+                    )
+                    result = executor.execute(
+                        job_id,
+                        job_info,
+                        step,
+                        current_step_index,
+                        previous_step_result,
+                        repo_reader,
+                        agent_params={}
+                    )
+                    self.job_handler.save_step_result(job_info, current_step_index, result)
+                    previous_step_result = result
+                    continue
+                # FIM DA MODIFICACAO PARA EPIC AZURE DEVOPS
                 if executar_incremental and current_step_index == 1:
                     step_batches = job_info['data'][JobFields.STEP_BATCHES]
                     current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
