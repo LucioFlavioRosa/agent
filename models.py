@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional
 
 class PullRequestSummary(BaseModel):
@@ -97,3 +97,10 @@ class StartAnalysisPayload(BaseModel):
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
     workflow_mode: Optional[str] = Field(None, description="Modo do workflow: 'code_generation' ou 'epic_task_creation'.")
+
+    @validator('branch_name_modernizado', always=True)
+    def branch_name_conditional(cls, v, values):
+        workflow_mode = values.get('workflow_mode')
+        if workflow_mode == 'code_generation' and (v is None or v == ''):
+            raise ValueError("branch_name_modernizado é obrigatório quando workflow_mode é 'code_generation'.")
+        return v
