@@ -5,9 +5,7 @@ from datetime import datetime, timezone
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
 
-
 class AgenteProcessador:
-    
     def __init__(self, llm_provider: ILLMProvider):
         self.llm_provider = llm_provider
 
@@ -54,7 +52,7 @@ class AgenteProcessador:
             tokens_in=resultado_da_ia['tokens_entrada'],
             tokens_out=resultado_da_ia['tokens_saida'],
             tipo_repositorio=repository_type,
-            nome_repositorio=repositorio,
+            nome_repositorio=repositorio if repositorio is not None else None,
             tipo_analise=tipo_analise,
             model_name=model_name,
             modo_adicao_incremental=modo_adicao_incremental,
