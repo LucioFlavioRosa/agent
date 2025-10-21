@@ -19,17 +19,26 @@ class StepExecutorFactory:
         }
         if workflow_mode == "epic_task_creation":
             if agent_type == "epic_azure_writer":
-                azure_devops_service = dependency_container.get_azure_devops_service() if dependency_container else None
-                epic_parser = dependency_container.get_epic_parser() if dependency_container else None
+                if dependency_container is None:
+                    raise ValueError("dependency_container é obrigatório para epic_azure_writer no modo epic_task_creation")
+                azure_devops_service = dependency_container.get_azure_devops_service()
+                epic_parser = dependency_container.get_epic_parser()
+                print("[StepExecutorFactory] Instanciando EpicAzureDevOpsStepExecutor com azure_devops_service e epic_parser")
                 return EpicAzureDevOpsStepExecutor(azure_devops_service, epic_parser, job_handler)
+            print("[StepExecutorFactory] Instanciando EpicTaskStepExecutor para epic_task_creation")
             return EpicTaskStepExecutor()
         executor_class = executors.get(agent_type)
         if not executor_class:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
         if agent_type == "epic_creator":
+            print("[StepExecutorFactory] Instanciando EpicCreationStepExecutor")
             return executor_class()
         if agent_type == "epic_azure_writer":
-            azure_devops_service = dependency_container.get_azure_devops_service() if dependency_container else None
-            epic_parser = dependency_container.get_epic_parser() if dependency_container else None
+            if dependency_container is None:
+                raise ValueError("dependency_container é obrigatório para epic_azure_writer")
+            azure_devops_service = dependency_container.get_azure_devops_service()
+            epic_parser = dependency_container.get_epic_parser()
+            print("[StepExecutorFactory] Instanciando EpicAzureDevOpsStepExecutor com azure_devops_service e epic_parser")
             return executor_class(azure_devops_service, epic_parser, job_handler)
+        print(f"[StepExecutorFactory] Instanciando {agent_type} executor")
         return executor_class(job_handler)
