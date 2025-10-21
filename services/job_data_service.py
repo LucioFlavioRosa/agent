@@ -29,7 +29,7 @@ class JobDataService:
         data[JobFields.REPOSITORY_TYPE] = payload_dict.get('repository_type')
         data[JobFields.REPO_NAME_MODERNIZADO] = payload_dict.get('repo_name_modernizado')
         workflow_mode = payload_dict.get('workflow_mode')
-        # Passo 7: branch_name é condicional ao workflow_mode
+        # Passo 7: branch_name_modernizado é condicional ao workflow_mode
         if workflow_mode != 'epic_task_creation':
             data[JobFields.BRANCH_NAME_MODERNIZADO] = payload_dict.get('branch_name_modernizado')
         data[JobFields.REPO_NAME_ORIGINAL] = payload_dict.get('repo_name_original')
