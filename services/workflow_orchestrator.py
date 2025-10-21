@@ -93,6 +93,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de pausar para aprovação sem relatório salvo no Blob Storage. analysis_report presente: {bool(job_info['data'].get('analysis_report'))}, tamanho: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
                         self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                         return
+                # MODIFICADO: extrai o epic_id do card_result e passa para criar_multiplas_tarefas
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
                 return
 
@@ -306,6 +307,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 for epico in epicos_a_processar:
                     card_result = azure_boards_service.criar_card_epico(epico)
                     cards_criados.append(card_result)
+                    epic_id = card_result.get('id')
                     tarefas = None
                     try:
                         tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id=epico.id, epico_nome=epico.titulo)
@@ -335,7 +337,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         })
                         tarefas = []
                     if tarefas:
-                        tarefas_result = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_nome=epico.titulo)
+                        tarefas_result = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_nome=epico.titulo, epic_id=epic_id)
                         tarefas_criadas.extend(tarefas_result)
                         tarefas_creation_errors.extend([r for r in tarefas_result if r.get('erro')])
                     else:
@@ -384,7 +386,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 tarefas_creation_errors = []
                 for epico_id in epicos_aprovados:
                     tarefas = TarefaParserService.parse_tarefas_from_report(analysis_report, epico_id)
-                    resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id)
+                    resultado = azure_boards_service.criar_multiplas_tarefas(tarefas, epico_id=None, epic_id=None)
                     tarefas_criadas.extend(resultado)
                     tarefas_creation_errors.extend([r for r in resultado if r.get('erro')])
                 job_info['data']['tarefas_criadas'] = tarefas_criadas
