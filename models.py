@@ -67,6 +67,9 @@ class JobFields:
     EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
+    WORKFLOW_MODE = 'workflow_mode'
+    EPIC_ID = 'epic_id'
+    TASK_IDS = 'task_ids'
 
 class JobActions:
     APPROVE = 'approve'
@@ -93,3 +96,4 @@ class StartAnalysisPayload(BaseModel):
     executar_steps_incrementalmente: bool = False
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    workflow_mode: Optional[str] = Field(None, description="Modo do workflow: 'code_generation' ou 'epic_task_creation'.")
