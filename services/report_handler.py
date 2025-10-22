@@ -11,9 +11,7 @@ class ReportHandler:
         analysis_name = job_info['data'].get('analysis_name')
         report_blob_url = None
         try:
-            # Tenta ler o relatório
             report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            # Se relatório existe, constrói a URL do blob
             from tools.blob_report_path_builder import build_report_blob_path
             from os import getenv
             blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
@@ -23,7 +21,6 @@ class ReportHandler:
                 report_blob_url = f"{account_url}/{container_name}/{blob_path}"
             elif container_name:
                 report_blob_url = f"/{container_name}/{blob_path}"
-            # Atualiza o tracker de jobs se a URL estiver disponível
             if report_blob_url:
                 try:
                     self.blob_storage.update_job_tracker(report_blob_url, job_id)
@@ -46,6 +43,8 @@ class ReportHandler:
         return None
 
     def save_report_to_blob(self, job_id, job_info, report_text, report_generated_by_agent=False):
+        if not report_text or len(str(report_text).strip()) == 0:
+            raise ValueError(f"[{job_id}] ERRO: Tentativa de salvar relatório vazio no Blob Storage.")
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
@@ -54,17 +53,18 @@ class ReportHandler:
         analysis_name = job_info['data'].get('analysis_name')
         if report_generated_by_agent:
             print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
+        print(f"[{job_id}] [DEBUG] Iniciando upload do relatório para o Blob Storage...")
         url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         if not url:
             raise ValueError(f"[{job_id}] ERRO: Blob Storage não retornou URL válida")
         job_info['data']['report_blob_url'] = url
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] Relatório salvo no Blob Storage: {url} (tamanho: {len(report_text)} chars)")
-        # Atualiza o tracker de jobs após salvar o relatório
         try:
             self.blob_storage.update_job_tracker(url, job_id)
         except Exception as e:
             print(f"[ReportHandler] Warning: Failed to update job tracker after saving report: {e}")
+        print(f"[{job_id}] [DEBUG] Upload do relatório concluído com sucesso.")
         return url
 
     def handle_report_only_mode(self, job_id, job_info, step_result):
