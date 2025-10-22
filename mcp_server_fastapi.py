@@ -83,7 +83,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_id = str(uuid.uuid4())
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
-    payload_dict['analysis_type'] = payload.analysis_type.value
+    payload_dict['analysis_type'] = payload.analysis_type
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     print(f"[{job_id}] [DEBUG] gerar_relatorio_apenas={payload.gerar_relatorio_apenas}, executar_steps_incrementalmente={payload.executar_steps_incrementalmente}")
     initial_job_data = job_data_service.create_initial_job_data(
