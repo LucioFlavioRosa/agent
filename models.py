@@ -17,6 +17,7 @@ class FinalStatusResponse(BaseModel):
     diagnostic_logs: Optional[Dict[str, Any]] = None
     report_blob_url: Optional[str] = None
     build_errors: Optional[List[str]] = None
+    epic_creation_results: Optional[Dict[str, Any]] = None
 
 class JobStatus:
     STARTING = 'starting'
@@ -67,6 +68,11 @@ class JobFields:
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
     REQUIRES_APPROVAL = 'requires_approval'
+    EPICOS_GERADOS = 'epicos_gerados'
+    AZURE_DEVOPS_ORG = 'azure_devops_org'
+    AZURE_DEVOPS_PROJECT = 'azure_devops_project'
+    AZURE_DEVOPS_BOARD_ID = 'azure_devops_board_id'
+    EPIC_CREATION_RESULTS = 'epic_creation_results'
 
 class JobActions:
     APPROVE = 'approve'
