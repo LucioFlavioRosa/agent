@@ -166,8 +166,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     step_result = self._execute_step_with_strategy(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                     )
+                    # Removido: chamada a self._save_generated_report(job_id, job_info, step_result, current_step_index) aqui
                     if current_step_index == 0:
-                        self._save_generated_report(job_id, job_info, step_result, current_step_index)
                         if step.get('requires_approval', False):
                             self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                             return
@@ -220,6 +220,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
+        # NOVA LÓGICA: Salvar relatório imediatamente após step 0, independente dos parâmetros
+        if current_step_index == 0:
+            print(f"[{job_id}] [DEBUG] Verificando se relatório foi gerado no step {current_step_index}...")
+            report_text = self.report_handler.extract_report_text(result)
+            if report_text and report_text.strip():
+                self._save_generated_report(job_id, job_info, result, current_step_index)
+                print(f"[{job_id}] [DEBUG] Relatório salvo com sucesso no step {current_step_index}.")
         if step.get('requires_approval', False):
             return result
         return result
