@@ -90,6 +90,7 @@ class StartAnalysisPayload(BaseModel):
     retornar_lista_arquivos: bool = False
     modo_adicao_incremental: bool = False
     usuario_executor: Optional[str] = None
-    executar_steps_incrementalmente: bool = False
+    executar_steps_incrementalmente: bool = Field(
+        True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
