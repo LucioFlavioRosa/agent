@@ -3,7 +3,8 @@ from typing import List, Dict, Any
 from tools.azure_secret_manager import AzureSecretManager
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
-import requests
+from azure.devops.v7_1.work_item_tracking.models import Wiql
+from azure.devops.v7_1.work_item_tracking.work_item_tracking_client import WorkItemTrackingClient
 
 class AzureBoardService:
     def __init__(self, organization: str, project: str, secret_manager: AzureSecretManager = None):
@@ -11,70 +12,56 @@ class AzureBoardService:
         self.project = project
         self.secret_manager = secret_manager or AzureSecretManager()
         self.connection = None
-        self.core_client = None
+        self.client = None
         self._connect()
 
     def _connect(self):
-        token = self._get_token()
-        org_url = f'https://dev.azure.com/{self.organization}'
+        token = self.secret_manager.get_secret(f"azure-token-{self.organization}")
         credentials = BasicAuthentication('', token)
+        org_url = f"https://dev.azure.com/{self.organization}"
         self.connection = Connection(base_url=org_url, creds=credentials)
-        self.core_client = self.connection.clients.get_core_client()
+        self.client: WorkItemTrackingClient = self.connection.clients.get_work_item_tracking_client()
 
-    def _get_token(self):
-        token_secret_name = f"azure-token-{self.organization}"
-        try:
-            return self.secret_manager.get_secret(token_secret_name)
-        except Exception:
-            return self.secret_manager.get_secret("azure-token")
-
-    def parse_epics_from_markdown(self, markdown_table: str) -> List[Dict[str, Any]]:
-        lines = [line for line in markdown_table.splitlines() if line.strip() and not line.strip().startswith('|---')]
-        header = None
+    def _parse_epics_from_markdown(self, markdown_table: str) -> List[Dict[str, Any]]:
+        lines = [line for line in markdown_table.strip().split('\n') if line.strip()]
+        if len(lines) < 3:
+            return []
+        header = lines[0].split('|')
+        header = [h.strip() for h in header if h.strip()]
         epics = []
-        for line in lines:
-            if line.startswith('|') and line.endswith('|'):
-                cols = [col.strip() for col in line.strip('|').split('|')]
-                if not header:
-                    header = cols
-                    continue
-                if len(cols) != len(header):
-                    continue
-                epic = dict(zip(header, cols))
-                epics.append(epic)
+        for line in lines[2:]:
+            cols = [c.strip() for c in line.split('|')][1:-1]
+            if len(cols) != 6:
+                continue
+            epic = {
+                'id': cols[0],
+                'title': cols[1],
+                'business_objective': cols[2],
+                'acceptance_criteria': cols[3],
+                'profiles': cols[4],
+                'effort': cols[5]
+            }
+            epics.append(epic)
         return epics
 
-    def create_epics(self, markdown_table: str) -> List[Dict[str, Any]]:
-        epics = self.parse_epics_from_markdown(markdown_table)
-        token = self._get_token()
-        created_epics = []
+    def create_epics(self, markdown_table: str) -> List[str]:
+        epics = self._parse_epics_from_markdown(markdown_table)
+        created_epic_ids = []
         for epic in epics:
-            title = epic.get('Épico') or epic.get('Epico') or epic.get('Epic')
-            description = f"Objetivo: {epic.get('Objetivo de Negócio', '')}\n\nCritérios/Atividades:\n{epic.get('Critérios de Aceite / Atividades Chave', '')}\n\nPerfis: {epic.get('Perfis Envolvidos', '')}\nEstimativa: {epic.get('Estimativa de Esforço', '')}"
-            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Epic?api-version=7.1-preview.3"
-            headers = {
-                'Content-Type': 'application/json-patch+json',
-                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            fields = {
+                'System.Title': epic['title'],
+                'System.Description': f"Objetivo de Negócio: {epic['business_objective']}\n\nCritérios de Aceite / Atividades Chave: {epic['acceptance_criteria']}\n\nPerfis Envolvidos: {epic['profiles']}\n\nEstimativa de Esforço: {epic['effort']}"
             }
-            payload = [
-                {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
-                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description}
-            ]
-            response = requests.post(url, headers=headers, json=payload)
-            if response.status_code in (200, 201):
-                data = response.json()
-                created_epics.append({
-                    "id": data.get("id"),
-                    "url": data.get("url"),
-                    "title": title
-                })
-            else:
-                created_epics.append({
-                    "error": response.text,
-                    "title": title
-                })
-        return created_epics
-
-    def _basic_auth_header(self, token):
-        import base64
-        return base64.b64encode(f':{token}'.encode('utf-8')).decode('utf-8')
+            try:
+                wi = self.client.create_work_item(
+                    document=[
+                        {"op": "add", "path": "/fields/System.Title", "value": fields['System.Title']},
+                        {"op": "add", "path": "/fields/System.Description", "value": fields['System.Description']}
+                    ],
+                    project=self.project,
+                    type="Epic"
+                )
+                created_epic_ids.append(str(wi.id))
+            except Exception as e:
+                created_epic_ids.append(f"ERROR: {str(e)}")
+        return created_epic_ids
