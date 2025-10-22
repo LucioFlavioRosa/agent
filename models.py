@@ -1,94 +1,62 @@
+from enum import Enum
+from typing import Optional
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
-
-class PullRequestSummary(BaseModel):
-    pull_request_url: str
-    branch_name: str
-    arquivos_modificados: List[str]
-    build_result: Optional[Dict[str, Any]] = None
-    commit_url: Optional[str] = None
-
-class FinalStatusResponse(BaseModel):
-    job_id: str
-    status: str
-    summary: Optional[List[PullRequestSummary]] = None
-    error_details: Optional[str] = None
-    analysis_report: Optional[str] = None
-    diagnostic_logs: Optional[Dict[str, Any]] = None
-    report_blob_url: Optional[str] = None
-    build_errors: Optional[List[str]] = None
 
 class JobStatus:
-    STARTING = 'starting'
-    PENDING_APPROVAL = 'pending_approval'
-    WORKFLOW_STARTED = 'workflow_started'
-    COMPLETED = 'completed'
-    FAILED = 'failed'
-    REJECTED = 'rejected'
+    WORKFLOW_STARTED = "workflow_started"
+    REJECTED = "rejected"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 class JobFields:
-    STATUS = 'status'
-    DATA = 'data'
-    ERROR_DETAILS = 'error_details'
-    REPO_NAME = 'repo_name'
-    ORIGINAL_REPO_NAME = 'original_repo_name'
-    PROJETO = 'projeto'
-    BRANCH_NAME = 'branch_name'
-    ORIGINAL_ANALYSIS_TYPE = 'original_analysis_type'
-    INSTRUCOES_EXTRAS = 'instrucoes_extras'
-    MODEL_NAME = 'model_name'
-    USAR_RAG = 'usar_rag'
-    GERAR_RELATORIO_APENAS = 'gerar_relatorio_apenas'
-    GERAR_NOVO_RELATORIO = 'gerar_novo_relatorio'
-    ARQUIVOS_ESPECIFICOS = 'arquivos_especificos'
-    ANALYSIS_NAME = 'analysis_name'
-    REPOSITORY_TYPE = 'repository_type'
-    ANALYSIS_REPORT = 'analysis_report'
-    REPORT_BLOB_URL = 'report_blob_url'
-    COMMIT_DETAILS = 'commit_details'
-    DIAGNOSTIC_LOGS = 'diagnostic_logs'
-    INSTRUCOES_EXTRAS_APROVACAO = 'instrucoes_extras_aprovacao'
-    PAUSED_AT_STEP = 'paused_at_step'
-    SUCCESS = 'success'
-    PR_URL = 'pr_url'
-    ARQUIVOS_MODIFICADOS = 'arquivos_modificados'
-    REPO_NAME_MODERNIZADO = 'repo_name_modernizado'
-    BRANCH_NAME_MODERNIZADO = 'branch_name_modernizado'
-    REPO_NAME_ORIGINAL = 'repo_name_original'
-    BRANCH_NAME_ORIGINAL = 'branch_name_original'
-    RETORNAR_LISTA_ARQUIVOS = 'retornar_lista_arquivos'
-    USUARIO_EXECUTOR = 'usuario_executor'
-    EXECUTAR_STEPS_INCREMENTALMENTE = 'executar_steps_incrementalmente'
-    STEP_BATCHES = 'step_batches'
-    CURRENT_BATCH_INDEX = 'current_batch_index'
-    BATCH_RESULTS = 'batch_results'
-    MAX_STEPS_PER_BATCH = 'max_steps_per_batch'
-    EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
-    BUILD_ERRORS = 'build_errors'
-    BUILD_RESULT = 'build_result'
+    DATA = "data"
+    STATUS = "status"
+    INSTRUCOES_EXTRAS_APROVACAO = "instrucoes_extras_aprovacao"
+    PAUSED_AT_STEP = "paused_at_step"
+    REPO_NAME = "repo_name_modernizado"
+    REPOSITORY_TYPE = "repository_type"
+    PROJETO = "projeto"
+    ANALYSIS_REPORT = "analysis_report"
+    REPORT_BLOB_URL = "report_blob_url"
+    GERAR_RELATORIO_APENAS = "gerar_relatorio_apenas"
+    EXECUTAR_STEPS_INCREMENTALMENTE = "executar_steps_incrementalmente"
+    MAX_STEPS_PER_BATCH = "max_steps_per_batch"
+    STEP_BATCHES = "step_batches"
+    CURRENT_BATCH_INDEX = "current_batch_index"
+    BATCH_RESULTS = "batch_results"
+    GERAR_NOVO_RELATORIO = "gerar_novo_relatorio"
+    ANALYSIS_NAME = "analysis_name"
 
 class JobActions:
-    APPROVE = 'approve'
-    REJECT = 'reject'
+    APPROVE = "approve"
+    REJECT = "reject"
+
+class ValidAnalysisTypes(str, Enum):
+    tipo1 = "tipo1"
+    tipo2 = "tipo2"
+    # ... outros tipos
 
 class StartAnalysisPayload(BaseModel):
-    repo_name_modernizado: str
-    branch_name_modernizado: Optional[str] = None
-    projeto: str
-    analysis_type: Any
+    repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
+    branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
+    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
+    analysis_type: ValidAnalysisTypes
     instrucoes_extras: Optional[str] = None
-    usar_rag: bool = False
-    gerar_relatorio_apenas: bool = False
-    gerar_novo_relatorio: bool = True
-    model_name: Optional[str] = None
-    arquivos_especificos: Optional[List[str]] = None
-    analysis_name: Optional[str] = None
-    repository_type: str
-    repo_name_original: Optional[str] = None
-    branch_name_original: Optional[str] = None
-    retornar_lista_arquivos: bool = False
-    usuario_executor: Optional[str] = None
+    usar_rag: bool = Field(False)
+    gerar_relatorio_apenas: bool = Field(False)
+    gerar_novo_relatorio: bool = Field(
+        True,
+        description="Se False, tenta ler relatório existente do Blob Storage usando analysis_name antes de gerar um novo"
+    )
+    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    arquivos_especificos: Optional[list] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
+    analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
+    repository_type: str = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
+    branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
+    retornar_lista_arquivos: bool = Field(False, description="Se True, além do código filtrado, retorna lista completa de todos os arquivos do repositório")
+    usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
-    max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
