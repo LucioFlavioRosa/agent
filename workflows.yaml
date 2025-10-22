@@ -286,3 +286,14 @@ suporte_dot_net:
       params:
         tipo_analise: "aplicacao_de_mudancas"
 
+criacao_epicos_azure_devops:
+  description: "criação de epicos a partir de transcrição de reunião"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
+  steps:
+    - status_update: "analisando a transcrição"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "processador"
+      params:
+        tipo_analise: "criacao_epicos.md"
+      requires_approval: true
+    
