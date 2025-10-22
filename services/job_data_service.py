@@ -19,8 +19,7 @@ class JobDataService:
         data[JobFields.REPO_NAME] = normalized_repo_name
         data[JobFields.PROJETO] = payload_dict.get('projeto')
         data[JobFields.ANALYSIS_NAME] = analysis_name
-        analysis_type_enum = payload_dict.get('analysis_type')
-        data[JobFields.ORIGINAL_ANALYSIS_TYPE] = analysis_type_enum.value if analysis_type_enum else None
+        data[JobFields.ORIGINAL_ANALYSIS_TYPE] = payload_dict.get('analysis_type')
         data[JobFields.INSTRUCOES_EXTRAS] = payload_dict.get('instrucoes_extras')
         data[JobFields.MODEL_NAME] = payload_dict.get('model_name')
         data[JobFields.USAR_RAG] = payload_dict.get('usar_rag', False)
