@@ -7,7 +7,7 @@ class ReportHandler:
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
         repo_name = job_info['data'].get('repo_name')
-        branch_name = job_info['data'].get('branch_name')
+        branch_name = job_info['data'].get('branch_name_modernizado')
         analysis_name = job_info['data'].get('analysis_name')
         report_blob_url = None
         try:
@@ -49,7 +49,7 @@ class ReportHandler:
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
         repo_name = job_info['data'].get('repo_name')
-        branch_name = job_info['data'].get('branch_name')
+        branch_name = job_info['data'].get('branch_name_modernizado')
         analysis_name = job_info['data'].get('analysis_name')
         if report_generated_by_agent:
             print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
