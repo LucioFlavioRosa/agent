@@ -7,7 +7,6 @@ class JobDataService:
         pass
         
     def _parse_repository_name(self, repo_name: str):
-        # Espera repo_name no formato organization/project/repository
         parts = repo_name.split('/')
         if len(parts) < 2:
             return None, None
@@ -57,7 +56,7 @@ class JobDataService:
             JobFields.STATUS: None,
             JobFields.DATA: data
         }
-        
+    
     def create_derived_job_data(self, original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
         original_data = original_job[JobFields.DATA]
         return {
