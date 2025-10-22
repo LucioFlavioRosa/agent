@@ -397,7 +397,7 @@ suporte_dot_net:
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
-        tipo_analise: "relatorio_suporte_geral_dot_net.md"
+        tipo_analise: "relatorio_suporte_geral_dot_net"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "gpt-4.1"
