@@ -54,6 +54,7 @@ class StartAnalysisPayload(BaseModel):
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    criar_epicos_azure: bool = Field(False, description="Se True, após aprovação, cria os épicos no Azure DevOps Board")
     
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -92,12 +93,17 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
     
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
-        raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
-    if payload.gerar_novo_relatorio is False and (payload.analysis_name is None or str(payload.analysis_name).strip() == ""):
-        raise HTTPException(status_code=400, detail="analysis_name é obrigatório quando gerar_novo_relatorio=False")
-    # Passo 7: Log de debug para requires_approval do primeiro step
-    #workflow = workflow_registry_service.get_workflow(payload.analysis_type)
+    # Validação especial para criação de épicos via transcrição de reunião
+    if getattr(payload, 'criar_epicos_azure', False):
+        if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
+            raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
+        # branch_name_modernizado pode ser None nesse caso
+        print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
+    else:
+        if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
+            raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
+        if payload.gerar_novo_relatorio is False and (payload.analysis_name is None or str(payload.analysis_name).strip() == ""):
+            raise HTTPException(status_code=400, detail="analysis_name é obrigatório quando gerar_novo_relatorio=False")
     workflows = workflow_registry_service.get_workflow_registry()
     workflow = workflows.get(payload.analysis_type)
     first_step = None
@@ -135,7 +141,6 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
     job_validation_service.validate_job_for_approval(job, payload.job_id)
     if job.get('data', {}).get('executar_steps_incrementalmente') is False and job.get('data', {}).get('gerar_relatorio_apenas') is False:
         raise HTTPException(status_code=400, detail="Não é possível aprovar jobs no modo não-incremental (descontinuado).")
-    # Passo 6: Validar status pending_approval antes de aprovar/rejeitar
     current_status = job.get(JobFields.STATUS)
     if payload.action == JobActions.APPROVE:
         if current_status != JobStatus.PENDING_APPROVAL:
