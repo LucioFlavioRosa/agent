@@ -16,7 +16,7 @@ from services.api_service_factory import ApiServiceFactory
 from services.pull_request_extractor_service import PullRequestExtractorService
 from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions, StartAnalysisPayload
+from models import JobStatus, JobFields, JobActions
 
 container = DependencyContainer()
 pr_extractor = PullRequestExtractorService()
