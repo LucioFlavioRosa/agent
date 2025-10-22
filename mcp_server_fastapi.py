@@ -224,6 +224,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
     print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
+    if status == JobStatus.COMPLETED and job_data.get('criar_epicos_azure'):
+        print(f"[{job_id}] [get_status] Job de criação de épicos finalizado. Epicos criados: {job_data.get('epicos_criados')}")
     try:
         if status == JobStatus.COMPLETED:
             return response_builder_service.build_completed_response(job_id, job, blob_url)
