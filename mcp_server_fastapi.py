@@ -51,7 +51,8 @@ class StartAnalysisPayload(BaseModel):
     retornar_lista_arquivos: bool = Field(False, description="Se True, além do código filtrado, retorna lista completa de todos os arquivos do repositório")
     modo_adicao_incremental: bool = Field(False, description="Se True, o novo conteúdo será ADICIONADO ao final dos arquivos existentes, ao invés de substituí-los. Útil para migrações de frameworks.")
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
-    executar_steps_incrementalmente: bool = Field(False, description="Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
+    executar_steps_incrementalmente: bool = Field(
+        True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
     
 class StartAnalysisResponse(BaseModel):
@@ -90,6 +91,8 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
+        raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     repo_name = payload.repo_name_modernizado
@@ -101,7 +104,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
     payload_dict['analysis_type'] = payload.analysis_type.value
-    # DEBUG: Logar o valor de executar_build_dotnet recebido
     print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
@@ -118,6 +120,8 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
     job_store = container.get_job_store()
     job = job_store.get_job(payload.job_id)
     job_validation_service.validate_job_for_approval(job, payload.job_id)
+    if job.get('data', {}).get('executar_steps_incrementalmente') is False and job.get('data', {}).get('gerar_relatorio_apenas') is False:
+        raise HTTPException(status_code=400, detail="Não é possível aprovar jobs no modo não-incremental (descontinuado).")
     if payload.action == JobActions.APPROVE:
         if payload.instrucoes_extras:
             job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
@@ -187,12 +191,7 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
-    
-    # ✅ CORREÇÃO APLICADA AQUI
-    # Garante que 'status' sempre tenha um valor string, fornecendo "PROCESSING" como padrão
-    # se a chave não existir ou seu valor for None/vazio.
     status = job.get(JobFields.STATUS) or "PROCESSING"
-    
     job_data = job.get(JobFields.DATA, {})
     blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
@@ -208,7 +207,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
             return response_builder_service.build_failed_response(job_id, job)
         else:
             return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, build_errors=job_data.get('build_errors'))
-            
     except ValidationError as e:
         print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
         print(f"Dados brutos do job que causaram o erro: {job}")
