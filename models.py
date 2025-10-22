@@ -57,7 +57,6 @@ class JobFields:
     REPO_NAME_ORIGINAL = 'repo_name_original'
     BRANCH_NAME_ORIGINAL = 'branch_name_original'
     RETORNAR_LISTA_ARQUIVOS = 'retornar_lista_arquivos'
-    MODO_ADICAO_INCREMENTAL = 'modo_adicao_incremental'
     USUARIO_EXECUTOR = 'usuario_executor'
     EXECUTAR_STEPS_INCREMENTALMENTE = 'executar_steps_incrementalmente'
     STEP_BATCHES = 'step_batches'
@@ -88,7 +87,6 @@ class StartAnalysisPayload(BaseModel):
     repo_name_original: Optional[str] = None
     branch_name_original: Optional[str] = None
     retornar_lista_arquivos: bool = False
-    modo_adicao_incremental: bool = False
     usuario_executor: Optional[str] = None
     executar_steps_incrementalmente: bool = Field(
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
