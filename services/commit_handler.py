@@ -60,7 +60,6 @@ class CommitHandler:
                 }]
                 print(f"[{job_id}] BLINDAGEM: commit_details definido com erro de formato")
                 return
-            modo_adicao_incremental = job_info.get('data', {}).get('modo_adicao_incremental', False)
             executar_build_dotnet = job_info.get('data', {}).get('executar_build_dotnet', False)
             print(f"[{job_id}] [DEBUG] Loop de grupos: executar_build_dotnet extraído={executar_build_dotnet}")
             for i, grupo in enumerate(grupos):
@@ -78,7 +77,6 @@ class CommitHandler:
                 LIMITE_DESCRICAO_AZURE = 3900 
                 descricao_completa = grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}")
                 if len(descricao_completa) > LIMITE_DESCRICAO_AZURE:
-                    # Use a nova variável 'descricao_pr' para a versão truncada
                     descricao_pr = descricao_completa[:LIMITE_DESCRICAO_AZURE] + "\n\n...(descrição truncada para não exceder o limite da API)..."
                     print(f"[{job_id}] AVISO: A descrição do PR do grupo {i+1} foi truncada por ser muito longa.")
                 else:
@@ -92,8 +90,7 @@ class CommitHandler:
                         mensagem_pr=grupo.get("titulo_pr", f"PR Grupo {i+1}"),
                         descricao_pr=descricao_pr,
                         conjunto_de_mudancas=conjunto_de_mudancas,
-                        repository_type=repository_type,
-                        modo_adicao_incremental=modo_adicao_incremental
+                        repository_type=repository_type
                     )
                     print(f"[{job_id}] [DEBUG][CommitHandler] resultado_branch (após processar_branch_por_provedor): {json.dumps(resultado_branch, default=str)}")
                     resultado_branch = self._validate_and_fix_pr_url(job_id, resultado_branch, i+1)
@@ -139,7 +136,6 @@ class CommitHandler:
                         "build_result": build_result,
                         "build_errors": build_errors
                     }
-                    # Validação final da pr_url
                     if resultado_branch.get('success') and (not commit_info.get('pr_url') or not isinstance(commit_info.get('pr_url'), str) or not commit_info.get('pr_url').strip()):
                         print(f"[{job_id}] [ERRO CRÍTICO] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
                         raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
@@ -150,7 +146,6 @@ class CommitHandler:
                     if resultado_branch and isinstance(resultado_branch, dict):
                         pr_url = resultado_branch.get('pr_url')
                         commit_url = resultado_branch.get('commit_url')
-                    # Se pr_url válida, preserva, senão coloca mensagem de erro
                     if pr_url and isinstance(pr_url, str) and pr_url.strip():
                         pr_url_final = pr_url
                     else:
@@ -173,7 +168,7 @@ class CommitHandler:
             print(f"[{job_id}] Commit concluído. Resultados: {len(commit_results)} branches processadas")
             print(f"[{job_id}] DIAGNÓSTICO FINAL - commit_results antes de salvar: {json.dumps(commit_results, default=str)}")
             for i, result in enumerate(commit_results):
-                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}, commit_url='{result.get('commit_url')}', build_result={result.get('build_result')}, build_errors={result.get('build_errors')}")
+                print(f"[{job_id}] DIAGNÓSTICO - PR {i+1}: pr_url='{result.get('pr_url')}', branch_name='{result.get('branch_name')}', success={result.get('success')}, arquivos_modificados={len(result.get('arquivos_modificados', []) )}, commit_url='{result.get('commit_url')}', build_result='{result.get('build_result')}', build_errors='{result.get('build_errors')}'")
             print(f"[{job_id}] BLINDAGEM: execute_commits concluído com sucesso")
             job_info['data']['commit_details'] = commit_results
         except Exception as e:
