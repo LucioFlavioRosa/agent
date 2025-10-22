@@ -16,8 +16,7 @@ def processar_branch_github(
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
-    conjunto_de_mudancas: list,
-    modo_adicao_incremental: bool = False
+    conjunto_de_mudancas: list
 ) -> Dict[str, Any]:
     resultado_branch = BaseCommitter._inicializar_resultado_branch(nome_branch)
     resultado_branch['commit_url'] = None
@@ -76,9 +75,6 @@ def processar_branch_github(
             elif status == "MODIFICADO":
                 if not sha_arquivo_existente or not arquivo_existente:
                     continue
-                if modo_adicao_incremental:
-                    conteudo_existente = arquivo_existente.decoded_content.decode('utf-8')
-                    conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                 commit_response = repo.update_file(path=caminho, message=f"refactor: {caminho}", content=conteudo or "", sha=sha_arquivo_existente, branch=nome_branch)
                 commits_realizados += 1
                 if commit_response and 'commit' in commit_response and hasattr(commit_response['commit'], 'html_url'):
