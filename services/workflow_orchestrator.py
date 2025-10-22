@@ -34,13 +34,16 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.dependency_container = dependency_container
                      
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
+        print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para o step {current_step_index}.")
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
             print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
             return False
         print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente. gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho do relatório: {len(report_text)}")
         job_info['data']['analysis_report'] = report_text
+        print(f"[{job_id}] [DEBUG] Chamando save_report_to_blob para salvar o relatório do step {current_step_index}.")
         url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        print(f"[{job_id}] [DEBUG] save_report_to_blob retornou url: {url}")
         if not url:
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
         print(f"[{job_id}] Relatório salvo com sucesso: {url}")
@@ -85,6 +88,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
+                step_result = None
                 if executar_incremental and current_step_index == 1:
                     step_batches = job_info['data'][JobFields.STEP_BATCHES]
                     current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
@@ -118,6 +122,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
                     break
+                else:
+                    step_result = self._execute_step_with_strategy(
+                        job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
+                    )
+                    # Salvar relatório no step 0 assim que for gerado
+                    if current_step_index == 0:
+                        self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                    previous_step_result = step_result
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
