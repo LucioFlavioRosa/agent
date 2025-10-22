@@ -17,6 +17,7 @@ from services.incremental_step_executor_service import IncrementalStepExecutorSe
 from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
 import tools.blob_report_reader as blob_report_reader
+from services.azure_board_service import AzureBoardService
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -100,7 +101,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
             gerar_relatorio_apenas = job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS, False)
-            # INICIALIZAÇÃO DE STEP_BATCHES ANTES DO LOOP (PASSO 4)
             if executar_incremental and start_from_step == 1:
                 if not job_info['data'].get(JobFields.STEP_BATCHES):
                     report_text = job_info['data'].get('analysis_report')
@@ -119,7 +119,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
                 step_result = None
-                # PASSO 3: VALIDAÇÃO ANTES DE ACESSAR STEP_BATCHES
                 if executar_incremental and current_step_index == 1:
                     step_batches = job_info['data'].get(JobFields.STEP_BATCHES)
                     if step_batches is None:
@@ -167,7 +166,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     step_result = self._execute_step_with_strategy(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                     )
-                    # PASSO 2: FLUXO DE APROVAÇÃO APÓS STEP 0
                     if current_step_index == 0:
                         self._save_generated_report(job_id, job_info, step_result, current_step_index)
                         if step.get('requires_approval', False):
@@ -223,7 +221,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
-        # PASSO 5: RETORNAR RESULTADO SE REQUER APROVAÇÃO
         if step.get('requires_approval', False):
             return result
         return result
@@ -238,6 +235,18 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+        if job_info['data'].get('criar_epicos_azure'):
+            print(f"[{job_id}] [AZURE_EPICS] Iniciando criação de épicos no Azure DevOps Board...")
+            organization = job_info['data'].get('azure_organization')
+            project = job_info['data'].get('azure_project')
+            report = job_info['data'].get('analysis_report')
+            azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+            created_epics = azure_board_service.create_epics(report)
+            job_info['data']['epicos_criados'] = created_epics
+            self.job_handler.update_job_status(job_id, 'completed')
+            self.job_handler.update_job(job_id, job_info)
+            print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
+            return
         batch_results = job_info['data'][JobFields.BATCH_RESULTS]
         total_batches = len(batch_results)
         total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
