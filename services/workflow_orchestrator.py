@@ -101,81 +101,23 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
             gerar_relatorio_apenas = job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS, False)
-            if executar_incremental and start_from_step == 1:
-                if not job_info['data'].get(JobFields.STEP_BATCHES):
-                    report_text = job_info['data'].get('analysis_report')
-                    if not report_text or not report_text.strip():
-                        raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
-                    step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
-                    job_info['data'][JobFields.STEP_BATCHES] = step_batches
-                    job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
-                    job_info['data'][JobFields.BATCH_RESULTS] = []
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-            if not executar_incremental and not gerar_relatorio_apenas:
-                raise ValueError("Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
-                step_result = None
-                if executar_incremental and current_step_index == 1:
-                    step_batches = job_info['data'].get(JobFields.STEP_BATCHES)
-                    if step_batches is None:
-                        report_text = job_info['data'].get('analysis_report')
-                        if not report_text or not report_text.strip():
-                            raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
-                        step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
-                        job_info['data'][JobFields.STEP_BATCHES] = step_batches
-                        job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
-                        job_info['data'][JobFields.BATCH_RESULTS] = []
-                        self.job_handler.update_job(job_id, job_info)
-                        print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-                    current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
-                    batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
-                    total_batches = len(step_batches)
-                    for batch_idx in range(current_batch_index, total_batches):
-                        try:
-                            batch = step_batches[batch_idx]
-                            print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
-                            agent_params = step.get('params', {}).copy() if step.get('params') else {}
-                            agent_params['current_batch'] = batch
-                            agent_params['total_batches'] = total_batches
-                            result = self._execute_step_with_strategy(
-                                job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
-                            )
-                            batch_results.append(result)
-                        except Exception as e:
-                            error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
-                            print(f"[{job_id}] {error_message}")
-                            if 'failed_batches' not in job_info['data']:
-                                job_info['data']['failed_batches'] = []
-                            job_info['data']['failed_batches'].append({
-                                "batch_index": batch_idx + 1,
-                                "error": str(e)
-                            })
-                            continue 
-                        finally:
-                            job_info['data'][JobFields.BATCH_RESULTS] = batch_results
-                            job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
-                            self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
-                    previous_step_result = {'incremental_results': batch_results}
-                    break
-                else:
-                    step_result = self._execute_step_with_strategy(
-                        job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
-                    )
-                    if current_step_index == 0:
-                        self._save_generated_report(job_id, job_info, step_result, current_step_index)
-                        if step.get('requires_approval', False):
-                            self.handle_approval_step(job_id, job_info, current_step_index, step_result)
-                            return
-                        if gerar_relatorio_apenas:
-                            self.job_handler.update_job_status(job_id, 'completed')
-                            print(f"[{job_id}] [DEBUG] gerar_relatorio_apenas=True detectado após step 0. Status atualizado para completed. Encerrando workflow.")
-                            return
-                    previous_step_result = step_result
+                step_result = self._execute_step_with_strategy(
+                    job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
+                )
+                if current_step_index == 0:
+                    self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                    if step.get('requires_approval', False):
+                        self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                        return
+                    if gerar_relatorio_apenas:
+                        self.job_handler.update_job_status(job_id, 'completed')
+                        print(f"[{job_id}] [DEBUG] gerar_relatorio_apenas=True detectado após step 0. Status atualizado para completed. Encerrando workflow.")
+                        return
+                previous_step_result = step_result
             if not gerar_relatorio_apenas:
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
