@@ -1,6 +1,10 @@
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional, Literal
 
+class EpicCreationPayload(BaseModel):
+    transcricao_reuniao: str = Field(..., description="Transcrição da reunião para geração de épicos")
+    criar_epicos_azure: bool = Field(False, description="Se True, após aprovação, cria os épicos no Azure DevOps Board")
+
 class PullRequestSummary(BaseModel):
     pull_request_url: str
     branch_name: str
@@ -67,7 +71,16 @@ class JobFields:
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
     REQUIRES_APPROVAL = 'requires_approval'
+    CRIAR_EPICOS_AZURE = 'criar_epicos_azure'
+    AZURE_ORGANIZATION = 'azure_organization'
+    AZURE_PROJECT = 'azure_project'
+    EPICOS_CRIADOS = 'epicos_criados'
 
 class JobActions:
     APPROVE = 'approve'
     REJECT = 'reject'
+
+class ValidAnalysisTypes(str):
+    MODERNIZACAO = 'modernizacao'
+    IMPLEMENTACAO = 'implementacao'
+    CRIACAO_EPICOS = 'criacao_epicos'
