@@ -96,6 +96,14 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
     if payload.gerar_novo_relatorio is False and (payload.analysis_name is None or str(payload.analysis_name).strip() == ""):
         raise HTTPException(status_code=400, detail="analysis_name é obrigatório quando gerar_novo_relatorio=False")
+    # Passo 7: Log de debug para requires_approval do primeiro step
+    workflow = workflow_registry_service.get_workflow(payload.analysis_type)
+    first_step = None
+    requires_approval_value = None
+    if workflow and 'steps' in workflow and len(workflow['steps']) > 0:
+        first_step = workflow['steps'][0]
+        requires_approval_value = first_step.get('requires_approval')
+        print(f"[DEBUG] Valor de requires_approval do primeiro step: {requires_approval_value}")
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     repo_name = payload.repo_name_modernizado
@@ -125,7 +133,11 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
     job_validation_service.validate_job_for_approval(job, payload.job_id)
     if job.get('data', {}).get('executar_steps_incrementalmente') is False and job.get('data', {}).get('gerar_relatorio_apenas') is False:
         raise HTTPException(status_code=400, detail="Não é possível aprovar jobs no modo não-incremental (descontinuado).")
+    # Passo 6: Validar status pending_approval antes de aprovar/rejeitar
+    current_status = job.get(JobFields.STATUS)
     if payload.action == JobActions.APPROVE:
+        if current_status != JobStatus.PENDING_APPROVAL:
+            raise HTTPException(status_code=400, detail="Ação de aprovação só é permitida quando o job está em pending_approval.")
         if payload.instrucoes_extras:
             job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
             print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
@@ -136,6 +148,8 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
         background_tasks.add_task(run_workflow_task, payload.job_id, start_from_step=start_from_step)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.WORKFLOW_STARTED, "message": "Aprovação recebida."}
     if payload.action == JobActions.REJECT:
+        if current_status != JobStatus.PENDING_APPROVAL:
+            raise HTTPException(status_code=400, detail="Ação de rejeição só é permitida quando o job está em pending_approval.")
         job[JobFields.STATUS] = JobStatus.REJECTED
         job_store.set_job(payload.job_id, job)
         return {"job_id": payload.job_id, JobFields.STATUS: JobStatus.REJECTED, "message": "Processo encerrado."}
