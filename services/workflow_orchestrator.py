@@ -92,7 +92,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 else:
                     print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no blob storage para analysis_name={analysis_name}. Prosseguindo para geração do relatório pelo agente.")
             repository_type = job_info['data']['repository_type']
-            repo_name = job_info['data']['repo_name']
+            repo_name = job_info['data'].get('repo_name')
             repository_provider = get_repository_provider_explicit(repository_type)
             cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
             repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service)
