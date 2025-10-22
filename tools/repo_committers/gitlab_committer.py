@@ -15,8 +15,7 @@ def processar_branch_gitlab(
     branch_alvo_do_pr: str,
     mensagem_pr: str,
     descricao_pr: str,
-    conjunto_de_mudancas: list,
-    modo_adicao_incremental: bool = False
+    conjunto_de_mudancas: list
 ) -> Dict[str, Any]:
     resultado_branch = BaseCommitter._inicializar_resultado_branch(nome_branch)
     sanitized = BranchNameSanitizer.sanitize(nome_branch)
@@ -69,8 +68,6 @@ def processar_branch_gitlab(
                 elif status == "MODIFICADO":
                     arquivo = repo.files.get(file_path=caminho, ref=nome_branch)
                     conteudo_existente = arquivo.decode().decode('utf-8') if hasattr(arquivo, 'decode') else arquivo.content
-                    if modo_adicao_incremental:
-                        conteudo = BaseCommitter._mesclar_conteudo(conteudo_existente, conteudo)
                     arquivo.content = conteudo or ""
                     arquivo.save(branch=nome_branch, commit_message=f"refactor: Modifica {caminho}")
                     commits_realizados += 1
