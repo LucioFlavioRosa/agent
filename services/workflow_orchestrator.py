@@ -68,6 +68,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
+            if not executar_incremental and not job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS, False):
+                raise ValueError("Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
             if executar_incremental and start_from_step == 1:
                 if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
                     report_text = job_info['data'].get('analysis_report')
@@ -79,7 +81,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-                    
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -93,17 +94,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         try:
                             batch = step_batches[batch_idx]
                             print(f"[{job_id}] [INCREMENTAL] Batch {batch_idx+1}/{total_batches}: {len(batch)} steps.")
-                            
                             agent_params = step.get('params', {}).copy() if step.get('params') else {}
                             agent_params['current_batch'] = batch
                             agent_params['total_batches'] = total_batches
-                            
                             result = self._execute_step_with_strategy(
                                 job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step, agent_params_override=agent_params
                             )
-                            
                             batch_results.append(result)
-                        
                         except Exception as e:
                             error_message = f"ERRO FATAL no batch {batch_idx + 1}: {e}. Pulando para o próximo batch."
                             print(f"[{job_id}] {error_message}")
@@ -114,39 +111,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 "error": str(e)
                             })
                             continue 
-                        
                         finally:
                             job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                             job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
                             self.job_handler.update_job(job_id, job_info)
-
                     print(f"[{job_id}] [INCREMENTAL] Todos os batches processados.")
                     previous_step_result = {'incremental_results': batch_results}
-                    break # Sai do loop de steps, pois os batches já foram processados
-                
-                # O restante do código para steps não-incrementais
-                step_result = self._execute_step_with_strategy(
-                    job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
-                )
-                self.job_handler.save_step_result(job_info, current_step_index, step_result)
-                previous_step_result = step_result
-                strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-                if strategy.should_finalize_workflow(job_info, current_step_index):
-                    print(f"[{job_id}] Workflow finalizado no step {current_step_index} (gerar_relatorio_apenas=True)")
-                    print(f"[{job_id}] Relatório disponível: {bool(job_info['data'].get('analysis_report'))}")
-                    print(f"[{job_id}] Blob URL: {job_info['data'].get('report_blob_url')}")
-                    print(f"[{job_id}] [execute_workflow] (ANTES update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                    analysis_report = job_info['data'].get('analysis_report')
-                    if job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS) is True:
-                        if not analysis_report or len(analysis_report.strip()) < 100:
-                            raise ValueError(f"[{job_id}] ERRO CRÍTICO: Tentativa de finalizar workflow no modo report_only sem relatório válido. analysis_report={'presente' if analysis_report else 'ausente'}, tamanho={len(analysis_report) if analysis_report else 0}")
-                    self.job_handler.update_job_status(job_id, 'completed')
-                    print(f"[{job_id}] [execute_workflow] (DEPOIS update_job_status completed) gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho analysis_report: {len(job_info['data'].get('analysis_report', ''))}, report_blob_url: {job_info['data'].get('report_blob_url')}")
-                    print(f"[{job_id}] Workflow finalizado com sucesso (modo report_only)")
-                    return
-                if strategy.should_pause_for_approval(job_info, step):
-                    self.handle_approval_step(job_id, job_info, current_step_index, step_result)
-                    return
+                    break
             self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
@@ -202,13 +173,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
-        if executar_incremental and JobFields.BATCH_RESULTS in job_info['data']:
-            batch_results = job_info['data'][JobFields.BATCH_RESULTS]
-            total_batches = len(batch_results)
-            total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
-            print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
-            final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
+        batch_results = job_info['data'][JobFields.BATCH_RESULTS]
+        total_batches = len(batch_results)
+        total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
+        print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
+        final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
         dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
         self.job_handler.update_job_status(job_id, 'committing_to_github')
         self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
