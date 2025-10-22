@@ -78,7 +78,6 @@ class CommitHandler:
                 LIMITE_DESCRICAO_AZURE = 3900 
                 descricao_completa = grupo.get("resumo_do_pr", f"Mudanças do grupo {i+1}")
                 if len(descricao_completa) > LIMITE_DESCRICAO_AZURE:
-                    # Use a nova variável 'descricao_pr' para a versão truncada
                     descricao_pr = descricao_completa[:LIMITE_DESCRICAO_AZURE] + "\n\n...(descrição truncada para não exceder o limite da API)..."
                     print(f"[{job_id}] AVISO: A descrição do PR do grupo {i+1} foi truncada por ser muito longa.")
                 else:
@@ -139,7 +138,6 @@ class CommitHandler:
                         "build_result": build_result,
                         "build_errors": build_errors
                     }
-                    # Validação final da pr_url
                     if resultado_branch.get('success') and (not commit_info.get('pr_url') or not isinstance(commit_info.get('pr_url'), str) or not commit_info.get('pr_url').strip()):
                         print(f"[{job_id}] [ERRO CRÍTICO] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
                         raise Exception(f"[CommitHandler] Resultado marcado como sucesso mas pr_url inválido: {json.dumps(resultado_branch, default=str)}")
@@ -150,7 +148,6 @@ class CommitHandler:
                     if resultado_branch and isinstance(resultado_branch, dict):
                         pr_url = resultado_branch.get('pr_url')
                         commit_url = resultado_branch.get('commit_url')
-                    # Se pr_url válida, preserva, senão coloca mensagem de erro
                     if pr_url and isinstance(pr_url, str) and pr_url.strip():
                         pr_url_final = pr_url
                     else:
