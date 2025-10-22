@@ -89,6 +89,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 def run_workflow_task(job_id: str, start_from_step: int = 0):
     workflow_orchestrator = container.get_workflow_orchestrator()
     workflow_orchestrator.execute_workflow(job_id, start_from_step)
+    
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
@@ -105,9 +106,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_id = str(uuid.uuid4())
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
-    payload_dict['analysis_type'] = payload.analysis_type
-    print(f"[{job_id}] [DEBUG] Valor de executar_build_dotnet recebido no payload: {payload_dict.get('executar_build_dotnet')}")
-    print(f"[{job_id}] [DEBUG] gerar_relatorio_apenas={payload.gerar_relatorio_apenas}, executar_steps_incrementalmente={payload.executar_steps_incrementalmente}")
+    if hasattr(payload.analysis_type, 'value'):
+        payload_dict['analysis_type'] = payload.analysis_type.value
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
@@ -115,9 +115,9 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
         analysis_service.register_analysis(analysis_name, job_id)
-    print(f"[{job_id}] Job criado - Repositório: '{normalized_repo_name}' (tipo: {payload.repository_type}), Projeto: '{payload.projeto}'")
     background_tasks.add_task(run_workflow_task, job_id, start_from_step=0)
     return StartAnalysisResponse(job_id=job_id)
+    
 @app.post("/update-job-status", response_model=Dict[str, str], tags=["Jobs"])
 def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTasks):
     job_store = container.get_job_store()
