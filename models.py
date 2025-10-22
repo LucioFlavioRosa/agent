@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional, Literal
-from mcp_server_fastapi import workflow_registry_service
 
 class PullRequestSummary(BaseModel):
     pull_request_url: str
