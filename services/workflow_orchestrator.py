@@ -92,7 +92,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 else:
                     print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no blob storage para analysis_name={analysis_name}. Prosseguindo para geração do relatório pelo agente.")
             repository_type = job_info['data']['repository_type']
-            repo_name = job_info['data']['repo_name']
+            repo_name = job_info['data'].get('repo_name')
             repository_provider = get_repository_provider_explicit(repository_type)
             cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
             repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service)
@@ -242,46 +242,45 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             azure_board_service = AzureBoardService(organization, project, self.secret_manager)
             created_epics = azure_board_service.create_epics(report)
             job_info['data']['epicos_criados'] = created_epics
-            self.job_handler.update_job_status(job_id, 'completed')
             self.job_handler.update_job(job_id, job_info)
             print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
-            return
-        batch_results = job_info['data'][JobFields.BATCH_RESULTS]
-        total_batches = len(batch_results)
-        total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
-        print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
-        final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
-        dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
-        self.job_handler.update_job_status(job_id, 'committing_to_github')
-        self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
-        print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
-        if job_info['data'].get('executar_build_dotnet', False):
-            commit_details = job_info['data'].get('commit_details', [])
-            build_errors = []
-            for idx, commit in enumerate(commit_details):
-                if 'build_result' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                if 'build_errors' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                errors = commit.get('build_errors')
-                if errors:
-                    build_errors.extend(errors)
-            if build_errors:
-                job_info['data']['build_errors'] = build_errors
+        else:
+            batch_results = job_info['data'][JobFields.BATCH_RESULTS]
+            total_batches = len(batch_results)
+            total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
+            print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
+            final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
+            dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
+            self.job_handler.update_job_status(job_id, 'committing_to_github')
+            self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+            print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
+            if job_info['data'].get('executar_build_dotnet', False):
+                commit_details = job_info['data'].get('commit_details', [])
+                build_errors = []
+                for idx, commit in enumerate(commit_details):
+                    if 'build_result' not in commit:
+                        print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                    if 'build_errors' not in commit:
+                        print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                    errors = commit.get('build_errors')
+                    if errors:
+                        build_errors.extend(errors)
+                if build_errors:
+                    job_info['data']['build_errors'] = build_errors
+                else:
+                    job_info['data']['build_errors'] = None
+                self.job_handler.update_job(job_id, job_info)
             else:
                 job_info['data']['build_errors'] = None
             self.job_handler.update_job(job_id, job_info)
-        else:
-            job_info['data']['build_errors'] = None
-        self.job_handler.update_job(job_id, job_info)
-        print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
-        if job_info['data'].get('executar_build_dotnet', False):
-            commit_details = job_info['data'].get('commit_details', [])
-            for idx, commit in enumerate(commit_details):
-                if 'build_result' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                if 'build_errors' not in commit:
-                    print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+            print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
+            if job_info['data'].get('executar_build_dotnet', False):
+                commit_details = job_info['data'].get('commit_details', [])
+                for idx, commit in enumerate(commit_details):
+                    if 'build_result' not in commit:
+                        print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                    if 'build_errors' not in commit:
+                        print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
         self.job_handler.update_job_status(job_id, 'completed')
 
     def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
