@@ -66,6 +66,7 @@ class JobFields:
     EXECUTAR_BUILD_DOTNET = 'executar_build_dotnet'
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
+    REQUIRES_APPROVAL = 'requires_approval'
 
 class JobActions:
     APPROVE = 'approve'
