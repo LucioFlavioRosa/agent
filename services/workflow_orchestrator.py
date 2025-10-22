@@ -34,7 +34,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.secret_manager = secret_manager or AzureSecretManager()
         self.cache_service = cache_service
         self.dependency_container = dependency_container
-                     
+
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para o step {current_step_index}.")
         report_text = self.report_handler.extract_report_text(step_result)
@@ -57,7 +57,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
         return True
-        
+
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
@@ -66,7 +66,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         try:
             gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
             analysis_name = job_info['data'].get('analysis_name')
-            if not gerar_novo_relatorio and analysis_name:
+            if gerar_novo_relatorio is False and analysis_name:
                 projeto = job_info['data'].get('projeto')
                 analysis_type = job_info['data'].get('original_analysis_type')
                 repository_type = job_info['data'].get('repository_type')
@@ -166,7 +166,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     step_result = self._execute_step_with_strategy(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                     )
-                    # Removido: chamada a self._save_generated_report(job_id, job_info, step_result, current_step_index) aqui
                     if current_step_index == 0:
                         if step.get('requires_approval', False):
                             self.handle_approval_step(job_id, job_info, current_step_index, step_result)
@@ -180,7 +179,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
         except Exception as e:
             self.job_handler.handle_job_error(job_id, e, 'workflow')
-            
+
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
                                     repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
@@ -220,17 +219,20 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
-        # NOVA LÓGICA: Salvar relatório imediatamente após step 0, independente dos parâmetros
+        gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
         if current_step_index == 0:
-            print(f"[{job_id}] [DEBUG] Verificando se relatório foi gerado no step {current_step_index}...")
-            report_text = self.report_handler.extract_report_text(result)
-            if report_text and report_text.strip():
-                self._save_generated_report(job_id, job_info, result, current_step_index)
-                print(f"[{job_id}] [DEBUG] Relatório salvo com sucesso no step {current_step_index}.")
+            if gerar_novo_relatorio is True:
+                print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente no step 0 porque gerar_novo_relatorio=True.")
+                report_text = self.report_handler.extract_report_text(result)
+                if report_text and report_text.strip():
+                    self._save_generated_report(job_id, job_info, result, current_step_index)
+                    print(f"[{job_id}] [DEBUG] Relatório salvo com sucesso no step {current_step_index}.")
+            else:
+                print(f"[{job_id}] [DEBUG] Não irá salvar relatório no step 0 porque gerar_novo_relatorio=False (relatório pode ter sido reutilizado).")
         if step.get('requires_approval', False):
             return result
         return result
-                                        
+
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         report_text = self.report_handler.extract_report_text(step_result)
@@ -238,7 +240,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info['status'] = 'pending_approval'
         self.job_handler.set_paused_step(job_info, step_index)
         self.job_handler.update_job(job_id, job_info)
-        
+
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
         if job_info['data'].get('criar_epicos_azure'):
