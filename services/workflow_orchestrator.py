@@ -16,6 +16,7 @@ from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
 from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
+import tools.blob_report_reader as blob_report_reader
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -62,6 +63,34 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not workflow:
             raise ValueError("Workflow não encontrado.")
         try:
+            # INÍCIO DA LÓGICA DE REUSO DE RELATÓRIO
+            gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
+            analysis_name = job_info['data'].get('analysis_name')
+            if not gerar_novo_relatorio and analysis_name:
+                projeto = job_info['data'].get('projeto')
+                analysis_type = job_info['data'].get('original_analysis_type')
+                repository_type = job_info['data'].get('repository_type')
+                repo_name = job_info['data'].get('repo_name_modernizado')
+                branch_name = job_info['data'].get('branch_name_modernizado')
+                print(f"[{job_id}] [DEBUG] gerar_novo_relatorio=False detectado. Tentando ler relatório existente do blob storage para analysis_name={analysis_name}.")
+                report = blob_report_reader.read_report_from_blob(
+                    projeto=projeto,
+                    analysis_type=analysis_type,
+                    repository_type=repository_type,
+                    repo_name=repo_name,
+                    branch_name=branch_name,
+                    analysis_name=analysis_name
+                )
+                if report is not None:
+                    print(f"[{job_id}] [DEBUG] Relatório encontrado no blob storage para analysis_name={analysis_name}. Reutilizando relatório.")
+                    job_info['data']['analysis_report'] = report
+                    url = self.report_handler.save_report_to_blob(job_id, job_info, report, report_generated_by_agent=False)
+                    job_info['data']['report_blob_url'] = url
+                    self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente.")
+                    return
+                else:
+                    print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no blob storage para analysis_name={analysis_name}. Prosseguindo para geração do relatório pelo agente.")
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data']['repo_name']
             repository_provider = get_repository_provider_explicit(repository_type)
