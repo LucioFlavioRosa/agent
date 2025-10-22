@@ -43,13 +43,6 @@ class BaseCommitter:
             branch_name = resultado_branch.get("branch_name", "branch-desconhecida")
             resultado_branch["pr_url"] = f"ERRO: PR não criado para branch {branch_name}. {error_message}"
     @staticmethod
-    def _mesclar_conteudo(conteudo_existente: str, novo_conteudo: str) -> str:
-        if conteudo_existente is None:
-            conteudo_existente = ""
-        if novo_conteudo is None:
-            novo_conteudo = ""
-        return conteudo_existente + "\n\n" + novo_conteudo
-    @staticmethod
     def _validate_no_duplicate_paths(conjunto_de_mudancas: List[Dict[str, Any]]) -> None:
         paths = [m.get('caminho_do_arquivo') or m.get('path') for m in conjunto_de_mudancas if m.get('caminho_do_arquivo') or m.get('path')]
         duplicates = set([p for p in paths if paths.count(p) > 1])
