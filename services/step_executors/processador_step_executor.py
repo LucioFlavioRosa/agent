@@ -27,10 +27,10 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         agent_params.update({
             'codigo': previous_step_result,
             'repositorio': job_info['data']['repo_name'],
-            'nome_branch': job_info['data']['branch_name'],
             'repository_type': job_info['data']['repository_type']
         })
-        
+        if not job_info['data'].get('criar_epicos_azure'):
+            agent_params['nome_branch'] = job_info['data']['branch_name']
         agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
         if isinstance(previous_step_result, dict) and 'lista_arquivos' in previous_step_result:
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
@@ -40,7 +40,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         agent_response = agente.main(**agent_params)
         
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
         
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
