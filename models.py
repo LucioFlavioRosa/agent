@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field, validator
+from typing import List, Dict, Any, Optional, Literal
+from mcp_server_fastapi import workflow_registry_service
 
 class PullRequestSummary(BaseModel):
     pull_request_url: str
@@ -75,7 +76,21 @@ class StartAnalysisPayload(BaseModel):
     repo_name_modernizado: str
     branch_name_modernizado: Optional[str] = None
     projeto: str
-    analysis_type: Any
+    analysis_type: str
+    @validator('analysis_type')
+    def validate_analysis_type(cls, v):
+        """
+        Este validador é executado em tempo de execução para cada requisição.
+        Ele usa o serviço já inicializado para obter a lista de tipos válidos.
+        """
+        valid_types = workflow_registry_service.get_valid_analysis_types()
+        if v not in valid_types:
+            # Se a validação falhar, o FastAPI automaticamente retorna um erro 422
+            # com esta mensagem, o que é o comportamento ideal para uma API.
+            raise ValueError(f"'{v}' não é um tipo de análise válido. Os tipos permitidos são: {', '.join(valid_types)}")
+        
+        # Se a validação passar, retorna o valor original.
+        return v
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = False
     gerar_relatorio_apenas: bool = False
@@ -92,3 +107,5 @@ class StartAnalysisPayload(BaseModel):
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    
+    
