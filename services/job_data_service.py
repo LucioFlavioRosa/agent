@@ -32,7 +32,6 @@ class JobDataService:
         data[JobFields.REPO_NAME_ORIGINAL] = payload_dict.get('repo_name_original')
         data[JobFields.BRANCH_NAME_ORIGINAL] = payload_dict.get('branch_name_original')
         data[JobFields.RETORNAR_LISTA_ARQUIVOS] = payload_dict.get('retornar_lista_arquivos', False)
-        data[JobFields.MODO_ADICAO_INCREMENTAL] = payload_dict.get('modo_adicao_incremental', False)
         data[JobFields.USUARIO_EXECUTOR] = payload_dict.get('usuario_executor')
         data[JobFields.EXECUTAR_STEPS_INCREMENTALMENTE] = payload_dict.get('executar_steps_incrementalmente', False)
         data[JobFields.MAX_STEPS_PER_BATCH] = payload_dict.get('max_steps_per_batch', 3)
@@ -45,6 +44,7 @@ class JobDataService:
             JobFields.STATUS: None,
             JobFields.DATA: data
         }
+        
     def create_derived_job_data(self, original_job: dict, analysis_name: str, normalized_repo_name: str, report: str) -> dict:
         original_data = original_job[JobFields.DATA]
         return {
@@ -64,7 +64,6 @@ class JobDataService:
                 JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
                 JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE],
                 JobFields.RETORNAR_LISTA_ARQUIVOS: original_data.get(JobFields.RETORNAR_LISTA_ARQUIVOS, False),
-                JobFields.MODO_ADICAO_INCREMENTAL: original_data.get(JobFields.MODO_ADICAO_INCREMENTAL, False),
                 JobFields.USUARIO_EXECUTOR: original_data.get(JobFields.USUARIO_EXECUTOR),
                 JobFields.EXECUTAR_STEPS_INCREMENTALMENTE: original_data.get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             },
