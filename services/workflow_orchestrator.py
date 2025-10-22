@@ -197,11 +197,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             })
         else:
             repo_name = job_info['data'].get('repo_name_modernizado')
-            branch_name = job_info['data'].get('branch_name_modernizado')
-            agent_params.update({
-                'repositorio': repo_name,
-                'nome_branch': branch_name
-            })
+            if not job_info['data'].get('criar_epicos_azure'):
+                branch_name = job_info['data'].get('branch_name_modernizado')
+                agent_params['nome_branch'] = branch_name
+            agent_params['repositorio'] = repo_name
         retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
