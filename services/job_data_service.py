@@ -3,10 +3,18 @@ from typing import Optional
 from models import JobStatus, JobFields
 
 class JobDataService:
-
     def __init__(self):
         pass
         
+    def _parse_repository_name(self, repo_name: str):
+        # Espera repo_name no formato organization/project/repository
+        parts = repo_name.split('/')
+        if len(parts) < 2:
+            return None, None
+        organization = parts[0]
+        project = parts[1]
+        return organization, project
+
     def generate_analysis_name(self, provided_name: Optional[str], job_id: str) -> str:
         if provided_name:
             return provided_name
@@ -17,6 +25,11 @@ class JobDataService:
     def create_initial_job_data(self, payload_dict, normalized_repo_name, analysis_name):
         data = {}
         data[JobFields.REPO_NAME] = normalized_repo_name
+        criar_epicos_azure = payload_dict.get('criar_epicos_azure', False)
+        if criar_epicos_azure:
+            organization, project = self._parse_repository_name(normalized_repo_name)
+            data[JobFields.AZURE_ORGANIZATION] = organization
+            data[JobFields.AZURE_PROJECT] = project
         data[JobFields.PROJETO] = payload_dict.get('projeto')
         data[JobFields.ANALYSIS_NAME] = analysis_name
         data[JobFields.ORIGINAL_ANALYSIS_TYPE] = payload_dict.get('analysis_type')
@@ -39,7 +52,7 @@ class JobDataService:
         if not isinstance(executar_build_dotnet, bool):
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
-        
+        data[JobFields.CRIAR_EPICOS_AZURE] = criar_epicos_azure
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
