@@ -97,7 +97,9 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     if payload.gerar_novo_relatorio is False and (payload.analysis_name is None or str(payload.analysis_name).strip() == ""):
         raise HTTPException(status_code=400, detail="analysis_name é obrigatório quando gerar_novo_relatorio=False")
     # Passo 7: Log de debug para requires_approval do primeiro step
-    workflow = workflow_registry_service.get_workflow(payload.analysis_type)
+    #workflow = workflow_registry_service.get_workflow(payload.analysis_type)
+    workflows = workflow_registry_service.get_workflow_registry()
+    workflow = workflows.get(payload.analysis_type)
     first_step = None
     requires_approval_value = None
     if workflow and 'steps' in workflow and len(workflow['steps']) > 0:
