@@ -49,11 +49,11 @@ class StartAnalysisPayload(BaseModel):
     repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
     branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
     retornar_lista_arquivos: bool = Field(False, description="Se True, além do código filtrado, retorna lista completa de todos os arquivos do repositório")
-    modo_adicao_incremental: bool = Field(False, description="Se True, o novo conteúdo será ADICIONADO ao final dos arquivos existentes, ao invés de substituí-los. Útil para migrações de frameworks.")
     usuario_executor: Optional[str] = Field(None, description="Nome do usuário que está executando a análise")
     executar_steps_incrementalmente: bool = Field(
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     
 class StartAnalysisResponse(BaseModel):
     job_id: str
