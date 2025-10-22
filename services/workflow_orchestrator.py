@@ -63,7 +63,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not workflow:
             raise ValueError("Workflow não encontrado.")
         try:
-            # INÍCIO DA LÓGICA DE REUSO DE RELATÓRIO
             gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
             analysis_name = job_info['data'].get('analysis_name')
             if not gerar_novo_relatorio and analysis_name:
@@ -101,10 +100,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
             gerar_relatorio_apenas = job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS, False)
-            if not executar_incremental and not gerar_relatorio_apenas:
-                raise ValueError("Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
+            # INICIALIZAÇÃO DE STEP_BATCHES ANTES DO LOOP (PASSO 4)
             if executar_incremental and start_from_step == 1:
-                if JobFields.STEP_BATCHES not in job_info['data'] or not job_info['data'][JobFields.STEP_BATCHES]:
+                if not job_info['data'].get(JobFields.STEP_BATCHES):
                     report_text = job_info['data'].get('analysis_report')
                     if not report_text or not report_text.strip():
                         raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
@@ -114,13 +112,26 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
+            if not executar_incremental and not gerar_relatorio_apenas:
+                raise ValueError("Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
                 self.job_handler.update_job_status(job_id, step['status_update'])
                 step_result = None
+                # PASSO 3: VALIDAÇÃO ANTES DE ACESSAR STEP_BATCHES
                 if executar_incremental and current_step_index == 1:
-                    step_batches = job_info['data'][JobFields.STEP_BATCHES]
+                    step_batches = job_info['data'].get(JobFields.STEP_BATCHES)
+                    if step_batches is None:
+                        report_text = job_info['data'].get('analysis_report')
+                        if not report_text or not report_text.strip():
+                            raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
+                        step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
+                        job_info['data'][JobFields.STEP_BATCHES] = step_batches
+                        job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
+                        job_info['data'][JobFields.BATCH_RESULTS] = []
+                        self.job_handler.update_job(job_id, job_info)
+                        print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
                     current_batch_index = job_info['data'].get(JobFields.CURRENT_BATCH_INDEX, 0)
                     batch_results = job_info['data'].get(JobFields.BATCH_RESULTS, [])
                     total_batches = len(step_batches)
@@ -156,8 +167,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     step_result = self._execute_step_with_strategy(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                     )
+                    # PASSO 2: FLUXO DE APROVAÇÃO APÓS STEP 0
                     if current_step_index == 0:
                         self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                        if step.get('requires_approval', False):
+                            self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                            return
                         if gerar_relatorio_apenas:
                             self.job_handler.update_job_status(job_id, 'completed')
                             print(f"[{job_id}] [DEBUG] gerar_relatorio_apenas=True detectado após step 0. Status atualizado para completed. Encerrando workflow.")
@@ -204,10 +219,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if agent_params_override:
             agent_params.update(agent_params_override)
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
-        return strategy.execute_step(
+        result = strategy.execute_step(
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
+        # PASSO 5: RETORNAR RESULTADO SE REQUER APROVAÇÃO
+        if step.get('requires_approval', False):
+            return result
+        return result
                                         
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
