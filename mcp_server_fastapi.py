@@ -7,7 +7,7 @@ from typing import Optional
 
 from urllib.parse import urlparse
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, root_validator
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 from services.dependency_container import DependencyContainer
@@ -54,7 +54,24 @@ class StartAnalysisPayload(BaseModel):
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    
+    azure_devops_org: Optional[str] = Field(None, description="Organização do Azure DevOps para criação de épicos")
+    azure_devops_project: Optional[str] = Field(None, description="Projeto do Azure DevOps para criação de épicos")
+    azure_devops_board_id: Optional[str] = Field(None, description="ID do board Kanban do Azure DevOps para criação de épicos")
+
+    @root_validator
+    def validate_criacao_epicos_fields(cls, values):
+        analysis_type = values.get('analysis_type')
+        if (str(analysis_type) == 'criacao_epicos'):
+            if not values.get('repo_name_modernizado'):
+                raise ValueError('repo_name_modernizado é obrigatório para criacao_epicos')
+            if not values.get('azure_devops_org'):
+                raise ValueError('azure_devops_org é obrigatório para criacao_epicos')
+            if not values.get('azure_devops_project'):
+                raise ValueError('azure_devops_project é obrigatório para criacao_epicos')
+            if not values.get('azure_devops_board_id'):
+                raise ValueError('azure_devops_board_id é obrigatório para criacao_epicos')
+        return values
+
 class StartAnalysisResponse(BaseModel):
     job_id: str
     
@@ -96,8 +113,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
     if payload.gerar_novo_relatorio is False and (payload.analysis_name is None or str(payload.analysis_name).strip() == ""):
         raise HTTPException(status_code=400, detail="analysis_name é obrigatório quando gerar_novo_relatorio=False")
-    # Passo 7: Log de debug para requires_approval do primeiro step
-    #workflow = workflow_registry_service.get_workflow(payload.analysis_type)
     workflows = workflow_registry_service.get_workflow_registry()
     workflow = workflows.get(payload.analysis_type)
     first_step = None
@@ -118,6 +133,11 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict = payload.dict()
     if hasattr(payload.analysis_type, 'value'):
         payload_dict['analysis_type'] = payload.analysis_type.value
+    # Adiciona campos do Azure DevOps ao job_data se presentes
+    if str(payload.analysis_type) == 'criacao_epicos':
+        payload_dict[JobFields.AZURE_DEVOPS_ORG] = payload.azure_devops_org
+        payload_dict[JobFields.AZURE_DEVOPS_PROJECT] = payload.azure_devops_project
+        payload_dict[JobFields.AZURE_DEVOPS_BOARD_ID] = payload.azure_devops_board_id
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
@@ -135,7 +155,6 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
     job_validation_service.validate_job_for_approval(job, payload.job_id)
     if job.get('data', {}).get('executar_steps_incrementalmente') is False and job.get('data', {}).get('gerar_relatorio_apenas') is False:
         raise HTTPException(status_code=400, detail="Não é possível aprovar jobs no modo não-incremental (descontinuado).")
-    # Passo 6: Validar status pending_approval antes de aprovar/rejeitar
     current_status = job.get(JobFields.STATUS)
     if payload.action == JobActions.APPROVE:
         if current_status != JobStatus.PENDING_APPROVAL:
