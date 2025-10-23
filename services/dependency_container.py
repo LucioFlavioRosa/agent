@@ -110,7 +110,8 @@ class DependencyContainer:
                 commit_handler=self.get_commit_handler(),
                 data_formatter=self.get_data_formatter(),
                 secret_manager=self.get_secret_manager(),
-                cache_service=self.get_redis_cache_service()
+                cache_service=self.get_redis_cache_service(),
+                dependency_container=self
             )
         return self._workflow_orchestrator
     
