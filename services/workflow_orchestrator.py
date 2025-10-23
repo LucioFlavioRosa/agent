@@ -181,7 +181,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     if current_step_index == 0:
                         report_text = self.report_handler.extract_report_text(step_result)
                         if report_text and report_text.strip():
-                            self.report_handler.save_report_to_cache(cache_key, report_text)
                             self._save_generated_report(job_id, job_info, step_result, current_step_index)
                             if step.get('requires_approval', False):
                                 self.handle_approval_step(job_id, job_info, current_step_index, step_result)
