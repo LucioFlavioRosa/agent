@@ -303,8 +303,7 @@ criacao_tarefas_azure_devops:
   steps:
     - status_update: "analisando o epico"
       model_name: "claude-sonnet-4-5"
-      agent_type: "processador"
+      agent_type: "revisor_board"
       params:
         tipo_analise: "criacao_tarefas"
       requires_approval: true
-    
