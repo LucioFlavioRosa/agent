@@ -26,8 +26,9 @@ def read_report_from_blob(projeto: str, analysis_type: str, repository_type: str
         print(f"[blob_report_reader] Relatório encontrado no blob: {blob_path} (tamanho: {len(report_content)})")
         return report_content
     except Exception as e:
-        if "BlobNotFound" in str(e) or "404" in str(e):
+        error_str = str(e)
+        if "BlobNotFound" in error_str or "404" in error_str:
             print(f"[blob_report_reader] Report not found in blob storage: {blob_path}")
             return None
         print(f"[blob_report_reader] Erro ao tentar ler blob {blob_path}: {e}")
-        raise e
+        raise
