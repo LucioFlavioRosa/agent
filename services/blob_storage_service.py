@@ -1,6 +1,9 @@
-from azure.storage.blob import BlobServiceClient
+import os
+from urllib.parse import urlparse
+from azure.storage.blob import BlobServiceClient, ContentSettings
 from tools.blob_job_tracker import BlobJobTracker
 from tools.azure_secret_manager import AzureSecretManager
+from tools.blob_report_path_builder import build_report_blob_path
 
 class BlobStorageService:
     def __init__(self):
@@ -9,7 +12,6 @@ class BlobStorageService:
         self._init_blob_service()
 
     def _init_blob_service(self):
-        import os
         container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
         if not container_name:
             raise RuntimeError('Azure Blob Storage container name missing.')
@@ -23,26 +25,29 @@ class BlobStorageService:
             print(f"Warning: Failed to get connection string from Key Vault: {e}")
             connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
         if not connection_string:
-            raise RuntimeError('Azure Blob Storage connection string not found in Key Vault or environment variables.')
+            raise RuntimeError('Azure Blob Storage connection string not found.')
 
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
 
     def upload_report(self, report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name):
-        from tools.blob_report_path_builder import build_report_blob_path
-        from azure.storage.blob import ContentSettings
         blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
         blob_client.upload_blob(report_text, overwrite=True, content_settings=ContentSettings(content_type='text/markdown'))
         return blob_client.url
 
     def read_report(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name):
-        from tools.blob_report_path_builder import build_report_blob_path
         blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
         if not blob_client.exists():
             return None
         return blob_client.download_blob().readall().decode('utf-8')
+        
+    def get_report_url(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name) -> str:
+        """Constrói e retorna a URL de um relatório sem fazer upload."""
+        blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
+        return blob_client.url
 
     def update_job_tracker(self, report_blob_url: str, job_id: str) -> None:
         try:
