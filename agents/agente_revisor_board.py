@@ -37,6 +37,12 @@ class AgenteRevisorBoard:
         current_batch: Optional[List[Dict[str, Any]]] = None,
         **kwargs
     ) -> Dict[str, Any]:
+        if not epic_id:
+            raise ValueError("epic_id é obrigatório para execução do agente revisor_board.")
+        if not organization:
+            raise ValueError("organization é obrigatório para execução do agente revisor_board.")
+        if not project:
+            raise ValueError("project é obrigatório para execução do agente revisor_board.")
         epic_data = self._get_epic_data(epic_id=epic_id, organization=organization, project=project)
         if not epic_data:
             print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para o épico '{epic_id}'.")
