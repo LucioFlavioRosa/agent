@@ -45,7 +45,6 @@ class ReportHandler:
         repo_name = job_info['data'].get('repo_name')
         branch_name = job_info['data'].get('branch_name_modernizado')
         analysis_name = job_info['data'].get('analysis_name')
-        print(f"[{job_id}] [DEBUG] Iniciando upload do relatório para o Blob Storage...")
         url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         if not url:
             raise ValueError(f"[{job_id}] ERRO: Blob Storage não retornou URL válida")
@@ -93,4 +92,19 @@ class ReportHandler:
                     return report
             except Exception as e:
                 print(f"[ReportHandler] Warning: Failed to read report from cache: {e}")
+        return None
+
+    def read_report_from_blob_or_cache(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name):
+        cache_key = None
+        if self.cache_service:
+            from tools.cache_key_builder import build_cache_key_for_report
+            cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            cached_report = self.read_report_from_cache(cache_key)
+            if cached_report and cached_report.strip():
+                return cached_report
+        report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        if report_text and report_text.strip():
+            if cache_key:
+                self.save_report_to_cache(cache_key, report_text)
+            return report_text
         return None
