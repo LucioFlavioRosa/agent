@@ -25,10 +25,18 @@ class JobDataService:
         data = {}
         data[JobFields.REPO_NAME] = normalized_repo_name
         criar_epicos_azure = payload_dict.get('criar_epicos_azure', False)
+        analysis_type = payload_dict.get('analysis_type')
         if criar_epicos_azure:
             organization, project = self._parse_repository_name(normalized_repo_name)
             data[JobFields.AZURE_ORGANIZATION] = organization
             data[JobFields.AZURE_PROJECT] = project
+        # Passo 3: adicionar campos para criacao_tarefas_azure_devops
+        if analysis_type == 'criacao_tarefas_azure_devops':
+            epic_id = payload_dict.get('epic_id')
+            organization, project = self._parse_repository_name(normalized_repo_name)
+            data[JobFields.EPIC_ID] = epic_id
+            data[JobFields.ORGANIZATION] = organization
+            data[JobFields.PROJECT] = project
         data[JobFields.PROJETO] = payload_dict.get('projeto')
         data[JobFields.ANALYSIS_NAME] = analysis_name
         data[JobFields.ORIGINAL_ANALYSIS_TYPE] = payload_dict.get('analysis_type')
