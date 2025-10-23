@@ -199,8 +199,16 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
-        is_comparador_agent = step.get('agent') == 'comparador'
-        if is_comparador_agent:
+        agent_type = step.get('agent_type', step.get('agent'))
+        # Passo 4: lógica para revisor_board
+        if agent_type == 'revisor_board':
+            epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
+            organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
+            project = job_info['data'].get('project') or job_info['data'].get('azure_project')
+            agent_params['epic_id'] = epic_id
+            agent_params['organization'] = organization
+            agent_params['project'] = project
+        elif agent_type == 'comparador':
             agent_params.update({
                 'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
                 'branch_name_modernizado': job_info['data'].get('branch_name_modernizado'),
