@@ -13,6 +13,8 @@ from tools.preenchimento import ChangesetFiller
 from services.redis_cache_service import RedisCacheService
 from tools.azure_secret_manager import AzureSecretManager
 from services.azure_board_service import AzureBoardService
+from tools.readers.azure_board_reader import AzureBoardReader
+from domain.interfaces.board_reader_interface import IBoardReader
 
 class DependencyContainer:
     def __init__(self):
@@ -31,6 +33,7 @@ class DependencyContainer:
         self._redis_cache_service = None
         self._secret_manager = None
         self._azure_board_service = None
+        self._board_reader = None
     
     def get_job_store(self) -> RedisJobStore:
         if self._job_store is None:
@@ -121,3 +124,8 @@ class DependencyContainer:
         if self._azure_board_service is None:
             self._azure_board_service = AzureBoardService(secret_manager=self.get_secret_manager())
         return self._azure_board_service
+
+    def get_board_reader(self) -> IBoardReader:
+        if self._board_reader is None:
+            self._board_reader = AzureBoardReader(azure_board_service=self.get_azure_board_service())
+        return self._board_reader
