@@ -1,18 +1,19 @@
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from tools.azure_secret_manager import AzureSecretManager
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 import requests
 
 class AzureBoardService:
-    def __init__(self, organization: str, project: str, secret_manager: AzureSecretManager = None):
+    def __init__(self, organization: Optional[str] = None, project: Optional[str] = None, secret_manager: AzureSecretManager = None):
         self.organization = organization
         self.project = project
         self.secret_manager = secret_manager or AzureSecretManager()
         self.connection = None
         self.core_client = None
-        self._connect()
+        if self.organization and self.project:
+            self._connect()
 
     def _connect(self):
         token = self._get_token()
@@ -22,7 +23,7 @@ class AzureBoardService:
         self.core_client = self.connection.clients.get_core_client()
 
     def _get_token(self):
-        token_secret_name = f"azure-token-{self.organization}"
+        token_secret_name = f"azure-token-{self.organization}" if self.organization else "azure-token"
         try:
             return self.secret_manager.get_secret(token_secret_name)
         except Exception:
@@ -78,3 +79,34 @@ class AzureBoardService:
     def _basic_auth_header(self, token):
         import base64
         return base64.b64encode(f':{token}'.encode('utf-8')).decode('utf-8')
+
+    def read_epic(self, epic_id: str) -> Dict[str, Any]:
+        if not self.organization or not self.project:
+            raise ValueError("organization e project devem estar definidos para buscar épico.")
+        token = self._get_token()
+        url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}?api-version=7.1-preview.3"
+        headers = {
+            'Authorization': f'Basic {self._basic_auth_header(token)}'
+        }
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                fields = data.get('fields', {})
+                return {
+                    'id': data.get('id'),
+                    'title': fields.get('System.Title'),
+                    'description': fields.get('System.Description'),
+                    'state': fields.get('System.State'),
+                    'url': data.get('url'),
+                    'fields': fields
+                }
+            else:
+                return {
+                    'error': response.text,
+                    'status_code': response.status_code
+                }
+        except Exception as e:
+            return {
+                'error': str(e)
+            }
