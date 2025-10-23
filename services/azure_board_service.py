@@ -4,6 +4,7 @@ from tools.azure_secret_manager import AzureSecretManager
 from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 import requests
+from services.task_parser_service import TaskParserService
 
 class AzureBoardService:
     def __init__(self, organization: Optional[str] = None, project: Optional[str] = None, secret_manager: AzureSecretManager = None):
@@ -110,3 +111,55 @@ class AzureBoardService:
             return {
                 'error': str(e)
             }
+
+    def create_tasks_from_report(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
+        parser = TaskParserService()
+        tasks = parser.parse_tasks_from_markdown(markdown_table)
+        token = self._get_token()
+        created_tasks = []
+        for task in tasks:
+            work_item_type = task.get('tipo', 'Task').capitalize()
+            if work_item_type not in ['Task', 'Feature', 'Bug', 'Spike']:
+                work_item_type = 'Task'
+            title = task.get('titulo', '')
+            descricao = task.get('descricao', '')
+            criterios_aceite = task.get('criterios_aceite', '')
+            perfis_sugeridos = task.get('perfis_sugeridos', '')
+            estimativa_sp = task.get('estimativa_sp', '')
+            description_full = descricao
+            if criterios_aceite:
+                description_full += '\n\nCritérios de Aceite:\n' + criterios_aceite
+            if perfis_sugeridos:
+                description_full += f"\n\nPerfis Sugeridos: {perfis_sugeridos}"
+            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/${work_item_type}?api-version=7.1-preview.3"
+            headers = {
+                'Content-Type': 'application/json-patch+json',
+                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            }
+            payload = [
+                {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
+                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description_full},
+                {"op": "add", "path": "/fields/System.Parent", "from": None, "value": int(epic_id)}
+            ]
+            if estimativa_sp:
+                try:
+                    sp_val = float(estimativa_sp)
+                    payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.StoryPoints", "from": None, "value": sp_val})
+                except Exception:
+                    pass
+            # Se houver campo customizado para perfis sugeridos, adicionar aqui (exemplo)
+            # payload.append({"op": "add", "path": "/fields/Custom.PerfisSugeridos", "from": None, "value": perfis_sugeridos})
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code in (200, 201):
+                data = response.json()
+                created_tasks.append({
+                    "id": data.get("id"),
+                    "url": data.get("url"),
+                    "title": title
+                })
+            else:
+                created_tasks.append({
+                    "error": response.text,
+                    "title": title
+                })
+        return created_tasks
