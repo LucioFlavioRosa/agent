@@ -20,6 +20,7 @@ import tools.blob_report_reader as blob_report_reader
 from services.azure_board_service import AzureBoardService
 from tools.cache_key_builder import build_cache_key_for_report
 
+
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
@@ -92,8 +93,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     branch_name_clean = branch_name if branch_name else "unknown"
                     analysis_name_clean = analysis_name if analysis_name else "unknown"
                     blob_path = f"{projeto_clean}/{analysis_type_clean}/{repository_type_clean}/{repo_name_clean}/{branch_name_clean}/{analysis_name_clean}.md"
+                    
                     container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
-                    account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
+                    secret_name = getenv('AZURE_STORAGE_CONNECTION_STRING')
+                    secret_manager = AzureSecretManager()
+                    account_url = secret_manager.get_secret(secret_name)
+                    
                     if account_url and container_name:
                         report_blob_url = f"{account_url}/{container_name}/{blob_path}"
                     elif container_name:
