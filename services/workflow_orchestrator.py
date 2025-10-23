@@ -74,7 +74,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             branch_name = job_info['data'].get('branch_name_modernizado')
             cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
             if start_from_step == 0:
-                report_from_blob = blob_report_reader.read_report_from_blob(
+                report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
                     analysis_type=analysis_type,
                     repository_type=repository_type,
@@ -82,36 +82,28 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     branch_name=branch_name,
                     analysis_name=analysis_name
                 )
+                
                 if report_from_blob is not None and report_from_blob.strip():
                     job_info['data']['analysis_report'] = report_from_blob
-                    from tools.blob_report_path_builder import build_report_blob_path
-                    from os import getenv
-                    projeto_clean = projeto if projeto else "unknown"
-                    analysis_type_clean = analysis_type if analysis_type else "unknown"
-                    repository_type_clean = repository_type if repository_type else "unknown"
-                    repo_name_clean = repo_name if repo_name else "unknown"
-                    branch_name_clean = branch_name if branch_name else "unknown"
-                    analysis_name_clean = analysis_name if analysis_name else "unknown"
-                    blob_path = f"{projeto_clean}/{analysis_type_clean}/{repository_type_clean}/{repo_name_clean}/{branch_name_clean}/{analysis_name_clean}.md"
+                    report_blob_url = self.report_handler.blob_storage.get_report_url(
+                        projeto=projeto,
+                        analysis_type=analysis_type,
+                        repository_type=repository_type,
+                        repo_name=repo_name,
+                        branch_name=branch_name,
+                        analysis_name=analysis_name
+                    )
                     
-                    container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
-                    secret_name = getenv('AZURE_STORAGE_CONNECTION_STRING')
-                    secret_manager = AzureSecretManager()
-                    account_url = secret_manager.get_secret(secret_name)
-                    
-                    if account_url and container_name:
-                        report_blob_url = f"{account_url}/{container_name}/{blob_path}"
-                    elif container_name:
-                        report_blob_url = f"/{container_name}/{blob_path}"
-                    else:
-                        report_blob_url = None
                     job_info['data']['report_blob_url'] = report_blob_url
                     self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage no step 0. Workflow pausado para aprovação.")
+                    
+                    print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage. Workflow pausado para aprovação.")
                     self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_from_blob})
-                    return
+                    return # Para a execução
+
                 else:
-                    print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no Blob Storage no step 0. Prosseguindo para geração do relatório pelo agente.")
+                    print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no Blob Storage. Prosseguindo para geração.")
+                
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data'].get('repo_name')
             repository_provider = get_repository_provider_explicit(repository_type)
