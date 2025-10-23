@@ -189,9 +189,67 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         return
                     previous_step_result = step_result
             if not gerar_relatorio_apenas:
-                self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
-        except Exception as e:
-            self.job_handler.handle_job_error(job_id, e, 'workflow')
+                # INÍCIO DA NOVA LÓGICA PARA CRIAR TAREFAS NO AZURE DEVOPS
+                if job_info['data'].get('criar_tarefas_azure'):
+                    print(f"[{job_id}] [AZURE_TASKS] Iniciando criação de tarefas no Azure DevOps Board...")
+                    organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
+                    project = job_info['data'].get('project') or job_info['data'].get('azure_project')
+                    epic_id = job_info['data'].get('epic_id')
+                    report = job_info['data'].get('analysis_report')
+                    azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+                    created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
+                    job_info['data']['tarefas_criadas'] = created_tasks
+                    self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
+                # FIM DA NOVA LÓGICA
+                if job_info['data'].get('criar_epicos_azure'):
+                    print(f"[{job_id}] [AZURE_EPICS] Iniciando criação de épicos no Azure DevOps Board...")
+                    organization = job_info['data'].get('azure_organization')
+                    project = job_info['data'].get('azure_project')
+                    report = job_info['data'].get('analysis_report')
+                    azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+                    created_epics = azure_board_service.create_epics(report)
+                    job_info['data']['epicos_criados'] = created_epics
+                    self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
+                else:
+                    batch_results = job_info['data'][JobFields.BATCH_RESULTS]
+                    total_batches = len(batch_results)
+                    total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
+                    print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
+                    final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
+                    dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
+                    self.job_handler.update_job_status(job_id, 'committing_to_github')
+                    self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+                    print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
+                    if job_info['data'].get('executar_build_dotnet', False):
+                        commit_details = job_info['data'].get('commit_details', [])
+                        build_errors = []
+                        for idx, commit in enumerate(commit_details):
+                            if 'build_result' not in commit:
+                                print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                            if 'build_errors' not in commit:
+                                print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                            errors = commit.get('build_errors')
+                            if errors:
+                                build_errors.extend(errors)
+                        if build_errors:
+                            job_info['data']['build_errors'] = build_errors
+                        else:
+                            job_info['data']['build_errors'] = None
+                        self.job_handler.update_job(job_id, job_info)
+                    else:
+                        job_info['data']['build_errors'] = None
+                    self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
+                    if job_info['data'].get('executar_build_dotnet', False):
+                        commit_details = job_info['data'].get('commit_details', [])
+                        for idx, commit in enumerate(commit_details):
+                            if 'build_result' not in commit:
+                                print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                            if 'build_errors' not in commit:
+                                print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                self.job_handler.update_job_status(job_id, 'completed')
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
@@ -260,6 +318,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
+        if job_info['data'].get('criar_tarefas_azure'):
+            print(f"[{job_id}] [AZURE_TASKS] Iniciando criação de tarefas no Azure DevOps Board...")
+            organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
+            project = job_info['data'].get('project') or job_info['data'].get('azure_project')
+            epic_id = job_info['data'].get('epic_id')
+            report = job_info['data'].get('analysis_report')
+            azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+            created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
+            job_info['data']['tarefas_criadas'] = created_tasks
+            self.job_handler.update_job(job_id, job_info)
+            print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
         if job_info['data'].get('criar_epicos_azure'):
             print(f"[{job_id}] [AZURE_EPICS] Iniciando criação de épicos no Azure DevOps Board...")
             organization = job_info['data'].get('azure_organization')
