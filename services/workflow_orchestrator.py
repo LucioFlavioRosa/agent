@@ -72,7 +72,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
             cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            # Passo 1: Buscar relatório no Blob Storage no step 0
             if start_from_step == 0:
                 report_from_blob = blob_report_reader.read_report_from_blob(
                     projeto=projeto,
@@ -84,9 +83,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 )
                 if report_from_blob is not None and report_from_blob.strip():
                     job_info['data']['analysis_report'] = report_from_blob
-                    # Salva no cache
-                    self.report_handler.save_report_to_cache(cache_key, report_from_blob)
-                    # Constrói a URL do blob
                     from tools.blob_report_path_builder import build_report_blob_path
                     from os import getenv
                     blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
@@ -99,6 +95,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     else:
                         report_blob_url = None
                     job_info['data']['report_blob_url'] = report_blob_url
+                    self.report_handler.save_report_to_cache(cache_key, report_from_blob)
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage no step 0. Workflow pausado para aprovação.")
                     self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_from_blob})
