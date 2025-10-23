@@ -18,7 +18,6 @@ from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
 import tools.blob_report_reader as blob_report_reader
 from services.azure_board_service import AzureBoardService
-from tools.cache_key_builder import build_cache_key_for_report
 
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
@@ -72,7 +71,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            
             if start_from_step == 0:
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
