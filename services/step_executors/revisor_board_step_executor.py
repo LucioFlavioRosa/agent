@@ -5,11 +5,12 @@ from typing import Dict, Any
 from services.step_executors.base_step_executor import BaseStepExecutor
 from services.factories.agent_factory import AgentFactory
 from tools.readers.azure_board_reader import AzureBoardReader
-from services.dependency_container import DependencyContainer
+from services.azure_board_service import AzureBoardService
 
 class RevisorBoardStepExecutor(BaseStepExecutor):
-    def __init__(self, job_handler=None):
+    def __init__(self, job_handler=None, azure_board_service: AzureBoardService = None):
         self.job_handler = job_handler
+        self.azure_board_service = azure_board_service
 
     def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any],
                 current_step_index: int, previous_step_result: Dict[str, Any],
@@ -46,13 +47,13 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
             'status_update': step['status_update']
         })
         max_retries = 3
-        dependency_container = DependencyContainer()
-        board_reader = dependency_container.get_board_reader()
+        if self.azure_board_service is None:
+            self.azure_board_service = AzureBoardService(organization=organization, project=project)
         for attempt in range(max_retries):
             try:
                 agente = AgentFactory.create_agent(
                     "revisor_board",
-                    board_reader=board_reader,
+                    azure_board_service=self.azure_board_service,
                     llm_provider=llm_provider
                 )
                 agent_response = agente.main(**agent_params)
