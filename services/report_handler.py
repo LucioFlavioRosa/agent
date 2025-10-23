@@ -21,14 +21,22 @@ class ReportHandler:
                 report_blob_url = f"{account_url}/{container_name}/{blob_path}"
             elif container_name:
                 report_blob_url = f"/{container_name}/{blob_path}"
-            if report_blob_url:
-                try:
-                    self.blob_storage.update_job_tracker(report_blob_url, job_id)
-                except Exception as e:
-                    print(f"[ReportHandler] Warning: Failed to update job tracker after reading report: {e}")
-            return report_text
+            if report_text is not None:
+                print(f"[ReportHandler] Relatório encontrado no Blob Storage: {report_blob_url} (tamanho: {len(report_text)})")
+                if report_blob_url:
+                    try:
+                        self.blob_storage.update_job_tracker(report_blob_url, job_id)
+                    except Exception as e:
+                        print(f"[ReportHandler] Warning: Failed to update job tracker after reading report: {e}")
+                return report_text
+            else:
+                print(f"[ReportHandler] Relatório NÃO encontrado no Blob Storage: {report_blob_url}")
+                return None
         except Exception as e:
-            print(f"[ReportHandler] Warning: Failed to read report or update tracker: {e}")
+            if "BlobNotFound" in str(e) or "404" in str(e):
+                print(f"[ReportHandler] Relatório NÃO encontrado no Blob Storage (BlobNotFound/404): {report_blob_url}")
+                return None
+            print(f"[ReportHandler] Erro ao tentar ler relatório do Blob Storage: {e}")
             return None
 
     def extract_report_text(self, step_result):
