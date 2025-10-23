@@ -1,6 +1,7 @@
 class ReportHandler:
-    def __init__(self, blob_storage):
+    def __init__(self, blob_storage, cache_service=None):
         self.blob_storage = blob_storage
+        self.cache_service = cache_service
 
     def try_read_existing_report(self, job_id, job_info, current_step_index):
         projeto = job_info['data'].get('projeto')
@@ -91,3 +92,20 @@ class ReportHandler:
             return None
         print(f"[{job_id}] Relatório válido lido do Blob Storage ({len(report_text)} chars).")
         return report_text
+
+    def save_report_to_cache(self, cache_key: str, report_text: str):
+        if self.cache_service:
+            try:
+                self.cache_service.set(cache_key, report_text)
+            except Exception as e:
+                print(f"[ReportHandler] Warning: Failed to save report to cache: {e}")
+
+    def read_report_from_cache(self, cache_key: str):
+        if self.cache_service:
+            try:
+                report = self.cache_service.get(cache_key)
+                if report:
+                    return report
+            except Exception as e:
+                print(f"[ReportHandler] Warning: Failed to read report from cache: {e}")
+        return None
