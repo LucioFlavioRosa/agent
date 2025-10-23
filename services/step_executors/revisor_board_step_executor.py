@@ -14,9 +14,9 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
     def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any],
                 current_step_index: int, previous_step_result: Dict[str, Any],
                 repo_reader, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
-        epic_id = job_info['data']['epic_id']
-        organization = job_info['data']['organization']
-        project = job_info['data']['project']
+        epic_id = job_info['data'].get('epic_id')
+        organization = job_info['data'].get('organization')
+        project = job_info['data'].get('project')
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
