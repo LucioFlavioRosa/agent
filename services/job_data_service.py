@@ -36,11 +36,9 @@ class JobDataService:
         data[JobFields.MODEL_NAME] = payload_dict.get('model_name')
         data[JobFields.USAR_RAG] = payload_dict.get('usar_rag', False)
         data[JobFields.GERAR_RELATORIO_APENAS] = payload_dict.get('gerar_relatorio_apenas', False)
-        data[JobFields.GERAR_NOVO_RELATORIO] = payload_dict.get('gerar_novo_relatorio', True)
         data[JobFields.ARQUIVOS_ESPECIFICOS] = payload_dict.get('arquivos_especificos')
         data[JobFields.REPOSITORY_TYPE] = payload_dict.get('repository_type')
         data[JobFields.REPO_NAME_MODERNIZADO] = payload_dict.get('repo_name_modernizado')
-        # Garantir propagação correta do valor de branch_name_modernizado
         data[JobFields.BRANCH_NAME_MODERNIZADO] = payload_dict.get('branch_name_modernizado')
         data[JobFields.REPO_NAME_ORIGINAL] = payload_dict.get('repo_name_original')
         data[JobFields.BRANCH_NAME_ORIGINAL] = payload_dict.get('branch_name_original')
@@ -72,7 +70,6 @@ class JobDataService:
                 JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
                 JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
                 JobFields.GERAR_RELATORIO_APENAS: False,
-                JobFields.GERAR_NOVO_RELATORIO: True,
                 JobFields.ARQUIVOS_ESPECIFICOS: original_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
                 JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",
                 JobFields.REPOSITORY_TYPE: original_data[JobFields.REPOSITORY_TYPE],
