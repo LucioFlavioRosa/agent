@@ -66,28 +66,17 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         try:
             gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
             analysis_name = job_info['data'].get('analysis_name')
+            print(f"[{job_id}] [DEBUG] Iniciando execute_workflow. gerar_novo_relatorio={gerar_novo_relatorio}, analysis_name={analysis_name}")
             if gerar_novo_relatorio is False and analysis_name:
-                projeto = job_info['data'].get('projeto')
-                analysis_type = job_info['data'].get('original_analysis_type')
-                repository_type = job_info['data'].get('repository_type')
-                repo_name = job_info['data'].get('repo_name_modernizado')
-                branch_name = job_info['data'].get('branch_name_modernizado')
                 print(f"[{job_id}] [DEBUG] gerar_novo_relatorio=False detectado. Tentando ler relatório existente do blob storage para analysis_name={analysis_name}.")
-                report = blob_report_reader.read_report_from_blob(
-                    projeto=projeto,
-                    analysis_type=analysis_type,
-                    repository_type=repository_type,
-                    repo_name=repo_name,
-                    branch_name=branch_name,
-                    analysis_name=analysis_name
-                )
-                if report is not None:
+                report_text = self.report_handler.try_read_existing_report(job_id, job_info, 0)
+                if report_text is not None:
                     print(f"[{job_id}] [DEBUG] Relatório encontrado no blob storage para analysis_name={analysis_name}. Reutilizando relatório.")
-                    job_info['data']['analysis_report'] = report
-                    url = self.report_handler.save_report_to_blob(job_id, job_info, report, report_generated_by_agent=False)
-                    job_info['data']['report_blob_url'] = url
+                    job_info['data']['analysis_report'] = report_text
+                    # O método try_read_existing_report já atualiza report_blob_url se encontrar
                     self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente.")
+                    self.job_handler.update_job_status(job_id, 'completed')
+                    print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente. Status atualizado para completed.")
                     return
                 else:
                     print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no blob storage para analysis_name={analysis_name}. Prosseguindo para geração do relatório pelo agente.")
@@ -220,6 +209,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             previous_step_result, repo_reader, llm_provider, agent_params
         )
         gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
+        # Removido: lógica de leitura do relatório do Blob Storage quando gerar_novo_relatorio=False no step 0
+        # Essa lógica foi movida para antes do loop de steps, conforme instrução do usuário
         if current_step_index == 0:
             if gerar_novo_relatorio is True:
                 print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente no step 0 porque gerar_novo_relatorio=True.")
