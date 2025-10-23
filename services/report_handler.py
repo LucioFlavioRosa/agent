@@ -3,40 +3,25 @@ class ReportHandler:
         self.blob_storage = blob_storage
         self.cache_service = cache_service
 
-    def try_read_existing_report(self, job_id, job_info, current_step_index):
+    def read_existing_report_from_blob(self, job_id, job_info, current_step_index):
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
         repo_name = job_info['data'].get('repo_name')
         branch_name = job_info['data'].get('branch_name_modernizado')
         analysis_name = job_info['data'].get('analysis_name')
-        report_blob_url = None
         try:
-            report_text = self.blob_storage.read_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            from tools.blob_report_path_builder import build_report_blob_path
-            from os import getenv
-            blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
-            account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
-            if account_url and container_name:
-                report_blob_url = f"{account_url}/{container_name}/{blob_path}"
-            elif container_name:
-                report_blob_url = f"/{container_name}/{blob_path}"
-            if report_text is not None:
-                print(f"[ReportHandler] Relatório encontrado no Blob Storage: {report_blob_url} (tamanho: {len(report_text)})")
-                if report_blob_url:
-                    try:
-                        self.blob_storage.update_job_tracker(report_blob_url, job_id)
-                    except Exception as e:
-                        print(f"[ReportHandler] Warning: Failed to update job tracker after reading report: {e}")
-                return report_text
-            else:
-                print(f"[ReportHandler] Relatório NÃO encontrado no Blob Storage: {report_blob_url}")
-                return None
+            from tools.blob_report_reader import read_report_from_blob
+            report_text = read_report_from_blob(
+                projeto=projeto,
+                analysis_type=analysis_type,
+                repository_type=repository_type,
+                repo_name=repo_name,
+                branch_name=branch_name,
+                analysis_name=analysis_name
+            )
+            return report_text
         except Exception as e:
-            if "BlobNotFound" in str(e) or "404" in str(e):
-                print(f"[ReportHandler] Relatório NÃO encontrado no Blob Storage (BlobNotFound/404): {report_blob_url}")
-                return None
             print(f"[ReportHandler] Erro ao tentar ler relatório do Blob Storage: {e}")
             return None
 
