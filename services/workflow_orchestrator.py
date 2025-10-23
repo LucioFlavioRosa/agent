@@ -18,6 +18,7 @@ from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
 import tools.blob_report_reader as blob_report_reader
 from services.azure_board_service import AzureBoardService
+from tools.cache_key_builder import build_cache_key_for_report
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -28,11 +29,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.workflow_registry = workflow_registry
         self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
         self.job_handler = job_handler or JobHandler(job_manager)
-        self.report_handler = report_handler or ReportHandler(blob_storage)
+        self.cache_service = cache_service
+        self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service)
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
         self.secret_manager = secret_manager or AzureSecretManager()
-        self.cache_service = cache_service
         self.dependency_container = dependency_container
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
@@ -56,6 +57,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
+        # Passo 2: Salvar relatório no cache
+        projeto = job_info['data'].get('projeto')
+        analysis_type = job_info['data'].get('original_analysis_type')
+        repository_type = job_info['data'].get('repository_type')
+        repo_name = job_info['data'].get('repo_name')
+        branch_name = job_info['data'].get('branch_name_modernizado')
+        analysis_name = job_info['data'].get('analysis_name')
+        cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+        self.report_handler.save_report_to_cache(cache_key, report_text)
         return True
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
@@ -70,6 +80,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name_modernizado')
             branch_name = job_info['data'].get('branch_name_modernizado')
+            # Passo 3: Buscar relatório no cache antes do blob storage
+            cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            cached_report = self.report_handler.read_report_from_cache(cache_key)
+            if cached_report is not None:
+                print(f"[{job_id}] [DEBUG] Relatório encontrado no cache para analysis_name={analysis_name}. Reutilizando relatório.")
+                job_info['data']['analysis_report'] = cached_report
+                self.job_handler.update_job(job_id, job_info)
+                return
             print(f"[{job_id}] [DEBUG] Tentando ler relatório existente do blob storage para analysis_name={analysis_name}.")
             report = blob_report_reader.read_report_from_blob(
                 projeto=projeto,
@@ -85,6 +103,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 url = self.report_handler.save_report_to_blob(job_id, job_info, report)
                 job_info['data']['report_blob_url'] = url
                 self.job_handler.update_job(job_id, job_info)
+                # Passo 1: Salvar relatório lido do blob no cache
+                self.report_handler.save_report_to_cache(cache_key, report)
                 print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente.")
                 return
             else:
