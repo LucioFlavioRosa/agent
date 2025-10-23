@@ -72,8 +72,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     analysis_type=analysis_type,
                     repository_type=repository_type,
                     repo_name=repo_name,
-                    branch_name=branch_name,
-                    analysis_name=analysis_name
+                    branch_name=branch_name
                 )
                 
                 if report_from_blob is not None and report_from_blob.strip():
@@ -83,8 +82,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         analysis_type=analysis_type,
                         repository_type=repository_type,
                         repo_name=repo_name,
-                        branch_name=branch_name,
-                        analysis_name=analysis_name
+                        branch_name=branch_name
                     )
                     
                     job_info['data']['report_blob_url'] = report_blob_url
@@ -97,6 +95,32 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 else:
                     print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no Blob Storage. Prosseguindo para geração.")
                 
+            # Passo 6: fluxo especial para criacao_tarefas_azure_devops
+            if analysis_type == 'criacao_tarefas_azure_devops':
+                previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
+                steps_to_run = workflow.get('steps', [])[start_from_step:]
+                for i, step in enumerate(steps_to_run):
+                    current_step_index = start_from_step + i
+                    print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
+                    self.job_handler.update_job_status(job_id, step['status_update'])
+                    step_result = self._execute_step_with_strategy(
+                        job_id, job_info, step, current_step_index, previous_step_result, None, i, start_from_step
+                    )
+                    if current_step_index == 0:
+                        report_text = self.report_handler.extract_report_text(step_result)
+                        if report_text and report_text.strip():
+                            self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                            if step.get('requires_approval', False):
+                                self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                                return
+                        else:
+                            print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
+                            return
+                        previous_step_result = step_result
+                    previous_step_result = step_result
+                self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
+                return
+            # Fim do passo 6
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data'].get('repo_name')
             repository_provider = get_repository_provider_explicit(repository_type)
@@ -195,7 +219,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
-                                    repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
+                                    repo_reader: Optional[Any], step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
@@ -228,9 +252,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if agent_params_override:
             agent_params.update(agent_params_override)
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+        # Passo 6: para criacao_tarefas_azure_devops, repo_reader deve ser None
+        if job_info['data'].get('original_analysis_type') == 'criacao_tarefas_azure_devops':
+            repo_reader_to_use = None
+        else:
+            repo_reader_to_use = repo_reader
         result = strategy.execute_step(
             job_id, job_info, step, current_step_index, 
-            previous_step_result, repo_reader, llm_provider, agent_params
+            previous_step_result, repo_reader_to_use, llm_provider, agent_params
         )
         if current_step_index == 0:
             print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente no step 0.")
