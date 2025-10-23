@@ -43,7 +43,6 @@ class JobFields:
     MODEL_NAME = 'model_name'
     USAR_RAG = 'usar_rag'
     GERAR_RELATORIO_APENAS = 'gerar_relatorio_apenas'
-    GERAR_NOVO_RELATORIO = 'gerar_novo_relatorio'
     ARQUIVOS_ESPECIFICOS = 'arquivos_especificos'
     ANALYSIS_NAME = 'analysis_name'
     REPOSITORY_TYPE = 'repository_type'
