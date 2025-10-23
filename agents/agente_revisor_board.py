@@ -1,21 +1,21 @@
 import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
-from domain.interfaces.board_reader_interface import IBoardReader
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
+from services.azure_board_service import AzureBoardService
 
 class AgenteRevisorBoard:
-    def __init__(self, board_reader: IBoardReader, llm_provider: ILLMProvider):
-        self.board_reader = board_reader
+    def __init__(self, azure_board_service: AzureBoardService, llm_provider: ILLMProvider):
+        self.azure_board_service = azure_board_service
         self.llm_provider = llm_provider
         init_logger()
 
-    def _get_epic_data(self, epic_id: str, organization: str, project: str) -> Dict[str, Any]:
-        if not epic_id or not organization or not project:
-            raise ValueError("epic_id, organization e project são obrigatórios para leitura do épico.")
+    def _get_epic_data(self, epic_id: str) -> Dict[str, Any]:
+        if not epic_id:
+            raise ValueError("epic_id é obrigatório para leitura do épico.")
         try:
-            return self.board_reader.read_epic(epic_id=epic_id, organization=organization, project=project)
+            return self.azure_board_service.read_epic(epic_id)
         except Exception as e:
             print(f"[AgenteRevisorBoard] ERRO durante leitura do épico: {e}")
             raise RuntimeError(f"Falha ao ler o épico: {e}") from e
@@ -23,8 +23,6 @@ class AgenteRevisorBoard:
     def main(
         self,
         epic_id: str,
-        organization: str,
-        project: str,
         tipo_analise: str = None,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
@@ -39,11 +37,7 @@ class AgenteRevisorBoard:
     ) -> Dict[str, Any]:
         if not epic_id:
             raise ValueError("epic_id é obrigatório para execução do agente revisor_board.")
-        if not organization:
-            raise ValueError("organization é obrigatório para execução do agente revisor_board.")
-        if not project:
-            raise ValueError("project é obrigatório para execução do agente revisor_board.")
-        epic_data = self._get_epic_data(epic_id=epic_id, organization=organization, project=project)
+        epic_data = self._get_epic_data(epic_id=epic_id)
         if not epic_data:
             print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para o épico '{epic_id}'.")
             print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados do épico")
