@@ -19,7 +19,8 @@ from tools.azure_secret_manager import AzureSecretManager
 import tools.blob_report_reader as blob_report_reader
 from services.azure_board_service import AzureBoardService
 from tools.cache_key_builder import build_cache_key_for_report
-
+from tools.blob_report_path_builder import build_report_blob_path
+from os import getenv
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -73,32 +74,20 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
             cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+            steps_to_run = workflow.get('steps', [])[start_from_step:]
             if start_from_step == 0:
-                report_from_blob = blob_report_reader.read_report_from_blob(
-                    projeto=projeto,
-                    analysis_type=analysis_type,
-                    repository_type=repository_type,
-                    repo_name=repo_name,
-                    branch_name=branch_name,
-                    analysis_name=analysis_name
-                )
-                if report_from_blob is not None and report_from_blob.strip():
-                    job_info['data']['analysis_report'] = report_from_blob
-                    from tools.blob_report_path_builder import build_report_blob_path
-                    from os import getenv
+                report_text = self.report_handler.read_existing_report_from_blob(job_id, job_info, 0)
+                if report_text is not None and report_text.strip():
+                    job_info['data']['analysis_report'] = report_text
                     projeto_clean = projeto if projeto else "unknown"
                     analysis_type_clean = analysis_type if analysis_type else "unknown"
                     repository_type_clean = repository_type if repository_type else "unknown"
                     repo_name_clean = repo_name if repo_name else "unknown"
                     branch_name_clean = branch_name if branch_name else "unknown"
                     analysis_name_clean = analysis_name if analysis_name else "unknown"
-                    blob_path = f"{projeto_clean}/{analysis_type_clean}/{repository_type_clean}/{repo_name_clean}/{branch_name_clean}/{analysis_name_clean}.md"
-                    
+                    blob_path = build_report_blob_path(projeto_clean, analysis_type_clean, repository_type_clean, repo_name_clean, branch_name_clean, analysis_name_clean)
                     container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
-                    secret_name = getenv('AZURE_STORAGE_CONNECTION_STRING')
-                    secret_manager = AzureSecretManager()
-                    account_url = secret_manager.get_secret(secret_name)
-                    
+                    account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
                     if account_url and container_name:
                         report_blob_url = f"{account_url}/{container_name}/{blob_path}"
                     elif container_name:
@@ -108,7 +97,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data']['report_blob_url'] = report_blob_url
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage no step 0. Workflow pausado para aprovação.")
-                    self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_from_blob})
+                    self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_text})
                     return
                 else:
                     print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no Blob Storage no step 0. Prosseguindo para geração do relatório pelo agente.")
@@ -118,7 +107,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
             repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service)
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
-            steps_to_run = workflow.get('steps', [])[start_from_step:]
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
             gerar_relatorio_apenas = job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS, False)
