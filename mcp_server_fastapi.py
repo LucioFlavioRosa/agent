@@ -41,7 +41,6 @@ class StartAnalysisPayload(BaseModel):
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False)
     gerar_relatorio_apenas: bool = Field(False)
-    gerar_novo_relatorio: bool = Field(True, description="Se False, tenta ler relatório existente do Blob Storage usando analysis_name")
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
     analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
@@ -93,17 +92,13 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
     
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    # Validação especial para criação de épicos via transcrição de reunião
     if getattr(payload, 'criar_epicos_azure', False):
         if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
             raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
-        # branch_name_modernizado pode ser None nesse caso
         print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
     else:
         if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
             raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
-        if payload.gerar_novo_relatorio is False and (payload.analysis_name is None or str(payload.analysis_name).strip() == ""):
-            raise HTTPException(status_code=400, detail="analysis_name é obrigatório quando gerar_novo_relatorio=False")
     workflows = workflow_registry_service.get_workflow_registry()
     workflow = workflows.get(payload.analysis_type)
     first_step = None
