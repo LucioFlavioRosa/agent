@@ -44,7 +44,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente. gerar_relatorio_apenas: {job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS)}, tamanho do relatório: {len(report_text)}")
         job_info['data']['analysis_report'] = report_text
         print(f"[{job_id}] [DEBUG] Chamando save_report_to_blob para salvar o relatório do step {current_step_index}.")
-        url = self.report_handler.save_report_to_blob(job_id, job_info, report_text, report_generated_by_agent=True)
+        url = self.report_handler.save_report_to_blob(job_id, job_info, report_text)
         print(f"[{job_id}] [DEBUG] save_report_to_blob retornou url: {url}")
         if not url:
             raise ValueError(f"[{job_id}] ERRO CRÍTICO: Relatório não foi salvo no Blob Storage")
@@ -64,33 +64,31 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not workflow:
             raise ValueError("Workflow não encontrado.")
         try:
-            gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
             analysis_name = job_info['data'].get('analysis_name')
-            if gerar_novo_relatorio is False and analysis_name:
-                projeto = job_info['data'].get('projeto')
-                analysis_type = job_info['data'].get('original_analysis_type')
-                repository_type = job_info['data'].get('repository_type')
-                repo_name = job_info['data'].get('repo_name_modernizado')
-                branch_name = job_info['data'].get('branch_name_modernizado')
-                print(f"[{job_id}] [DEBUG] gerar_novo_relatorio=False detectado. Tentando ler relatório existente do blob storage para analysis_name={analysis_name}.")
-                report = blob_report_reader.read_report_from_blob(
-                    projeto=projeto,
-                    analysis_type=analysis_type,
-                    repository_type=repository_type,
-                    repo_name=repo_name,
-                    branch_name=branch_name,
-                    analysis_name=analysis_name
-                )
-                if report is not None:
-                    print(f"[{job_id}] [DEBUG] Relatório encontrado no blob storage para analysis_name={analysis_name}. Reutilizando relatório.")
-                    job_info['data']['analysis_report'] = report
-                    url = self.report_handler.save_report_to_blob(job_id, job_info, report, report_generated_by_agent=False)
-                    job_info['data']['report_blob_url'] = url
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente.")
-                    return
-                else:
-                    print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no blob storage para analysis_name={analysis_name}. Prosseguindo para geração do relatório pelo agente.")
+            projeto = job_info['data'].get('projeto')
+            analysis_type = job_info['data'].get('original_analysis_type')
+            repository_type = job_info['data'].get('repository_type')
+            repo_name = job_info['data'].get('repo_name_modernizado')
+            branch_name = job_info['data'].get('branch_name_modernizado')
+            print(f"[{job_id}] [DEBUG] Tentando ler relatório existente do blob storage para analysis_name={analysis_name}.")
+            report = blob_report_reader.read_report_from_blob(
+                projeto=projeto,
+                analysis_type=analysis_type,
+                repository_type=repository_type,
+                repo_name=repo_name,
+                branch_name=branch_name,
+                analysis_name=analysis_name
+            )
+            if report is not None:
+                print(f"[{job_id}] [DEBUG] Relatório encontrado no blob storage para analysis_name={analysis_name}. Reutilizando relatório.")
+                job_info['data']['analysis_report'] = report
+                url = self.report_handler.save_report_to_blob(job_id, job_info, report)
+                job_info['data']['report_blob_url'] = url
+                self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente.")
+                return
+            else:
+                print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no blob storage para analysis_name={analysis_name}. Prosseguindo para geração do relatório pelo agente.")
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data'].get('repo_name')
             repository_provider = get_repository_provider_explicit(repository_type)
@@ -219,16 +217,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
-        gerar_novo_relatorio = job_info['data'].get('gerar_novo_relatorio', True)
         if current_step_index == 0:
-            if gerar_novo_relatorio is True:
-                print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente no step 0 porque gerar_novo_relatorio=True.")
-                report_text = self.report_handler.extract_report_text(result)
-                if report_text and report_text.strip():
-                    self._save_generated_report(job_id, job_info, result, current_step_index)
-                    print(f"[{job_id}] [DEBUG] Relatório salvo com sucesso no step {current_step_index}.")
-            else:
-                print(f"[{job_id}] [DEBUG] Não irá salvar relatório no step 0 porque gerar_novo_relatorio=False (relatório pode ter sido reutilizado).")
+            print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente no step 0.")
+            report_text = self.report_handler.extract_report_text(result)
+            if report_text and report_text.strip():
+                self._save_generated_report(job_id, job_info, result, current_step_index)
+                print(f"[{job_id}] [DEBUG] Relatório salvo com sucesso no step {current_step_index}.")
         if step.get('requires_approval', False):
             return result
         return result
