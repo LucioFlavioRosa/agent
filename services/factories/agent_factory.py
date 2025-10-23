@@ -27,8 +27,10 @@ class AgentFactory:
         if not agent_class:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
         if agent_type == 'revisor_board':
-            if board_reader is None or llm_provider is None:
-                raise ValueError("Para 'revisor_board', é necessário fornecer board_reader e llm_provider.")
+            if board_reader is None:
+                raise ValueError("Para 'revisor_board', é necessário fornecer board_reader.")
+            if llm_provider is None:
+                raise ValueError("Para 'revisor_board', é necessário fornecer llm_provider.")
             return agent_class(board_reader=board_reader, llm_provider=llm_provider)
         if agent_type in ["revisor", "comparador"]:
             return agent_class(repository_reader=repository_reader, llm_provider=llm_provider)
