@@ -17,6 +17,12 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         epic_id = job_info['data'].get('epic_id')
         organization = job_info['data'].get('organization')
         project = job_info['data'].get('project')
+        if not epic_id:
+            raise ValueError(f"[{job_id}] Parâmetro obrigatório 'epic_id' ausente em job_info['data'].")
+        if not organization:
+            raise ValueError(f"[{job_id}] Parâmetro obrigatório 'organization' ausente em job_info['data'].")
+        if not project:
+            raise ValueError(f"[{job_id}] Parâmetro obrigatório 'project' ausente em job_info['data'].")
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
