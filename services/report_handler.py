@@ -50,7 +50,7 @@ class ReportHandler:
                     return step_result['resultado']['relatorio']
         return None
 
-    def save_report_to_blob(self, job_id, job_info, report_text, report_generated_by_agent=False):
+    def save_report_to_blob(self, job_id, job_info, report_text):
         if not report_text or len(str(report_text).strip()) == 0:
             raise ValueError(f"[{job_id}] ERRO: Tentativa de salvar relatório vazio no Blob Storage.")
         projeto = job_info['data'].get('projeto')
@@ -59,8 +59,6 @@ class ReportHandler:
         repo_name = job_info['data'].get('repo_name')
         branch_name = job_info['data'].get('branch_name_modernizado')
         analysis_name = job_info['data'].get('analysis_name')
-        if report_generated_by_agent:
-            print(f"[{job_id}] Salvando relatório gerado pelo agente no Blob Storage (gerar_novo_relatorio era False, mas relatório não foi encontrado).")
         print(f"[{job_id}] [DEBUG] Iniciando upload do relatório para o Blob Storage...")
         url = self.blob_storage.upload_report(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         if not url:
