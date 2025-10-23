@@ -57,7 +57,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
-        # Passo 2: Salvar relatório no cache
         projeto = job_info['data'].get('projeto')
         analysis_type = job_info['data'].get('original_analysis_type')
         repository_type = job_info['data'].get('repository_type')
@@ -80,7 +79,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name_modernizado')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            # Passo 3: Buscar relatório no cache antes do blob storage
             cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
             cached_report = self.report_handler.read_report_from_cache(cache_key)
             if cached_report is not None:
@@ -103,7 +101,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 url = self.report_handler.save_report_to_blob(job_id, job_info, report)
                 job_info['data']['report_blob_url'] = url
                 self.job_handler.update_job(job_id, job_info)
-                # Passo 1: Salvar relatório lido do blob no cache
                 self.report_handler.save_report_to_cache(cache_key, report)
                 print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente.")
                 return
