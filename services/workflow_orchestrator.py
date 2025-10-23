@@ -57,15 +57,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
-        # Passo 2: Salvar relatório no cache
-        projeto = job_info['data'].get('projeto')
-        analysis_type = job_info['data'].get('original_analysis_type')
-        repository_type = job_info['data'].get('repository_type')
-        repo_name = job_info['data'].get('repo_name')
-        branch_name = job_info['data'].get('branch_name_modernizado')
-        analysis_name = job_info['data'].get('analysis_name')
-        cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-        self.report_handler.save_report_to_cache(cache_key, report_text)
         return True
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
@@ -78,37 +69,42 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             projeto = job_info['data'].get('projeto')
             analysis_type = job_info['data'].get('original_analysis_type')
             repository_type = job_info['data'].get('repository_type')
-            repo_name = job_info['data'].get('repo_name_modernizado')
+            repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            # Passo 3: Buscar relatório no cache antes do blob storage
             cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-            cached_report = self.report_handler.read_report_from_cache(cache_key)
-            if cached_report is not None:
-                print(f"[{job_id}] [DEBUG] Relatório encontrado no cache para analysis_name={analysis_name}. Reutilizando relatório.")
-                job_info['data']['analysis_report'] = cached_report
-                self.job_handler.update_job(job_id, job_info)
-                return
-            print(f"[{job_id}] [DEBUG] Tentando ler relatório existente do blob storage para analysis_name={analysis_name}.")
-            report = blob_report_reader.read_report_from_blob(
-                projeto=projeto,
-                analysis_type=analysis_type,
-                repository_type=repository_type,
-                repo_name=repo_name,
-                branch_name=branch_name,
-                analysis_name=analysis_name
-            )
-            if report is not None:
-                print(f"[{job_id}] [DEBUG] Relatório encontrado no blob storage para analysis_name={analysis_name}. Reutilizando relatório.")
-                job_info['data']['analysis_report'] = report
-                url = self.report_handler.save_report_to_blob(job_id, job_info, report)
-                job_info['data']['report_blob_url'] = url
-                self.job_handler.update_job(job_id, job_info)
-                # Passo 1: Salvar relatório lido do blob no cache
-                self.report_handler.save_report_to_cache(cache_key, report)
-                print(f"[{job_id}] [DEBUG] Workflow encerrado após reutilização do relatório existente.")
-                return
-            else:
-                print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no blob storage para analysis_name={analysis_name}. Prosseguindo para geração do relatório pelo agente.")
+            # Passo 1: Buscar relatório no Blob Storage no step 0
+            if start_from_step == 0:
+                report_from_blob = blob_report_reader.read_report_from_blob(
+                    projeto=projeto,
+                    analysis_type=analysis_type,
+                    repository_type=repository_type,
+                    repo_name=repo_name,
+                    branch_name=branch_name,
+                    analysis_name=analysis_name
+                )
+                if report_from_blob is not None and report_from_blob.strip():
+                    job_info['data']['analysis_report'] = report_from_blob
+                    # Salva no cache
+                    self.report_handler.save_report_to_cache(cache_key, report_from_blob)
+                    # Constrói a URL do blob
+                    from tools.blob_report_path_builder import build_report_blob_path
+                    from os import getenv
+                    blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+                    container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
+                    account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
+                    if account_url and container_name:
+                        report_blob_url = f"{account_url}/{container_name}/{blob_path}"
+                    elif container_name:
+                        report_blob_url = f"/{container_name}/{blob_path}"
+                    else:
+                        report_blob_url = None
+                    job_info['data']['report_blob_url'] = report_blob_url
+                    self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage no step 0. Workflow pausado para aprovação.")
+                    self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_from_blob})
+                    return
+                else:
+                    print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no Blob Storage no step 0. Prosseguindo para geração do relatório pelo agente.")
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data'].get('repo_name')
             repository_provider = get_repository_provider_explicit(repository_type)
@@ -185,13 +181,21 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                     )
                     if current_step_index == 0:
-                        if step.get('requires_approval', False):
-                            self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                        report_text = self.report_handler.extract_report_text(step_result)
+                        if report_text and report_text.strip():
+                            self.report_handler.save_report_to_cache(cache_key, report_text)
+                            self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                            if step.get('requires_approval', False):
+                                self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                                return
+                        else:
+                            print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
                             return
-                        if gerar_relatorio_apenas:
-                            self.job_handler.update_job_status(job_id, 'completed')
-                            print(f"[{job_id}] [DEBUG] gerar_relatorio_apenas=True detectado após step 0. Status atualizado para completed. Encerrando workflow.")
-                            return
+                        previous_step_result = step_result
+                    if gerar_relatorio_apenas:
+                        self.job_handler.update_job_status(job_id, 'completed')
+                        print(f"[{job_id}] [DEBUG] gerar_relatorio_apenas=True detectado após step 0. Status atualizado para completed. Encerrando workflow.")
+                        return
                     previous_step_result = step_result
             if not gerar_relatorio_apenas:
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
