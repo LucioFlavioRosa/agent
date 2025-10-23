@@ -18,6 +18,7 @@ from services.dotnet_build_service import DotNetBuildService
 from tools.azure_secret_manager import AzureSecretManager
 import tools.blob_report_reader as blob_report_reader
 from services.azure_board_service import AzureBoardService
+from tools.cache_key_builder import build_cache_key_for_report
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -70,7 +71,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            
+            cache_key = build_cache_key_for_report(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
             if start_from_step == 0:
                 report_from_blob = blob_report_reader.read_report_from_blob(
                     projeto=projeto,
@@ -84,7 +85,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data']['analysis_report'] = report_from_blob
                     from tools.blob_report_path_builder import build_report_blob_path
                     from os import getenv
-                    blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
+                    projeto_clean = projeto if projeto else "unknown"
+                    analysis_type_clean = analysis_type if analysis_type else "unknown"
+                    repository_type_clean = repository_type if repository_type else "unknown"
+                    repo_name_clean = repo_name if repo_name else "unknown"
+                    branch_name_clean = branch_name if branch_name else "unknown"
+                    analysis_name_clean = analysis_name if analysis_name else "unknown"
+                    blob_path = f"{projeto_clean}/{analysis_type_clean}/{repository_type_clean}/{repo_name_clean}/{branch_name_clean}/{analysis_name_clean}.md"
                     container_name = getenv('AZURE_STORAGE_CONTAINER_NAME')
                     account_url = getenv('AZURE_STORAGE_ACCOUNT_URL')
                     if account_url and container_name:
@@ -94,7 +101,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     else:
                         report_blob_url = None
                     job_info['data']['report_blob_url'] = report_blob_url
-                    self.report_handler.save_report_to_cache(cache_key, report_from_blob)
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage no step 0. Workflow pausado para aprovação.")
                     self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_from_blob})
