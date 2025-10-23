@@ -1,8 +1,8 @@
 import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
-from domain/interfaces.board_reader_interface import IBoardReader
-from domain/interfaces.llm_provider_interface import ILLMProvider
+from domain.interfaces.board_reader_interface import IBoardReader
+from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
 
 class AgenteRevisorBoard:
