@@ -12,6 +12,8 @@ class AgenteRevisorBoard:
         init_logger()
 
     def _get_epic_data(self, epic_id: str, organization: str, project: str) -> Dict[str, Any]:
+        if not epic_id or not organization or not project:
+            raise ValueError("epic_id, organization e project são obrigatórios para leitura do épico.")
         try:
             return self.board_reader.read_epic(epic_id=epic_id, organization=organization, project=project)
         except Exception as e:
@@ -20,10 +22,10 @@ class AgenteRevisorBoard:
 
     def main(
         self,
-        tipo_analise: str,
         epic_id: str,
         organization: str,
         project: str,
+        tipo_analise: str = None,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
