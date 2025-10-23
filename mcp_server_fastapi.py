@@ -16,7 +16,7 @@ from services.api_service_factory import ApiServiceFactory
 from services.pull_request_extractor_service import PullRequestExtractorService
 from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
-from models import JobStatus, JobFields, JobActions, StartAnalysisPayload
+from models import JobStatus, JobFields, JobActions
 
 container = DependencyContainer()
 pr_extractor = PullRequestExtractorService()
@@ -33,6 +33,29 @@ job_data_service = api_service_factory.get_job_data_service()
 job_validation_service = api_service_factory.get_job_validation_service()
 logging_service = api_service_factory.get_logging_service()
 
+class StartAnalysisPayload(BaseModel):
+    repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
+    branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
+    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
+    analysis_type: ValidAnalysisTypes
+    instrucoes_extras: Optional[str] = None
+    usar_rag: bool = Field(False)
+    gerar_relatorio_apenas: bool = Field(False)
+    model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado. Se nulo, usa o padrão.")
+    arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de caminhos específicos de arquivos para ler. Se fornecido, apenas esses arquivos serão processados.")
+    analysis_name: Optional[str] = Field(None, description="Nome personalizado para identificar a análise.")
+    repository_type: Literal['github', 'gitlab', 'azure'] = Field(description="Tipo do repositório: 'github', 'gitlab', 'azure'.")
+    repo_name_original: Optional[str] = Field(None, description="Nome do repositório original para comparação")
+    branch_name_original: Optional[str] = Field(None, description="Branch do repositório original")
+    retornar_lista_arquivos: bool = False
+    usuario_executor: Optional[str] = None
+    executar_steps_incrementalmente: bool = Field(
+        True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
+    max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
+    executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
+    criar_epicos_azure: bool = Field(False, description="Se True, após aprovação, cria os épicos no Azure DevOps Board")
+    epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
+    
 class StartAnalysisResponse(BaseModel):
     job_id: str
     
