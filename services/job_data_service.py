@@ -25,6 +25,7 @@ class JobDataService:
         data = {}
         data[JobFields.REPO_NAME] = normalized_repo_name
         criar_epicos_azure = payload_dict.get('criar_epicos_azure', False)
+        criar_tarefas_azure = payload_dict.get('criar_tarefas_azure', False)
         analysis_type = payload_dict.get('analysis_type')
         if criar_epicos_azure:
             organization, project = self._parse_repository_name(normalized_repo_name)
@@ -59,6 +60,7 @@ class JobDataService:
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
         data[JobFields.CRIAR_EPICOS_AZURE] = criar_epicos_azure
+        data['criar_tarefas_azure'] = criar_tarefas_azure
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
