@@ -8,6 +8,7 @@ from services.task_parser_service import TaskParserService
 import json
 import time
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from services.epic_reader_service import EpicReaderService
 
 class AzureBoardService:
     def __init__(self, organization: Optional[str] = None, project: Optional[str] = None, secret_manager: AzureSecretManager = None):
@@ -119,31 +120,19 @@ class AzureBoardService:
         if not self.organization or not self.project:
             return {"error": "organization e project devem estar definidos para criar backlog."}
         try:
-            epic_data = self.read_epic(epic_id)
-            if 'error' in epic_data or not epic_data.get('title'):
-                return {"error": f"Não foi possível ler o épico ou título ausente: {epic_data.get('error', 'Título ausente')}"}
-            
-            backlog_name = epic_data['title']
+            epic_title = EpicReaderService.get_epic_title(epic_id, self.organization, self.project)
+            if not epic_title:
+                return {"error": "Não foi possível obter o título do épico."}
             token = self._get_token()
-    
-            # ---> LINHA ALTERADA <---
-            # Troque "$Backlog" por "$Product Backlog Item" ou "$User Story"
-            # Verifique qual tipo de item existe no seu projeto Azure DevOps
             url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Product%20Backlog%20Item?api-version=7.1-preview.3"
-            # Se o seu processo for "Agile", use "$User Story"
-            # url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$User%20Story?api-version=7.1-preview.3"
-            # ---> FIM DA ALTERAÇÃO <---
-            
             headers = {
                 'Content-Type': 'application/json-patch+json',
                 'Authorization': f'Basic {self._basic_auth_header(token)}'
             }
-            # Adiciona o link para o Épico pai
             parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
             payload = [
-                {"op": "add", "path": "/fields/System.Title", "from": None, "value": backlog_name},
+                {"op": "add", "path": "/fields/System.Title", "from": None, "value": epic_title},
                 {"op": "add", "path": "/fields/System.Description", "from": None, "value": f"Backlog criado a partir do épico {epic_id}"},
-                # Adiciona a relação de parentesco com o Épico
                 {
                     "op": "add",
                     "path": "/relations/-",
@@ -153,29 +142,26 @@ class AzureBoardService:
                     }
                 }
             ]
-            
             response = requests.post(url, headers=headers, json=payload)
-            
             if response.status_code in (200, 201):
                 data = response.json()
                 return {
                     "id": data.get("id"),
                     "url": data.get("url"),
-                    "title": backlog_name
+                    "title": epic_title
                 }
             else:
-                print(f"[AzureBoardService-ERROR] Falha ao criar Backlog/PBI. Status: {response.status_code}, Resposta: {response.text}")
                 return {
                     "error": response.text,
                     "status_code": response.status_code
                 }
         except Exception as e:
-            print(f"[AzureBoardService-ERROR] Exceção em create_backlog_from_epic: {e}")
             return {"error": str(e)}
 
     def create_tasks_from_report(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
-        print(f"[AzureBoardService-DEBUG] Tentando criar um backlog a partir do Épico ID: {epic_id}")
+        print(f"[AzureBoardService-DEBUG] Chamando AzureBoardService.create_backlog_from_epic com epic_id={epic_id}")
         backlog_result = self.create_backlog_from_epic(epic_id)
+        print(f"[AzureBoardService-DEBUG] Resultado de create_backlog_from_epic: {backlog_result}")
         if 'error' in backlog_result or not backlog_result.get('id'):
             return [{"error": f"Falha ao criar backlog: {backlog_result.get('error', 'Erro desconhecido')}"}]
         backlog_id = backlog_result['id']
