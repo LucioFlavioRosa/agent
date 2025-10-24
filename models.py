@@ -71,6 +71,7 @@ class JobFields:
     BUILD_RESULT = 'build_result'
     REQUIRES_APPROVAL = 'requires_approval'
     CRIAR_EPICOS_AZURE = 'criar_epicos_azure'
+    CRIAR_TAREFAS_AZURE = 'criar_tarefas_azure'
     AZURE_ORGANIZATION = 'azure_organization'
     AZURE_PROJECT = 'azure_project'
     EPICOS_CRIADOS = 'epicos_criados'
