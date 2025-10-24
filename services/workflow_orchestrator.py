@@ -92,7 +92,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     
                     print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage. Workflow pausado para aprovação.")
                     self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_from_blob})
-                    return # Para a execução
+                    return
 
                 else:
                     print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no Blob Storage. Prosseguindo para geração.")
@@ -107,6 +107,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
             gerar_relatorio_apenas = job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS, False)
+            
             if executar_incremental and start_from_step == 1:
                 if not job_info['data'].get(JobFields.STEP_BATCHES):
                     report_text = job_info['data'].get('analysis_report')
@@ -118,8 +119,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     job_info['data'][JobFields.BATCH_RESULTS] = []
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
+            
             if not executar_incremental and not gerar_relatorio_apenas:
                 raise ValueError("Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
+            
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -253,7 +256,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
-                                    repo_reader: ReaderGeral, step_iteration: int, start_from_step: int, batch_steps: Optional[list] = None, agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
+                                    repo_reader: ReaderGeral, step_iteration: int, 
+                                    start_from_step: int, batch_steps: Optional[list] = None, 
+                                    agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
+                                        
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
