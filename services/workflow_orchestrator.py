@@ -73,29 +73,23 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 report = job_info['data'].get('analysis_report')
                 print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
                 azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                try:
-                    print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report com epic_id={epic_id}")
-                    created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
-                    print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_tasks_from_report: {created_tasks}")
-                    if created_tasks and any('error' in task for task in created_tasks):
-                        error_message = next((task['error'] for task in created_tasks if 'error' in task), "Erro desconhecido ao criar tarefas no Azure.")
-                        print(f"[{job_id}] [ERROR] Falha detectada ao criar tarefas no Azure: {error_message}")
-                        job_info['data']['tarefas_criadas_erro'] = created_tasks
-                        self.job_handler.update_job(job_id, job_info)
-                        self.job_handler.update_job_status(job_id, 'failed')
-                        return
-                    job_info['data']['tarefas_criadas'] = created_tasks
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_backlog_from_epic com epic_id={epic_id}")
+                created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
+                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_backlog_from_epic: {created_tasks}")
+                if created_tasks and any('error' in task for task in created_tasks):
+                    error_message = next((task['error'] for task in created_tasks if 'error' in task), "Erro desconhecido ao criar tarefas no Azure.")
+                    print(f"[{job_id}] [ERROR] Falha detectada ao criar tarefas no Azure: {error_message}")
+                    job_info['data']['tarefas_criadas_erro'] = created_tasks
                     self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
-                    print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de tarefas Azure.")
-                    self.job_handler.update_job_status(job_id, 'completed')
-                    print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
-                    return
-                except Exception as e:
-                    print(f"[{job_id}] [ERROR] Exception ao criar tarefas Azure: {str(e)}")
-                    traceback.print_exc()
                     self.job_handler.update_job_status(job_id, 'failed')
                     return
+                job_info['data']['tarefas_criadas'] = created_tasks
+                self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
+                print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de tarefas Azure.")
+                self.job_handler.update_job_status(job_id, 'completed')
+                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
+                return
             if start_from_step > 0 and job_info['data'].get('criar_epicos_azure'):
                 print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
