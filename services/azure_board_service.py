@@ -5,6 +5,7 @@ from azure.devops.connection import Connection
 from msrest.authentication import BasicAuthentication
 import requests
 from services.task_parser_service import TaskParserService
+import json
 
 class AzureBoardService:
     def __init__(self, organization: Optional[str] = None, project: Optional[str] = None, secret_manager: AzureSecretManager = None):
@@ -120,6 +121,7 @@ class AzureBoardService:
         total_tasks = len(tasks)
         success_count = 0
         error_count = 0
+        parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
         for idx, task in enumerate(tasks):
             work_item_type = task.get('tipo', 'Task').capitalize()
             if work_item_type not in ['Task', 'Feature', 'Bug', 'Spike']:
@@ -140,43 +142,76 @@ class AzureBoardService:
                 'Authorization': f'Basic {self._basic_auth_header(token)}'
             }
             payload = [
-                {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
-                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description_full},
-                {"op": "add", "path": "/fields/System.Parent", "from": None, "value": int(epic_id)}
+                {"op": "add", "path": "/fields/System.Title", "value": title},
+                {"op": "add", "path": "/fields/System.Description", "value": f"<div>{description_full}</div>"}
             ]
+            if perfis_sugeridos:
+                pass  # já incluído na descrição
             if estimativa_sp:
                 try:
                     sp_val = float(estimativa_sp)
-                    payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.StoryPoints", "from": None, "value": sp_val})
+                    payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.StoryPoints", "value": sp_val})
                 except Exception:
                     pass
+            # Adiciona relação hierárquica correta com épico pai
+            payload.append({
+                "op": "add",
+                "path": "/relations/-",
+                "value": {
+                    "rel": "System.LinkTypes.Hierarchy-Reverse",
+                    "url": parent_epic_url,
+                    "attributes": {
+                        "comment": "Tarefa adicionada via script Python"
+                    }
+                }
+            })
             print(f"[AzureBoardService] [DEBUG] ANTES de requests.post: url={url}")
             print(f"[AzureBoardService] [DEBUG] headers: {{'Content-Type': '{headers['Content-Type']}', 'Authorization': 'Basic <hidden>'}}")
-            print(f"[AzureBoardService] [DEBUG] payload: {payload}")
+            print(f"[AzureBoardService] [DEBUG] payload: {json.dumps(payload, ensure_ascii=False)}")
             try:
-                response = requests.post(url, headers=headers, json=payload)
+                response = requests.post(url, headers=headers, data=json.dumps(payload))
                 print(f"[AzureBoardService] [DEBUG] DEPOIS de requests.post: response.status_code={response.status_code}")
                 print(f"[AzureBoardService] [DEBUG] response.text: {response.text}")
                 if response.status_code in (200, 201):
-                    data = response.json()
-                    created_tasks.append({
-                        "id": data.get("id"),
-                        "url": data.get("url"),
-                        "title": title
-                    })
-                    success_count += 1
+                    try:
+                        data = response.json()
+                        created_tasks.append({
+                            "id": data.get("id"),
+                            "url": data.get("url"),
+                            "title": title
+                        })
+                        success_count += 1
+                    except Exception as e:
+                        print(f"[AzureBoardService] [ERROR] Exception ao processar JSON de resposta: {str(e)}")
+                        created_tasks.append({
+                            "error": f"Erro ao processar JSON de resposta: {str(e)}",
+                            "status_code": response.status_code,
+                            "title": title
+                        })
+                        error_count += 1
                 else:
+                    print(f"[AzureBoardService] [ERROR] Erro na criação da tarefa: status_code={response.status_code} - {response.text}")
                     created_tasks.append({
                         "error": response.text,
+                        "status_code": response.status_code,
                         "title": title
                     })
                     error_count += 1
-            except Exception as e:
+            except requests.exceptions.RequestException as e:
                 print(f"[AzureBoardService] [ERROR] Exception ao criar tarefa: {str(e)}")
-                created_tasks.append({
-                    "error": str(e),
-                    "title": title
-                })
+                if hasattr(e, 'response') and e.response is not None:
+                    print(f"   Status Code: {e.response.status_code}")
+                    print(f"   Detalhes do erro: {e.response.text}")
+                    created_tasks.append({
+                        "error": e.response.text,
+                        "status_code": e.response.status_code,
+                        "title": title
+                    })
+                else:
+                    created_tasks.append({
+                        "error": str(e),
+                        "title": title
+                    })
                 error_count += 1
                 continue
         print(f"[AzureBoardService] [SUMMARY] Total de tarefas processadas: {total_tasks}, criadas com sucesso: {success_count}, com erro: {error_count}")
