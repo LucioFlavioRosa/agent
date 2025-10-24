@@ -117,7 +117,10 @@ class AzureBoardService:
         tasks = parser.parse_tasks_from_markdown(markdown_table)
         token = self._get_token()
         created_tasks = []
-        for task in tasks:
+        total_tasks = len(tasks)
+        success_count = 0
+        error_count = 0
+        for idx, task in enumerate(tasks):
             work_item_type = task.get('tipo', 'Task').capitalize()
             if work_item_type not in ['Task', 'Feature', 'Bug', 'Spike']:
                 work_item_type = 'Task'
@@ -161,16 +164,20 @@ class AzureBoardService:
                         "url": data.get("url"),
                         "title": title
                     })
+                    success_count += 1
                 else:
                     created_tasks.append({
                         "error": response.text,
                         "title": title
                     })
+                    error_count += 1
             except Exception as e:
                 print(f"[AzureBoardService] [ERROR] Exception ao criar tarefa: {str(e)}")
                 created_tasks.append({
                     "error": str(e),
                     "title": title
                 })
+                error_count += 1
                 continue
+        print(f"[AzureBoardService] [SUMMARY] Total de tarefas processadas: {total_tasks}, criadas com sucesso: {success_count}, com erro: {error_count}")
         return created_tasks
