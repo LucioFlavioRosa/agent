@@ -31,7 +31,6 @@ class JobDataService:
             organization, project = self._parse_repository_name(normalized_repo_name)
             data[JobFields.AZURE_ORGANIZATION] = organization
             data[JobFields.AZURE_PROJECT] = project
-        # Passo 3: adicionar campos para criacao_tarefas_azure_devops
         if analysis_type == 'criacao_tarefas_azure_devops':
             epic_id = payload_dict.get('epic_id')
             organization, project = self._parse_repository_name(normalized_repo_name)
@@ -60,6 +59,10 @@ class JobDataService:
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
         data[JobFields.CRIAR_EPICOS_AZURE] = criar_epicos_azure
+        # Passo 3: garantir que criar_tarefas_azure seja propagado corretamente
+        if not isinstance(criar_tarefas_azure, bool):
+            criar_tarefas_azure = bool(criar_tarefas_azure)
+        data[JobFields.CRIAR_TAREFAS_AZURE] = criar_tarefas_azure
         data['criar_tarefas_azure'] = criar_tarefas_azure
         return {
             JobFields.STATUS: None,
