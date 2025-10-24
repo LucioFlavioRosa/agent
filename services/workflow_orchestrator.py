@@ -163,7 +163,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                 "batch_index": batch_idx + 1,
                                 "error": str(e)
                             })
-                            continue 
+                            continue
                         finally:
                             job_info['data'][JobFields.BATCH_RESULTS] = batch_results
                             job_info['data'][JobFields.CURRENT_BATCH_INDEX] = batch_idx + 1
@@ -259,12 +259,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     repo_reader: ReaderGeral, step_iteration: int, 
                                     start_from_step: int, batch_steps: Optional[list] = None, 
                                     agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
-                                        
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
-        # Passo 4: lógica para revisor_board
         if agent_type == 'revisor_board':
             epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
             organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
