@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 
 class TaskParserService:
     def parse_tasks_from_markdown(self, markdown_table: str) -> List[Dict[str, Any]]:
+        print(f"[TaskParserService-DEBUG] Iniciando parsing. Tamanho do markdown: {len(markdown_table)} caracteres")
         lines = [line for line in markdown_table.splitlines() if line.strip()]
         header = None
         tasks = []
@@ -33,4 +34,7 @@ class TaskParserService:
                         task['estimativa_sp'] = col
                 if task:
                     tasks.append(task)
+        print(f"[TaskParserService-DEBUG] Parsing concluído. Total de tarefas parseadas: {len(tasks)}")
+        if len(tasks) == 0:
+            print(f"[TaskParserService-WARNING] Nenhuma tarefa foi parseada da tabela Markdown. Verifique o formato da tabela.")
         return tasks
