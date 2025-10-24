@@ -16,7 +16,6 @@ from services.incremental_step_executor_service import IncrementalStepExecutorSe
 from tools.azure_secret_manager import AzureSecretManager
 from services.azure_board_service import AzureBoardService
 
-
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
@@ -34,7 +33,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.dependency_container = dependency_container
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
-        
         report_text = self.report_handler.extract_report_text(step_result)
         if not report_text or len(report_text.strip()) == 0:
             print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
@@ -65,7 +63,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            
             if start_from_step == 0:
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
@@ -75,7 +72,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     branch_name=branch_name,
                     analysis_name=analysis_name
                 )
-                
                 if report_from_blob is not None and report_from_blob.strip():
                     job_info['data']['analysis_report'] = report_from_blob
                     report_blob_url = self.report_handler.blob_storage.get_report_url(
@@ -86,17 +82,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         branch_name=branch_name,
                         analysis_name=analysis_name
                     )
-                    
                     job_info['data']['report_blob_url'] = report_blob_url
                     self.job_handler.update_job(job_id, job_info)
-                    
                     print(f"[{job_id}] [DEBUG] Relatório encontrado no Blob Storage. Workflow pausado para aprovação.")
                     self.handle_approval_step(job_id, job_info, 0, {'relatorio': report_from_blob})
                     return
-
                 else:
                     print(f"[{job_id}] [DEBUG] Relatório NÃO encontrado no Blob Storage. Prosseguindo para geração.")
-                
             repository_type = job_info['data']['repository_type']
             repo_name = job_info['data'].get('repo_name')
             repository_provider = get_repository_provider_explicit(repository_type)
@@ -107,22 +99,20 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             executar_incremental = job_info['data'].get(JobFields.EXECUTAR_STEPS_INCREMENTALMENTE, False)
             max_steps_per_batch = job_info['data'].get(JobFields.MAX_STEPS_PER_BATCH, 3)
             gerar_relatorio_apenas = job_info['data'].get(JobFields.GERAR_RELATORIO_APENAS, False)
-            
-            if executar_incremental and start_from_step == 1:
-                if not job_info['data'].get(JobFields.STEP_BATCHES):
-                    report_text = job_info['data'].get('analysis_report')
-                    if not report_text or not report_text.strip():
-                        raise ValueError(f"[{job_id}] ERRO: Relatório aprovado não encontrado para parsing incremental.")
-                    step_batches = IncrementalStepExecutorService.get_step_batches_from_report(report_text, max_steps_per_batch=max_steps_per_batch)
-                    job_info['data'][JobFields.STEP_BATCHES] = step_batches
-                    job_info['data'][JobFields.CURRENT_BATCH_INDEX] = 0
-                    job_info['data'][JobFields.BATCH_RESULTS] = []
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [INCREMENTAL] step_batches inicializados com {len(step_batches)} batches.")
-            
+            # NOVA LÓGICA: criar tarefas no Azure DevOps Board após aprovação do relatório
+            if job_info['data'].get('criar_tarefas_azure') and start_from_step == 1:
+                epic_id = job_info['data'].get('epic_id')
+                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
+                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
+                report = job_info['data'].get('analysis_report')
+                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+                created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
+                job_info['data']['tarefas_criadas'] = created_tasks
+                self.job_handler.update_job(job_id, job_info)
+                self.job_handler.update_job_status(job_id, 'completed')
+                return
             if not executar_incremental and not gerar_relatorio_apenas:
                 raise ValueError("Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
-            
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
@@ -192,19 +182,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                         return
                     previous_step_result = step_result
             if not gerar_relatorio_apenas:
-                # INÍCIO DA NOVA LÓGICA PARA CRIAR TAREFAS NO AZURE DEVOPS
-                if job_info['data'].get('criar_tarefas_azure'):
-                    print(f"[{job_id}] [AZURE_TASKS] Iniciando criação de tarefas no Azure DevOps Board...")
-                    organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-                    project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-                    epic_id = job_info['data'].get('epic_id')
-                    report = job_info['data'].get('analysis_report')
-                    azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                    created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
-                    job_info['data']['tarefas_criadas'] = created_tasks
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
-                # FIM DA NOVA LÓGICA
                 if job_info['data'].get('criar_epicos_azure'):
                     print(f"[{job_id}] [AZURE_EPICS] Iniciando criação de épicos no Azure DevOps Board...")
                     organization = job_info['data'].get('azure_organization')
@@ -253,7 +230,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             if 'build_errors' not in commit:
                                 print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
                 self.job_handler.update_job_status(job_id, 'completed')
-                
         except Exception as e:
             print(e)
 
@@ -262,12 +238,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     repo_reader: ReaderGeral, step_iteration: int, 
                                     start_from_step: int, batch_steps: Optional[list] = None, 
                                     agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
-                                        
         model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
-        # Passo 4: lógica para revisor_board
         if agent_type == 'revisor_board':
             epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
             organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
@@ -327,17 +301,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        if job_info['data'].get('criar_tarefas_azure'):
-            print(f"[{job_id}] [AZURE_TASKS] Iniciando criação de tarefas no Azure DevOps Board...")
-            organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-            project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-            epic_id = job_info['data'].get('epic_id')
-            report = job_info['data'].get('analysis_report')
-            azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-            created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
-            job_info['data']['tarefas_criadas'] = created_tasks
-            self.job_handler.update_job(job_id, job_info)
-            print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
         if job_info['data'].get('criar_epicos_azure'):
             print(f"[{job_id}] [AZURE_EPICS] Iniciando criação de épicos no Azure DevOps Board...")
             organization = job_info['data'].get('azure_organization')
