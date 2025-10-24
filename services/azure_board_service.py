@@ -118,11 +118,14 @@ class AzureBoardService:
 
     def create_backlog_from_epic(self, epic_id: str) -> Dict[str, Any]:
         if not self.organization or not self.project:
+            print(f"[AzureBoardService-DEBUG] organization e project não definidos para criar backlog.")
             return {"error": "organization e project devem estar definidos para criar backlog."}
         try:
+            print(f"[AzureBoardService-DEBUG] Chamando EpicReaderService.get_epic_title com epic_id={epic_id}, organization={self.organization}, project={self.project}")
             epic_title = EpicReaderService.get_epic_title(epic_id, self.organization, self.project)
             print(f"[AzureBoardService-DEBUG] Título do épico obtido: epic_title={epic_title}")
             if not epic_title:
+                print(f"[AzureBoardService-DEBUG] Não foi possível obter o título do épico {epic_id}.")
                 return {"error": f"Não foi possível obter o título do épico {epic_id}. Verifique se o épico existe e se as credenciais estão corretas."}
             token = self._get_token()
             url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Product%20Backlog%20Item?api-version=7.1-preview.3"
@@ -148,27 +151,32 @@ class AzureBoardService:
             print(f"[AzureBoardService-DEBUG] Resposta da criação do backlog. Status={response.status_code}, Body={response.text[:500]}")
             if response.status_code in (200, 201):
                 data = response.json()
+                print(f"[AzureBoardService-DEBUG] Backlog criado com sucesso. id={data.get('id')}, url={data.get('url')}, title={epic_title}")
                 return {
                     "id": data.get("id"),
                     "url": data.get("url"),
                     "title": epic_title
                 }
             else:
+                print(f"[AzureBoardService-DEBUG] Falha ao criar backlog: {response.text}")
                 return {
                     "error": response.text,
                     "status_code": response.status_code
                 }
         except Exception as e:
+            print(f"[AzureBoardService-DEBUG] Exceção ao criar backlog: {str(e)}")
             return {"error": str(e)}
 
     def create_tasks_from_report(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
         if not epic_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
+            print(f"[AzureBoardService-DEBUG] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
             raise ValueError(f"[AzureBoardService] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
         print(f"[AzureBoardService-DEBUG] Chamando AzureBoardService.create_backlog_from_epic com epic_id={epic_id}")
         print(f"[AzureBoardService-DEBUG] ANTES de chamar create_backlog_from_epic. epic_id={epic_id}, self.organization={self.organization}, self.project={self.project}")
         backlog_result = self.create_backlog_from_epic(epic_id)
         print(f"[AzureBoardService-DEBUG] DEPOIS de chamar create_backlog_from_epic. backlog_result={backlog_result}")
         if 'error' in backlog_result or not backlog_result.get('id'):
+            print(f"[AzureBoardService-DEBUG] Falha ao criar backlog: {backlog_result.get('error', 'Erro desconhecido')}")
             return [{"error": f"Falha ao criar backlog: {backlog_result.get('error', 'Erro desconhecido')}"}]
         backlog_id = backlog_result['id']
         backlog_url = backlog_result['url']
@@ -178,6 +186,7 @@ class AzureBoardService:
         print(f"[TaskParserService-DEBUG] Parsing concluído. Total de tarefas parseadas: {len(tasks)}")
         if len(tasks) == 0:
             print(f"[TaskParserService-WARNING] Nenhuma tarefa foi parseada da tabela Markdown. Verifique o formato da tabela.")
+            return [{"error": "Nenhuma tarefa foi encontrada no relatório para criar no backlog."}]
         token = self._get_token()
         created_tasks = []
         total_tasks = len(tasks)
