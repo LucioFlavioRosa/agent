@@ -65,6 +65,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
+            print(f"[{job_id}] [DEBUG-PRE-CHECK] start_from_step={start_from_step}, criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}")
             if start_from_step > 0 and job_info['data'].get('criar_tarefas_azure'):
                 print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas Azure após aprovação do relatório.")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
@@ -73,13 +74,19 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 report = job_info['data'].get('analysis_report')
                 print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
                 azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_backlog_from_epic com epic_id={epic_id}")
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report com epic_id={epic_id}")
                 created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
-                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_backlog_from_epic: {created_tasks}")
+                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_tasks_from_report: {created_tasks}")
                 if created_tasks and any('error' in task for task in created_tasks):
                     error_message = next((task['error'] for task in created_tasks if 'error' in task), "Erro desconhecido ao criar tarefas no Azure.")
                     print(f"[{job_id}] [ERROR] Falha detectada ao criar tarefas no Azure: {error_message}")
                     job_info['data']['tarefas_criadas_erro'] = created_tasks
+                    self.job_handler.update_job(job_id, job_info)
+                    self.job_handler.update_job_status(job_id, 'failed')
+                    return
+                if created_tasks is not None and isinstance(created_tasks, list) and len(created_tasks) == 0:
+                    print(f"[{job_id}] [ERROR] Nenhuma tarefa foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.")
+                    job_info['data']['error_details'] = 'Nenhuma tarefa foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.'
                     self.job_handler.update_job(job_id, job_info)
                     self.job_handler.update_job_status(job_id, 'failed')
                     return
