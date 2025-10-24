@@ -54,6 +54,7 @@ class StartAnalysisPayload(BaseModel):
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
     criar_epicos_azure: bool = Field(False, description="Se True, após aprovação, cria os épicos no Azure DevOps Board")
+    criar_tarefas_azure: bool = Field(False, description="Se True, após aprovação do relatório de tarefas, cria os Work Items no Azure DevOps Board dentro do épico especificado.")
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
     
 class StartAnalysisResponse(BaseModel):
@@ -97,6 +98,9 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
             raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
         print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
+    if getattr(payload, 'criar_tarefas_azure', False):
+        if not getattr(payload, 'epic_id', None):
+            raise HTTPException(status_code=400, detail="epic_id é obrigatório quando criar_tarefas_azure=True.")
     else:
         if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
             raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
