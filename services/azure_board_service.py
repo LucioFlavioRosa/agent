@@ -83,73 +83,7 @@ class AzureBoardService:
         except Exception as e:
             return {"error": str(e)}
 
-    def create_epics(self, markdown_table: str) -> List[Dict[str, Any]]:
-        epics = self.parse_epics_from_markdown(markdown_table)
-        token = self._get_token()
-        created_epics = []
-        for epic in epics:
-            title = epic.get('Épico') or epic.get('Epico') or epic.get('Epic')
-            description = f"Objetivo: {epic.get('Objetivo de Negócio', '')}\n\nCritérios/Atividades:\n{epic.get('Critérios de Aceite / Atividades Chave', '')}\n\nPerfis: {epic.get('Perfis Envolvidos', '')}\nEstimativa: {epic.get('Estimativa de Esforço', '')}"
-            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Epic?api-version=7.1-preview.3"
-            headers = {
-                'Content-Type': 'application/json-patch+json',
-                'Authorization': f'Basic {self._basic_auth_header(token)}'
-            }
-            payload = [
-                {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
-                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description}
-            ]
-            response = requests.post(url, headers=headers, json=payload)
-            if response.status_code in (200, 201):
-                data = response.json()
-                created_epics.append({
-                    "id": data.get("id"),
-                    "url": data.get("url"),
-                    "title": title
-                })
-            else:
-                created_epics.append({
-                    "error": response.text,
-                    "title": title
-                })
-        return created_epics
-
-    def _basic_auth_header(self, token):
-        import base64
-        return base64.b64encode(f':{token}'.encode('utf-8')).decode('utf-8')
-
-    def read_epic(self, epic_id: str) -> Dict[str, Any]:
-        if not self.organization or not self.project:
-            raise ValueError("organization e project devem estar definidos para buscar épico.")
-        token = self._get_token()
-        url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}?api-version=7.1-preview.3"
-        headers = {
-            'Authorization': f'Basic {self._basic_auth_header(token)}'
-        }
-        try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                fields = data.get('fields', {})
-                return {
-                    'id': data.get('id'),
-                    'title': fields.get('System.Title'),
-                    'description': fields.get('System.Description'),
-                    'state': fields.get('System.State'),
-                    'url': data.get('url'),
-                    'fields': fields
-                }
-            else:
-                return {
-                    'error': response.text,
-                    'status_code': response.status_code
-                }
-        except Exception as e:
-            return {
-                'error': str(e)
-            }
-
-    def create_tasks_from_report(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
+    def create_tasks_from_report(self, epic_id: str, markdown_table: str, backlog_id: Optional[str] = None) -> List[Dict[str, Any]]:
         parser = TaskParserService()
         tasks = parser.parse_tasks_from_markdown(markdown_table)
         print(f"[AzureBoardService] [DEBUG] Número de tarefas parseadas: {len(tasks)}")
@@ -158,7 +92,14 @@ class AzureBoardService:
         total_tasks = len(tasks)
         success_count = 0
         error_count = 0
-        parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
+        parent_url = None
+        parent_type = None
+        if backlog_id:
+            parent_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{backlog_id}"
+            parent_type = 'Backlog'
+        else:
+            parent_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
+            parent_type = 'Epic'
         api_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Task?api-version=7.1-preview.3"
         for idx, task in enumerate(tasks):
             print(f"[AzureBoardService] [DEBUG] Processando tarefa {idx+1}/{total_tasks}: {task}")
@@ -198,9 +139,9 @@ class AzureBoardService:
                 "path": "/relations/-",
                 "value": {
                     "rel": "System.LinkTypes.Hierarchy-Reverse",
-                    "url": parent_epic_url,
+                    "url": parent_url,
                     "attributes": {
-                        "comment": "Tarefa adicionada via script Python"
+                        "comment": f"Tarefa adicionada via script Python (parent: {parent_type})"
                     }
                 }
             })
@@ -281,3 +222,53 @@ class AzureBoardService:
                     continue
         print(f"[AzureBoardService] [SUMMARY] Total de tarefas processadas: {total_tasks}, criadas com sucesso: {success_count}, com erro: {error_count}")
         return created_tasks
+
+    def _basic_auth_header(self, token):
+        import base64
+        return base64.b64encode(f':{token}'.encode('utf-8')).decode('utf-8')
+
+    def read_epic(self, epic_id: str) -> Dict[str, Any]:
+        if not self.organization or not self.project:
+            raise ValueError("organization e project devem estar definidos para buscar épico.")
+        token = self._get_token()
+        url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}?api-version=7.1-preview.3"
+        headers = {
+            'Authorization': f'Basic {self._basic_auth_header(token)}'
+        }
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                fields = data.get('fields', {})
+                return {
+                    'id': data.get('id'),
+                    'title': fields.get('System.Title'),
+                    'description': fields.get('System.Description'),
+                    'state': fields.get('System.State'),
+                    'url': data.get('url'),
+                    'fields': fields
+                }
+            else:
+                return {
+                    'error': response.text,
+                    'status_code': response.status_code
+                }
+        except Exception as e:
+            return {
+                'error': str(e)
+            }
+
+    def create_backlog_and_tasks_from_epic(self, epic_id: str, markdown_table: str) -> Dict[str, Any]:
+        backlog_result = self.create_backlog_from_epic(epic_id)
+        if 'error' in backlog_result or not backlog_result.get('id'):
+            return {
+                'error': backlog_result.get('error', 'Erro ao criar backlog'),
+                'backlog': backlog_result,
+                'tasks': []
+            }
+        backlog_id = backlog_result['id']
+        tasks_result = self.create_tasks_from_report(epic_id, markdown_table, backlog_id=backlog_id)
+        return {
+            'backlog': backlog_result,
+            'tasks': tasks_result
+        }
