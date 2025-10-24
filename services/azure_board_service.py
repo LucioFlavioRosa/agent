@@ -147,14 +147,12 @@ class AzureBoardService:
                     payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.StoryPoints", "from": None, "value": sp_val})
                 except Exception:
                     pass
-            # LOG DEBUG ANTES DA CHAMADA
-            print(f"[AzureBoardService] [DEBUG] Preparando chamada à API Azure DevOps para criar tarefa:")
-            print(f"[AzureBoardService] [DEBUG] url: {url}")
+            print(f"[AzureBoardService] [DEBUG] ANTES de requests.post: url={url}")
             print(f"[AzureBoardService] [DEBUG] headers: {{'Content-Type': '{headers['Content-Type']}', 'Authorization': 'Basic <hidden>'}}")
             print(f"[AzureBoardService] [DEBUG] payload: {payload}")
             try:
                 response = requests.post(url, headers=headers, json=payload)
-                print(f"[AzureBoardService] [DEBUG] response.status_code: {response.status_code}")
+                print(f"[AzureBoardService] [DEBUG] DEPOIS de requests.post: response.status_code={response.status_code}")
                 print(f"[AzureBoardService] [DEBUG] response.text: {response.text}")
                 if response.status_code in (200, 201):
                     data = response.json()
