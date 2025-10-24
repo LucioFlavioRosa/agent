@@ -147,19 +147,32 @@ class AzureBoardService:
                     payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.StoryPoints", "from": None, "value": sp_val})
                 except Exception:
                     pass
-            # Se houver campo customizado para perfis sugeridos, adicionar aqui (exemplo)
-            # payload.append({"op": "add", "path": "/fields/Custom.PerfisSugeridos", "from": None, "value": perfis_sugeridos})
-            response = requests.post(url, headers=headers, json=payload)
-            if response.status_code in (200, 201):
-                data = response.json()
+            # LOG DEBUG ANTES DA CHAMADA
+            print(f"[AzureBoardService] [DEBUG] Preparando chamada à API Azure DevOps para criar tarefa:")
+            print(f"[AzureBoardService] [DEBUG] url: {url}")
+            print(f"[AzureBoardService] [DEBUG] headers: {{'Content-Type': '{headers['Content-Type']}', 'Authorization': 'Basic <hidden>'}}")
+            print(f"[AzureBoardService] [DEBUG] payload: {payload}")
+            try:
+                response = requests.post(url, headers=headers, json=payload)
+                print(f"[AzureBoardService] [DEBUG] response.status_code: {response.status_code}")
+                print(f"[AzureBoardService] [DEBUG] response.text: {response.text}")
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    created_tasks.append({
+                        "id": data.get("id"),
+                        "url": data.get("url"),
+                        "title": title
+                    })
+                else:
+                    created_tasks.append({
+                        "error": response.text,
+                        "title": title
+                    })
+            except Exception as e:
+                print(f"[AzureBoardService] [ERROR] Exception ao criar tarefa: {str(e)}")
                 created_tasks.append({
-                    "id": data.get("id"),
-                    "url": data.get("url"),
+                    "error": str(e),
                     "title": title
                 })
-            else:
-                created_tasks.append({
-                    "error": response.text,
-                    "title": title
-                })
+                continue
         return created_tasks
