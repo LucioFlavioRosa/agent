@@ -49,6 +49,40 @@ class AzureBoardService:
                 epics.append(epic)
         return epics
 
+    def create_backlog_from_epic(self, epic_id: str) -> Dict[str, Any]:
+        if not self.organization or not self.project:
+            return {"error": "organization e project devem estar definidos para criar backlog."}
+        try:
+            epic_data = self.read_epic(epic_id)
+            if 'error' in epic_data or not epic_data.get('title'):
+                return {"error": f"Não foi possível ler o épico ou título ausente: {epic_data.get('error', 'Título ausente')}"}
+            backlog_name = epic_data['title']
+            token = self._get_token()
+            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Backlog?api-version=7.1-preview.3"
+            headers = {
+                'Content-Type': 'application/json-patch+json',
+                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            }
+            payload = [
+                {"op": "add", "path": "/fields/System.Title", "from": None, "value": backlog_name},
+                {"op": "add", "path": "/fields/System.Description", "from": None, "value": f"Backlog criado a partir do épico {epic_id}"}
+            ]
+            response = requests.post(url, headers=headers, json=payload)
+            if response.status_code in (200, 201):
+                data = response.json()
+                return {
+                    "id": data.get("id"),
+                    "url": data.get("url"),
+                    "title": backlog_name
+                }
+            else:
+                return {
+                    "error": response.text,
+                    "status_code": response.status_code
+                }
+        except Exception as e:
+            return {"error": str(e)}
+
     def create_epics(self, markdown_table: str) -> List[Dict[str, Any]]:
         epics = self.parse_epics_from_markdown(markdown_table)
         token = self._get_token()
@@ -128,7 +162,6 @@ class AzureBoardService:
         api_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Task?api-version=7.1-preview.3"
         for idx, task in enumerate(tasks):
             print(f"[AzureBoardService] [DEBUG] Processando tarefa {idx+1}/{total_tasks}: {task}")
-            # Validação dos campos obrigatórios
             if not task.get('titulo') or not task.get('descricao'):
                 print(f"[AzureBoardService] [ERROR] Tarefa sem campos obrigatórios (titulo/descricao) - ignorando: {task}")
                 created_tasks.append({
@@ -246,6 +279,5 @@ class AzureBoardService:
                             print(f"[AzureBoardService] [WARN] Tentando novamente em {wait_time} segundos...")
                             time.sleep(wait_time)
                     continue
-            # fim do for de retry
         print(f"[AzureBoardService] [SUMMARY] Total de tarefas processadas: {total_tasks}, criadas com sucesso: {success_count}, com erro: {error_count}")
         return created_tasks
