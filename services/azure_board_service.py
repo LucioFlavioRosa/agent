@@ -121,14 +121,11 @@ class AzureBoardService:
             return {"error": "organization e project devem estar definidos para criar backlog."}
         try:
             epic_title = EpicReaderService.get_epic_title(epic_id, self.organization, self.project)
+            print(f"[AzureBoardService-DEBUG] Título do épico obtido: epic_title={epic_title}")
             if not epic_title:
-                return {"error": "Não foi possível obter o título do épico."}
+                return {"error": f"Não foi possível obter o título do épico {epic_id}. Verifique se o épico existe e se as credenciais estão corretas."}
             token = self._get_token()
             url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Product%20Backlog%20Item?api-version=7.1-preview.3"
-            headers = {
-                'Content-Type': 'application/json-patch+json',
-                'Authorization': f'Basic {self._basic_auth_header(token)}'
-            }
             parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "from": None, "value": epic_title},
@@ -142,7 +139,13 @@ class AzureBoardService:
                     }
                 }
             ]
+            print(f"[AzureBoardService-DEBUG] Criando backlog. URL={url}, Payload={payload}")
+            headers = {
+                'Content-Type': 'application/json-patch+json',
+                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            }
             response = requests.post(url, headers=headers, json=payload)
+            print(f"[AzureBoardService-DEBUG] Resposta da criação do backlog. Status={response.status_code}, Body={response.text[:500]}")
             if response.status_code in (200, 201):
                 data = response.json()
                 return {
@@ -159,15 +162,22 @@ class AzureBoardService:
             return {"error": str(e)}
 
     def create_tasks_from_report(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
+        if not epic_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
+            raise ValueError(f"[AzureBoardService] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
         print(f"[AzureBoardService-DEBUG] Chamando AzureBoardService.create_backlog_from_epic com epic_id={epic_id}")
+        print(f"[AzureBoardService-DEBUG] ANTES de chamar create_backlog_from_epic. epic_id={epic_id}, self.organization={self.organization}, self.project={self.project}")
         backlog_result = self.create_backlog_from_epic(epic_id)
-        print(f"[AzureBoardService-DEBUG] Resultado de create_backlog_from_epic: {backlog_result}")
+        print(f"[AzureBoardService-DEBUG] DEPOIS de chamar create_backlog_from_epic. backlog_result={backlog_result}")
         if 'error' in backlog_result or not backlog_result.get('id'):
             return [{"error": f"Falha ao criar backlog: {backlog_result.get('error', 'Erro desconhecido')}"}]
         backlog_id = backlog_result['id']
         backlog_url = backlog_result['url']
         parser = TaskParserService()
+        print(f"[TaskParserService-DEBUG] Iniciando parsing. Tamanho do markdown: {len(markdown_table)} caracteres")
         tasks = parser.parse_tasks_from_markdown(markdown_table)
+        print(f"[TaskParserService-DEBUG] Parsing concluído. Total de tarefas parseadas: {len(tasks)}")
+        if len(tasks) == 0:
+            print(f"[TaskParserService-WARNING] Nenhuma tarefa foi parseada da tabela Markdown. Verifique o formato da tabela.")
         token = self._get_token()
         created_tasks = []
         total_tasks = len(tasks)
@@ -208,12 +218,14 @@ class AzureBoardService:
                 'Content-Type': 'application/json-patch+json',
                 'Authorization': f'Basic {self._basic_auth_header(token)}'
             }
+            print(f"[AzureBoardService-DEBUG] Criando tarefa {idx+1}/{total_tasks}. Título: {title}, Payload: {json.dumps(payload)[:200]}")
             try:
                 response = requests.post(
                     f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Task?api-version=7.1-preview.3",
                     headers=headers,
                     data=json.dumps(payload)
                 )
+                print(f"[AzureBoardService-DEBUG] Resposta da criação da tarefa {idx+1}. Status={response.status_code}, Body={response.text[:300]}")
                 if response.status_code in (200, 201):
                     try:
                         data = response.json()
