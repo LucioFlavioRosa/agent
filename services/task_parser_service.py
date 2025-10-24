@@ -33,7 +33,4 @@ class TaskParserService:
                         task['estimativa_sp'] = col
                 if task:
                     tasks.append(task)
-        print(f"[TaskParserService] [DEBUG] Total de tarefas parseadas: {len(tasks)}")
-        for t in tasks:
-            print(f"[TaskParserService] [DEBUG] Tarefa: {t}")
         return tasks
