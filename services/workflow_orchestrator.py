@@ -66,40 +66,45 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
             # Passo 1: Após aprovação do relatório, fluxo de criação de tarefas/épicos Azure
-            if start_from_step > 0 and (job_info['data'].get('criar_tarefas_azure') or job_info['data'].get('criar_epicos_azure')):
-                print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas/épicos Azure após aprovação do relatório.")
+            if start_from_step > 0 and job_info['data'].get('criar_tarefas_azure'):
+                print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas Azure após aprovação do relatório.")
+                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
+                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
+                epic_id = job_info['data'].get('epic_id')
+                report = job_info['data'].get('analysis_report')
+                print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
+                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+                try:
+                    print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report")
+                    created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
+                    print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_tasks_from_report: {created_tasks}")
+                    job_info['data']['tarefas_criadas'] = created_tasks
+                    self.job_handler.update_job(job_id, job_info)
+                    print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
+                    print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de tarefas Azure.")
+                    self.job_handler.update_job_status(job_id, 'completed')
+                    print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
+                    return
+                except Exception as e:
+                    print(f"[{job_id}] [ERROR] Exception ao criar tarefas Azure: {str(e)}")
+                    traceback.print_exc()
+                    self.job_handler.update_job_status(job_id, 'failed')
+                    return
+            if start_from_step > 0 and job_info['data'].get('criar_epicos_azure'):
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
                 project = job_info['data'].get('project') or job_info['data'].get('azure_project')
                 epic_id = job_info['data'].get('epic_id')
                 report = job_info['data'].get('analysis_report')
                 azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                if job_info['data'].get('criar_tarefas_azure'):
-                    print(f"[{job_id}] [DEBUG] ANTES de create_tasks_from_report: epic_id={epic_id}, len(report)={len(report) if report else 0}")
-                    try:
-                        created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
-                        print(f"[{job_id}] [DEBUG] DEPOIS de create_tasks_from_report: created_tasks={created_tasks}")
-                        job_info['data']['tarefas_criadas'] = created_tasks
-                        self.job_handler.update_job(job_id, job_info)
-                        print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
-                        print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de tarefas Azure.")
-                        self.job_handler.update_job_status(job_id, 'completed')
-                        print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas/épicos Azure.")
-                        return
-                    except Exception as e:
-                        print(f"[{job_id}] [ERROR] Exception ao criar tarefas Azure: {str(e)}")
-                        traceback.print_exc()
-                        self.job_handler.update_job_status(job_id, 'failed')
-                        return
-                if job_info['data'].get('criar_epicos_azure'):
-                    print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
-                    created_epics = azure_board_service.create_epics(report)
-                    print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_epics: {created_epics}")
-                    job_info['data']['epicos_criados'] = created_epics
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
-                    self.job_handler.update_job_status(job_id, 'completed')
-                    print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas/épicos Azure.")
-                    return
+                created_epics = azure_board_service.create_epics(report)
+                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_epics: {created_epics}")
+                job_info['data']['epicos_criados'] = created_epics
+                self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
+                self.job_handler.update_job_status(job_id, 'completed')
+                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de épicos Azure.")
+                return
             if start_from_step == 0:
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
@@ -315,78 +320,43 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _finalize_workflow(self, job_id: str, job_info: Dict[str, Any], workflow: Dict[str, Any], 
                            final_result: Dict[str, Any], repository_type: str, repo_name: str) -> None:
-        print(f"[{job_id}] [DEBUG] criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}, criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
-        if job_info['data'].get('criar_tarefas_azure') or job_info['data'].get('criar_epicos_azure'):
-            organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-            project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-            epic_id = job_info['data'].get('epic_id')
-            report = job_info['data'].get('analysis_report')
-            azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-            if job_info['data'].get('criar_tarefas_azure'):
-                print(f"[{job_id}] [DEBUG] ANTES de create_tasks_from_report: epic_id={epic_id}, len(report)={len(report) if report else 0}")
-                try:
-                    created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
-                    print(f"[{job_id}] [DEBUG] DEPOIS de create_tasks_from_report: created_tasks={created_tasks}")
-                    job_info['data']['tarefas_criadas'] = created_tasks
-                    self.job_handler.update_job(job_id, job_info)
-                    print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
-                    print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de tarefas Azure.")
-                    self.job_handler.update_job_status(job_id, 'completed')
-                    print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas/épicos Azure.")
-                    return
-                except Exception as e:
-                    print(f"[{job_id}] [ERROR] Exception ao criar tarefas Azure: {str(e)}")
-                    traceback.print_exc()
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-            if job_info['data'].get('criar_epicos_azure'):
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
-                created_epics = azure_board_service.create_epics(report)
-                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_epics: {created_epics}")
-                job_info['data']['epicos_criados'] = created_epics
-                self.job_handler.update_job(job_id, job_info)
-                print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
-                self.job_handler.update_job_status(job_id, 'completed')
-                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas/épicos Azure.")
-                return
-        else:
-            batch_results = job_info['data'][JobFields.BATCH_RESULTS]
-            total_batches = len(batch_results)
-            total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
-            print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
-            final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
-            dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
-            self.job_handler.update_job_status(job_id, 'committing_to_github')
-            self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
-            print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
-            if job_info['data'].get('executar_build_dotnet', False):
-                commit_details = job_info['data'].get('commit_details', [])
-                build_errors = []
-                for idx, commit in enumerate(commit_details):
-                    if 'build_result' not in commit:
-                        print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                    if 'build_errors' not in commit:
-                        print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                    errors = commit.get('build_errors')
-                    if errors:
-                        build_errors.extend(errors)
-                if build_errors:
-                    job_info['data']['build_errors'] = build_errors
-                else:
-                    job_info['data']['build_errors'] = None
-                self.job_handler.update_job(job_id, job_info)
+        batch_results = job_info['data'][JobFields.BATCH_RESULTS]
+        total_batches = len(batch_results)
+        total_steps = sum(len(batch) if isinstance(batch, list) else 1 for batch in batch_results)
+        print(f"[{job_id}] [INCREMENTAL] Finalizando workflow incremental. Batches processados: {total_batches}, Steps executados: {total_steps}.")
+        final_result = IncrementalStepExecutorService.merge_all_batches(batch_results)
+        dados_finais_formatados = self.data_formatter.format_incremental_result_for_commit(final_result)
+        self.job_handler.update_job_status(job_id, 'committing_to_github')
+        self.commit_handler.execute_commits(job_id, job_info, dados_finais_formatados, repository_type, repo_name)
+        print(f"[{job_id}] [DEBUG] Após execute_commits: executar_build_dotnet={job_info['data'].get('executar_build_dotnet')}, commit_details presente: {bool(job_info['data'].get('commit_details'))}")
+        if job_info['data'].get('executar_build_dotnet', False):
+            commit_details = job_info['data'].get('commit_details', [])
+            build_errors = []
+            for idx, commit in enumerate(commit_details):
+                if 'build_result' not in commit:
+                    print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                if 'build_errors' not in commit:
+                    print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                errors = commit.get('build_errors')
+                if errors:
+                    build_errors.extend(errors)
+            if build_errors:
+                job_info['data']['build_errors'] = build_errors
             else:
                 job_info['data']['build_errors'] = None
             self.job_handler.update_job(job_id, job_info)
-            print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
-            if job_info['data'].get('executar_build_dotnet', False):
-                commit_details = job_info['data'].get('commit_details', [])
-                for idx, commit in enumerate(commit_details):
-                    if 'build_result' not in commit:
-                        print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-                    if 'build_errors' not in commit:
-                        print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
-            self.job_handler.update_job_status(job_id, 'completed')
+        else:
+            job_info['data']['build_errors'] = None
+        self.job_handler.update_job(job_id, job_info)
+        print(f"[{job_id}] DIAGNÓSTICO - Job atualizado no job store")
+        if job_info['data'].get('executar_build_dotnet', False):
+            commit_details = job_info['data'].get('commit_details', [])
+            for idx, commit in enumerate(commit_details):
+                if 'build_result' not in commit:
+                    print(f"[{job_id}] [ERRO CRÍTICO] build_result ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+                if 'build_errors' not in commit:
+                    print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
+        self.job_handler.update_job_status(job_id, 'completed')
 
     def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
         print(f"[WorkflowOrchestrator] Obtendo token. repository_type={repository_type}, repo_name={repo_name}")
