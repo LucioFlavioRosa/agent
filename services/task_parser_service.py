@@ -37,3 +37,11 @@ class TaskParserService:
         for t in tasks:
             print(f"[TaskParserService] [DEBUG] Tarefa: {t}")
         return tasks
+
+    def parse_backlog_name_from_epic(self, epic_data: Dict[str, Any]) -> str:
+        if not isinstance(epic_data, dict):
+            raise ValueError('epic_data deve ser um dicionário')
+        title = epic_data.get('title')
+        if not title or not isinstance(title, str) or not title.strip():
+            raise ValueError('Título do épico ausente ou inválido em epic_data')
+        return title.strip()
