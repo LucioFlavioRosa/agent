@@ -124,6 +124,7 @@ class DependencyContainer:
     def get_azure_board_service(self) -> AzureBoardService:
         if self._azure_board_service is None:
             self._azure_board_service = AzureBoardService(secret_manager=self.get_secret_manager())
+            print(f"[DependencyContainer-DEBUG] Criando AzureBoardService. organization={self._azure_board_service.organization if self._azure_board_service else 'N/A'}, project={self._azure_board_service.project if self._azure_board_service else 'N/A'}")
         return self._azure_board_service
 
     def get_board_reader(self) -> IBoardReader:
