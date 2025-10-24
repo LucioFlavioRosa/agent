@@ -253,6 +253,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             if 'build_errors' not in commit:
                                 print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
                 self.job_handler.update_job_status(job_id, 'completed')
+                
+        except Exception as e:
+            print(e)
 
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
