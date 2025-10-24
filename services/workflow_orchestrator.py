@@ -78,6 +78,14 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report")
                     created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
                     print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_tasks_from_report: {created_tasks}")
+                    if created_tasks and any('error' in task for task in created_tasks):
+                        error_message = next((task['error'] for task in created_tasks if 'error' in task), "Erro desconhecido ao criar tarefas no Azure.")
+                        print(f"[{job_id}] [ERROR] Falha detectada ao criar tarefas no Azure: {error_message}")
+                        job_info['data']['tarefas_criadas_erro'] = created_tasks
+                        self.job_handler.update_job(job_id, job_info)
+                        self.job_handler.update_job_status(job_id, 'failed')
+                        return
+                        
                     job_info['data']['tarefas_criadas'] = created_tasks
                     self.job_handler.update_job(job_id, job_info)
                     print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
