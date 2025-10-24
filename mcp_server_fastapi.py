@@ -99,12 +99,12 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
         print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
     if getattr(payload, 'criar_tarefas_azure', False):
+        print(f"[DEBUG] criar_tarefas_azure recebido como True no payload para repo: {payload.repo_name_modernizado}")
         if not getattr(payload, 'epic_id', None):
             raise HTTPException(status_code=400, detail="epic_id é obrigatório quando criar_tarefas_azure=True.")
     else:
         if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
             raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
-    # Passo 2: validação para criacao_tarefas_azure_devops
     analysis_type_str = str(payload.analysis_type.value) if hasattr(payload.analysis_type, 'value') else str(payload.analysis_type)
     if analysis_type_str == 'criacao_tarefas_azure_devops':
         if not getattr(payload, 'epic_id', None):
@@ -136,9 +136,14 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             raise HTTPException(status_code=400, detail="repo_name_modernizado deve conter organização e projeto separados por '/'.")
         payload_dict['organization'] = repo_parts[0]
         payload_dict['project'] = repo_parts[1]
+    # Passo extra: garantir propagação de criar_tarefas_azure
+    if 'criar_tarefas_azure' not in payload_dict:
+        payload_dict['criar_tarefas_azure'] = False
+    print(f"[DEBUG] Valor de criar_tarefas_azure no payload_dict antes de criar o job: {payload_dict.get('criar_tarefas_azure')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
+    print(f"[DEBUG] Valor de criar_tarefas_azure no initial_job_data: {initial_job_data.get('data', {}).get('criar_tarefas_azure')}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
