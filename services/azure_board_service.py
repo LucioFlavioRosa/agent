@@ -6,6 +6,8 @@ from msrest.authentication import BasicAuthentication
 import requests
 from services.task_parser_service import TaskParserService
 import json
+import time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 class AzureBoardService:
     def __init__(self, organization: Optional[str] = None, project: Optional[str] = None, secret_manager: AzureSecretManager = None):
@@ -116,13 +118,25 @@ class AzureBoardService:
     def create_tasks_from_report(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
         parser = TaskParserService()
         tasks = parser.parse_tasks_from_markdown(markdown_table)
+        print(f"[AzureBoardService] [DEBUG] Número de tarefas parseadas: {len(tasks)}")
         token = self._get_token()
         created_tasks = []
         total_tasks = len(tasks)
         success_count = 0
         error_count = 0
         parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
+        api_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Task?api-version=7.1-preview.3"
         for idx, task in enumerate(tasks):
+            print(f"[AzureBoardService] [DEBUG] Processando tarefa {idx+1}/{total_tasks}: {task}")
+            # Validação dos campos obrigatórios
+            if not task.get('titulo') or not task.get('descricao'):
+                print(f"[AzureBoardService] [ERROR] Tarefa sem campos obrigatórios (titulo/descricao) - ignorando: {task}")
+                created_tasks.append({
+                    "error": "Campos obrigatórios ausentes (titulo/descricao)",
+                    "task": task
+                })
+                error_count += 1
+                continue
             work_item_type = task.get('tipo', 'Task').capitalize()
             if work_item_type not in ['Task', 'Feature', 'Bug', 'Spike']:
                 work_item_type = 'Task'
@@ -136,24 +150,16 @@ class AzureBoardService:
                 description_full += '\n\nCritérios de Aceite:\n' + criterios_aceite
             if perfis_sugeridos:
                 description_full += f"\n\nPerfis Sugeridos: {perfis_sugeridos}"
-            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/${work_item_type}?api-version=7.1-preview.3"
-            headers = {
-                'Content-Type': 'application/json-patch+json',
-                'Authorization': f'Basic {self._basic_auth_header(token)}'
-            }
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "value": title},
                 {"op": "add", "path": "/fields/System.Description", "value": f"<div>{description_full}</div>"}
             ]
-            if perfis_sugeridos:
-                pass  # já incluído na descrição
             if estimativa_sp:
                 try:
                     sp_val = float(estimativa_sp)
                     payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.StoryPoints", "value": sp_val})
                 except Exception:
-                    pass
-            # Adiciona relação hierárquica correta com épico pai
+                    print(f"[AzureBoardService] [WARN] Estimativa (SP) inválida para a tarefa '{title}': {estimativa_sp}")
             payload.append({
                 "op": "add",
                 "path": "/relations/-",
@@ -165,54 +171,81 @@ class AzureBoardService:
                     }
                 }
             })
-            print(f"[AzureBoardService] [DEBUG] ANTES de requests.post: url={url}")
-            print(f"[AzureBoardService] [DEBUG] headers: {{'Content-Type': '{headers['Content-Type']}', 'Authorization': 'Basic <hidden>'}}")
-            print(f"[AzureBoardService] [DEBUG] payload: {json.dumps(payload, ensure_ascii=False)}")
-            try:
-                response = requests.post(url, headers=headers, data=json.dumps(payload))
-                print(f"[AzureBoardService] [DEBUG] DEPOIS de requests.post: response.status_code={response.status_code}")
-                print(f"[AzureBoardService] [DEBUG] response.text: {response.text}")
-                if response.status_code in (200, 201):
-                    try:
-                        data = response.json()
-                        created_tasks.append({
-                            "id": data.get("id"),
-                            "url": data.get("url"),
-                            "title": title
-                        })
-                        success_count += 1
-                    except Exception as e:
-                        print(f"[AzureBoardService] [ERROR] Exception ao processar JSON de resposta: {str(e)}")
-                        created_tasks.append({
-                            "error": f"Erro ao processar JSON de resposta: {str(e)}",
-                            "status_code": response.status_code,
-                            "title": title
-                        })
-                        error_count += 1
-                else:
-                    print(f"[AzureBoardService] [ERROR] Erro na criação da tarefa: status_code={response.status_code} - {response.text}")
-                    created_tasks.append({
-                        "error": response.text,
-                        "status_code": response.status_code,
-                        "title": title
-                    })
-                    error_count += 1
-            except requests.exceptions.RequestException as e:
-                print(f"[AzureBoardService] [ERROR] Exception ao criar tarefa: {str(e)}")
-                if hasattr(e, 'response') and e.response is not None:
-                    print(f"   Status Code: {e.response.status_code}")
-                    print(f"   Detalhes do erro: {e.response.text}")
-                    created_tasks.append({
-                        "error": e.response.text,
-                        "status_code": e.response.status_code,
-                        "title": title
-                    })
-                else:
-                    created_tasks.append({
-                        "error": str(e),
-                        "title": title
-                    })
-                error_count += 1
-                continue
+            headers = {
+                'Content-Type': 'application/json-patch+json',
+                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            }
+            max_attempts = 3
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    print(f"[AzureBoardService] [DEBUG] Tentativa {attempt} de criação da tarefa '{title}' no Azure DevOps...")
+                    print(f"[AzureBoardService] [DEBUG] Payload: {json.dumps(payload, ensure_ascii=False)}")
+                    response = requests.post(
+                        f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/${work_item_type}?api-version=7.1-preview.3",
+                        headers=headers,
+                        data=json.dumps(payload)
+                    )
+                    print(f"[AzureBoardService] [DEBUG] Status code: {response.status_code}")
+                    print(f"[AzureBoardService] [DEBUG] Response text: {response.text}")
+                    if response.status_code in (200, 201):
+                        try:
+                            data = response.json()
+                            created_tasks.append({
+                                "id": data.get("id"),
+                                "url": data.get("url"),
+                                "title": title
+                            })
+                            success_count += 1
+                        except Exception as e:
+                            print(f"[AzureBoardService] [ERROR] Exception ao processar JSON de resposta: {str(e)}")
+                            created_tasks.append({
+                                "error": f"Erro ao processar JSON de resposta: {str(e)}",
+                                "status_code": response.status_code,
+                                "title": title
+                            })
+                            error_count += 1
+                        break
+                    else:
+                        print(f"[AzureBoardService] [ERROR] Erro na criação da tarefa: status_code={response.status_code} - {response.text}")
+                        if attempt == max_attempts:
+                            created_tasks.append({
+                                "error": response.text,
+                                "status_code": response.status_code,
+                                "title": title
+                            })
+                            error_count += 1
+                        else:
+                            wait_time = 2 ** attempt
+                            print(f"[AzureBoardService] [WARN] Tentando novamente em {wait_time} segundos...")
+                            time.sleep(wait_time)
+                except requests.exceptions.RequestException as e:
+                    print(f"[AzureBoardService] [ERROR] Exception ao criar tarefa: {str(e)}")
+                    if hasattr(e, 'response') and e.response is not None:
+                        print(f"   Status Code: {e.response.status_code}")
+                        print(f"   Detalhes do erro: {e.response.text}")
+                        if attempt == max_attempts:
+                            created_tasks.append({
+                                "error": e.response.text,
+                                "status_code": e.response.status_code,
+                                "title": title
+                            })
+                            error_count += 1
+                        else:
+                            wait_time = 2 ** attempt
+                            print(f"[AzureBoardService] [WARN] Tentando novamente em {wait_time} segundos...")
+                            time.sleep(wait_time)
+                    else:
+                        if attempt == max_attempts:
+                            created_tasks.append({
+                                "error": str(e),
+                                "title": title
+                            })
+                            error_count += 1
+                        else:
+                            wait_time = 2 ** attempt
+                            print(f"[AzureBoardService] [WARN] Tentando novamente em {wait_time} segundos...")
+                            time.sleep(wait_time)
+                    continue
+            # fim do for de retry
         print(f"[AzureBoardService] [SUMMARY] Total de tarefas processadas: {total_tasks}, criadas com sucesso: {success_count}, com erro: {error_count}")
         return created_tasks
