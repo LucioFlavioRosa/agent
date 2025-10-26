@@ -18,6 +18,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         epic_id = job_info['data'].get('epic_id')
         organization = job_info['data'].get('organization')
         project = job_info['data'].get('project')
+        task_id = job_info['data'].get('task_id')
         if not epic_id:
             raise ValueError(f"[{job_id}] Parâmetro obrigatório 'epic_id' ausente em job_info['data'].")
         if not organization:
@@ -46,8 +47,8 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
             'projeto': job_info['data'].get('projeto'),
             'status_update': step['status_update']
         })
-        # Passo 6: adicionar task_id se presente
-        agent_params['task_id'] = job_info['data'].get('task_id')
+        agent_params['task_id'] = task_id
+        print(f"[{job_id}] [DEBUG] Chamando agente revisor_board com task_id={agent_params.get('task_id')}, epic_id={agent_params.get('epic_id')}")
         max_retries = 3
         if self.azure_board_service is None:
             self.azure_board_service = AzureBoardService(organization=organization, project=project)
@@ -61,7 +62,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params)
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
@@ -74,6 +75,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                         print(f"[{job_id}] A IA retornou resposta vazia ou inválida. Reutilizando resultado anterior.")
                         return previous_step_result
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
+                print(f"[{job_id}] [DEBUG] Resposta do agente revisor_board recebida, tamanho: {len(cleaned_string)} caracteres")
                 result = json.loads(cleaned_string, strict=False)
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
                 return result
