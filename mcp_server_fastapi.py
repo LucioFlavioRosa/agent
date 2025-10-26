@@ -56,6 +56,7 @@ class StartAnalysisPayload(BaseModel):
     criar_epicos_azure: bool = Field(False, description="Se True, após aprovação, cria os épicos no Azure DevOps Board")
     criar_tarefas_azure: bool = Field(False, description="Se True, após aprovação do relatório de tarefas, cria os Work Items no Azure DevOps Board dentro do épico especificado.")
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
+    task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
     
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -106,6 +107,10 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
             raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
     analysis_type_str = str(payload.analysis_type.value) if hasattr(payload.analysis_type, 'value') else str(payload.analysis_type)
+    # Validação explícita do task_id para revisor_tarefas
+    if analysis_type_str == 'revisor_tarefas':
+        if not getattr(payload, 'task_id', None) or (isinstance(payload.task_id, str) and not payload.task_id.strip()):
+            raise HTTPException(status_code=400, detail="task_id é obrigatório para análise do tipo revisor_tarefas.")
     if analysis_type_str == 'criacao_tarefas_azure_devops':
         if not getattr(payload, 'epic_id', None):
             raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
