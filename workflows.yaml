@@ -307,3 +307,14 @@ criacao_tarefas_azure_devops:
       params:
         tipo_analise: "criacao_tarefas"
       requires_approval: true
+
+revisor_tarefas:
+  description: "melhorias da descrição de tarefas"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
+  steps:
+    - status_update: "analisando o epico"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "melhoria_de_tarefas"
+      params:
+        tipo_analise: "criacao_tarefas"
+      requires_approval: true
