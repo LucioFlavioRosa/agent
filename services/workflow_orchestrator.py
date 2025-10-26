@@ -273,6 +273,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['epic_id'] = epic_id
             agent_params['organization'] = organization
             agent_params['project'] = project
+            agent_params['task_id'] = job_info['data'].get('task_id')
         elif agent_type == 'comparador':
             agent_params.update({
                 'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
