@@ -113,6 +113,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de épicos Azure.")
                 return
             if start_from_step == 0:
+                print(f"[{job_id}] [DEBUG] Entrando no step 0. analysis_type={analysis_type}")
+                if analysis_type == 'revisor_tarefas':
+                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
                     analysis_type=analysis_type,
@@ -197,14 +200,19 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     previous_step_result = {'incremental_results': batch_results}
                     break
                 else:
+                    if current_step_index == 0 and analysis_type == 'revisor_tarefas':
+                        print(f"[{job_id}] [DEBUG] Executando step 0 com task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={step.get('status_update')} (revisor_tarefas)")
                     step_result = self._execute_step_with_strategy(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                     )
                     if current_step_index == 0:
+                        print(f"[{job_id}] [DEBUG] Step 0: resultado do agente: {str(step_result)[:300]}...")
                         report_text = self.report_handler.extract_report_text(step_result)
                         if report_text and report_text.strip():
+                            print(f"[{job_id}] [DEBUG] Step 0: relatório gerado, salvando...")
                             self._save_generated_report(job_id, job_info, step_result, current_step_index)
                             if step.get('requires_approval', False):
+                                print(f"[{job_id}] [DEBUG] Step 0: requires_approval=True, chamando handle_approval_step")
                                 self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                                 return
                         else:
