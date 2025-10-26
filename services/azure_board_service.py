@@ -116,6 +116,37 @@ class AzureBoardService:
                 'error': str(e)
             }
 
+    def read_task(self, task_id: str) -> Dict[str, Any]:
+        if not self.organization or not self.project:
+            raise ValueError("organization e project devem estar definidos para buscar tarefa.")
+        token = self._get_token()
+        url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{task_id}?api-version=7.1-preview.3"
+        headers = {
+            'Authorization': f'Basic {self._basic_auth_header(token)}'
+        }
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                fields = data.get('fields', {})
+                return {
+                    'id': data.get('id'),
+                    'title': fields.get('System.Title'),
+                    'description': fields.get('System.Description'),
+                    'state': fields.get('System.State'),
+                    'url': data.get('url'),
+                    'fields': fields
+                }
+            else:
+                return {
+                    'error': response.text,
+                    'status_code': response.status_code
+                }
+        except Exception as e:
+            return {
+                'error': str(e)
+            }
+
     def create_backlog_from_epic(self, epic_id: str) -> Dict[str, Any]:
         if not self.organization or not self.project:
             print(f"[AzureBoardService-DEBUG] organization e project não definidos para criar backlog.")
