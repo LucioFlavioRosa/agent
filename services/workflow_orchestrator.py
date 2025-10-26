@@ -266,7 +266,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
-        if agent_type == 'revisor_board':
+        if agent_type == 'revisor_board' or agent_type == 'revisor_tarefas':
             epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
             organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
             project = job_info['data'].get('project') or job_info['data'].get('azure_project')
