@@ -78,6 +78,7 @@ class JobFields:
     EPIC_ID = 'epic_id'
     ORGANIZATION = 'organization'
     PROJECT = 'project'
+    TASK_ID = 'task_id'
 
 class JobActions:
     APPROVE = 'approve'
