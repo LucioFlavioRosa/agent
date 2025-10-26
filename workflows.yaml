@@ -314,7 +314,7 @@ revisor_tarefas:
   steps:
     - status_update: "analisando o epico"
       model_name: "claude-sonnet-4-5"
-      agent_type: "melhoria_de_tarefas"
+      agent_type: "revisor_board"
       params:
-        tipo_analise: "criacao_tarefas"
+        tipo_analise: "melhoria_de_tarefas"
       requires_approval: true
