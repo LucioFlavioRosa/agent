@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, model_validator
 from typing import List, Dict, Any, Optional, Literal
 
 class EpicCreationPayload(BaseModel):
@@ -115,15 +115,18 @@ class StartAnalysisPayload(BaseModel):
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
 
-    @root_validator
-    def check_task_id_for_revisor_tarefas(cls, values):
-        analysis_type = values.get('analysis_type')
-        task_id = values.get('task_id')
-        if analysis_type == 'revisor_tarefas':
-            if not task_id or (isinstance(task_id, str) and not task_id.strip()):
-                raise ValueError('task_id é obrigatório quando analysis_type for "revisor_tarefas".')
-        else:
-            if task_id is not None:
-                # Para outros analysis_type, task_id deve ser None
-                values['task_id'] = None
-        return values
+   @model_validator(mode='before')
+    def check_task_id_for_revisor_tarefas(cls, data: Any) -> Any:
+        # A verificação 'isinstance' garante que o validador funcione com diferentes tipos de entrada
+        if isinstance(data, dict):
+            analysis_type = data.get('analysis_type')
+            task_id = data.get('task_id')
+            
+            if analysis_type == ValidAnalysisTypes.REVISOR_TAREFAS:
+                if not task_id or not str(task_id).strip():
+                    raise ValueError('task_id é obrigatório quando analysis_type for "revisor_tarefas".')
+            elif task_id is not None:
+                # Zera o task_id se não for do tipo revisor_tarefas para evitar dados inconsistentes
+                data['task_id'] = None
+                
+        return data
