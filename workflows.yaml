@@ -312,7 +312,7 @@ revisor_tarefas:
   description: "melhorias da descrição de tarefas"
   extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
   steps:
-    - status_update: "analisando o epico"
+    - status_update: "analisando o tarefa"
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor_board"
       params:
