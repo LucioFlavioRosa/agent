@@ -46,6 +46,8 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
             'projeto': job_info['data'].get('projeto'),
             'status_update': step['status_update']
         })
+        # Passo 6: adicionar task_id se presente
+        agent_params['task_id'] = job_info['data'].get('task_id')
         max_retries = 3
         if self.azure_board_service is None:
             self.azure_board_service = AzureBoardService(organization=organization, project=project)
@@ -59,7 +61,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params)
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
