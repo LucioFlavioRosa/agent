@@ -115,9 +115,8 @@ class StartAnalysisPayload(BaseModel):
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
 
-   @model_validator(mode='before')
+    @model_validator(mode='before')
     def check_task_id_for_revisor_tarefas(cls, data: Any) -> Any:
-        # A verificação 'isinstance' garante que o validador funcione com diferentes tipos de entrada
         if isinstance(data, dict):
             analysis_type = data.get('analysis_type')
             task_id = data.get('task_id')
