@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field, validator, model_validator
 from typing import List, Dict, Any, Optional, Literal
+from enum import Enum
 
 class EpicCreationPayload(BaseModel):
     transcricao_reuniao: str = Field(..., description="Transcrição da reunião para geração de épicos")
@@ -84,7 +85,7 @@ class JobActions:
     APPROVE = 'approve'
     REJECT = 'reject'
 
-class ValidAnalysisTypes(str):
+class ValidAnalysisTypes(str, Enum):
     MODERNIZACAO = 'modernizacao'
     IMPLEMENTACAO = 'implementacao'
     CRIACAO_EPICOS = 'criacao_epicos'
