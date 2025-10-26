@@ -46,7 +46,9 @@ class AgenteRevisorBoard:
             print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para o épico '{epic_id}'.")
             print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados do épico")
             return {"resultado": {"reposta_final": {}}}
+        print(f"[AgenteRevisorBoard] Dados do épico obtidos: {len(json.dumps(epic_data))} caracteres")
         if task_data is not None:
+            print(f"[AgenteRevisorBoard] Dados da tarefa obtidos: {len(json.dumps(task_data))} caracteres")
             instrucoes_extras = (instrucoes_extras or "") + '\n\n--- DADOS DO ÉPICO ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False) + '\n\n--- DADOS DA TAREFA ---\n' + json.dumps(task_data, indent=2, ensure_ascii=False)
         else:
             instrucoes_extras = (instrucoes_extras or "") + '\n\n--- DADOS DO ÉPICO ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False)
@@ -57,6 +59,7 @@ class AgenteRevisorBoard:
                 instrucoes_extras += "\n\n" + batch_instrucao
             else:
                 instrucoes_extras = batch_instrucao
+        print(f"[AgenteRevisorBoard] instrucoes_extras final: {len(instrucoes_extras)} caracteres")
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
             prompt_principal=None,
