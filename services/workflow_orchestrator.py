@@ -223,9 +223,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                             print(f"[{job_id}] [DEBUG] Step 0: análise revisor_tarefas, chamando _save_generated_report explicitamente.")
                             report_saved = self._save_generated_report(job_id, job_info, step_result, current_step_index)
                             print(f"[{job_id}] [DEBUG] Step 0: _save_generated_report retornou {report_saved}")
-                            if not report_saved:
-                                print(f"[{job_id}] [ERRO] Relatório não foi salvo no step 0 (revisor_tarefas). Lançando exceção.")
-                                raise ValueError(f"[{job_id}] ERRO: Relatório não foi salvo no step 0 para analysis_type='revisor_tarefas'.")
+                            # PASSO 8: Verificação explícita após _save_generated_report
+                            if not report_saved or not job_info['data'].get('analysis_report') or not job_info['data']['analysis_report'].strip():
+                                print(f"[{job_id}] [ERRO] Relatório não foi salvo ou está vazio após _save_generated_report no step 0 (revisor_tarefas). Lançando exceção.")
+                                raise ValueError(f"[{job_id}] ERRO: Relatório não foi salvo ou está vazio após _save_generated_report no step 0 para analysis_type='revisor_tarefas'.")
                             if step.get('requires_approval', False):
                                 print(f"[{job_id}] [DEBUG] Step 0: requires_approval=True, chamando handle_approval_step")
                                 self.handle_approval_step(job_id, job_info, current_step_index, step_result)
