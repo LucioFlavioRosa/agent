@@ -300,3 +300,34 @@ class AzureBoardService:
                     "title": title
                 })
         return created_tasks
+
+    def update_task_discussion(self, task_id: str, discussion_entries: List[Dict[str, str]]) -> Dict[str, Any]:
+        if not self.organization or not self.project:
+            return {"error": "organization e project devem estar definidos para atualizar discussion da task."}
+        token = self._get_token()
+        url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{task_id}/comments?api-version=7.1-preview.3"
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Basic {self._basic_auth_header(token)}'
+        }
+        created_comment_ids = []
+        errors = []
+        for entry in discussion_entries:
+            categoria = entry.get('Categoria') or entry.get('categoria') or ''
+            pergunta = entry.get('Pergunta') or entry.get('pergunta') or ''
+            comment_body = f"**Categoria:** {categoria}\n**Pergunta:** {pergunta}"
+            payload = {"text": comment_body}
+            try:
+                response = requests.post(url, headers=headers, json=payload)
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    comment_id = data.get('id')
+                    created_comment_ids.append(comment_id)
+                else:
+                    errors.append({"error": response.text, "status_code": response.status_code, "payload": payload})
+            except Exception as e:
+                errors.append({"error": str(e), "payload": payload})
+        result = {"success": len(errors) == 0, "comment_ids": created_comment_ids}
+        if errors:
+            result["errors"] = errors
+        return result
