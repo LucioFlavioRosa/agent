@@ -37,6 +37,10 @@ class JobDataService:
             data[JobFields.EPIC_ID] = epic_id
             data[JobFields.ORGANIZATION] = organization
             data[JobFields.PROJECT] = project
+        # Passo 7: garantir task_id para revisor_tarefas
+        if analysis_type == 'revisor_tarefas':
+            task_id = payload_dict.get('task_id')
+            data[JobFields.TASK_ID] = task_id
         data[JobFields.PROJETO] = payload_dict.get('projeto')
         data[JobFields.ANALYSIS_NAME] = analysis_name
         data[JobFields.ORIGINAL_ANALYSIS_TYPE] = payload_dict.get('analysis_type')
@@ -63,7 +67,9 @@ class JobDataService:
             criar_tarefas_azure = bool(criar_tarefas_azure)
         data[JobFields.CRIAR_TAREFAS_AZURE] = criar_tarefas_azure
         data['criar_tarefas_azure'] = criar_tarefas_azure
-        data[JobFields.TASK_ID] = payload_dict.get('task_id')
+        # task_id também fora do bloco condicional para manter compatibilidade
+        if 'task_id' in payload_dict and analysis_type != 'revisor_tarefas':
+            data[JobFields.TASK_ID] = payload_dict.get('task_id')
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
