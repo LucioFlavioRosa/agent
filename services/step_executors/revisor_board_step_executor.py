@@ -68,7 +68,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params)
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
+                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
