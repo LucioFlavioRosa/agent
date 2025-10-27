@@ -69,7 +69,7 @@ class JobDataService:
         data[JobFields.CRIAR_TAREFAS_AZURE] = criar_tarefas_azure
         data['criar_tarefas_azure'] = criar_tarefas_azure
         # task_id também fora do bloco condicional para manter compatibilidade
-        if 'task_id' in payload_dict and analysis_type != 'revisor_tarefas':
+        if 'task_id' in payload_dict and analysis_type == 'revisor_tarefas':
             data[JobFields.TASK_ID] = payload_dict.get('task_id')
         return {
             JobFields.STATUS: None,
