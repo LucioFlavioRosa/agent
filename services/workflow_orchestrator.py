@@ -22,7 +22,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
                  job_handler: JobHandler = None, report_handler: ReportHandler = None,
                  commit_handler: CommitHandler = None, data_formatter: DataFormatter = None, secret_manager: Optional[Any] = None,
-                 cache_service=None, dependency_container=None):
+                 cache_service=None, dependency_container=None, azure_board_service=None):
         self.workflow_registry = workflow_registry
         self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
         self.job_handler = job_handler or JobHandler(job_manager)
@@ -32,6 +32,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.data_formatter = data_formatter or DataFormatter()
         self.secret_manager = secret_manager or AzureSecretManager()
         self.dependency_container = dependency_container
+        self.azure_board_service = azure_board_service
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para step {current_step_index}.")
