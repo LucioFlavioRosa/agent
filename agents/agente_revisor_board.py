@@ -17,6 +17,7 @@ class AgenteRevisorBoard:
         epic_data = self.azure_board_service.read_epic(epic_id)
         if task_id:
             task_data = self.azure_board_service.read_task(task_id)
+            print(f"[AgenteRevisorBoard] Dados da tarefa obtidos: {len(json.dumps(task_data))} caracteres")
             return {'epic': epic_data, 'task': task_data}
         else:
             return {'epic': epic_data}
@@ -40,7 +41,6 @@ class AgenteRevisorBoard:
         print(f"[AgenteRevisorBoard] [DEBUG] Entrando no main. epic_id={epic_id}, task_id={task_id}")
         if not epic_id:
             raise ValueError("epic_id é obrigatório para execução do agente revisor_board.")
-        # Validação específica para revisor_tarefas
         if tipo_analise == 'revisor_tarefas':
             if not task_id:
                 raise ValueError("task_id é obrigatório quando analysis_type == 'revisor_tarefas'.")
