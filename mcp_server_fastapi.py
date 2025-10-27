@@ -107,7 +107,10 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     # Passo 8: validação explícita do task_id para revisor_tarefas
     if analysis_type_str == 'revisor_tarefas':
         if not getattr(payload, 'task_id', None) or (isinstance(payload.task_id, str) and not payload.task_id.strip()):
+            print(f"[DEBUG] task_id ausente ou vazio no payload para analysis_type == 'revisor_tarefas'.")
             raise HTTPException(status_code=400, detail="task_id é obrigatório para análise do tipo revisor_tarefas.")
+        else:
+            print(f"[DEBUG] task_id propagado para revisor_tarefas: {payload.task_id}")
     if analysis_type_str == 'criacao_tarefas_azure_devops':
         if not getattr(payload, 'epic_id', None):
             raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
@@ -143,11 +146,16 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     # Passo extra: garantir propagação de criar_tarefas_azure
     if 'criar_tarefas_azure' not in payload_dict:
         payload_dict['criar_tarefas_azure'] = False
+    # Passo 8: log de debug para task_id
+    if analysis_type_str == 'revisor_tarefas':
+        print(f"[DEBUG] (payload_dict) task_id para revisor_tarefas: {payload_dict.get('task_id')}")
     print(f"[DEBUG] Valor de criar_tarefas_azure no payload_dict antes de criar o job: {payload_dict.get('criar_tarefas_azure')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
     print(f"[DEBUG] Valor de criar_tarefas_azure no initial_job_data: {initial_job_data.get('data', {}).get('criar_tarefas_azure')}")
+    if analysis_type_str == 'revisor_tarefas':
+        print(f"[DEBUG] (initial_job_data) task_id para revisor_tarefas: {initial_job_data.get('data', {}).get('task_id')}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:

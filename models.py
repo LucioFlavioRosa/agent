@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator, model_validator
+from pydantic import BaseModel, Field, validator, model_validator, ValidationError
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 
@@ -121,12 +121,11 @@ class StartAnalysisPayload(BaseModel):
         if isinstance(data, dict):
             analysis_type = data.get('analysis_type')
             task_id = data.get('task_id')
-            
-            if analysis_type == ValidAnalysisTypes.REVISOR_TAREFAS:
+            # Validação explícita: task_id é obrigatório quando analysis_type == 'revisor_tarefas'
+            if analysis_type == ValidAnalysisTypes.REVISOR_TAREFAS or analysis_type == 'revisor_tarefas':
                 if not task_id or not str(task_id).strip():
                     raise ValueError('task_id é obrigatório quando analysis_type for "revisor_tarefas".')
             elif task_id is not None:
                 # Zera o task_id se não for do tipo revisor_tarefas para evitar dados inconsistentes
                 data['task_id'] = None
-                
         return data
