@@ -115,17 +115,3 @@ class StartAnalysisPayload(BaseModel):
     criar_tarefas_azure: bool = Field(False, description="Se True, após aprovação do relatório de tarefas, cria os Work Items no Azure DevOps Board dentro do épico especificado.")
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
-
-    @model_validator(mode='before')
-    def check_task_id_for_revisor_tarefas(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            analysis_type = data.get('analysis_type')
-            task_id = data.get('task_id')
-            # Validação explícita: task_id é obrigatório quando analysis_type == 'revisor_tarefas'
-            if analysis_type == ValidAnalysisTypes.REVISOR_TAREFAS or analysis_type == 'revisor_tarefas':
-                if not task_id or not str(task_id).strip():
-                    raise ValueError('task_id é obrigatório quando analysis_type for "revisor_tarefas".')
-            elif task_id is not None:
-                # Zera o task_id se não for do tipo revisor_tarefas para evitar dados inconsistentes
-                data['task_id'] = None
-        return data
