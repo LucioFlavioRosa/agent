@@ -125,7 +125,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de épicos Azure.")
                 return
             # INICIO DO NOVO FLUXO PARA criacao_tarefas_azure_devops
-            if analysis_type == 'criacao_tarefas_azure_devops' and start_from_step > 0:
+            if analysis_type == 'revisor_tarefas' and start_from_step > 0:
                 print(f"[{job_id}] [DEBUG] Fluxo de update_task_discussion para criacao_tarefas_azure_devops iniciado.")
                 task_id = job_info['data'].get('task_id')
                 report = job_info['data'].get('analysis_report')
