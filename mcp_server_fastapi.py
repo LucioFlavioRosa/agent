@@ -137,7 +137,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     if hasattr(payload.analysis_type, 'value'):
         payload_dict['analysis_type'] = payload.analysis_type.value
     # Passo 2: extrair organization e project para criacao_tarefas_azure_devops
-    if analysis_type_str == 'criacao_tarefas_azure_devops':
+    if analysis_type_str.isin(['criacao_tarefas_azure_devops', "revisor_tarefas"]):
         repo_parts = repo_name.split('/')
         if len(repo_parts) < 2:
             raise HTTPException(status_code=400, detail="repo_name_modernizado deve conter organização e projeto separados por '/'.")
