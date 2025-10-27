@@ -34,7 +34,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.dependency_container = dependency_container
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
+        print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para step {current_step_index}.")
         report_text = self.report_handler.extract_report_text(step_result)
+        print(f"[{job_id}] [DEBUG] extract_report_text retornou: {str(report_text)[:200]}...")
         if not report_text or len(report_text.strip()) == 0:
             print(f"[{job_id}] ERRO: Relatório gerado pelo agente está vazio no step {current_step_index}.")
             return False
@@ -50,6 +52,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.report_handler.blob_storage.update_job_tracker(job_info['data']['report_blob_url'], job_id)
         except Exception as e:
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
+        print(f"[{job_id}] [DEBUG] _save_generated_report finalizado com sucesso para step {current_step_index}.")
         return True
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
@@ -68,7 +71,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             print(f"[{job_id}] [DEBUG-PRE-CHECK] start_from_step={start_from_step}, criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}")
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
-                # Passo 3: log de debug e validação de task_id
                 if start_from_step == 0:
                     task_id = job_info['data'].get('task_id')
                     print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas) - task_id presente? {task_id is not None}, valor: {task_id}")
@@ -123,7 +125,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             if start_from_step == 0:
                 print(f"[{job_id}] [DEBUG] Entrando no step 0. analysis_type={analysis_type}")
                 if analysis_type == 'revisor_tarefas':
-                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={step.get('status_update') if 'step' in locals() else None}")
+                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
                     analysis_type=analysis_type,
@@ -210,22 +212,36 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 else:
                     if current_step_index == 0 and analysis_type == 'revisor_tarefas':
                         print(f"[{job_id}] [DEBUG] Executando step 0 com task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={step.get('status_update')} (revisor_tarefas)")
+                    print(f"[{job_id}] [DEBUG] Antes de chamar _execute_step_with_strategy para step {current_step_index} (analysis_type={analysis_type})")
                     step_result = self._execute_step_with_strategy(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
                     )
+                    print(f"[{job_id}] [DEBUG] Depois de _execute_step_with_strategy para step {current_step_index} (analysis_type={analysis_type}), resultado: {str(step_result)[:300]}...")
                     if current_step_index == 0:
                         print(f"[{job_id}] [DEBUG] Step 0: resultado do agente: {str(step_result)[:300]}...")
-                        report_text = self.report_handler.extract_report_text(step_result)
-                        if report_text and report_text.strip():
-                            print(f"[{job_id}] [DEBUG] Step 0: relatório gerado, salvando...")
-                            self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                        if analysis_type == 'revisor_tarefas':
+                            print(f"[{job_id}] [DEBUG] Step 0: análise revisor_tarefas, chamando _save_generated_report explicitamente.")
+                            report_saved = self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                            print(f"[{job_id}] [DEBUG] Step 0: _save_generated_report retornou {report_saved}")
+                            if not report_saved:
+                                print(f"[{job_id}] [ERRO] Relatório não foi salvo no step 0 (revisor_tarefas). Lançando exceção.")
+                                raise ValueError(f"[{job_id}] ERRO: Relatório não foi salvo no step 0 para analysis_type='revisor_tarefas'.")
                             if step.get('requires_approval', False):
                                 print(f"[{job_id}] [DEBUG] Step 0: requires_approval=True, chamando handle_approval_step")
                                 self.handle_approval_step(job_id, job_info, current_step_index, step_result)
                                 return
                         else:
-                            print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
-                            return
+                            report_text = self.report_handler.extract_report_text(step_result)
+                            if report_text and report_text.strip():
+                                print(f"[{job_id}] [DEBUG] Step 0: relatório gerado, salvando...")
+                                self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                                if step.get('requires_approval', False):
+                                    print(f"[{job_id}] [DEBUG] Step 0: requires_approval=True, chamando handle_approval_step")
+                                    self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                                    return
+                            else:
+                                print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
+                                return
                         previous_step_result = step_result
                     if gerar_relatorio_apenas:
                         self.job_handler.update_job_status(job_id, 'completed')
@@ -323,13 +339,16 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if agent_type == 'revisor_board' and analysis_type == 'revisor_tarefas':
             print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: Antes de chamar AgentFactory, task_id={agent_params.get('task_id')}")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
+        print(f"[{job_id}] [DEBUG] Chamando strategy.execute_step para agent_type={agent_type}, step={current_step_index}")
         result = strategy.execute_step(
             job_id, job_info, step, current_step_index, 
             previous_step_result, repo_reader, llm_provider, agent_params
         )
+        print(f"[{job_id}] [DEBUG] strategy.execute_step retornou resultado para step {current_step_index}: {str(result)[:300]}...")
         if current_step_index == 0:
             print(f"[{job_id}] [DEBUG] Salvando relatório gerado pelo agente no step 0.")
             report_text = self.report_handler.extract_report_text(result)
+            print(f"[{job_id}] [DEBUG] extract_report_text retornou: {str(report_text)[:200]}...")
             if report_text and report_text.strip():
                 self._save_generated_report(job_id, job_info, result, current_step_index)
                 print(f"[{job_id}] [DEBUG] Relatório salvo com sucesso no step {current_step_index}.")
