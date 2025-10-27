@@ -19,12 +19,16 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         organization = job_info['data'].get('organization')
         project = job_info['data'].get('project')
         task_id = job_info['data'].get('task_id')
+        analysis_type = job_info['data'].get('original_analysis_type')
         if not epic_id:
             raise ValueError(f"[{job_id}] Parâmetro obrigatório 'epic_id' ausente em job_info['data'].")
         if not organization:
             raise ValueError(f"[{job_id}] Parâmetro obrigatório 'organization' ausente em job_info['data'].")
         if not project:
             raise ValueError(f"[{job_id}] Parâmetro obrigatório 'project' ausente em job_info['data'].")
+        if analysis_type == 'revisor_tarefas':
+            if not task_id:
+                raise ValueError(f"[{job_id}] Parâmetro obrigatório 'task_id' ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
@@ -48,6 +52,8 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
             'status_update': step['status_update']
         })
         agent_params['task_id'] = task_id
+        if analysis_type == 'revisor_tarefas':
+            print(f"[{job_id}] [DEBUG] RevisorBoardStepExecutor: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
         print(f"[{job_id}] [DEBUG] Chamando agente revisor_board com task_id={agent_params.get('task_id')}, epic_id={agent_params.get('epic_id')}")
         max_retries = 3
         if self.azure_board_service is None:
@@ -62,7 +68,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params)
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
