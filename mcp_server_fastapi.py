@@ -103,17 +103,16 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         print(f"[DEBUG] criar_tarefas_azure recebido como True no payload para repo: {payload.repo_name_modernizado}")
         if not getattr(payload, 'epic_id', None):
             raise HTTPException(status_code=400, detail="epic_id é obrigatório quando criar_tarefas_azure=True.")
-    else:
-        if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
-            raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
     analysis_type_str = str(payload.analysis_type.value) if hasattr(payload.analysis_type, 'value') else str(payload.analysis_type)
-    # Validação explícita do task_id para revisor_tarefas
+    # Passo 8: validação explícita do task_id para revisor_tarefas
     if analysis_type_str == 'revisor_tarefas':
         if not getattr(payload, 'task_id', None) or (isinstance(payload.task_id, str) and not payload.task_id.strip()):
             raise HTTPException(status_code=400, detail="task_id é obrigatório para análise do tipo revisor_tarefas.")
     if analysis_type_str == 'criacao_tarefas_azure_devops':
         if not getattr(payload, 'epic_id', None):
             raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
+    if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
+        raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
     workflows = workflow_registry_service.get_workflow_registry()
     workflow = workflows.get(payload.analysis_type)
     first_step = None
