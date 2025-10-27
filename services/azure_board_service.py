@@ -95,6 +95,7 @@ class AzureBoardService:
         }
         try:
             response = requests.get(url, headers=headers)
+            print(f"[AzureBoardService-DEBUG] read_epic: GET {url} status={response.status_code}")
             if response.status_code == 200:
                 data = response.json()
                 fields = data.get('fields', {})
@@ -107,11 +108,13 @@ class AzureBoardService:
                     'fields': fields
                 }
             else:
+                print(f"[AzureBoardService-DEBUG] read_epic: Falha ao buscar épico. status={response.status_code}, body={response.text}")
                 return {
                     'error': response.text,
                     'status_code': response.status_code
                 }
         except Exception as e:
+            print(f"[AzureBoardService-DEBUG] read_epic: Exceção ao buscar épico: {str(e)}")
             return {
                 'error': str(e)
             }
@@ -125,10 +128,13 @@ class AzureBoardService:
             'Authorization': f'Basic {self._basic_auth_header(token)}'
         }
         try:
+            print(f"[AzureBoardService-DEBUG] read_task: GET {url}")
             response = requests.get(url, headers=headers)
+            print(f"[AzureBoardService-DEBUG] read_task: status={response.status_code}")
             if response.status_code == 200:
                 data = response.json()
                 fields = data.get('fields', {})
+                print(f"[AzureBoardService-DEBUG] read_task: Dados retornados para task_id={task_id}: {json.dumps(fields)[:200]}...")
                 return {
                     'id': data.get('id'),
                     'title': fields.get('System.Title'),
@@ -138,11 +144,13 @@ class AzureBoardService:
                     'fields': fields
                 }
             else:
+                print(f"[AzureBoardService-DEBUG] read_task: Falha ao buscar tarefa. status={response.status_code}, body={response.text}")
                 return {
                     'error': response.text,
                     'status_code': response.status_code
                 }
         except Exception as e:
+            print(f"[AzureBoardService-DEBUG] read_task: Exceção ao buscar tarefa: {str(e)}")
             return {
                 'error': str(e)
             }
