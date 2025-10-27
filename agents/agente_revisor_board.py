@@ -37,8 +37,13 @@ class AgenteRevisorBoard:
         task_id: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
+        print(f"[AgenteRevisorBoard] [DEBUG] Entrando no main. epic_id={epic_id}, task_id={task_id}")
         if not epic_id:
             raise ValueError("epic_id é obrigatório para execução do agente revisor_board.")
+        # Validação específica para revisor_tarefas
+        if tipo_analise == 'revisor_tarefas':
+            if not task_id:
+                raise ValueError("task_id é obrigatório quando analysis_type == 'revisor_tarefas'.")
         data = self._get_epic_and_task_data(epic_id=epic_id, task_id=task_id)
         epic_data = data.get('epic')
         task_data = data.get('task')
