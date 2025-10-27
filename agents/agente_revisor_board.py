@@ -40,7 +40,6 @@ class AgenteRevisorBoard:
         print(f"[AgenteRevisorBoard] [DEBUG] Entrando no main. epic_id={epic_id}, task_id={task_id}")
         if not epic_id:
             raise ValueError("epic_id é obrigatório para execução do agente revisor_board.")
-        # Validação específica para revisor_tarefas
         if tipo_analise == 'revisor_tarefas':
             if not task_id:
                 raise ValueError("task_id é obrigatório quando analysis_type == 'revisor_tarefas'.")
@@ -87,6 +86,9 @@ class AgenteRevisorBoard:
             modo_adicao_incremental=False,
             usuario_executor=usuario_executor
         )
+        # PASSO 7: Validação para garantir que a resposta contém a chave 'reposta_final' e que não está vazia
+        if not isinstance(resultado_da_ia, dict) or 'reposta_final' not in resultado_da_ia or not resultado_da_ia['reposta_final']:
+            raise ValueError(f"[AgenteRevisorBoard] ERRO: A resposta da LLM está vazia ou malformada. resultado_da_ia: {resultado_da_ia}")
         return {
             "resultado": {
                 "reposta_final": resultado_da_ia
