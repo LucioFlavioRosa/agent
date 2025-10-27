@@ -124,26 +124,25 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'completed')
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de épicos Azure.")
                 return
-            # INICIO DO NOVO FLUXO PARA criacao_tarefas_azure_devops
             if analysis_type == 'revisor_tarefas' and start_from_step > 0:
-                print(f"[{job_id}] [DEBUG] Fluxo de update_task_discussion para criacao_tarefas_azure_devops iniciado.")
                 task_id = job_info['data'].get('task_id')
                 report = job_info['data'].get('analysis_report')
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
                 project = job_info['data'].get('project') or job_info['data'].get('azure_project')
                 azure_board_service = AzureBoardService(organization, project, self.secret_manager)
                 task_discussion_updater_service = TaskDiscussionUpdaterService()
+                print(f"[{job_id}] [DEBUG][DISCUSSION] Antes de update_task_from_report: task_id={task_id}, tamanho_report={len(report) if report else 0}, report_preview={str(report)[:200] if report else ''}")
                 update_result = task_discussion_updater_service.update_task_from_report(task_id, report, azure_board_service)
+                print(f"[{job_id}] [DEBUG][DISCUSSION] Depois de update_task_from_report: update_result={update_result}")
                 job_info['data']['task_discussion_update_result'] = update_result
                 self.job_handler.update_job(job_id, job_info)
                 if update_result.get('error') or (not update_result.get('success', True)):
-                    print(f"[{job_id}] [ERROR] Falha ao atualizar discussion da task: {update_result}")
+                    print(f"[{job_id}] [ERROR][DISCUSSION] Falha ao atualizar discussion da task: {update_result}")
                     self.job_handler.update_job_status(job_id, 'failed')
                     return
-                print(f"[{job_id}] [DEBUG] Discussion da task atualizada com sucesso: {update_result}")
+                print(f"[{job_id}] [DEBUG][DISCUSSION] Discussion da task atualizada com sucesso: {update_result}")
                 self.job_handler.update_job_status(job_id, 'completed')
                 return
-            # FIM DO NOVO FLUXO
             if start_from_step == 0:
                 print(f"[{job_id}] [DEBUG] Entrando no step 0. analysis_type={analysis_type}")
                 if analysis_type == 'revisor_tarefas':
