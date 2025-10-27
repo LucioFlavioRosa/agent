@@ -68,6 +68,12 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             print(f"[{job_id}] [DEBUG-PRE-CHECK] start_from_step={start_from_step}, criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}")
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
+                # Passo 3: log de debug e validação de task_id
+                if start_from_step == 0:
+                    task_id = job_info['data'].get('task_id')
+                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas) - task_id presente? {task_id is not None}, valor: {task_id}")
+                    if not task_id:
+                        raise ValueError(f"[{job_id}] ERRO: task_id ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
             if start_from_step > 0 and job_info['data'].get('criar_tarefas_azure'):
                 print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas Azure. epic_id={job_info['data'].get('epic_id')}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
@@ -117,7 +123,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             if start_from_step == 0:
                 print(f"[{job_id}] [DEBUG] Entrando no step 0. analysis_type={analysis_type}")
                 if analysis_type == 'revisor_tarefas':
-                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
+                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={step.get('status_update') if 'step' in locals() else None}")
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
                     analysis_type=analysis_type,
@@ -276,6 +282,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
+        analysis_type = job_info['data'].get('original_analysis_type')
         if agent_type == 'revisor_board':
             epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
             organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
@@ -284,6 +291,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['organization'] = organization
             agent_params['project'] = project
             agent_params['task_id'] = job_info['data'].get('task_id')
+            if analysis_type == 'revisor_tarefas':
+                print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
         elif agent_type == 'comparador':
             agent_params.update({
                 'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
@@ -311,6 +320,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
+        if agent_type == 'revisor_board' and analysis_type == 'revisor_tarefas':
+            print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: Antes de chamar AgentFactory, task_id={agent_params.get('task_id')}")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         result = strategy.execute_step(
             job_id, job_info, step, current_step_index, 
