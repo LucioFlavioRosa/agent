@@ -54,6 +54,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
+        print(f"[{job_id}] [DEBUG] task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, analysis_type={job_info['data'].get('original_analysis_type')}")
         print(f"[{job_id}] [DEBUG] criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}, criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
         if not workflow:
@@ -117,7 +118,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             if start_from_step == 0:
                 print(f"[{job_id}] [DEBUG] Entrando no step 0. analysis_type={analysis_type}")
                 if analysis_type == 'revisor_tarefas':
-                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
+                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={step.get('status_update')} (revisor_tarefas)")
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
                     analysis_type=analysis_type,
