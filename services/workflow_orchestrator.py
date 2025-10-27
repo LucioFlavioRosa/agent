@@ -66,6 +66,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
             print(f"[{job_id}] [DEBUG-PRE-CHECK] start_from_step={start_from_step}, criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}")
+            if analysis_type == 'revisor_tarefas':
+                print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
             if start_from_step > 0 and job_info['data'].get('criar_tarefas_azure'):
                 print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas Azure. epic_id={job_info['data'].get('epic_id')}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
