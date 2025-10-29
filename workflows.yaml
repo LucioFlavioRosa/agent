@@ -1,5 +1,5 @@
 criacao_prototipo:
-  description: "Criacao de um prototipo em html para ideacao de um produto/solucao"
+  description: "Agente responsavel por criar um prototipo em html para ideacao de um produto/solucao"
   extensions: [".html"]
   steps:
     - status_update: "ideacao_prototipo"
