@@ -1,3 +1,19 @@
+criacao_prototipo:
+  description: "Criacao de um prototipo em html para ideacao de um produto/solucao"
+  extensions: [".html"]
+  steps:
+    - status_update: "ideacao_prototipo"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_criacao_prototipo"
+      requires_approval: true
+    - status_update: "criando_prototipo"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "criacao_prototipo_html"
+
 relatorio_avaliacao_terraform:
   description: "Realizar uma auditoria técnica aprofundada no código Terraform fornecido"
   extensions: [".tf", ".tfvars"]
