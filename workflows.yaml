@@ -1,6 +1,6 @@
 criacao_prototipo:
   description: "Agente responsavel por criar um prototipo em html para ideacao de um produto/solucao"
-  extensions: [".html"]
+  extensions: [".html", ".png", ]
   steps:
     - status_update: "ideacao_prototipo"
       model_name: "claude-sonnet-4-5"
