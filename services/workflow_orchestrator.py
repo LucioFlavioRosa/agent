@@ -59,7 +59,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
-        print(f"[{job_id}] [DEBUG] criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}, criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
@@ -70,7 +69,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            print(f"[{job_id}] [DEBUG-PRE-CHECK] start_from_step={start_from_step}, criar_tarefas_azure={job_info['data'].get('criar_tarefas_azure')}")
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 if start_from_step == 0:
@@ -339,7 +337,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             })
         else:
             repo_name = job_info['data'].get('repo_name_modernizado')
-            if not job_info['data'].get('criar_epicos_azure'):
+            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas']:
                 branch_name = job_info['data'].get('branch_name_modernizado')
                 agent_params['nome_branch'] = branch_name
             agent_params['repositorio'] = repo_name
