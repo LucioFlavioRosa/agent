@@ -78,7 +78,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas) - task_id presente? {task_id is not None}, valor: {task_id}")
                     if not task_id:
                         raise ValueError(f"[{job_id}] ERRO: task_id ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
-            if start_from_step > 0 and job_info['data'].get('criar_tarefas_azure'):
+            if start_from_step > 0 and analysis_type == 'criacao_tarefas_azure_devops':
                 print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas Azure. epic_id={job_info['data'].get('epic_id')}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
                 project = job_info['data'].get('project') or job_info['data'].get('azure_project')
@@ -109,8 +109,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'completed')
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
                 return
-            if start_from_step > 0 and job_info['data'].get('criar_epicos_azure'):
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: criar_epicos_azure={job_info['data'].get('criar_epicos_azure')}")
+            if start_from_step > 0 and analysis_type == 'criacao_epicos_azure_devops':
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: agente={analysis_type}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
                 project = job_info['data'].get('project') or job_info['data'].get('azure_project')
                 epic_id = job_info['data'].get('epic_id')
