@@ -24,10 +24,8 @@ class JobDataService:
     def create_initial_job_data(self, payload_dict, normalized_repo_name, analysis_name):
         data = {}
         data[JobFields.REPO_NAME] = normalized_repo_name
-        criar_epicos_azure = payload_dict.get('criar_epicos_azure', False)
-        criar_tarefas_azure = payload_dict.get('criar_tarefas_azure', False)
         analysis_type = payload_dict.get('analysis_type')
-        if criar_epicos_azure:
+        if analysis_type == 'criacao_epicos_azure_devops':
             organization, project = self._parse_repository_name(normalized_repo_name)
             data[JobFields.AZURE_ORGANIZATION] = organization
             data[JobFields.AZURE_PROJECT] = project
