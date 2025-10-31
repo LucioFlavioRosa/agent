@@ -65,11 +65,7 @@ class JobDataService:
         if not isinstance(executar_build_dotnet, bool):
             executar_build_dotnet = bool(executar_build_dotnet)
         data[JobFields.EXECUTAR_BUILD_DOTNET] = executar_build_dotnet
-        data[JobFields.CRIAR_EPICOS_AZURE] = criar_epicos_azure
-        if not isinstance(criar_tarefas_azure, bool):
-            criar_tarefas_azure = bool(criar_tarefas_azure)
-        data[JobFields.CRIAR_TAREFAS_AZURE] = criar_tarefas_azure
-        data['criar_tarefas_azure'] = criar_tarefas_azure
+        
         return {
             JobFields.STATUS: None,
             JobFields.DATA: data
