@@ -112,7 +112,7 @@ relatorio_documentacao:
 
 relatorio_implentacao_feature:
   description: "Analisar a descrição da nova feature e a base de código existente para gerar um plano de implementação técnico, detalhado e sequenciado"
-  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt"]
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
