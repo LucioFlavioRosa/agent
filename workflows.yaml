@@ -22,7 +22,7 @@ melhoria_prototipo:
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
-        tipo_analise: "relatorio_melhoria_prototipo"
+        tipo_analise: "relatorio_melhoria_html"
       requires_approval: true
     - status_update: "criando_prototipo"
       model_name: "gpt-4.1"
