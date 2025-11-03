@@ -28,7 +28,7 @@ melhoria_prototipo:
       model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
-        tipo_analise: "mudancas_html"
+        tipo_analise: "aplicacao_de_mudancas"
 
 relatorio_avaliacao_terraform:
   description: "Realizar uma auditoria técnica aprofundada no código Terraform fornecido"
