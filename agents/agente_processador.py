@@ -36,6 +36,7 @@ class AgenteProcessador:
                 'lista_todos_arquivos': lista_arquivos
             }, indent=2, ensure_ascii=False)
         else:
+            print(f"[Agente Processador] nao temos arquivos de entrada")
             codigo_str = ' '
             
         resultado_da_ia = self.llm_provider.executar_prompt(
