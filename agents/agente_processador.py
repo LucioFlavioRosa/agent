@@ -29,15 +29,15 @@ class AgenteProcessador:
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if lista_arquivos:
+        if codigo:
             print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
             codigo_str = json.dumps({
                 'arquivos_codigo': codigo,
                 'lista_todos_arquivos': lista_arquivos
             }, indent=2, ensure_ascii=False)
         else:
-            codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
-
+            codigo_str = ' '
+            
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
             prompt_principal=codigo_str,
