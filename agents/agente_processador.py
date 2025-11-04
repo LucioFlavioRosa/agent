@@ -18,7 +18,7 @@ class AgenteProcessador:
         repository_type: str,
         repositorio: Optional[str] = None,
         nome_branch: Optional[str] = None,
-        instrucoes_extras: str = "",
+        instrucoes_extras: Optional[str] = None,
         usar_rag: bool = False,
         model_name: Optional[str] = None,
         max_token_out: int = 15000,
