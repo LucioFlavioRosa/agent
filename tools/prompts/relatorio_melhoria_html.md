@@ -34,7 +34,7 @@ Seu plano DEVE ser gerado seguindo estes princípios:
 4.  **ESTRUTURA DA TABELA:** A tabela deve listar **todos os passos necessários** para a migração em **ordem sequencial** e ter **exatamente** as seguintes colunas: `Passo #`, `Camada`, `Ação`, `Caminho do Arquivo`, `Descrição`, `Tempo Estimado`.
     * Para a coluna `Camada`, utilize a categoria da tarefa (ex: 'Estrutura do Projeto', 'Lógica de Negócio', 'Configuração', 'Interface do Usuário (UI)').
     * Para a coluna `Ação`, use verbos claros como 'CRIAR', 'MODIFICAR', 'MIGRAR', 'CONFIGURAR', 'REESCREVER'.
-    * Na coluna `Caminho do Arquivo`, aponte o arquivo a ser criado ou modificado.
+    * Na coluna `Caminho do Arquivo`, aponte somente o nome arquivo a ser criado ou modificado e nada mais, exemplo: nunca faça isso `prototipos/painel-monitoramento.html` (seção `<script>`), faça isso `prototipos/painel-monitoramento.html`. deve aparecer na descrição (seção `<script>`)
     * Na coluna `Descrição`, detalhe a tarefa técnica, explicando a transição do padrão antigo para o novo padrão .NET 9.
     * Preencha a coluna `Tempo Estimado` para cada passo.
 
