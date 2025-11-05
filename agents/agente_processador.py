@@ -18,7 +18,7 @@ class AgenteProcessador:
         repository_type: str,
         repositorio: Optional[str] = None,
         nome_branch: Optional[str] = None,
-        instrucoes_extras: Optional[str] = None,
+        instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
         max_token_out: int = 15000,
@@ -29,16 +29,15 @@ class AgenteProcessador:
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if codigo:
+        if lista_arquivos:
             print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
             codigo_str = json.dumps({
                 'arquivos_codigo': codigo,
                 'lista_todos_arquivos': lista_arquivos
             }, indent=2, ensure_ascii=False)
         else:
-            print(f"[Agente Processador] nao temos arquivos de entrada")
-            codigo_str = ' '
-            
+            codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
+
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
             prompt_principal=codigo_str,
