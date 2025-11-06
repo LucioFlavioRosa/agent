@@ -27,7 +27,6 @@ class ProcessadorStepExecutor(BaseStepExecutor):
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
         agent_params.update({
-            'codigo': previous_step_result,
             'repositorio': job_info['data'].get('repo_name_modernizado'),
             'repository_type': job_info['data']['repository_type']
         })
@@ -39,6 +38,7 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
 
         try:
+            agent_params['codigo'] = previous_step_result
             agente = AgentFactory.create_agent("processador", None, llm_provider)
             agent_response = agente.main(**agent_params)
         except Exception as e:
@@ -48,12 +48,12 @@ class ProcessadorStepExecutor(BaseStepExecutor):
             agent_response = agente.main(**agent_params)
 
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
 
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
                 print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
                 return previous_step_result
-            raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
+            return {}
 
         return json.loads(cleaned_string)
