@@ -69,6 +69,36 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
+            # Passo 3: lógica especial para geracao_codigo_a_partir_de_reuniao
+            if start_from_step == 0 and analysis_type == 'geracao_codigo_a_partir_de_reuniao':
+                previous_step_result = None
+                repo_reader = None
+                steps_to_run = workflow.get('steps', [])[start_from_step:]
+                for i, step in enumerate(steps_to_run):
+                    current_step_index = start_from_step + i
+                    print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
+                    self.job_handler.update_job_status(job_id, step['status_update'])
+                    step_result = self._execute_step_with_strategy(
+                        job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
+                    )
+                    print(f"[{job_id}] [DEBUG] Depois de _execute_step_with_strategy para step {current_step_index} (analysis_type={analysis_type}), resultado: {str(step_result)[:300]}...")
+                    if current_step_index == 0:
+                        report_text = self.report_handler.extract_report_text(step_result)
+                        if report_text and report_text.strip():
+                            print(f"[{job_id}] [DEBUG] Step 0: relatório gerado, salvando...")
+                            self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                            if step.get('requires_approval', False):
+                                print(f"[{job_id}] [DEBUG] Step 0: requires_approval=True, chamando handle_approval_step")
+                                self.handle_approval_step(job_id, job_info, current_step_index, step_result)
+                                return
+                        else:
+                            print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
+                            return
+                        previous_step_result = step_result
+                    previous_step_result = step_result
+                self.job_handler.update_job_status(job_id, 'completed')
+                return
+            # Fim do bloco especial
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 if start_from_step == 0:
@@ -337,7 +367,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             })
         else:
             repo_name = job_info['data'].get('repo_name_modernizado')
-            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas']:
+            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'geracao_codigo_a_partir_de_reuniao']:
                 branch_name = job_info['data'].get('branch_name_modernizado')
                 agent_params['nome_branch'] = branch_name
             agent_params['repositorio'] = repo_name
