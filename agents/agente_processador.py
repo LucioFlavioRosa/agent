@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
 
-
 class AgenteProcessador:
     
     def __init__(self, llm_provider: ILLMProvider):
@@ -14,8 +13,8 @@ class AgenteProcessador:
     def main(
         self,
         tipo_analise: str,
-        codigo: Dict[str, Any],
-        repository_type: str,
+        codigo: Optional[Dict[str, Any]] = None,
+        repository_type: str = None,
         repositorio: Optional[str] = None,
         nome_branch: Optional[str] = None,
         instrucoes_extras: str = "",
@@ -29,14 +28,20 @@ class AgenteProcessador:
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
     ) -> Dict[str, Any]:
-        if lista_arquivos:
-            print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
-            codigo_str = json.dumps({
-                'arquivos_codigo': codigo,
-                'lista_todos_arquivos': lista_arquivos
-            }, indent=2, ensure_ascii=False)
+        if codigo is not None and codigo != {}:
+            if lista_arquivos:
+                print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
+                codigo_str = json.dumps({
+                    'arquivos_codigo': codigo,
+                    'lista_todos_arquivos': lista_arquivos
+                }, indent=2, ensure_ascii=False)
+            else:
+                codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
         else:
-            codigo_str = json.dumps(codigo, indent=2, ensure_ascii=False)
+            if lista_arquivos:
+                codigo_str = json.dumps({'lista_todos_arquivos': lista_arquivos}, indent=2, ensure_ascii=False)
+            else:
+                codigo_str = json.dumps({'sem_codigo_base': True}, indent=2, ensure_ascii=False)
 
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
