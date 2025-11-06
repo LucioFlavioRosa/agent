@@ -56,23 +56,6 @@ class StartAnalysisPayload(BaseModel):
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
 
-    @validator('repo_name_modernizado', 'branch_name_modernizado', always=True)
-    def validate_repo_fields(cls, v, values, field):
-        analysis_type = values.get('analysis_type')
-        if analysis_type == 'geracao_codigo_a_partir_de_reuniao':
-            return v
-        if v is None:
-            raise ValueError(f"{field.name} é obrigatório para este tipo de análise.")
-        return v
-    @validator('projeto', always=True)
-    def validate_projeto_field(cls, v, values):
-        analysis_type = values.get('analysis_type')
-        if analysis_type == 'geracao_codigo_a_partir_de_reuniao':
-            return v
-        if v is None:
-            raise ValueError("projeto é obrigatório para este tipo de análise.")
-        return v
-
 class StartAnalysisResponse(BaseModel):
     job_id: str
     
