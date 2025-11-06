@@ -59,6 +59,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
+        # Passo 5: Validar repo_name_modernizado obrigatório
+        repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
+        if not repo_name_modernizado:
+            raise ValueError("O campo 'repo_name_modernizado' é obrigatório em job_info['data'] para execução do workflow.")
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
@@ -69,6 +73,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
+            # Passo 6: branch_name_modernizado opcional
+            # O campo branch_name_modernizado só será propagado se estiver presente
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 if start_from_step == 0:
@@ -318,6 +324,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_info['data'].get('original_analysis_type')
+        # Passo 3: Propagar instrucoes_extras para agent_params
+        agent_params['instrucoes_extras'] = job_info['data'].get('instrucoes_extras', '')
         if agent_type == 'revisor_board':
             epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
             organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
@@ -339,7 +347,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repo_name = job_info['data'].get('repo_name_modernizado')
             if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas']:
                 branch_name = job_info['data'].get('branch_name_modernizado')
-                agent_params['nome_branch'] = branch_name
+                if branch_name:
+                    agent_params['nome_branch'] = branch_name
             agent_params['repositorio'] = repo_name
         retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
         agent_params.update({
