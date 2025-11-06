@@ -28,6 +28,9 @@ class AgenteProcessador:
         job_id: Optional[str] = None,
         projeto: Optional[str] = None,
     ) -> Dict[str, Any]:
+        if instrucoes_extras is None:
+            instrucoes_extras = ""
+        print(f"[AgenteProcessador] instrucoes_extras recebido: {instrucoes_extras[:200]}")
         if codigo is not None and codigo != {}:
             if lista_arquivos:
                 print(f"[Agente Processador] Lista de arquivos recebida: {len(lista_arquivos)} arquivos totais no repositório")
