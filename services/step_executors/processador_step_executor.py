@@ -11,8 +11,10 @@ class ProcessadorStepExecutor(BaseStepExecutor):
     def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                 current_step_index: int, previous_step_result: Dict[str, Any], 
                 repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
-        
-        instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
+        instrucoes_extras = job_info['data'].get('instrucoes_extras', '')
+        if instrucoes_extras is None:
+            instrucoes_extras = ''
+        instrucoes_formatadas = instrucoes_extras
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
 
@@ -26,26 +28,32 @@ class ProcessadorStepExecutor(BaseStepExecutor):
         agent_params['instrucoes_extras'] = instrucoes_formatadas
         agent_params.update({
             'codigo': previous_step_result,
-            'repositorio': job_info['data']['repo_name'],
+            'repositorio': job_info['data'].get('repo_name_modernizado'),
             'repository_type': job_info['data']['repository_type']
         })
-        if not job_info['data'].get('criar_epicos_azure'):
+        if job_info['data'].get('branch_name'):
             agent_params['nome_branch'] = job_info['data']['branch_name']
         agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
         if isinstance(previous_step_result, dict) and 'lista_arquivos' in previous_step_result:
             agent_params['lista_arquivos'] = previous_step_result['lista_arquivos']
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
-        
-        agente = AgentFactory.create_agent("processador", None, llm_provider)
-        agent_response = agente.main(**agent_params)
-        
+
+        try:
+            agente = AgentFactory.create_agent("processador", None, llm_provider)
+            agent_response = agente.main(**agent_params)
+        except Exception as e:
+            print(f"[{job_id}] Erro ao ler código do repositório ou executar agente: {e}. Prosseguindo apenas com instrucoes_extras e parâmetros disponíveis.")
+            agent_params['codigo'] = {}
+            agente = AgentFactory.create_agent("processador", None, llm_provider)
+            agent_response = agente.main(**agent_params)
+
         json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
-        
+        cleaned_string = json_string.replace("", "").replace("", "").strip()
+
         if not cleaned_string:
             if previous_step_result and isinstance(previous_step_result, dict):
                 print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
                 return previous_step_result
             raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
-        
+
         return json.loads(cleaned_string)
