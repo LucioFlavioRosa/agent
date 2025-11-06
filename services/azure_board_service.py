@@ -167,7 +167,7 @@ class AzureBoardService:
                 print(f"[AzureBoardService-DEBUG] Não foi possível obter o título do épico {epic_id}.")
                 return {"error": f"Não foi possível obter o título do épico {epic_id}. Verifique se o épico existe e se as credenciais estão corretas."}
             token = self._get_token()
-            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/%Product%20Backlog%20Item?api-version=7.1-preview.3"
+            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Product%20Backlog%20Item?api-version=7.1-preview.3"
             parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "from": None, "value": epic_title},
