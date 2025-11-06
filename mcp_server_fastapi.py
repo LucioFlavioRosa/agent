@@ -7,7 +7,7 @@ from typing import Optional
 
 from urllib.parse import urlparse
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, validator
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
 from services.dependency_container import DependencyContainer
@@ -34,9 +34,9 @@ job_validation_service = api_service_factory.get_job_validation_service()
 logging_service = api_service_factory.get_logging_service()
 
 class StartAnalysisPayload(BaseModel):
-    repo_name_modernizado: str = Field(description="Nome do repositório modernizado")
+    repo_name_modernizado: Optional[str] = Field(None, description="Nome do repositório modernizado")
     branch_name_modernizado: Optional[str] = Field(None, description="Branch do repositório modernizado")
-    projeto: str = Field(description="Nome do projeto para agrupar atividades e organizar histórico")
+    projeto: Optional[str] = Field(None, description="Nome do projeto para agrupar atividades e organizar histórico")
     analysis_type: ValidAnalysisTypes
     instrucoes_extras: Optional[str] = None
     usar_rag: bool = Field(False)
@@ -55,7 +55,24 @@ class StartAnalysisPayload(BaseModel):
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
-    
+
+    @validator('repo_name_modernizado', 'branch_name_modernizado', always=True)
+    def validate_repo_fields(cls, v, values, field):
+        analysis_type = values.get('analysis_type')
+        if analysis_type == 'geracao_codigo_a_partir_de_reuniao':
+            return v
+        if v is None:
+            raise ValueError(f"{field.name} é obrigatório para este tipo de análise.")
+        return v
+    @validator('projeto', always=True)
+    def validate_projeto_field(cls, v, values):
+        analysis_type = values.get('analysis_type')
+        if analysis_type == 'geracao_codigo_a_partir_de_reuniao':
+            return v
+        if v is None:
+            raise ValueError("projeto é obrigatório para este tipo de análise.")
+        return v
+
 class StartAnalysisResponse(BaseModel):
     job_id: str
     
@@ -93,27 +110,31 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
     
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    if getattr(payload, 'criar_epicos_azure', False):
-        if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
-            raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
-        print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
-    if getattr(payload, 'criar_tarefas_azure', False):
-        print(f"[DEBUG] criar_tarefas_azure recebido como True no payload para repo: {payload.repo_name_modernizado}")
-        if not getattr(payload, 'epic_id', None):
-            raise HTTPException(status_code=400, detail="epic_id é obrigatório quando criar_tarefas_azure=True.")
     analysis_type_str = str(payload.analysis_type.value) if hasattr(payload.analysis_type, 'value') else str(payload.analysis_type)
-    # Passo 8: validação explícita do task_id para revisor_tarefas
-    if analysis_type_str == 'revisor_tarefas':
-        if not getattr(payload, 'task_id', None) or (isinstance(payload.task_id, str) and not payload.task_id.strip()):
-            print(f"[DEBUG] task_id ausente ou vazio no payload para analysis_type == 'revisor_tarefas'.")
-            raise HTTPException(status_code=400, detail="task_id é obrigatório para análise do tipo revisor_tarefas.")
-        else:
-            print(f"[DEBUG] task_id propagado para revisor_tarefas: {payload.task_id}")
-    if analysis_type_str == 'criacao_tarefas_azure_devops':
-        if not getattr(payload, 'epic_id', None):
-            raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
-    if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
-        raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
+    if analysis_type_str != 'geracao_codigo_a_partir_de_reuniao':
+        if getattr(payload, 'criar_epicos_azure', False):
+            if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
+                raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
+            print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
+        if getattr(payload, 'criar_tarefas_azure', False):
+            print(f"[DEBUG] criar_tarefas_azure recebido como True no payload para repo: {payload.repo_name_modernizado}")
+            if not getattr(payload, 'epic_id', None):
+                raise HTTPException(status_code=400, detail="epic_id é obrigatório quando criar_tarefas_azure=True.")
+        # Passo 8: validação explícita do task_id para revisor_tarefas
+        if analysis_type_str == 'revisor_tarefas':
+            if not getattr(payload, 'task_id', None) or (isinstance(payload.task_id, str) and not payload.task_id.strip()):
+                print(f"[DEBUG] task_id ausente ou vazio no payload para analysis_type == 'revisor_tarefas'.")
+                raise HTTPException(status_code=400, detail="task_id é obrigatório para análise do tipo revisor_tarefas.")
+            else:
+                print(f"[DEBUG] task_id propagado para revisor_tarefas: {payload.task_id}")
+        if analysis_type_str == 'criacao_tarefas_azure_devops':
+            if not getattr(payload, 'epic_id', None):
+                raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
+        if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
+            raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
+    else:
+        if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
+            raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para este tipo de análise.")
     workflows = workflow_registry_service.get_workflow_registry()
     workflow = workflows.get(payload.analysis_type)
     first_step = None
@@ -128,7 +149,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     branch_name = payload.branch_name_modernizado
     normalized_repo_name = repository_normalizer_service.normalize_repo_name(
         repo_name, payload.repository_type
-    )
+    ) if repo_name else None
     job_id = str(uuid.uuid4())
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
@@ -136,7 +157,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         payload_dict['analysis_type'] = payload.analysis_type.value
     # Passo 2: extrair organization e project para criacao_tarefas_azure_devops e revisao de tarefas
     if analysis_type_str in ['criacao_tarefas_azure_devops', "revisor_tarefas"]:
-        repo_parts = repo_name.split('/')
+        repo_parts = repo_name.split('/') if repo_name else []
         if len(repo_parts) < 2:
             raise HTTPException(status_code=400, detail="repo_name_modernizado deve conter organização e projeto separados por '/'.")
         payload_dict['organization'] = repo_parts[0]
