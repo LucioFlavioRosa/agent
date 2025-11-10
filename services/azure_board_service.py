@@ -54,19 +54,50 @@ class AzureBoardService:
         epics = self.parse_epics_from_markdown(markdown_table)
         token = self._get_token()
         created_epics = []
+        
         for epic in epics:
+            # 1. Extrai o Título
             title = epic.get('Épico') or epic.get('Epico') or epic.get('Epic')
-            description = f"Objetivo: {epic.get('Objetivo de Negócio', '')}\n\nCritérios/Atividades:\n{epic.get('Critérios de Aceite / Atividades Chave', '')}\n\nPerfis: {epic.get('Perfis Envolvidos', '')}\nEstimativa: {epic.get('Estimativa de Esforço', '')}"
+
+            # 2. [ALTERAÇÃO] Extrai os Critérios de Aceite SEPARADAMENTE
+            # IMPORTANTE: A chave 'Critérios de Aceite / Atividades Chave' 
+            # DEVE corresponder exatamente ao cabeçalho na sua tabela markdown.
+            acceptance_criteria = epic.get('Critérios de Aceite / Atividades Chave', '')
+
+            # 3. [ALTERAÇÃO] Monta a Descrição apenas com os campos restantes
+            desc_parts = []
+            if epic.get('Objetivo de Negócio'):
+                desc_parts.append(f"Objetivo: {epic.get('Objetivo de Negócio')}")
+            if epic.get('Perfis Envolvidos'):
+                desc_parts.append(f"Perfis: {epic.get('Perfis Envolvidos')}")
+            if epic.get('Estimativa de Esforço'):
+                desc_parts.append(f"Estimativa: {epic.get('Estimativa de Esforço')}")
+            
+            # Junta os campos restantes, separados por linhas duplas
+            description = "\n\n".join(desc_parts) 
+
+            # --- O restante da função continua aqui ---
             url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Epic?api-version=7.1-preview.3"
             headers = {
                 'Content-Type': 'application/json-patch+json',
                 'Authorization': f'Basic {self._basic_auth_header(token)}'
             }
+            
+            # 4. [ALTERAÇÃO] Monta o payload inicial
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
                 {"op": "add", "path": "/fields/System.Description", "from": None, "value": description}
             ]
+
+            # 5. [ALTERAÇÃO] Adiciona os Critérios de Aceite ao payload (se existirem)
+            if acceptance_criteria and acceptance_criteria.strip():
+                payload.append(
+                    {"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "from": None, "value": acceptance_criteria}
+                )
+
+            # Envia a requisição
             response = requests.post(url, headers=headers, json=payload)
+            
             if response.status_code in (200, 201):
                 data = response.json()
                 created_epics.append({
@@ -79,6 +110,7 @@ class AzureBoardService:
                     "error": response.text,
                     "title": title
                 })
+                
         return created_epics
 
     def _basic_auth_header(self, token):
