@@ -50,7 +50,7 @@ class AzureBoardService:
                 epics.append(epic)
         return epics
 
-    def create_epics(self, markdown_table: str) -> List[Dict[str, Any]]:
+    def create_epics(self, markdown_table: str, tags_para_adicionar='projeto_wilker') -> List[Dict[str, Any]]:
         epics = self.parse_epics_from_markdown(markdown_table)
         token = self._get_token()
         created_epics = []
@@ -87,6 +87,7 @@ class AzureBoardService:
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
                 {"op": "add", "path": "/fields/System.Description", "from": None, "value": description}
+                {"op": "add", "path": "/fields/System.Tags", "from": None, "value": tags_para_adicionar}
             ]
 
             # 5. [ALTERAÇÃO] Adiciona os Critérios de Aceite ao payload (se existirem)
