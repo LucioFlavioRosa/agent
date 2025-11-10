@@ -20,7 +20,10 @@ class CommitHandler:
         print(f"[{job_id}] [DEBUG] INICIO execute_commits: executar_build_dotnet={job_info.get('data', {}).get('executar_build_dotnet')}")
         print(f"[{job_id}] BLINDAGEM: Iniciando execute_commits")
         try:
-            branch_base_para_pr = job_info['data'].get('branch_name', 'main')
+            branch_base_para_pr = job_info['data'].get('branch_name_modernizado')
+            if not branch_base_para_pr:
+                branch_base_para_pr = job_info['data'].get('branch_name', 'main')
+            print(f"[{job_id}] Definida a branch de origem/alvo para o PR: '{branch_base_para_pr}'")
             print(f"[{job_id}] Iniciando commit com repositório: '{repo_name}' (tipo: {repository_type})")
             try:
                 repository_provider = self.repository_provider_factory(repository_type)
