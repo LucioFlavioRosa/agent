@@ -86,7 +86,7 @@ class AzureBoardService:
             # 4. [ALTERAÇÃO] Monta o payload inicial
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
-                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description}
+                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description},
                 {"op": "add", "path": "/fields/System.Tags", "from": None, "value": tags_para_adicionar}
             ]
 
