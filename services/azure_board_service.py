@@ -34,21 +34,51 @@ class AzureBoardService:
             return self.secret_manager.get_secret(token_secret_name)
         except Exception:
             return self.secret_manager.get_secret("azure-token")
-
+            
     def parse_epics_from_markdown(self, markdown_table: str) -> List[Dict[str, Any]]:
-        lines = [line for line in markdown_table.splitlines() if line.strip() and not line.strip().startswith('|---')]
-        header = None
+         print(f"[AzureBoardService-DEBUG] Chamando parse_epics_from_markdown")
+        # Remove linhas vazias e a linha de separador '---'
+        lines = [line for line in markdown_table.strip().splitlines() 
+                 if line.strip() and not line.strip().startswith('|---')]
+
+        if len(lines) < 2:
+            print("[AzureBoardService] parse_epics_from_markdown: Tabela inválida, cabeçalho ou linhas de dados ausentes.")
+            return []
+
+        header = []
         epics = []
-        for line in lines:
-            if line.startswith('|') and line.endswith('|'):
-                cols = [col.strip() for col in line.strip('|').split('|')]
-                if not header:
-                    header = cols
-                    continue
-                if len(cols) != len(header):
-                    continue
-                epic = dict(zip(header, cols))
-                epics.append(epic)
+
+        # Processa o cabeçalho
+        header_line = lines[0].strip()
+        if header_line.startswith('|'):
+            header_line = header_line[1:]
+        if header_line.endswith('|'):
+            header_line = header_line[:-1]
+        
+        header = [h.strip() for h in header_line.split('|')]
+        
+        # Processa as linhas de dados
+        for line in lines[1:]:
+            line = line.strip()
+            if not line.startswith('|'):
+                continue
+                
+            if line.startswith('|'):
+                line = line[1:]
+            if line.endswith('|'):
+                line = line[:-1]
+
+            cols = [col.strip() for col in line.split('|')]
+            
+            if len(cols) == len(header):
+                try:
+                    epic = dict(zip(header, cols))
+                    epics.append(epic)
+                except Exception as e:
+                    print(f"[AzureBoardService] parse_epics_from_markdown: Erro ao zipar header e cols. {e}")
+            else:
+                 print(f"[AzureBoardService] parse_epics_from_markdown: Disparidade de colunas. Header: {len(header)}, Linha: {len(cols)}. Linha: {line}")
+
         return epics
 
     def create_epics(self, markdown_table: str, tags_para_adicionar='projeto_modernizacao_avaliacao') -> List[Dict[str, Any]]:
