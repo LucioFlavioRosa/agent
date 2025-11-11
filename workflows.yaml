@@ -329,6 +329,17 @@ criacao_epicos_azure_devops:
         tipo_analise: "criacao_epicos"
       requires_approval: true
 
+criacao_features_azure_devops:
+  description: "criação de features a partir de épicos"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
+  steps:
+    - status_update: "analisando o epico"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor_board"
+      params:
+        tipo_analise: "criacao_features"
+      requires_approval: true
+
 criacao_tarefas_azure_devops:
   description: "criação de tarefas a partir de epicos"
   extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
