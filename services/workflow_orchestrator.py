@@ -59,7 +59,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
-        # Passo 5: Validar repo_name_modernizado obrigatório
         repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
         if not repo_name_modernizado:
             raise ValueError("O campo 'repo_name_modernizado' é obrigatório em job_info['data'] para execução do workflow.")
@@ -73,8 +72,42 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            # Passo 6: branch_name_modernizado opcional
-            # O campo branch_name_modernizado só será propagado se estiver presente
+            if start_from_step > 0 and analysis_type == 'criacao_features_azure_devops':
+                print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de features Azure. epic_id={job_info['data'].get('epic_id')}")
+                epic_id = job_info['data'].get('epic_id')
+                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
+                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
+                report = job_info['data'].get('analysis_report')
+                print(f"[{job_id}] [DEBUG] Dados para criação de features: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
+                if not epic_id:
+                    raise ValueError(f"[{job_id}] ERRO: epic_id ausente em job_info['data'] para analysis_type == 'criacao_features_azure_devops'.")
+                if not report or not report.strip():
+                    raise ValueError(f"[{job_id}] ERRO: Relatório de features ausente ou vazio para criação de features no Azure.")
+                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_features_from_epic com epic_id={epic_id}")
+                created_features = azure_board_service.create_features_from_epic(epic_id, report)
+                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_features_from_epic: {created_features}")
+                if created_features and any('error' in feature for feature in created_features):
+                    error_message = next((feature['error'] for feature in created_features if 'error' in feature), "Erro desconhecido ao criar features no Azure.")
+                    print(f"[{job_id}] [ERROR] Falha detectada ao criar features no Azure: {error_message}")
+                    job_info['data']['features_criadas_erro'] = created_features
+                    self.job_handler.update_job(job_id, job_info)
+                    self.job_handler.update_job_status(job_id, 'failed')
+                    return
+                if created_features is not None and len(created_features) == 0:
+                    print(f"[{job_id}] [ERROR] Nenhuma feature foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.")
+                    job_info['data']['error_details'] = 'Nenhuma feature foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.'
+                    self.job_handler.update_job(job_id, job_info)
+                    self.job_handler.update_job_status(job_id, 'failed')
+                    return
+                job_info['data']['features_criadas'] = created_features
+                self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] [AZURE_FEATURES] Features criadas: {created_features}")
+                print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de features Azure.")
+                self.job_handler.update_job_status(job_id, 'completed')
+                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de features Azure.")
+                return
+            # ... restante do método permanece igual ...
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 if start_from_step == 0:
@@ -324,7 +357,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_info['data'].get('original_analysis_type')
-        # Passo 3: Propagar instrucoes_extras para agent_params
         agent_params['instrucoes_extras'] = job_info['data'].get('instrucoes_extras', '')
         if agent_type == 'revisor_board':
             epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
