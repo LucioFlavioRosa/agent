@@ -35,6 +35,12 @@ class JobDataService:
             data[JobFields.EPIC_ID] = epic_id
             data[JobFields.ORGANIZATION] = organization
             data[JobFields.PROJECT] = project
+        if analysis_type == 'criacao_features_azure_devops':
+            epic_id = payload_dict.get('epic_id')
+            organization, project = self._parse_repository_name(normalized_repo_name)
+            data[JobFields.EPIC_ID] = epic_id
+            data[JobFields.ORGANIZATION] = organization
+            data[JobFields.PROJECT] = project
         # Passo 7: garantir task_id para revisor_tarefas
         if analysis_type == 'revisor_tarefas':
             task_id = payload_dict.get('task_id')
