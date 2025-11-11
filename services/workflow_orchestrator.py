@@ -377,7 +377,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             })
         else:
             repo_name = job_info['data'].get('repo_name_modernizado')
-            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas']:
+            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops']:
                 branch_name = job_info['data'].get('branch_name_modernizado')
                 if branch_name:
                     agent_params['nome_branch'] = branch_name
