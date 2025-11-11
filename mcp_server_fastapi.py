@@ -55,6 +55,10 @@ class StartAnalysisPayload(BaseModel):
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
     epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops' ou 'criacao_features_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
+    feature_id: Optional[str] = Field(
+        None,
+        description="ID da feature do Azure DevOps. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'."
+    )
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -113,6 +117,8 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         if analysis_type_str == 'criacao_tarefas_azure_devops':
             if not getattr(payload, 'epic_id', None):
                 raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
+            if not getattr(payload, 'feature_id', None) or (isinstance(payload.feature_id, str) and not payload.feature_id.strip()):
+                raise HTTPException(status_code=400, detail="feature_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
         if analysis_type_str == 'criacao_features_azure_devops':
             if not getattr(payload, 'epic_id', None) or (isinstance(payload.epic_id, str) and not payload.epic_id.strip()):
                 raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_features_azure_devops.")
@@ -162,6 +168,9 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     if analysis_type_str == 'revisor_tarefas':
         print(f"[DEBUG] (payload_dict) task_id para revisor_tarefas: {payload_dict.get('task_id')}")
     print(f"[DEBUG] Valor de criar_tarefas_azure no payload_dict antes de criar o job: {payload_dict.get('criar_tarefas_azure')}")
+    # Garantir que feature_id seja propagado para criacao_tarefas_azure_devops
+    if analysis_type_str == 'criacao_tarefas_azure_devops':
+        payload_dict['feature_id'] = payload.feature_id
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
