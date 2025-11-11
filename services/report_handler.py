@@ -1,3 +1,6 @@
+import json
+import re
+
 class ReportHandler:
     def __init__(self, blob_storage, cache_service=None):
         self.blob_storage = blob_storage
