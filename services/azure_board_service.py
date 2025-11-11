@@ -51,6 +51,64 @@ class AzureBoardService:
                 epics.append(epic)
         return epics
 
+    def create_epics(self, markdown_table: str, tags_para_adicionar='projeto_wilker') -> List[Dict[str, Any]]:
+        epics = self.parse_epics_from_markdown(markdown_table)
+        token = self._get_token()
+        created_epics = []
+        
+        for epic in epics:
+            # 1. Extrai o Título
+            title = epic.get('Épico') or epic.get('Epico') or epic.get('Epic')
+
+            # 2. [ALTERAÇÃO] Extrai os Critérios de Aceite SEPARADAMENTE
+            # IMPORTANTE: A chave 'Critérios de Aceite / Atividades Chave' 
+            # DEVE corresponder exatamente ao cabeçalho na sua tabela markdown.
+            acceptance_criteria = epic.get('Critérios de Aceite / Atividades Chave', '')
+
+            # 3. [ALTERAÇÃO] Monta a Descrição apenas com os campos restantes
+            desc_parts = []
+            if epic.get('Objetivo de Negócio'):
+                desc_parts.append(f"Objetivo: {epic.get('Objetivo de Negócio')}")
+            if epic.get('Perfis Envolvidos'):
+                desc_parts.append(f"Perfis: {epic.get('Perfis Envolvidos')}")
+            if epic.get('Estimativa de Esforço'):
+                desc_parts.append(f"Estimativa: {epic.get('Estimativa de Esforço')}")
+            
+            description = "\n\n".join(desc_parts) 
+
+            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Epic?api-version=7.1-preview.3"
+            headers = {
+                'Content-Type': 'application/json-patch+json',
+                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            }
+            
+            payload = [
+                {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
+                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description},
+                {"op": "add", "path": "/fields/System.Tags", "from": None, "value": tags_para_adicionar}
+            ]
+
+            if acceptance_criteria and acceptance_criteria.strip():
+                payload.append(
+                    {"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "from": None, "value": acceptance_criteria}
+                )
+            response = requests.post(url, headers=headers, json=payload)
+            
+            if response.status_code in (200, 201):
+                data = response.json()
+                created_epics.append({
+                    "id": data.get("id"),
+                    "url": data.get("url"),
+                    "title": title
+                })
+            else:
+                created_epics.append({
+                    "error": response.text,
+                    "title": title
+                })
+                
+        return created_epics
+
     def create_features_from_epic(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
         if not epic_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
             print(f"[AzureBoardService-DEBUG] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
