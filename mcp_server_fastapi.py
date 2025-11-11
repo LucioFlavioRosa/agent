@@ -53,7 +53,7 @@ class StartAnalysisPayload(BaseModel):
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops'.")
+    epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops' ou 'criacao_features_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
 
 class StartAnalysisResponse(BaseModel):
@@ -113,6 +113,16 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         if analysis_type_str == 'criacao_tarefas_azure_devops':
             if not getattr(payload, 'epic_id', None):
                 raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
+        if analysis_type_str == 'criacao_features_azure_devops':
+            if not getattr(payload, 'epic_id', None) or (isinstance(payload.epic_id, str) and not payload.epic_id.strip()):
+                raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_features_azure_devops.")
+            repo_name = payload.repo_name_modernizado
+            repo_parts = repo_name.split('/') if repo_name else []
+            if len(repo_parts) < 3:
+                raise HTTPException(status_code=400, detail="repo_name_modernizado deve conter organização, projeto e repositório separados por '/'.")
+            payload_dict = payload.dict()
+            payload_dict['organization'] = repo_parts[0]
+            payload_dict['project'] = repo_parts[1]
         if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
             raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
     else:
