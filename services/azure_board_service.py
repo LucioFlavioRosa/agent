@@ -9,6 +9,7 @@ import json
 import time
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from services.epic_reader_service import EpicReaderService
+from services.feature_parser_service import FeatureParserService
 
 class AzureBoardService:
     def __init__(self, organization: Optional[str] = None, project: Optional[str] = None, secret_manager: AzureSecretManager = None):
@@ -50,69 +51,94 @@ class AzureBoardService:
                 epics.append(epic)
         return epics
 
-    def create_epics(self, markdown_table: str, tags_para_adicionar='projeto_wilker') -> List[Dict[str, Any]]:
-        epics = self.parse_epics_from_markdown(markdown_table)
+    def create_features_from_epic(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
+        if not epic_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
+            print(f"[AzureBoardService-DEBUG] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
+            raise ValueError(f"[AzureBoardService] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
+        print(f"[AzureBoardService-DEBUG] Chamando FeatureParserService.parse_features_from_markdown")
+        features = FeatureParserService.parse_features_from_markdown(markdown_table)
+        print(f"[AzureBoardService-DEBUG] Parsing concluído. Total de features parseadas: {len(features)}")
+        if len(features) == 0:
+            print(f"[AzureBoardService-WARNING] Nenhuma feature foi parseada da tabela Markdown. Verifique o formato da tabela.")
+            return [{"error": "Nenhuma feature foi encontrada no relatório para criar no épico."}]
         token = self._get_token()
-        created_epics = []
-        
-        for epic in epics:
-            # 1. Extrai o Título
-            title = epic.get('Épico') or epic.get('Epico') or epic.get('Epic')
-
-            # 2. [ALTERAÇÃO] Extrai os Critérios de Aceite SEPARADAMENTE
-            # IMPORTANTE: A chave 'Critérios de Aceite / Atividades Chave' 
-            # DEVE corresponder exatamente ao cabeçalho na sua tabela markdown.
-            acceptance_criteria = epic.get('Critérios de Aceite / Atividades Chave', '')
-
-            # 3. [ALTERAÇÃO] Monta a Descrição apenas com os campos restantes
-            desc_parts = []
-            if epic.get('Objetivo de Negócio'):
-                desc_parts.append(f"Objetivo: {epic.get('Objetivo de Negócio')}")
-            if epic.get('Perfis Envolvidos'):
-                desc_parts.append(f"Perfis: {epic.get('Perfis Envolvidos')}")
-            if epic.get('Estimativa de Esforço'):
-                desc_parts.append(f"Estimativa: {epic.get('Estimativa de Esforço')}")
-            
-            # Junta os campos restantes, separados por linhas duplas
-            description = "\n\n".join(desc_parts) 
-
-            # --- O restante da função continua aqui ---
-            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Epic?api-version=7.1-preview.3"
+        created_features = []
+        parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
+        MOSCOW_MAP = {"M": 1, "S": 2, "C": 3, "W": 4, "Must": 1, "Should": 2, "Could": 3, "Won't": 4}
+        for idx, feature in enumerate(features):
+            title = feature.get('Feature', '') or feature.get('Título', '')
+            descricao = feature.get('Descrição (Jornada/Valor)', '') or feature.get('Descrição', '')
+            criterios_aceite = feature.get('Critérios de Aceite', '')
+            perfis_envolvidos = feature.get('Perfis Envolvidos', '')
+            prioridade_moscow = feature.get('Prioridade (MoSCoW)', '').strip()
+            estimativa_sprints = feature.get('Estimativa (Sprints)', '').strip()
+            description_full = descricao
+            if perfis_envolvidos:
+                description_full += f"\n\nPerfis Envolvidos: {perfis_envolvidos}"
+            payload = [
+                {"op": "add", "path": "/fields/System.Title", "value": title},
+                {"op": "add", "path": "/fields/System.Description", "value": f"<div>{description_full}</div>"}
+            ]
+            if criterios_aceite:
+                payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "value": criterios_aceite})
+            if prioridade_moscow:
+                prioridade_valor = MOSCOW_MAP.get(prioridade_moscow, 2)
+                payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Common.Priority", "value": prioridade_valor})
+            if estimativa_sprints:
+                try:
+                    effort_val = float(estimativa_sprints)
+                    payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.Effort", "value": effort_val})
+                except Exception:
+                    pass
+            payload.append({
+                "op": "add",
+                "path": "/relations/-",
+                "value": {
+                    "rel": "System.LinkTypes.Hierarchy-Reverse",
+                    "url": parent_epic_url,
+                    "attributes": {
+                        "comment": "Feature adicionada via script Python"
+                    }
+                }
+            })
             headers = {
                 'Content-Type': 'application/json-patch+json',
                 'Authorization': f'Basic {self._basic_auth_header(token)}'
             }
-            
-            # 4. [ALTERAÇÃO] Monta o payload inicial
-            payload = [
-                {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
-                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description},
-                {"op": "add", "path": "/fields/System.Tags", "from": None, "value": tags_para_adicionar}
-            ]
-
-            # 5. [ALTERAÇÃO] Adiciona os Critérios de Aceite ao payload (se existirem)
-            if acceptance_criteria and acceptance_criteria.strip():
-                payload.append(
-                    {"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "from": None, "value": acceptance_criteria}
+            print(f"[AzureBoardService-DEBUG] Criando feature {idx+1}/{len(features)}. Título: {title}, Payload: {json.dumps(payload)[:200]}")
+            try:
+                response = requests.post(
+                    f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Feature?api-version=7.1-preview.3",
+                    headers=headers,
+                    data=json.dumps(payload)
                 )
-
-            # Envia a requisição
-            response = requests.post(url, headers=headers, json=payload)
-            
-            if response.status_code in (200, 201):
-                data = response.json()
-                created_epics.append({
-                    "id": data.get("id"),
-                    "url": data.get("url"),
+                print(f"[AzureBoardService-DEBUG] Resposta da criação da feature {idx+1}. Status={response.status_code}, Body={response.text[:300]}")
+                if response.status_code in (200, 201):
+                    try:
+                        data = response.json()
+                        created_features.append({
+                            "id": data.get("id"),
+                            "url": data.get("url"),
+                            "title": title
+                        })
+                    except Exception as e:
+                        created_features.append({
+                            "error": f"Erro ao processar JSON de resposta: {str(e)}",
+                            "status_code": response.status_code,
+                            "title": title
+                        })
+                else:
+                    created_features.append({
+                        "error": response.text,
+                        "status_code": response.status_code,
+                        "title": title
+                    })
+            except Exception as e:
+                created_features.append({
+                    "error": str(e),
                     "title": title
                 })
-            else:
-                created_epics.append({
-                    "error": response.text,
-                    "title": title
-                })
-                
-        return created_epics
+        return created_features
 
     def _basic_auth_header(self, token):
         import base64
@@ -201,8 +227,6 @@ class AzureBoardService:
                 return {"error": f"Não foi possível obter o título do épico {epic_id}. Verifique se o épico existe e se as credenciais estão corretas."}
             token = self._get_token()
             url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Product%20Backlog%20Item?api-version=7.1-preview.3"
-            # teste
-            #url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/Issue?api-version=7.1-preview.3"
             parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "from": None, "value": epic_title},
