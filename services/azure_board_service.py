@@ -92,7 +92,7 @@ class AzureBoardService:
                 payload.append(
                     {"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "from": None, "value": acceptance_criteria}
                 )
-            response = requests.post(url, headers=headers, json=payload)
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
             
             if response.status_code in (200, 201):
                 data = response.json()
