@@ -46,16 +46,22 @@ class AgenteRevisorBoard:
         data = self._get_epic_and_task_data(epic_id=epic_id, task_id=task_id)
         epic_data = data.get('epic')
         task_data = data.get('task')
-        if epic_data is None:
-            print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para o épico '{epic_id}'.")
-            print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados do épico")
-            return {"resultado": {"reposta_final": {}}}
-        print(f"[AgenteRevisorBoard] Dados do épico obtidos: {len(json.dumps(epic_data))} caracteres")
-        if task_data is not None:
-            print(f"[AgenteRevisorBoard] Dados da tarefa obtidos: {len(json.dumps(task_data))} caracteres")
-            instrucoes_extras = (instrucoes_extras or "") + '\n\n--- DADOS DO ÉPICO ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False) + '\n\n--- DADOS DA TAREFA ---\n' + json.dumps(task_data, indent=2, ensure_ascii=False)
-        else:
+        if tipo_analise == 'criacao_features_azure_devops':
+            if epic_data is None:
+                print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para o épico '{epic_id}'.")
+                print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados do épico")
+                return {"resultado": {"reposta_final": {}}}
             instrucoes_extras = (instrucoes_extras or "") + '\n\n--- DADOS DO ÉPICO ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False)
+        else:
+            if epic_data is None:
+                print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para o épico '{epic_id}'.")
+                print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados do épico")
+                return {"resultado": {"reposta_final": {}}}
+            if task_data is not None:
+                print(f"[AgenteRevisorBoard] Dados da tarefa obtidos: {len(json.dumps(task_data))} caracteres")
+                instrucoes_extras = (instrucoes_extras or "") + '\n\n--- DADOS DO ÉPICO ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False) + '\n\n--- DADOS DA TAREFA ---\n' + json.dumps(task_data, indent=2, ensure_ascii=False)
+            else:
+                instrucoes_extras = (instrucoes_extras or "") + '\n\n--- DADOS DO ÉPICO ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False)
         if current_batch is not None and isinstance(current_batch, list) and len(current_batch) > 0:
             batch_instrucao = "ATENÇÃO: Processar APENAS os passos listados abaixo. Ignorar todos os outros passos do relatório original.\n"
             batch_instrucao += json.dumps(current_batch, indent=2, ensure_ascii=False)
@@ -86,7 +92,6 @@ class AgenteRevisorBoard:
             modo_adicao_incremental=False,
             usuario_executor=usuario_executor
         )
-        # PASSO 7: Validação para garantir que a resposta contém a chave 'reposta_final' e que não está vazia
         if not isinstance(resultado_da_ia, dict) or 'reposta_final' not in resultado_da_ia or not resultado_da_ia['reposta_final']:
             raise ValueError(f"[AgenteRevisorBoard] ERRO: A resposta da LLM está vazia ou malformada. resultado_da_ia: {resultado_da_ia}")
         return {
