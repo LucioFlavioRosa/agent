@@ -36,7 +36,7 @@ class AzureBoardService:
             return self.secret_manager.get_secret("azure-token")
             
     def parse_epics_from_markdown(self, markdown_table: str) -> List[Dict[str, Any]]:
-         print(f"[AzureBoardService-DEBUG] Chamando parse_epics_from_markdown")
+        print(f"[AzureBoardService-DEBUG] Chamando parse_epics_from_markdown")
         # Remove linhas vazias e a linha de separador '---'
         lines = [line for line in markdown_table.strip().splitlines() 
                  if line.strip() and not line.strip().startswith('|---')]
