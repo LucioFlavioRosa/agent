@@ -28,13 +28,65 @@ class ReportHandler:
     def extract_report_text(self, step_result):
         if not step_result:
             return None
+
+        raw_output_str = None
+
+        # 1. Encontrar a string de saída bruta do agente
         if isinstance(step_result, dict):
             if 'relatorio' in step_result:
+                # Caso 1: O resultado já é um dict com a chave 'relatorio'
                 return step_result['relatorio']
-            if 'resultado' in step_result and isinstance(step_result['resultado'], dict):
+            
+            if 'resultado_gerado' in step_result:
+                # Caso 2: A estratégia padrão retornou a string do agente
+                raw_output_str = step_result['resultado_gerado']
+            elif 'resultado' in step_result and isinstance(step_result['resultado'], dict):
+                 # Caso 3: Lógica antiga (resultado aninhado)
                 if 'relatorio' in step_result['resultado']:
                     return step_result['resultado']['relatorio']
-        return None
+            elif isinstance(step_result.get('resultado'), str):
+                # Caso 4: A chave 'resultado' contém a string
+                raw_output_str = step_result.get('resultado')
+                
+        elif isinstance(step_result, str):
+            # Caso 5: O próprio step_result é a string bruta
+            raw_output_str = step_result
+
+        if not raw_output_str:
+            print("[ReportHandler] extract_report_text: step_result não continha uma string de saída reconhecida.")
+            return None
+
+        # 2. A saída do agente (raw_output_str) deve ser um JSON string (conforme seu prompt)
+        try:
+            # Limpa o markdown ```json ... ``` que o LLM às vezes adiciona
+            # re.DOTALL faz com que '.' inclua quebras de linha
+            match = re.search(r'\{.*\}', raw_output_str, re.DOTALL)
+            
+            if match:
+                json_str = match.group(0)
+            else:
+                # Se não achar JSON, talvez seja a tabela pura?
+                if raw_output_str.strip().startswith('|'):
+                     return raw_output_str
+                print(f"[ReportHandler] extract_report_text: Não foi possível encontrar um JSON na string: {raw_output_str[:200]}")
+                return None
+
+            # 3. Parsear o JSON string
+            data = json.loads(json_str)
+            
+            # 4. Extrair o conteúdo da chave 'relatorio'
+            if isinstance(data, dict) and 'relatorio' in data:
+                return data['relatorio'] # Retorna a tabela markdown
+            else:
+                print(f"[ReportHandler] extract_report_text: JSON parseado não contém a chave 'relatorio'.")
+                return None
+
+        except json.JSONDecodeError as e:
+            print(f"[ReportHandler] extract_report_text: Falha ao decodificar JSON. Error: {e}. String: {raw_output_str[:200]}")
+            # Se falhou o JSON, talvez seja a tabela pura
+            if raw_output_str.strip().startswith('|'):
+                return raw_output_str
+            return None
 
     def save_report_to_blob(self, job_id, job_info, report_text):
         if not report_text or len(str(report_text).strip()) == 0:
