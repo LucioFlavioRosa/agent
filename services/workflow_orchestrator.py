@@ -72,59 +72,19 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-            if start_from_step > 0 and analysis_type == 'criacao_features_azure_devops':
-                print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de features Azure. epic_id={job_info['data'].get('epic_id')}")
-                epic_id = job_info['data'].get('epic_id')
-                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-                report = job_info['data'].get('analysis_report')
-                print(f"[{job_id}] [DEBUG] Dados para criação de features: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
-                if not epic_id:
-                    raise ValueError(f"[{job_id}] ERRO: epic_id ausente em job_info['data'] para analysis_type == 'criacao_features_azure_devops'.")
-                if not report or not report.strip():
-                    raise ValueError(f"[{job_id}] ERRO: Relatório de features ausente ou vazio para criação de features no Azure.")
-                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_features_from_epic com epic_id={epic_id}")
-                created_features = azure_board_service.create_features_from_epic(epic_id, report)
-                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_features_from_epic: {created_features}")
-                if created_features and any('error' in feature for feature in created_features):
-                    error_message = next((feature['error'] for feature in created_features if 'error' in feature), "Erro desconhecido ao criar features no Azure.")
-                    print(f"[{job_id}] [ERROR] Falha detectada ao criar features no Azure: {error_message}")
-                    job_info['data']['features_criadas_erro'] = created_features
-                    self.job_handler.update_job(job_id, job_info)
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-                if created_features is not None and len(created_features) == 0:
-                    print(f"[{job_id}] [ERROR] Nenhuma feature foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.")
-                    job_info['data']['error_details'] = 'Nenhuma feature foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.'
-                    self.job_handler.update_job(job_id, job_info)
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-                job_info['data']['features_criadas'] = created_features
-                self.job_handler.update_job(job_id, job_info)
-                print(f"[{job_id}] [AZURE_FEATURES] Features criadas: {created_features}")
-                print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de features Azure.")
-                self.job_handler.update_job_status(job_id, 'completed')
-                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de features Azure.")
-                return
-            # ... restante do método permanece igual ...
-            if analysis_type == 'revisor_tarefas':
-                print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
-                if start_from_step == 0:
-                    task_id = job_info['data'].get('task_id')
-                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas) - task_id presente? {task_id is not None}, valor: {task_id}")
-                    if not task_id:
-                        raise ValueError(f"[{job_id}] ERRO: task_id ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
             if start_from_step > 0 and analysis_type == 'criacao_tarefas_azure_devops':
                 print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas Azure. epic_id={job_info['data'].get('epic_id')}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
                 project = job_info['data'].get('project') or job_info['data'].get('azure_project')
                 epic_id = job_info['data'].get('epic_id')
+                feature_id = job_info['data'].get('feature_id')
                 report = job_info['data'].get('analysis_report')
-                print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
+                print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: epic_id={epic_id}, feature_id={feature_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
+                if not feature_id or not isinstance(feature_id, str) or not feature_id.strip():
+                    raise ValueError(f"[{job_id}] ERRO: feature_id ausente ou inválido em job_info['data'] para analysis_type == 'criacao_tarefas_azure_devops'.")
                 azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report com epic_id={epic_id}")
-                created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report com epic_id={epic_id}, feature_id={feature_id}")
+                created_tasks = azure_board_service.create_tasks_from_report(epic_id, feature_id, report)
                 print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_tasks_from_report: {created_tasks}")
                 if created_tasks and any('error' in task for task in created_tasks):
                     error_message = next((task['error'] for task in created_tasks if 'error' in task), "Erro desconhecido ao criar tarefas no Azure.")
@@ -146,6 +106,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'completed')
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
                 return
+            if analysis_type == 'revisor_tarefas':
+                print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
+                if start_from_step == 0:
+                    task_id = job_info['data'].get('task_id')
+                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas) - task_id presente? {task_id is not None}, valor: {task_id}")
+                    if not task_id:
+                        raise ValueError(f"[{job_id}] ERRO: task_id ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
             if start_from_step > 0 and analysis_type == 'criacao_epicos_azure_devops':
                 print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: agente={analysis_type}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
