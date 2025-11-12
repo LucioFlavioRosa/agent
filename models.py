@@ -78,6 +78,7 @@ class JobFields:
     ORGANIZATION = 'organization'
     PROJECT = 'project'
     TASK_ID = 'task_id'
+    FEATURE_ID = 'feature_id'
 
 class JobActions:
     APPROVE = 'approve'
