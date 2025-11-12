@@ -12,6 +12,7 @@ class AgenteRevisorBoard:
         init_logger()
 
     def _get_epic_and_task_data(self, epic_id: str, task_id: Optional[str] = None, feature_id: Optional[str] = None) -> Dict[str, Any]:
+        print(f"[AgenteRevisorBoard] [DEBUG] Entrando no main. epic_id={epic_id}, task_id={task_id}, feature_id={feature_id}")
         if not epic_id:
             raise ValueError("epic_id é obrigatório para leitura do épico.")
         epic_data = self.azure_board_service.read_epic(epic_id)
