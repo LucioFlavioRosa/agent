@@ -266,10 +266,7 @@ class AzureBoardService:
             return {
                 'error': str(e)
             }
-
-    # ==================================================================
-    # == NOVA FUNÇÃO ADICIONADA ==
-    # ==================================================================
+            
     def read_feature(self, feature_id: str) -> Dict[str, Any]:
         """
         Lê os dados de uma Feature específica.
@@ -293,7 +290,6 @@ class AzureBoardService:
                     'description': fields.get('System.Description'),
                     'acceptance_criteria': fields.get('Microsoft.VSTS.Common.AcceptanceCriteria'),
                     'state': fields.get('System.State'),
-                    'state': fields.get('System.State'),
                     'url': data.get('url'),
                     'fields': fields
                 }
@@ -308,7 +304,6 @@ class AzureBoardService:
             return {
                 'error': str(e)
             }
-    # ==================================================================
 
     def read_task(self, task_id: str) -> Dict[str, Any]:
         if not self.organization or not self.project:
