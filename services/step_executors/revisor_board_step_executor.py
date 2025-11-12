@@ -112,6 +112,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                     raise ValueError("IA retornou resposta vazia ou inválida e não há resultado anterior para usar.")
                     
                 print(f"[{job_id}] [DEBUG] Resposta do agente revisor_board recebida, tamanho: {len(cleaned_string)} caracteres")
+                print(f"[{job_id}] [DEBUG] JSON limpo recebido do Agente:\n{cleaned_string}\n")
                 result = json.loads(cleaned_string, strict=False)
                 print(f"[{job_id}] JSON decodificado com sucesso na tentativa {attempt + 1}.")
                 
