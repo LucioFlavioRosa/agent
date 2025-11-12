@@ -58,6 +58,8 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         })
         agent_params['task_id'] = task_id
         agent_params['feature_id'] = feature_id
+        agent_params['analysis_type'] = analysis_type
+                    
         if analysis_type == 'revisor_tarefas':
             print(f"[{job_id}] [DEBUG] RevisorBoardStepExecutor: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
         if analysis_type == 'criacao_tarefas_azure_devops':
