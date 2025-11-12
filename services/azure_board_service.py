@@ -318,11 +318,17 @@ class AzureBoardService:
             if response.status_code == 200:
                 data = response.json()
                 fields = data.get('fields', {})
-                print(f"[AzureBoardService-DEBUG] read_task: Dados retornados para task_id={task_id}: {json.dumps(fields)[:200]}...")
+                title = fields.get('System.Title')
+                description = fields.get('System.Description')
+                acceptance_criteria = fields.get('Microsoft.VSTS.Common.AcceptanceCriteria')
+                print(f"[AzureBoardService-DEBUG] read_feature: title={title}, description={description}, acceptance_criteria={acceptance_criteria}")
+                if not title or not description or not acceptance_criteria:
+                    print(f"[AzureBoardService-ERROR] Campos obrigatórios ausentes na feature: title={title}, description={description}, acceptance_criteria={acceptance_criteria}")
                 return {
                     'id': data.get('id'),
-                    'title': fields.get('System.Title'),
-                    'description': fields.get('System.Description'),
+                    'title': title,
+                    'description': description,
+                    'acceptance_criteria': acceptance_criteria,
                     'state': fields.get('System.State'),
                     'url': data.get('url'),
                     'fields': fields
