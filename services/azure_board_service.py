@@ -268,9 +268,7 @@ class AzureBoardService:
             }
             
     def read_feature(self, feature_id: str) -> Dict[str, Any]:
-        """
-        Lê os dados de uma Feature específica.
-        """
+    
         if not self.organization or not self.project:
             raise ValueError("organization e project devem estar definidos para buscar feature.")
         token = self._get_token()
@@ -554,9 +552,7 @@ class AzureBoardService:
                 })
         return created_tasks
 
-    # ==================================================================
-    # == ADICIONE ESTA NOVA FUNÇÃO AO SEU 'AzureBoardService.py' ==
-    # ==================================================================
+    
     def create_tasks_from_report_for_feature(self, feature_id: str, markdown_table: str) -> List[Dict[str, Any]]:
         """
         Cria um PBI a partir de uma FEATURE e, em seguida, cria Tarefas
@@ -602,7 +598,7 @@ class AzureBoardService:
             if criterios_aceite:
                 description_full += '\n\nCritérios de Aceite:\n' + criterios_aceite
             if perfis_sugeridos:
-                description_full += f"\n\Perfis Sugeridos: {perfis_sugeridos}"
+                description_full += f"\n\nPerfis Sugeridos: {perfis_sugeridos}"
                 
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "value": title},
