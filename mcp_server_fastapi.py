@@ -53,7 +53,7 @@ class StartAnalysisPayload(BaseModel):
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type for 'criacao_tarefas_azure_devops' ou 'criacao_features_azure_devops'.")
+    epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type para 'criacao_features_azure_devops'.")
     feature_id: Optional[str] = Field(None, description="ID da feature do Azure DevOps. Obrigatório apenas quando analysis_type for 'criacao_tarefas_azure_devops'.")
     task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
 
