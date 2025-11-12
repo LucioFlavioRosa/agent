@@ -18,8 +18,9 @@ class AgenteRevisorBoard:
         feature_id: Optional[str] = None
     ) -> Dict[str, Any]:
 
+        data: Dict[str, Any] = {}
         if epic_id:
-            self.azure_board_service.read_epic(epic_id)
+            data['epic'] = self.azure_board_service.read_epic(epic_id) 
         
         if feature_id:
             data['feature'] = self.azure_board_service.read_feature(feature_id)
@@ -31,7 +32,6 @@ class AgenteRevisorBoard:
         
     def main(
         self,
-        epic_id: str,
         tipo_analise: str = None,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
@@ -43,13 +43,12 @@ class AgenteRevisorBoard:
         usuario_executor: Optional[str] = None,
         current_batch: Optional[List[Dict[str, Any]]] = None,
         task_id: Optional[str] = None,
-        feature_id: Optional[str] = None, # <-- NOVO PARÂMETRO
+        feature_id: Optional[str] = None,
+        epic_id: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         print(f"[AgenteRevisorBoard] [DEBUG] Entrando no main. epic_id={epic_id}, task_id={task_id}, feature_id={feature_id}")
         
-        if not epic_id:
-            raise ValueError("epic_id é obrigatório para execução do agente revisor_board.")
             
         if tipo_analise == 'revisor_tarefas':
             if not task_id:
@@ -65,55 +64,59 @@ class AgenteRevisorBoard:
         feature_data = data.get('feature')
         task_data = data.get('task')
 
-        # 2. Construir 'instrucoes_extras' com base no 'tipo_analise'
         
-        if epic_data is None:
-            print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para o épico '{epic_id}'.")
-            print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados do épico")
-            return {"resultado": {"reposta_final": {}}}
+        # 2. Construir 'instrucoes_extras' com base no 'tipo_analise'
+        instrucoes_formatadas = (instrucoes_extras or "") # Usar uma nova variável
 
-        # Adiciona dados do Épico (comum a todos os tipos)
-        instrucoes_extras = (instrucoes_extras or "") + '\n\n--- DADOS DO ÉPICO ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False)
+        # Adiciona dados do Épico (contexto) APENAS SE ele foi fornecido e encontrado
+        if epic_data:
+            if 'error' in epic_data:
+                 print(f"[AgenteRevisorBoard] AVISO: Erro ao buscar épico (contexto) '{epic_id}': {epic_data['error']}.")
+                 # Não falha, apenas loga o aviso
+            else:
+                print(f"[AgenteRevisorBoard] DEBUG: Adicionando dados do Épico {epic_id} ao contexto.")
+                instrucoes_formatadas += '\n\n--- DADOS DO ÉPICO (CONTEXTO) ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False)
+        else:
+            print(f"[AgenteRevisorBoard] DEBUG: Nenhum epic_id fornecido ou dados não encontrados. Contexto do épico pulado.")
 
-        if tipo_analise == 'criacao_features_azure_devops':
-            # Este tipo de análise (para criar tarefas) AGORA precisa de dados da Feature
+        
+        # Este é o tipo_tarefa para (Feature -> Task)
+        if tipo_analise == 'criacao_features_azure_devops': 
             if not feature_id:
                 raise ValueError("feature_id é obrigatório quando tipo_analise == 'criacao_features_azure_devops'.")
                 
-            if feature_data is None:
-                print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para a feature '{feature_id}'.")
-                print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados da feature")
-                return {"resultado": {"reposta_final": {}}}
+            if feature_data is None or 'error' in feature_data:
+                print(f"[AgenteRevisorBoard] ERRO: Nenhum dado encontrado para a feature '{feature_id}'.")
+                raise ValueError(f"Dados da feature {feature_id} não encontrados ou contêm erro: {feature_data.get('error')}")
             
             # Adiciona dados da Feature
-            instrucoes_extras += '\n\n--- DADOS DA FEATURE ---\n' + json.dumps(feature_data, indent=2, ensure_ascii=False)
+            instrucoes_formatadas += '\n\n--- DADOS DA FEATURE (FONTE DA VERDADE) ---\n' + json.dumps(feature_data, indent=2, ensure_ascii=False)
         
         elif tipo_analise == 'revisor_tarefas':
             # Este tipo de análise precisa de dados da Tarefa
-            if task_data is None:
-                print(f"[AgenteRevisorBoard] AVISO: Nenhum dado encontrado para a tarefa '{task_id}'.")
-                print(f"[AgenteRevisorBoard] Retornando resposta vazia devido à ausência de dados da tarefa")
-                return {"resultado": {"reposta_final": {}}}
+            if task_data is None or 'error' in task_data:
+                print(f"[AgenteRevisorBoard] ERRO: Nenhum dado encontrado para a tarefa '{task_id}'.")
+                raise ValueError(f"Dados da tarefa {task_id} não encontrados ou contêm erro: {task_data.get('error')}")
             
             # Adiciona dados da Tarefa
-            instrucoes_extras += '\n\n--- DADOS DA TAREFA ---\n' + json.dumps(task_data, indent=2, ensure_ascii=False)
+            instrucoes_formatadas += '\n\n--- DADOS DA TAREFA (FONTE DA VERDADE) ---\n' + json.dumps(task_data, indent=2, ensure_ascii=False)
             
-            # (Opcional) Se a revisão de tarefa também precisar do contexto da feature,
-            # você pode adicionar a lógica para 'feature_data' aqui também.
-            # Por enquanto, ele só adiciona a tarefa.
+            # Adiciona contexto da feature se ela existir
+            if feature_data and 'error' not in feature_data:
+                instrucoes_formatadas += '\n\n--- DADOS DA FEATURE (CONTEXTO) ---\n' + json.dumps(feature_data, indent=2, ensure_ascii=False)
 
         # 3. Processar Lotes (Batch)
         if current_batch is not None and isinstance(current_batch, list) and len(current_batch) > 0:
             batch_instrucao = "ATENÇÃO: Processar APENAS os passos listados abaixo. Ignorar todos os outros passos do relatório original.\n"
             batch_instrucao += json.dumps(current_batch, indent=2, ensure_ascii=False)
-            instrucoes_extras += "\n\n" + batch_instrucao
+            instrucoes_formatadas += "\n\n" + batch_instrucao # Adiciona à nova variável
 
         # 4. Executar LLM e Logar
-        print(f"[AgenteRevisorBoard] instrucoes_extras final: {len(instrucoes_extras)} caracteres")
+        print(f"[AgenteRevisorBoard] instrucoes_extras final: {len(instrucoes_formatadas)} caracteres")
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=tipo_analise,
             prompt_principal=None,
-            instrucoes_extras=instrucoes_extras,
+            instrucoes_extras=instrucoes_formatadas, # <-- CORREÇÃO: Usa a variável correta
             usar_rag=usar_rag,
             model_name=model_name,
             max_token_out=max_token_out,
@@ -127,7 +130,7 @@ class AgenteRevisorBoard:
             tokens_out=resultado_da_ia['tokens_saida'],
             status='FINALIZADO',
             tipo_repositorio='azure_board',
-            nome_repositorio=epic_id,
+            nome_repositorio=epic_id or feature_id or task_id or "ID_Nao_Fornecido", 
             tipo_analise=tipo_analise,
             model_name=model_name,
             modo_adicao_incremental=False,
