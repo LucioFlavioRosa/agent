@@ -78,7 +78,7 @@ class AgenteRevisorBoard:
         else:
             print(f"[AgenteRevisorBoard] DEBUG: Nenhum epic_id fornecido ou dados não encontrados. Contexto do épico pulado.")
 
-        if tipo_analise == 'criacao_tarefas_azure_devops': # <-- CORRETO (Feature -> Task)
+        if tipo_analise == 'criacao_tarefas_azure_devops':
             
             if not feature_id:
                 raise ValueError("feature_id é obrigatório quando tipo_analise == 'criacao_tarefas_azure_devops'.")
