@@ -250,6 +250,7 @@ class AzureBoardService:
                     'id': data.get('id'),
                     'title': fields.get('System.Title'),
                     'description': fields.get('System.Description'),
+                    'acceptance_criteria': fields.get('Microsoft.VSTS.Common.AcceptanceCriteria'),
                     'state': fields.get('System.State'),
                     'url': data.get('url'),
                     'fields': fields
