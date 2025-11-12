@@ -112,8 +112,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
             else:
                 print(f"[DEBUG] task_id propagado para revisor_tarefas: {payload.task_id}")
         if analysis_type_str == 'criacao_tarefas_azure_devops':
-            if not getattr(payload, 'epic_id', None):
-                raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
             if not getattr(payload, 'feature_id', None) or (isinstance(payload.feature_id, str) and not payload.feature_id.strip()):
                 raise HTTPException(status_code=400, detail="feature_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
                 
