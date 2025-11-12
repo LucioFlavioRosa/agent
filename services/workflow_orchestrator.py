@@ -59,7 +59,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             print(f"[WorkflowOrchestrator] Warning: Failed to update job tracker after saving report: {e}")
         print(f"[{job_id}] [DEBUG] _save_generated_report finalizado com sucesso para step {current_step_index}.")
         return True
-
+    
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
         repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
@@ -358,13 +358,22 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self._finalize_workflow(job_id, job_info, workflow, previous_step_result, repository_type, repo_name)
 
         except Exception as e:
-            print(f"[{job_id}] ERRO FATAL NO WORKFLOW: {e}")
+            error_message = str(e)
+            print(f"[{job_id}] ERRO FATAL NO WORKFLOW: {error_message}")
             traceback.print_exc()
-            self.job_handler.update_job_status(job_id, 'failed', str(e))
+            
+            # Atualiza os dados do job com o erro antes de mudar o status
+            try:
+                # job_info deve estar acessível neste escopo
+                if job_info and 'data' in job_info:
+                    job_info['data']['error_details'] = error_message
+                    self.job_handler.update_job(job_id, job_info)
+            except Exception as update_err:
+                print(f"[{job_id}] ERRO CRÍTICO: Falha ao salvar detalhes do erro no job: {update_err}")
 
-    # ==================================================================
-    # == MUDANÇA 2: _execute_step_with_strategy atualizado ==
-    # ==================================================================
+            # Agora atualiza o status SEM o argumento de erro
+            self.job_handler.update_job_status(job_id, 'failed')
+    
     def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
                                     repo_reader: ReaderGeral, step_iteration: int, 
@@ -451,10 +460,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if step.get('requires_approval', False):
             return result
         return result
-    # ==================================================================
-    # == FIM DA MUDANÇA 2 ==
-    # ==================================================================
-
+    
     def handle_approval_step(self, job_id: str, job_info: Dict[str, Any], step_index: int, step_result: Dict[str, Any]) -> None:
         print(f"[{job_id}] Etapa requer aprovação.")
         report_text = self.report_handler.extract_report_text(step_result)
