@@ -45,7 +45,6 @@ class AzureBoardService:
         }
         try:
             response = requests.get(url, headers=headers)
-            print(f"[AzureBoardService-DEBUG] read_feature: GET {url} status={response.status_code}")
             if response.status_code == 200:
                 data = response.json()
                 fields = data.get('fields', {})
@@ -58,27 +57,21 @@ class AzureBoardService:
                     'fields': fields
                 }
             else:
-                print(f"[AzureBoardService-DEBUG] read_feature: Falha ao buscar feature. status={response.status_code}, body={response.text}")
                 return {
                     'error': response.text,
                     'status_code': response.status_code
                 }
         except Exception as e:
-            print(f"[AzureBoardService-DEBUG] read_feature: Exceção ao buscar feature: {str(e)}")
             return {
                 'error': str(e)
             }
 
     def create_tasks_from_feature(self, feature_id: str, markdown_table: str) -> List[Dict[str, Any]]:
         if not feature_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
-            print(f"[AzureBoardService-DEBUG] ERRO: feature_id ou markdown_table inválidos. feature_id={feature_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
             raise ValueError(f"[AzureBoardService] ERRO: feature_id ou markdown_table inválidos. feature_id={feature_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
-        print(f"[AzureBoardService-DEBUG] Chamando TaskParserService.parse_tasks_from_markdown")
         parser = TaskParserService()
         tasks = parser.parse_tasks_from_markdown(markdown_table)
-        print(f"[AzureBoardService-DEBUG] Parsing concluído. Total de tarefas parseadas: {len(tasks)}")
         if len(tasks) == 0:
-            print(f"[AzureBoardService-WARNING] Nenhuma tarefa foi parseada da tabela Markdown. Verifique o formato da tabela.")
             return [{"error": "Nenhuma tarefa foi encontrada no relatório para criar na feature."}]
         token = self._get_token()
         created_tasks = []
@@ -120,14 +113,12 @@ class AzureBoardService:
                 'Content-Type': 'application/json-patch+json',
                 'Authorization': f'Basic {self._basic_auth_header(token)}'
             }
-            print(f"[AzureBoardService-DEBUG] Criando tarefa {idx+1}/{total_tasks}. Título: {title}, Payload: {json.dumps(payload)[:200]}")
             try:
                 response = requests.post(
                     f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Task?api-version=7.1-preview.3",
                     headers=headers,
                     data=json.dumps(payload)
                 )
-                print(f"[AzureBoardService-DEBUG] Resposta da criação da tarefa {idx+1}. Status={response.status_code}, Body={response.text[:300]}")
                 if response.status_code in (200, 201):
                     try:
                         data = response.json()
@@ -157,14 +148,11 @@ class AzureBoardService:
 
     def create_tasks_from_report(self, feature_id: str, markdown_table: str) -> List[Dict[str, Any]]:
         if not feature_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
-            print(f"[AzureBoardService-DEBUG] ERRO: feature_id ou markdown_table inválidos. feature_id={feature_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
             raise ValueError(f"[AzureBoardService] ERRO: feature_id ou markdown_table inválidos. feature_id={feature_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
-        print(f"[AzureBoardService-DEBUG] Chamando AzureBoardService.create_tasks_from_feature com feature_id={feature_id}")
-        created_tasks = self.create_tasks_from_feature(feature_id, markdown_table)
-        return created_tasks
+        return self.create_tasks_from_feature(feature_id, markdown_table)
 
     def _basic_auth_header(self, token):
         import base64
         return base64.b64encode(f':{token}'.encode('utf-8')).decode('utf-8')
 
-    # ... demais funções permanecem inalteradas ...
+    # ... demais métodos permanecem inalterados ...
