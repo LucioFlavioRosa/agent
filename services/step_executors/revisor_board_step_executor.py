@@ -21,6 +21,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         task_id = job_info['data'].get('task_id')
         feature_id = job_info['data'].get('feature_id')
         analysis_type = job_info['data'].get('original_analysis_type')
+        feature_data = job_info['data'].get('feature_data') if analysis_type == 'criacao_tarefas_azure_devops' else None
         if not organization:
             raise ValueError(f"[{job_id}] Parâmetro obrigatório 'organization' ausente em job_info['data'].")
         if not project:
@@ -34,6 +35,9 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         if analysis_type == 'criacao_tarefas_azure_devops':
             if not feature_id:
                 raise ValueError(f"[{job_id}] Parâmetro obrigatório 'feature_id' ausente em job_info['data'] para analysis_type == 'criacao_tarefas_azure_devops'.")
+            print(f"[{job_id}] [DEBUG] RevisorBoardStepExecutor: Conteúdo de feature_data antes de montar instrucoes_formatadas: {json.dumps(feature_data, ensure_ascii=False)}")
+            if not feature_data or not feature_data.get('title') or not feature_data.get('description') or not feature_data.get('acceptance_criteria'):
+                raise ValueError(f"[{job_id}] ERRO: Campos obrigatórios da feature ausentes ou vazios em feature_data. title={feature_data.get('title')}, description={feature_data.get('description')}, acceptance_criteria={feature_data.get('acceptance_criteria')}")
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
@@ -76,7 +80,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params) 
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
