@@ -20,7 +20,6 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         project = job_info['data'].get('project')
         task_id = job_info['data'].get('task_id')
         analysis_type = job_info['data'].get('original_analysis_type')
-        feature_id = job_info['data'].get('feature_id')
         if not epic_id:
             raise ValueError(f"[{job_id}] Parâmetro obrigatório 'epic_id' ausente em job_info['data'].")
         if not organization:
@@ -30,9 +29,6 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         if analysis_type == 'revisor_tarefas':
             if not task_id:
                 raise ValueError(f"[{job_id}] Parâmetro obrigatório 'task_id' ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
-        if analysis_type == 'criacao_tarefas_azure_devops':
-            if feature_id is None:
-                raise ValueError(f"[{job_id}] Parâmetro obrigatório 'feature_id' ausente em job_info['data'] para analysis_type == 'criacao_tarefas_azure_devops'.")
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
@@ -56,7 +52,6 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
             'status_update': step['status_update']
         })
         agent_params['task_id'] = task_id
-        agent_params['feature_id'] = feature_id
         if analysis_type == 'revisor_tarefas':
             print(f"[{job_id}] [DEBUG] RevisorBoardStepExecutor: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
         print(f"[{job_id}] [DEBUG] Chamando agente revisor_board com task_id={agent_params.get('task_id')}, epic_id={agent_params.get('epic_id')}")

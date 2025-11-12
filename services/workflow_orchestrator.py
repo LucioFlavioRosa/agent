@@ -107,6 +107,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'completed')
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de features Azure.")
                 return
+            # ... restante do método permanece igual ...
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 if start_from_step == 0:
@@ -119,14 +120,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
                 project = job_info['data'].get('project') or job_info['data'].get('azure_project')
                 epic_id = job_info['data'].get('epic_id')
-                feature_id = job_info['data'].get('feature_id')
                 report = job_info['data'].get('analysis_report')
-                print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: epic_id={epic_id}, feature_id={feature_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
-                if not feature_id or not isinstance(feature_id, str) or not feature_id.strip():
-                    raise ValueError(f"[{job_id}] ERRO: feature_id ausente ou inválido em job_info['data'] para analysis_type == 'criacao_tarefas_azure_devops'.")
+                print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
                 azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report com epic_id={epic_id}, feature_id={feature_id}")
-                created_tasks = azure_board_service.create_tasks_from_report(epic_id, feature_id, report)
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report com epic_id={epic_id}")
+                created_tasks = azure_board_service.create_tasks_from_report(epic_id, report)
                 print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_tasks_from_report: {created_tasks}")
                 if created_tasks and any('error' in task for task in created_tasks):
                     error_message = next((task['error'] for task in created_tasks if 'error' in task), "Erro desconhecido ao criar tarefas no Azure.")
@@ -148,13 +146,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'completed')
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
                 return
-            if analysis_type == 'revisor_tarefas':
-                print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
-                if start_from_step == 0:
-                    task_id = job_info['data'].get('task_id')
-                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas) - task_id presente? {task_id is not None}, valor: {task_id}")
-                    if not task_id:
-                        raise ValueError(f"[{job_id}] ERRO: task_id ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
             if start_from_step > 0 and analysis_type == 'criacao_epicos_azure_devops':
                 print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: agente={analysis_type}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
@@ -375,7 +366,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['organization'] = organization
             agent_params['project'] = project
             agent_params['task_id'] = job_info['data'].get('task_id')
-            agent_params['feature_id'] = job_info['data'].get('feature_id')
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
         elif agent_type == 'comparador':
