@@ -74,15 +74,8 @@ class AzureBoardService:
         created_epics = []
 
         for epic in epics:
-            # 1. Extrai o Título
             title = epic.get('Épico') or epic.get('Epico') or epic.get('Epic')
-
-            # 2. [ALTERAÇÃO] Extrai os Critérios de Aceite SEPARADAMENTE
-            # IMPORTANTE: A chave 'Critérios de Aceite / Atividades Chave' 
-            # DEVE corresponder exatamente ao cabeçalho na sua tabela markdown.
             acceptance_criteria = epic.get('Critérios de Aceite / Atividades Chave', '')
-
-            # 3. [ALTERAÇÃO] Monta a Descrição apenas com os campos restantes
             desc_parts = []
             if epic.get('Objetivo de Negócio'):
                 desc_parts.append(f"Objetivo: {epic.get('Objetivo de Negócio')}")
@@ -90,27 +83,22 @@ class AzureBoardService:
                 desc_parts.append(f"Perfis: {epic.get('Perfis Envolvidos')}")
             if epic.get('Estimativa de Esforço'):
                 desc_parts.append(f"Estimativa: {epic.get('Estimativa de Esforço')}")
-
             description = "\n\n".join(desc_parts) 
-
             url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Epic?api-version=7.1-preview.3"
             headers = {
                 'Content-Type': 'application/json-patch+json',
                 'Authorization': f'Basic {self._basic_auth_header(token)}'
             }
-
             payload = [
                 {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
                 {"op": "add", "path": "/fields/System.Description", "from": None, "value": description},
                 {"op": "add", "path": "/fields/System.Tags", "from": None, "value": tags_para_adicionar}
             ]
-
             if acceptance_criteria and acceptance_criteria.strip():
                 payload.append(
                     {"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "from": None, "value": acceptance_criteria}
                 )
             response = requests.post(url, headers=headers, data=json.dumps(payload))
-
             if response.status_code in (200, 201):
                 data = response.json()
                 created_epics.append({
@@ -123,7 +111,6 @@ class AzureBoardService:
                     "error": response.text,
                     "title": title
                 })
-
         return created_epics
 
     def create_features_from_epic(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
@@ -286,231 +273,3 @@ class AzureBoardService:
             return {
                 'error': str(e)
             }
-
-    def create_backlog_from_feature(self, epic_id: str, feature_id: str) -> Dict[str, Any]:
-        if not self.organization or not self.project:
-            print(f"[AzureBoardService-DEBUG] organization e project não definidos para criar backlog.")
-            return {"error": "organization e project devem estar definidos para criar backlog."}
-        if not feature_id or not isinstance(feature_id, str) or not feature_id.strip():
-            print(f"[AzureBoardService-DEBUG] feature_id ausente ou inválido para criar backlog.")
-            return {"error": "feature_id deve ser fornecido para criar backlog a partir de uma feature."}
-        try:
-            print(f"[AzureBoardService-DEBUG] Chamando EpicReaderService.get_epic_title com epic_id={epic_id}, organization={self.organization}, project={self.project}")
-            epic_title = EpicReaderService.get_epic_title(epic_id, self.organization, self.project)
-            print(f"[AzureBoardService-DEBUG] Título do épico obtido: epic_title={epic_title}")
-            if not epic_title:
-                print(f"[AzureBoardService-DEBUG] Não foi possível obter o título do épico {epic_id}.")
-                return {"error": f"Não foi possível obter o título do épico {epic_id}. Verifique se o épico existe e se as credenciais estão corretas."}
-            feature_data = self.read_feature(feature_id)
-            if not feature_data or 'title' not in feature_data or not feature_data['title']:
-                print(f"[AzureBoardService-DEBUG] Não foi possível obter o título da feature {feature_id}.")
-                return {"error": f"Não foi possível obter o título da feature {feature_id}. Verifique se a feature existe e se as credenciais estão corretas."}
-            feature_title = feature_data['title']
-            token = self._get_token()
-            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Product%20Backlog%20Item?api-version=7.1-preview.3"
-            parent_feature_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{feature_id}"
-            payload = [
-                {"op": "add", "path": "/fields/System.Title", "from": None, "value": feature_title},
-                {"op": "add", "path": "/fields/System.Description", "from": None, "value": f"Backlog criado a partir da feature {feature_id} e do épico {epic_id}"},
-                {
-                    "op": "add",
-                    "path": "/relations/-",
-                    "value": {
-                        "rel": "System.LinkTypes.Hierarchy-Reverse",
-                        "url": parent_feature_url
-                    }
-                }
-            ]
-            print(f"[AzureBoardService-DEBUG] Criando backlog. URL={url}, Payload={payload}")
-            headers = {
-                'Content-Type': 'application/json-patch+json',
-                'Authorization': f'Basic {self._basic_auth_header(token)}'
-            }
-            response = requests.post(url, headers=headers, json=payload)
-            print(f"[AzureBoardService-DEBUG] Resposta da criação do backlog. Status={response.status_code}, Body={response.text[:500]}")
-            if response.status_code in (200, 201):
-                data = response.json()
-                print(f"[AzureBoardService-DEBUG] Backlog criado com sucesso. id={data.get('id')}, url={data.get('url')}, title={feature_title}")
-                return {
-                    "id": data.get("id"),
-                    "url": data.get("url"),
-                    "title": feature_title
-                }
-            else:
-                print(f"[AzureBoardService-DEBUG] Falha ao criar backlog: {response.text}")
-                return {
-                    "error": response.text,
-                    "status_code": response.status_code
-                }
-        except Exception as e:
-            print(f"[AzureBoardService-DEBUG] Exceção ao criar backlog: {str(e)}")
-            return {"error": str(e)}
-
-    def create_tasks_from_report(self, epic_id: str, feature_id: str, markdown_table: str) -> List[Dict[str, Any]]:
-        if not epic_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
-            print(f"[AzureBoardService-DEBUG] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
-            raise ValueError(f"[AzureBoardService] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
-        if not feature_id or not isinstance(feature_id, str) or not feature_id.strip():
-            print(f"[AzureBoardService-DEBUG] ERRO: feature_id ausente ou inválido em create_tasks_from_report.")
-            raise ValueError(f"[AzureBoardService] ERRO: feature_id ausente ou inválido em create_tasks_from_report.")
-        print(f"[AzureBoardService-DEBUG] Chamando AzureBoardService.create_backlog_from_feature com epic_id={epic_id}, feature_id={feature_id}")
-        print(f"[AzureBoardService-DEBUG] ANTES de chamar create_backlog_from_feature. epic_id={epic_id}, feature_id={feature_id}, self.organization={self.organization}, self.project={self.project}")
-        backlog_result = self.create_backlog_from_feature(epic_id, feature_id)
-        print(f"[AzureBoardService-DEBUG] DEPOIS de chamar create_backlog_from_feature. backlog_result={backlog_result}")
-        if 'error' in backlog_result or not backlog_result.get('id'):
-            print(f"[AzureBoardService-DEBUG] Falha ao criar backlog: {backlog_result.get('error', 'Erro desconhecido')}")
-            return [{"error": f"Falha ao criar backlog: {backlog_result.get('error', 'Erro desconhecido')}"}]
-        backlog_id = backlog_result['id']
-        backlog_url = backlog_result['url']
-        parser = TaskParserService()
-        print(f"[TaskParserService-DEBUG] Iniciando parsing. Tamanho do markdown: {len(markdown_table)} caracteres")
-        tasks = parser.parse_tasks_from_markdown(markdown_table)
-        print(f"[TaskParserService-DEBUG] Parsing concluído. Total de tarefas parseadas: {len(tasks)}")
-        if len(tasks) == 0:
-            print(f"[TaskParserService-WARNING] Nenhuma tarefa foi parseada da tabela Markdown. Verifique o formato da tabela.")
-            return [{"error": "Nenhuma tarefa foi encontrada no relatório para criar no backlog."}]
-        token = self._get_token()
-        created_tasks = []
-        total_tasks = len(tasks)
-        parent_backlog_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{backlog_id}"
-        for idx, task in enumerate(tasks):
-            title = task.get('titulo', '')
-            descricao = task.get('descricao', '')
-            criterios_aceite = task.get('criterios_aceite', '')
-            perfis_sugeridos = task.get('perfis_sugeridos', '')
-            estimativa_sp = task.get('estimativa_sp', '')
-            description_full = descricao
-            if criterios_aceite:
-                description_full += '\n\nCritérios de Aceite:\n' + criterios_aceite
-            if perfis_sugeridos:
-                description_full += f"\n\nPerfis Sugeridos: {perfis_sugeridos}"
-            payload = [
-                {"op": "add", "path": "/fields/System.Title", "value": title},
-                {"op": "add", "path": "/fields/System.Description", "value": f"<div>{description_full}</div>"}
-            ]
-            if estimativa_sp:
-                try:
-                    sp_val = float(estimativa_sp)
-                    payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.StoryPoints", "value": sp_val})
-                except Exception:
-                    pass
-            payload.append({
-                "op": "add",
-                "path": "/relations/-",
-                "value": {
-                    "rel": "System.LinkTypes.Hierarchy-Reverse",
-                    "url": parent_backlog_url,
-                    "attributes": {
-                        "comment": "Tarefa adicionada via script Python"
-                    }
-                }
-            })
-            headers = {
-                'Content-Type': 'application/json-patch+json',
-                'Authorization': f'Basic {self._basic_auth_header(token)}'
-            }
-            print(f"[AzureBoardService-DEBUG] Criando tarefa {idx+1}/{total_tasks}. Título: {title}, Payload: {json.dumps(payload)[:200]}")
-            try:
-                response = requests.post(
-                    f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Task?api-version=7.1-preview.3",
-                    headers=headers,
-                    data=json.dumps(payload)
-                )
-                print(f"[AzureBoardService-DEBUG] Resposta da criação da tarefa {idx+1}. Status={response.status_code}, Body={response.text[:300]}")
-                if response.status_code in (200, 201):
-                    try:
-                        data = response.json()
-                        created_tasks.append({
-                            "id": data.get("id"),
-                            "url": data.get("url"),
-                            "title": title
-                        })
-                    except Exception as e:
-                        created_tasks.append({
-                            "error": f"Erro ao processar JSON de resposta: {str(e)}",
-                            "status_code": response.status_code,
-                            "title": title
-                        })
-                else:
-                    created_tasks.append({
-                        "error": response.text,
-                        "status_code": response.status_code,
-                        "title": title
-                    })
-            except Exception as e:
-                created_tasks.append({
-                    "error": str(e),
-                    "title": title
-                })
-        return created_tasks
-
-    def read_task(self, task_id: str) -> Dict[str, Any]:
-        if not self.organization or not self.project:
-            raise ValueError("organization e project devem estar definidos para buscar tarefa.")
-        token = self._get_token()
-        url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{task_id}?api-version=7.1-preview.3"
-        headers = {
-            'Authorization': f'Basic {self._basic_auth_header(token)}'
-        }
-        try:
-            print(f"[AzureBoardService-DEBUG] read_task: GET {url}")
-            response = requests.get(url, headers=headers)
-            print(f"[AzureBoardService-DEBUG] read_task: status={response.status_code}")
-            if response.status_code == 200:
-                data = response.json()
-                fields = data.get('fields', {})
-                print(f"[AzureBoardService-DEBUG] read_task: Dados retornados para task_id={task_id}: {json.dumps(fields)[:200]}...")
-                return {
-                    'id': data.get('id'),
-                    'title': fields.get('System.Title'),
-                    'description': fields.get('System.Description'),
-                    'state': fields.get('System.State'),
-                    'url': data.get('url'),
-                    'fields': fields
-                }
-            else:
-                print(f"[AzureBoardService-DEBUG] read_task: Falha ao buscar tarefa. status={response.status_code}, body={response.text}")
-                return {
-                    'error': response.text,
-                    'status_code': response.status_code
-                }
-        except Exception as e:
-            print(f"[AzureBoardService-DEBUG] read_task: Exceção ao buscar tarefa: {str(e)}")
-            return {
-                'error': str(e)
-            }
-
-    def update_task_discussion(self, task_id: str, discussion_entries: List[Dict[str, str]]) -> Dict[str, Any]:
-        if not self.organization or not self.project:
-            return {"error": "organization e project devem estar definidos para atualizar discussion da task."}
-        token = self._get_token()
-        url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{task_id}/comments?api-version=7.1-preview.3"
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Basic {self._basic_auth_header(token)}'
-        }
-        created_comment_ids = []
-        errors = []
-        for entry in discussion_entries:
-            categoria = entry.get('Categoria') or entry.get('categoria') or ''
-            pergunta = entry.get('Pergunta') or entry.get('pergunta') or ''
-            comment_body = f"**Categoria:** {categoria}\n**Pergunta:** {pergunta}"
-            payload = {"text": comment_body}
-            try:
-                response = requests.post(url, headers=headers, json=payload)
-                if response.status_code in (200, 201):
-                    data = response.json()
-                    comment_id = data.get('id')
-                    created_comment_ids.append(comment_id)
-                else:
-                    errors.append({"error": response.text, "status_code": response.status_code, "payload": payload})
-            except Exception as e:
-                errors.append({"error": str(e), "payload": payload})
-        result = {"success": len(errors) == 0, "comment_ids": created_comment_ids}
-        if errors:
-            result["errors"] = errors
-        return result
-
-    def _basic_auth_header(self, token):
-        import base64
-        return base64.b64encode(f':{token}'.encode('utf-8')).decode('utf-8')
