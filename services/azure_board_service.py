@@ -286,10 +286,7 @@ class AzureBoardService:
                     'id': data.get('id'),
                     'title': fields.get('System.Title'),
                     'description': fields.get('System.Description'),
-                    'acceptance_criteria': fields.get('Microsoft.VSTS.Common.AcceptanceCriteria'),
-                    'state': fields.get('System.State'),
-                    'url': data.get('url'),
-                    'fields': fields
+                    'acceptance_criteria': fields.get('Microsoft.VSTS.Common.AcceptanceCriteria')
                 }
             else:
                 print(f"[AzureBoardService-DEBUG] read_feature: Falha ao buscar feature. status={response.status_code}, body={response.text}")
