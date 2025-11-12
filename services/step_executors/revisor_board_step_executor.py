@@ -25,8 +25,6 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         analysis_type = job_info['data'].get('original_analysis_type')
 
         # --- VALIDAÇÃO DOS PARÂMETROS ---
-        if not epic_id:
-            raise ValueError(f"[{job_id}] Parâmetro obrigatório 'epic_id' ausente em job_info['data'].")
         if not organization:
             raise ValueError(f"[{job_id}] Parâmetro obrigatório 'organization' ausente em job_info['data'].")
         if not project:
