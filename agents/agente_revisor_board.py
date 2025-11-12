@@ -10,7 +10,6 @@ class AgenteRevisorBoard:
         self.azure_board_service = azure_board_service
         self.llm_provider = llm_provider
         init_logger()
-        
     def _get_epic_and_task_data(
         self, 
         epic_id: Optional[str] = None, 
@@ -54,21 +53,16 @@ class AgenteRevisorBoard:
         epic_data = data.get('epic')
         feature_data = data.get('feature')
         task_data = data.get('task')
-        instrucoes_formatadas = (instrucoes_extras or "")
-        if epic_data:
-            if 'error' in epic_data:
-                 print(f"[AgenteRevisorBoard] AVISO: Erro ao buscar épico (contexto) '{epic_id}': {epic_data['error']}.")
-            else:
-                print(f"[AgenteRevisorBoard] DEBUG: Adicionando dados do Épico {epic_id} ao contexto.")
-                instrucoes_formatadas += '\n\n--- DADOS DO ÉPICO (CONTEXTO) ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False)
-        else:
-            print(f"[AgenteRevisorBoard] DEBUG: Nenhum epic_id fornecido ou dados não encontrados. Contexto do épico pulado.")
+        print(f"[AgenteRevisorBoard] [DEBUG] feature_data recebido: {json.dumps(feature_data, ensure_ascii=False)}")
         if tipo_analise == 'criacao_tarefas_azure_devops':
             if not feature_id:
                 raise ValueError("feature_id é obrigatório quando tipo_analise == 'criacao_tarefas_azure_devops'.")
             if feature_data is None or 'error' in feature_data:
                 print(f"[AgenteRevisorBoard] ERRO: Nenhum dado encontrado para a feature '{feature_id}'.")
                 raise ValueError(f"Dados da feature {feature_id} não encontrados ou contêm erro: {feature_data.get('error')}")
+            if not feature_data.get('title') or not feature_data.get('description') or not feature_data.get('acceptance_criteria'):
+                raise ValueError(f"Campos obrigatórios da feature ausentes ou vazios: title={feature_data.get('title')}, description={feature_data.get('description')}, acceptance_criteria={feature_data.get('acceptance_criteria')}")
+            instrucoes_formatadas = (instrucoes_extras or "")
             instrucoes_formatadas += '\n\n--- DADOS DA FEATURE (FONTE DA VERDADE) ---\n' + json.dumps(feature_data, indent=2, ensure_ascii=False)
         elif tipo_analise == 'criacao_features_azure_devops':
             if not epic_id or epic_data is None or 'error' in epic_data:
@@ -77,9 +71,12 @@ class AgenteRevisorBoard:
             if task_data is None or 'error' in task_data:
                 print(f"[AgenteRevisorBoard] ERRO: Nenhum dado encontrado para a tarefa '{task_id}'.")
                 raise ValueError(f"Dados da tarefa {task_id} não encontrados ou contêm erro: {task_data.get('error')}")
+            instrucoes_formatadas = (instrucoes_extras or "")
             instrucoes_formatadas += '\n\n--- DADOS DA TAREFA (FONTE DA VERDADE) ---\n' + json.dumps(task_data, indent=2, ensure_ascii=False)
             if feature_data and 'error' not in feature_data:
                 instrucoes_formatadas += '\n\n--- DADOS DA FEATURE (CONTEXTO) ---\n' + json.dumps(feature_data, indent=2, ensure_ascii=False)
+        else:
+            instrucoes_formatadas = (instrucoes_extras or "")
         if current_batch is not None and isinstance(current_batch, list) and len(current_batch) > 0:
             batch_instrucao = "ATENÇÃO: Processar APENAS os passos listados abaixo. Ignorar todos os outros passos do relatório original.\n"
             batch_instrucao += json.dumps(current_batch, indent=2, ensure_ascii=False)
