@@ -58,6 +58,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
         })
         agent_params['task_id'] = task_id
         agent_params['feature_id'] = feature_id
+        agent_params['analysis_type'] = analysis_type  # Passo 1: Propagação explícita do analysis_type
         if analysis_type == 'revisor_tarefas':
             print(f"[{job_id}] [DEBUG] RevisorBoardStepExecutor: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
         if analysis_type == 'criacao_tarefas_azure_devops':
@@ -76,7 +77,7 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                 agent_response = agente.main(**agent_params) 
                 raw_response_from_llm = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
                 cleaned_string = None
-                match = re.search(r"```json\s*([\s\S]*?)\s*```", raw_response_from_llm)
+                match = re.search(r"\s*([\s\S]*?)\s*", raw_response_from_llm)
                 if match:
                     cleaned_string = match.group(1).strip()
                 else:
