@@ -107,7 +107,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'completed')
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de features Azure.")
                 return
-            # ... restante do método permanece igual ...
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 if start_from_step == 0:
@@ -376,6 +375,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['organization'] = organization
             agent_params['project'] = project
             agent_params['task_id'] = job_info['data'].get('task_id')
+            agent_params['feature_id'] = job_info['data'].get('feature_id')
             if analysis_type == 'revisor_tarefas':
                 print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
         elif agent_type == 'comparador':
