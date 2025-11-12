@@ -30,10 +30,10 @@ class JobDataService:
             data[JobFields.AZURE_ORGANIZATION] = organization
             data[JobFields.AZURE_PROJECT] = project
         if analysis_type == 'criacao_tarefas_azure_devops':
-            epic_id = payload_dict.get('epic_id')
+            #epic_id = payload_dict.get('epic_id')
             feature_id = payload_dict.get('feature_id')
             organization, project = self._parse_repository_name(normalized_repo_name)
-            data[JobFields.EPIC_ID] = epic_id
+            #data[JobFields.EPIC_ID] = epic_id
             data[JobFields.FEATURE_ID] = feature_id
             data[JobFields.ORGANIZATION] = organization
             data[JobFields.PROJECT] = project
