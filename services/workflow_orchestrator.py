@@ -386,6 +386,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_info['data'].get('original_analysis_type')
         agent_params['instrucoes_extras'] = job_info['data'].get('instrucoes_extras', '')
+        agent_params['tipo_analise'] = analysis_type
 
         if agent_type == 'revisor_board':
             epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
