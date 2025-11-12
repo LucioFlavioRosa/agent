@@ -13,22 +13,17 @@ class AgenteRevisorBoard:
         
     def _get_epic_and_task_data(
         self, 
-        epic_id: str, 
+        epic_id: Optional[str] = None, 
         task_id: Optional[str] = None, 
         feature_id: Optional[str] = None
     ) -> Dict[str, Any]:
+
+        if epic_id:
+            self.azure_board_service.read_epic(epic_id)
         
-        if not epic_id:
-            raise ValueError("epic_id é obrigatório para leitura do épico.")
-            
-        # Sempre busca o épico
-        data = {'epic': self.azure_board_service.read_epic(epic_id)}
-        
-        # Busca a feature se o ID for fornecido
         if feature_id:
             data['feature'] = self.azure_board_service.read_feature(feature_id)
             
-        # Busca a tarefa se o ID for fornecido
         if task_id:
             data['task'] = self.azure_board_service.read_task(task_id)
             
