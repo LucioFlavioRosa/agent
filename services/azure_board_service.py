@@ -68,6 +68,156 @@ class AzureBoardService:
             else:
                  print(f"[AzureBoardService] parse_epics_from_markdown: Disparidade de colunas. Header: {len(header)}, Linha: {len(cols)}. Linha: {line}")
         return epics
+    def create_epics(self, markdown_table: str, tags_para_adicionar='projeto_modernizacao_avaliacao') -> List[Dict[str, Any]]:
+        epics = self.parse_epics_from_markdown(markdown_table)
+        token = self._get_token()
+        created_epics = []
+
+        for epic in epics:
+            # 1. Extrai o Título
+            title = epic.get('Épico') or epic.get('Epico') or epic.get('Epic')
+
+            # 2. [ALTERAÇÃO] Extrai os Critérios de Aceite SEPARADAMENTE
+            # IMPORTANTE: A chave 'Critérios de Aceite / Atividades Chave' 
+            # DEVE corresponder exatamente ao cabeçalho na sua tabela markdown.
+            acceptance_criteria = epic.get('Critérios de Aceite / Atividades Chave', '')
+
+            # 3. [ALTERAÇÃO] Monta a Descrição apenas com os campos restantes
+            desc_parts = []
+            if epic.get('Objetivo de Negócio'):
+                desc_parts.append(f"Objetivo: {epic.get('Objetivo de Negócio')}")
+            if epic.get('Perfis Envolvidos'):
+                desc_parts.append(f"Perfis: {epic.get('Perfis Envolvidos')}")
+            if epic.get('Estimativa de Esforço'):
+                desc_parts.append(f"Estimativa: {epic.get('Estimativa de Esforço')}")
+
+            description = "\n\n".join(desc_parts) 
+
+            url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Epic?api-version=7.1-preview.3"
+            headers = {
+                'Content-Type': 'application/json-patch+json',
+                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            }
+
+            payload = [
+                {"op": "add", "path": "/fields/System.Title", "from": None, "value": title},
+                {"op": "add", "path": "/fields/System.Description", "from": None, "value": description},
+                {"op": "add", "path": "/fields/System.Tags", "from": None, "value": tags_para_adicionar}
+            ]
+
+            if acceptance_criteria and acceptance_criteria.strip():
+                payload.append(
+                    {"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "from": None, "value": acceptance_criteria}
+                )
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+
+            if response.status_code in (200, 201):
+                data = response.json()
+                created_epics.append({
+                    "id": data.get("id"),
+                    "url": data.get("url"),
+                    "title": title
+                })
+            else:
+                created_epics.append({
+                    "error": response.text,
+                    "title": title
+                })
+
+        return created_epics
+
+    def create_features_from_epic(self, epic_id: str, markdown_table: str) -> List[Dict[str, Any]]:
+        if not epic_id or not markdown_table or not isinstance(markdown_table, str) or len(markdown_table.strip()) == 0:
+            print(f"[AzureBoardService-DEBUG] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
+            raise ValueError(f"[AzureBoardService] ERRO: epic_id ou markdown_table inválidos. epic_id={epic_id}, len(markdown_table)={len(markdown_table) if markdown_table else 0}")
+        print(f"[AzureBoardService-DEBUG] Chamando FeatureParserService.parse_features_from_markdown")
+        features = FeatureParserService.parse_features_from_markdown(markdown_table)
+        print(f"[AzureBoardService-DEBUG] Parsing concluído. Total de features parseadas: {len(features)}")
+        if len(features) == 0:
+            print(f"[AzureBoardService-WARNING] Nenhuma feature foi parseada da tabela Markdown. Verifique o formato da tabela.")
+            return [{"error": "Nenhuma feature foi encontrada no relatório para criar no épico."}]
+        token = self._get_token()
+        created_features = []
+        parent_epic_url = f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/{epic_id}"
+        MOSCOW_MAP = {"M": 1, "S": 2, "C": 3, "W": 4, "Must": 1, "Should": 2, "Could": 3, "Won't": 4}
+        for idx, feature in enumerate(features):
+            title = feature.get('Feature', '') or feature.get('Título', '')
+            descricao = feature.get('Descrição (Jornada/Valor)', '') or feature.get('Descrição', '')
+            criterios_aceite = feature.get('Critérios de Aceite', '')
+            perfis_envolvidos = feature.get('Perfis Envolvidos', '')
+            prioridade_moscow = feature.get('Prioridade (MoSCoW)', '').strip()
+            estimativa_sprints = feature.get('Estimativa (Sprints)', '').strip()
+            description_full = descricao
+            if perfis_envolvidos:
+                description_full += f"\n\nPerfis Envolvidos: {perfis_envolvidos}"
+            payload = [
+                {"op": "add", "path": "/fields/System.Title", "value": title},
+                {"op": "add", "path": "/fields/System.Description", "value": f"<div>{description_full}</div>"}
+            ]
+            if criterios_aceite:
+                payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Common.AcceptanceCriteria", "value": criterios_aceite})
+            if prioridade_moscow:
+                prioridade_valor = MOSCOW_MAP.get(prioridade_moscow, 2)
+                payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Common.Priority", "value": prioridade_valor})
+            if estimativa_sprints:
+                try:
+                    effort_val = float(estimativa_sprints)
+                    payload.append({"op": "add", "path": "/fields/Microsoft.VSTS.Scheduling.Effort", "value": effort_val})
+                except Exception:
+                    pass
+            payload.append({
+                "op": "add",
+                "path": "/relations/-",
+                "value": {
+                    "rel": "System.LinkTypes.Hierarchy-Reverse",
+                    "url": parent_epic_url,
+                    "attributes": {
+                        "comment": "Feature adicionada via script Python"
+                    }
+                }
+            })
+            headers = {
+                'Content-Type': 'application/json-patch+json',
+                'Authorization': f'Basic {self._basic_auth_header(token)}'
+            }
+            print(f"[AzureBoardService-DEBUG] Criando feature {idx+1}/{len(features)}. Título: {title}, Payload: {json.dumps(payload)[:200]}")
+            try:
+                response = requests.post(
+                    f"https://dev.azure.com/{self.organization}/{self.project}/_apis/wit/workitems/$Feature?api-version=7.1-preview.3",
+                    headers=headers,
+                    data=json.dumps(payload)
+                )
+                print(f"[AzureBoardService-DEBUG] Resposta da criação da feature {idx+1}. Status={response.status_code}, Body={response.text[:300]}")
+                if response.status_code in (200, 201):
+                    try:
+                        data = response.json()
+                        created_features.append({
+                            "id": data.get("id"),
+                            "url": data.get("url"),
+                            "title": title
+                        })
+                    except Exception as e:
+                        created_features.append({
+                            "error": f"Erro ao processar JSON de resposta: {str(e)}",
+                            "status_code": response.status_code,
+                            "title": title
+                        })
+                else:
+                    created_features.append({
+                        "error": response.text,
+                        "status_code": response.status_code,
+                        "title": title
+                    })
+            except Exception as e:
+                created_features.append({
+                    "error": str(e),
+                    "title": title
+                })
+        return created_features
+
+    def _basic_auth_header(self, token):
+        import base64
+        return base64.b64encode(f':{token}'.encode('utf-8')).decode('utf-8')
 
     def read_epic(self, epic_id: str) -> Dict[str, Any]:
         if not self.organization or not self.project:
