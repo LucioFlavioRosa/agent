@@ -24,7 +24,7 @@ class AgenteRevisorBoard:
             data['feature'] = self.azure_board_service.read_feature(feature_id)
         if task_id:
             data['task'] = self.azure_board_service.read_task(task_id)
-        print(f"[AgenteRevisorBoard] DEBUG: dados lidos sao: {data}.")
+       
         return data
     def main(
         self,
@@ -55,7 +55,7 @@ class AgenteRevisorBoard:
         epic_data = data.get('epic')
         feature_data = data.get('feature')
         task_data = data.get('task')
-        print(f"[AgenteRevisorBoard] DEBUG: feature_data lida é: {feature_data}.")
+        
         instrucoes_formatadas = (instrucoes_extras or "")
         if epic_data:
             if 'error' in epic_data:
@@ -72,6 +72,7 @@ class AgenteRevisorBoard:
                 print(f"[AgenteRevisorBoard] ERRO: Nenhum dado encontrado para a feature '{feature_id}'.")
                 raise ValueError(f"Dados da feature {feature_id} não encontrados ou contêm erro: {feature_data.get('error')}")
             instrucoes_formatadas += '\n\n--- DADOS DA FEATURE (FONTE DA VERDADE) ---\n' + json.dumps(feature_data, indent=2, ensure_ascii=False)
+            print(f"[AgenteRevisorBoard] DEBUG: instrucoes_formatadas final é: {instrucoes_formatadas}.")
         elif tipo_analise == 'criacao_features_azure_devops':
             if not epic_id or epic_data is None or 'error' in epic_data:
                  raise ValueError(f"epic_id é obrigatório e deve ser válido para tipo_analise == 'criacao_features_azure_devops'.")
