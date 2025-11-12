@@ -37,8 +37,12 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
                 raise ValueError(f"[{job_id}] Parâmetro obrigatório 'task_id' ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
         
         if analysis_type == 'criacao_features_azure_devops':
+            if not epic_id:
+                raise ValueError(f"[{job_id}] Parâmetro obrigatório 'epic_id' ausente em job_info['data'] para analysis_type == 'criacao_features_azure_devops'.")
+
+        if analysis_type == 'criacao_tarefas_azure_devops':
             if not feature_id:
-                raise ValueError(f"[{job_id}] Parâmetro obrigatório 'feature_id' ausente em job_info['data'] para analysis_type == 'criacao_features_azure_devops'.")
+                raise ValueError(f"[{job_id}] Parâmetro obrigatório 'feature_id' ausente em job_info['data'] para analysis_type == 'criacao_tarefas_azure_devops'.")
 
         # --- PREPARAÇÃO DAS INSTRUÇÕES ---
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
