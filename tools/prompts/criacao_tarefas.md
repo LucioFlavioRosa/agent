@@ -34,10 +34,13 @@ Seu plano DEVE seguir estes princípios:
 ## 5. REGRAS IMPERATIVAS E FORMATO DE SAÍDA
 **SUA RESPOSTA DEVE SEGUIR ESTAS REGRAS DE FORMA ESTRITA E LITERAL.**
 
-1.  **SAÍDA EXCLUSIVAMENTE EM JSON:** Sua resposta final **DEVE** ser um único e válido bloco de código JSON. **NADA PODE EXISTIR FORA DO BLOCO ```json ... ```**, nem antes, nem depois.
-2.  **ESTRUTURA DO JSON:** O objeto JSON deve conter uma **ÚNICA CHAVE** no nível raiz chamada `relatorio`.
-3.  **CONTEÚDO DA CHAVE `relatorio`:** O valor da chave `relatorio` deve ser uma **única string** contendo uma tabela formatada em Markdown.
-4.  **ESTRUTURA DA TABELA:** A tabela Markdown deve listar **todas as tarefas geradas** e ter **exatamente** as seguintes colunas: `ID`, `Título`, `Descrição`, `Tipo`, `Critérios de Aceite`, `Perfis Sugeridos`, `Estimativa (SP)`.
+Sua saída deve ter exatamente esta estrutura, sem nenhum caractere ou texto adicional.
+1. A sua resposta DEVE ser um único bloco de código JSON.
+2. **O JSON DEVE** começar com  ```json e terminar com ````.
+3. NÃO inclua nenhum texto, explicação ou comentário fora do bloco de código JSON.
+4. **Alerte sobre o erro comum:** "Preste muita atenção para garantir que todas as strings dentro do JSON sejam devidamente terminadas com aspas de fechamento ("). Não interrompa a geração no meio de uma string.
+5. A falha em seguir estas regras de formatação resultará em erro do sistema. A sua resposta final deve ser apenas o JSON.
+6. **ESTRUTURA DA TABELA:** A tabela Markdown deve listar **todas as tarefas geradas** e ter **exatamente** as seguintes colunas: `ID`, `Título`, `Descrição`, `Tipo`, `Critérios de Aceite`, `Perfis Sugeridos`, `Estimativa (SP)`.
     * Para a coluna `ID`, use um identificador sequencial simples (ex: `T01`, `T02`).
     * Na coluna `Título`, dê um nome curto, técnico e focado na ação (ex: "Backend: Criar endpoint POST /solicitacoes").
     * Na coluna `Descrição`, **seja claro e conciso, garantindo que o escopo desta tarefa seja único e não se sobreponha a nenhuma outra tarefa na tabela.**
@@ -45,18 +48,11 @@ Seu plano DEVE seguir estes princípios:
     * Na coluna `Critérios de Aceite`, liste os critérios usando `- ` para bullet points. Para quebras de linha dentro desta célula, utilize a tag `<br>`. **Estes critérios devem ser exclusivos desta tarefa.**
     * Na coluna `Perfis Sugeridos`, liste os perfis separados por vírgula.
     * Na coluna `Estimativa (SP)`, use números (1, 2, 3, 5, 8...).
-5.  **ALERTA DE FORMATAÇÃO:** Preste muita atenção para garantir que a string da tabela Markdown esteja corretamente formatada e que todas as strings dentro do JSON sejam devidamente terminadas com aspas de fechamento (`"`). Não interrompa a geração no meio de uma string. A falha em seguir estas regras resultará em erro do sistema.
+7.  **ALERTA DE FORMATAÇÃO:** Preste muita atenção para garantir que a string da tabela Markdown esteja corretamente formatada e que todas as strings dentro do JSON sejam devidamente terminadas com aspas de fechamento (`"`). Não interrompa a geração no meio de uma string. A falha em seguir estas regras resultará em erro do sistema.
 
 ---
 
 ## 6. EXEMPLO ESTRITO DA SAÍDA FINAL
-
-**INPUT DE EXEMPLO:**
-* **Descrição da Feature:** "Feature F1.1: Criação de Nova Solicitação de Coleta. Descrição: Como um Operador ICL, eu quero criar uma nova solicitação de agendamento de coleta (FOB) informando os dados básicos, para que o fornecedor seja notificado. Critérios de Aceite: - Tela de formulário com campos: fornecedor, unidade, data/hora, janela, tipo de frete, local de entrega.<br>- Validação de campos obrigatórios.<br>- Endpoint de API para salvar a solicitação (status 'Pendente')."
-* **Descrição do Épico (Contexto):** "Épico E1: Gestão de Coletas v1. Objetivo: Otimizar o processo de agendamento de coletas FOB, dando visibilidade ao Operador ICL e ao Fornecedor."
-
-*Sua saída deve ter exatamente esta estrutura, sem nenhum caractere ou texto adicional.*
-
 **SAÍDA ESPERADA (siga este formato):**
 ```json
 {
