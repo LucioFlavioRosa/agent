@@ -28,7 +28,7 @@ class AgenteRevisorBoard:
         return data
     def main(
         self,
-        tipo_analise: str,
+        analysis_type: Optional[str] = None,
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
@@ -43,10 +43,11 @@ class AgenteRevisorBoard:
         epic_id: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
-        print(f"[AgenteRevisorBoard] [DEBUG] TIPO DE ANALISE={tipo_analise}")
+        print(f"[AgenteRevisorBoard] [DEBUG] analysis_type recebido: {analysis_type}")
+        print(f"[AgenteRevisorBoard] [DEBUG] TIPO DE ANALISE={analysis_type}")
         
         print(f"[AgenteRevisorBoard] [DEBUG] Entrando no main. epic_id={epic_id}, task_id={task_id}, feature_id={feature_id}")
-        if tipo_analise == 'revisor_tarefas':
+        if analysis_type == 'revisor_tarefas':
             if not task_id:
                 raise ValueError("task_id é obrigatório quando analysis_type == 'revisor_tarefas'.")
         data = self._get_epic_and_task_data(
@@ -68,18 +69,18 @@ class AgenteRevisorBoard:
         else:
             print(f"[AgenteRevisorBoard] DEBUG: Nenhum epic_id fornecido ou dados não encontrados. Contexto do épico pulado.")
             
-        if tipo_analise == 'criacao_tarefas_azure_devops':
+        if analysis_type == 'criacao_tarefas_azure_devops':
             if not feature_id:
-                raise ValueError("feature_id é obrigatório quando tipo_analise == 'criacao_tarefas_azure_devops'.")
+                raise ValueError("feature_id é obrigatório quando analysis_type == 'criacao_tarefas_azure_devops'.")
             if feature_data is None or 'error' in feature_data:
                 print(f"[AgenteRevisorBoard] ERRO: Nenhum dado encontrado para a feature '{feature_id}'.")
                 raise ValueError(f"Dados da feature {feature_id} não encontrados ou contêm erro: {feature_data.get('error')}")
             instrucoes_formatadas += '\n\n--- DADOS DA FEATURE (FONTE DA VERDADE) ---\n' + json.dumps(feature_data, indent=2, ensure_ascii=False)
             print(f"[AgenteRevisorBoard] DEBUG: instrucoes_formatadas final é: {instrucoes_formatadas}.")
-        elif tipo_analise == 'criacao_features_azure_devops':
+        elif analysis_type == 'criacao_features_azure_devops':
             if not epic_id or epic_data is None or 'error' in epic_data:
-                 raise ValueError(f"epic_id é obrigatório e deve ser válido para tipo_analise == 'criacao_features_azure_devops'.")
-        elif tipo_analise == 'revisor_tarefas':
+                 raise ValueError(f"epic_id é obrigatório e deve ser válido para analysis_type == 'criacao_features_azure_devops'.")
+        elif analysis_type == 'revisor_tarefas':
             if task_data is None or 'error' in task_data:
                 print(f"[AgenteRevisorBoard] ERRO: Nenhum dado encontrado para a tarefa '{task_id}'.")
                 raise ValueError(f"Dados da tarefa {task_id} não encontrados ou contêm erro: {task_data.get('error')}")
@@ -92,7 +93,7 @@ class AgenteRevisorBoard:
             instrucoes_formatadas += "\n\n" + batch_instrucao 
         print(f"[AgenteRevisorBoard] instrucoes_extras final: {len(instrucoes_formatadas)} caracteres")
         resultado_da_ia = self.llm_provider.executar_prompt(
-            tipo_tarefa=tipo_analise,
+            tipo_tarefa=analysis_type,
             prompt_principal=None,
             instrucoes_extras=instrucoes_formatadas, 
             usar_rag=usar_rag,
@@ -108,7 +109,7 @@ class AgenteRevisorBoard:
             status='FINALIZADO',
             tipo_repositorio='azure_board',
             nome_repositorio=epic_id or feature_id or task_id or "ID_Nao_Fornecido", 
-            tipo_analise=tipo_analise,
+            tipo_analise=analysis_type,
             model_name=model_name,
             modo_adicao_incremental=False,
             usuario_executor=usuario_executor
