@@ -24,6 +24,7 @@ class AgenteRevisorBoard:
             data['feature'] = self.azure_board_service.read_feature(feature_id)
         if task_id:
             data['task'] = self.azure_board_service.read_task(task_id)
+        print(f"[AgenteRevisorBoard] DEBUG: dados lidos epic_id={data}.")
         return data
     def main(
         self,
