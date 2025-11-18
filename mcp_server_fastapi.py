@@ -3,10 +3,11 @@ import uuid
 import time
 import traceback
 import os
+import logging
 from typing import Optional
 
 from urllib.parse import urlparse
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Path, Request
 from pydantic import BaseModel, Field, ValidationError, validator
 from typing import Optional, Literal, List, Dict, Any
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +18,11 @@ from services.pull_request_extractor_service import PullRequestExtractorService
 from services.job_logging_service import JobLoggingService
 from services.response_builder_service import FinalStatusResponse
 from models import JobStatus, JobFields, JobActions
+
+# Configuração global de logging
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+logger = logging.getLogger("mcp_server")
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO), format='%(asctime)s %(levelname)s %(message)s')
 
 container = DependencyContainer()
 pr_extractor = PullRequestExtractorService()
@@ -99,18 +105,18 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         if getattr(payload, 'criar_epicos_azure', False):
             if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
                 raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
-            print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
+            logger.debug(f"Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
         if getattr(payload, 'criar_tarefas_azure', False):
-            print(f"[DEBUG] criar_tarefas_azure recebido como True no payload para repo: {payload.repo_name_modernizado}")
+            logger.debug(f"criar_tarefas_azure recebido como True no payload para repo: {payload.repo_name_modernizado}")
             if not getattr(payload, 'epic_id', None):
                 raise HTTPException(status_code=400, detail="epic_id é obrigatório quando criar_tarefas_azure=True.")
         # Passo 8: validação explícita do task_id para revisor_tarefas
         if analysis_type_str == 'revisor_tarefas':
             if not getattr(payload, 'task_id', None) or (isinstance(payload.task_id, str) and not payload.task_id.strip()):
-                print(f"[DEBUG] task_id ausente ou vazio no payload para analysis_type == 'revisor_tarefas'.")
+                logger.debug(f"task_id ausente ou vazio no payload para analysis_type == 'revisor_tarefas'.")
                 raise HTTPException(status_code=400, detail="task_id é obrigatório para análise do tipo revisor_tarefas.")
             else:
-                print(f"[DEBUG] task_id propagado para revisor_tarefas: {payload.task_id}")
+                logger.debug(f"task_id propagado para revisor_tarefas: {payload.task_id}")
         if analysis_type_str == 'criacao_tarefas_azure_devops':
             if not getattr(payload, 'feature_id', None) or (isinstance(payload.feature_id, str) and not payload.feature_id.strip()):
                 raise HTTPException(status_code=400, detail="feature_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
@@ -137,7 +143,7 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     if workflow and 'steps' in workflow and len(workflow['steps']) > 0:
         first_step = workflow['steps'][0]
         requires_approval_value = first_step.get('requires_approval')
-        print(f"[DEBUG] Valor de requires_approval do primeiro step: {requires_approval_value}")
+        logger.debug(f"Valor de requires_approval do primeiro step: {requires_approval_value}")
     job_store = container.get_job_store()
     analysis_service = container.get_analysis_name_service()
     repo_name = payload.repo_name_modernizado
@@ -162,14 +168,14 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
         payload_dict['criar_tarefas_azure'] = False
     # Passo 8: log de debug para task_id
     if analysis_type_str == 'revisor_tarefas':
-        print(f"[DEBUG] (payload_dict) task_id para revisor_tarefas: {payload_dict.get('task_id')}")
-    print(f"[DEBUG] Valor de criar_tarefas_azure no payload_dict antes de criar o job: {payload_dict.get('criar_tarefas_azure')}")
+        logger.debug(f"(payload_dict) task_id para revisor_tarefas: {payload_dict.get('task_id')}")
+    logger.debug(f"Valor de criar_tarefas_azure no payload_dict antes de criar o job: {payload_dict.get('criar_tarefas_azure')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
-    print(f"[DEBUG] Valor de criar_tarefas_azure no initial_job_data: {initial_job_data.get('data', {}).get('criar_tarefas_azure')}")
+    logger.debug(f"Valor de criar_tarefas_azure no initial_job_data: {initial_job_data.get('data', {}).get('criar_tarefas_azure')}")
     if analysis_type_str == 'revisor_tarefas':
-        print(f"[DEBUG] (initial_job_data) task_id para revisor_tarefas: {initial_job_data.get('data', {}).get('task_id')}")
+        logger.debug(f"(initial_job_data) task_id para revisor_tarefas: {initial_job_data.get('data', {}).get('task_id')}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
@@ -190,7 +196,7 @@ def update_job_status(payload: UpdateJobPayload, background_tasks: BackgroundTas
             raise HTTPException(status_code=400, detail="Ação de aprovação só é permitida quando o job está em pending_approval.")
         if payload.instrucoes_extras:
             job[JobFields.DATA][JobFields.INSTRUCOES_EXTRAS_APROVACAO] = payload.instrucoes_extras
-            print(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
+            logger.info(f"[{payload.job_id}] Instruções extras de aprovação salvas: {payload.instrucoes_extras[:100]}...")
         job[JobFields.STATUS] = JobStatus.WORKFLOW_STARTED
         paused_step = job[JobFields.DATA].get(JobFields.PAUSED_AT_STEP, 0)
         start_from_step = paused_step + 1
@@ -209,7 +215,7 @@ def get_job_report(job_id: str = Path(..., title="O ID do Job para buscar o rela
     job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    print(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
+    logger.info(f"[{job_id}] [get_job_report] Buscando relatório. Job status: {job.get('status')}, gerar_relatorio_apenas: {job.get('data', {}).get('gerar_relatorio_apenas')}, analysis_report presente: {bool(job.get('data', {}).get('analysis_report'))}")
     job_validation_service.validate_job_exists(job, job_id)
     report = job_validation_service.get_report_from_job(job, job_id)
     blob_url = job.get(JobFields.DATA, {}).get(JobFields.REPORT_BLOB_URL)
@@ -249,26 +255,38 @@ def start_code_generation_from_report(analysis_name: str, background_tasks: Back
     )
     job_store.set_job(new_job_id, new_job_data)
     analysis_service.register_analysis(f"{analysis_name}-implementation", new_job_id)
-    print(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
+    logger.info(f"[{new_job_id}] Job derivado criado - Repositório: '{normalized_repo_name}' (tipo: {original_repository_type}), Projeto: '{original_data[JobFields.PROJETO]}'")
     background_tasks.add_task(run_workflow_task, new_job_id, start_from_step=0)
     return StartAnalysisResponse(job_id=new_job_id)
 
 @app.get("/status/{job_id}", response_model=FinalStatusResponse, tags=["Jobs"])
-def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
+def get_status(request: Request, job_id: str = Path(..., title="O ID do Job a ser verificado")):
     job_store = container.get_job_store()
     job = job_store.get_job(job_id)
     job_validation_service.validate_job_exists(job, job_id)
+
+    # Controle de acesso: validação de propriedade do job
+    usuario_executor = None
+    # Exemplo: busca de usuário autenticado via header (ajuste conforme seu mecanismo de autenticação)
+    if hasattr(request, 'headers'):
+        usuario_executor = request.headers.get('X-Usuario-Executor')
+    # Alternativamente, se usar OAuth/JWT, extraia do request.state ou request.user
+    job_usuario_executor = job.get('data', {}).get('usuario_executor')
+    if job_usuario_executor:
+        if not usuario_executor or usuario_executor != job_usuario_executor:
+            logger.warning(f"Tentativa de acesso não autorizado ao job {job_id} por usuário '{usuario_executor}'. Dono do job: '{job_usuario_executor}'")
+            raise HTTPException(status_code=403, detail="Acesso negado ao job.")
     status = job.get(JobFields.STATUS) or "PROCESSING"
     job_data = job.get(JobFields.DATA, {})
     blob_url = job_data.get(JobFields.REPORT_BLOB_URL)
     gerar_relatorio_apenas = job_data.get(JobFields.GERAR_RELATORIO_APENAS, False)
     analysis_report = job_data.get(JobFields.ANALYSIS_REPORT, None)
-    print(f"[{job_id}] [get_status] status: {status}")
-    print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
-    print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
-    print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
+    logger.info(f"[{job_id}] [get_status] status: {status}")
+    logger.info(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
+    logger.info(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
+    logger.info(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
     if status == JobStatus.COMPLETED and job_data.get('criar_epicos_azure'):
-        print(f"[{job_id}] [get_status] Job de criação de épicos finalizado. Epicos criados: {job_data.get('epicos_criados')}")
+        logger.info(f"[{job_id}] [get_status] Job de criação de épicos finalizado. Epicos criados: {job_data.get('epicos_criados')}")
     try:
         if status == JobStatus.COMPLETED:
             return response_builder_service.build_completed_response(job_id, job, blob_url)
@@ -277,8 +295,8 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
         else:
             return FinalStatusResponse(job_id=job_id, status=status, report_blob_url=blob_url, build_errors=job_data.get('build_errors'))
     except ValidationError as e:
-        print(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
-        print(f"Dados brutos do job que causaram o erro: {job}")
+        logger.error(f"ERRO CRÍTICO de Validação no Job ID {job_id}: {e}")
+        logger.error(f"Dados brutos do job que causaram o erro: {job}")
         raise
 @app.get("/reports/{report_name}/jobs", response_model=List[str], tags=["Reports"])
 def get_jobs_for_report(report_name: str):
@@ -292,5 +310,5 @@ def get_jobs_for_report(report_name: str):
         jobs = blob_storage.get_jobs_for_report(report_blob_url)
         return jobs
     except Exception as e:
-        print(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
+        logger.warning(f"[API] Warning: Failed to get jobs for report {report_blob_url}: {e}")
         raise HTTPException(status_code=500, detail="Erro ao buscar jobs associados ao relatório.")
