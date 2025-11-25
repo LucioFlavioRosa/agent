@@ -81,7 +81,7 @@ class AzureBoardService:
 
         return epics
 
-    def create_epics(self, markdown_table: str, tags_para_adicionar='projeto_synergy') -> List[Dict[str, Any]]:
+    def create_epics(self, markdown_table: str, tags_para_adicionar='projeto_plurix') -> List[Dict[str, Any]]:
         epics = self.parse_epics_from_markdown(markdown_table)
         token = self._get_token()
         created_epics = []
