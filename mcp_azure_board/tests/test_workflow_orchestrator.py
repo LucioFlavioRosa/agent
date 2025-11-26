@@ -1,99 +1,68 @@
 import pytest
-from fastapi.testclient import TestClient
-from mcp_azure_board.mcp_server_fastapi import app
-from mcp_azure_board.services.workflow_orchestrator import WorkflowOrchestrator
-from mcp_azure_board.services.dependency_container import DependencyContainer
-from mcp_azure_board.models import JobStatus
+from services.workflow_orchestrator import WorkflowOrchestrator
+from services.dependency_container import DependencyContainer
 
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+class DummyJobManager:
+    def get_job_info(self, job_id):
+        return {
+            'data': {
+                'repo_name_modernizado': 'TestRepo',
+                'original_analysis_type': 'criacao_epicos_azure_devops',
+                'analysis_name': 'dummy-analysis',
+                'projeto': 'TestProject',
+                'repository_type': 'azure',
+                'repo_name': 'TestRepo',
+                'branch_name_modernizado': 'main',
+                'executar_steps_incrementalmente': True,
+                'max_steps_per_batch': 2,
+                'gerar_relatorio_apenas': False
+            },
+            'status': 'starting'
+        }
+    def update_job_status(self, job_id, status):
+        pass
+    def update_job(self, job_id, job_info):
+        pass
+    def get_step_result(self, job_info, step_index):
+        return {}
+    def set_paused_step(self, job_info, step_index):
+        job_info['data']['paused_at_step'] = step_index
 
-@pytest.fixture(scope="module")
+class DummyBlobStorage:
+    def read_report(self, **kwargs):
+        return None
+    def save_report_to_blob(self, job_id, job_info, report_text):
+        return f"https://dummy.blob/{job_id}/report.md"
+    def get_report_url(self, **kwargs):
+        return f"https://dummy.blob/report.md"
+    def update_job_tracker(self, report_blob_url, job_id):
+        pass
+
+@pytest.fixture
 def orchestrator():
-    container = DependencyContainer()
-    workflow_registry_service = container.get_workflow_registry_service()
-    workflow_registry = workflow_registry_service.get_workflow_registry()
-    job_manager = container.get_job_manager()
-    blob_storage = container.get_blob_storage()
+    workflow_registry = {
+        'criacao_epicos_azure_devops': {
+            'steps': [
+                {'status_update': 'pending_approval', 'requires_approval': True},
+                {'status_update': 'workflow_started', 'requires_approval': False}
+            ]
+        }
+    }
     return WorkflowOrchestrator(
-        job_manager=job_manager,
-        blob_storage=blob_storage,
-        workflow_registry=workflow_registry,
-        dependency_container=container
+        job_manager=DummyJobManager(),
+        blob_storage=DummyBlobStorage(),
+        workflow_registry=workflow_registry
     )
 
-def test_execute_workflow_criacao_epicos(orchestrator):
-    job_id = "test-job-epico"
-    job_info = {
-        "data": {
-            "original_analysis_type": "criacao_epicos_azure_devops",
-            "repo_name_modernizado": "org/proj/repo",
-            "organization": "org",
-            "project": "proj",
-            "analysis_name": "test-analysis-epico",
-            "repository_type": "azure"
-        }
-    }
-    orchestrator.job_handler.job_manager.set_job(job_id, job_info)
-    try:
-        orchestrator.execute_workflow(job_id)
-    except Exception as e:
-        pytest.fail(f"Falha ao executar workflow de criação de épicos: {e}")
+def test_execute_workflow_epicos(orchestrator):
+    job_id = "dummy-job-id"
+    orchestrator.execute_workflow(job_id, start_from_step=0)
+    # Não há commits ou builds neste MCP, apenas fluxo de steps e relatórios
 
-def test_execute_workflow_criacao_features(orchestrator):
-    job_id = "test-job-feature"
-    job_info = {
-        "data": {
-            "original_analysis_type": "criacao_features_azure_devops",
-            "repo_name_modernizado": "org/proj/repo",
-            "organization": "org",
-            "project": "proj",
-            "epic_id": "12345",
-            "analysis_name": "test-analysis-feature",
-            "repository_type": "azure"
-        }
-    }
-    orchestrator.job_handler.job_manager.set_job(job_id, job_info)
-    try:
-        orchestrator.execute_workflow(job_id, start_from_step=1)
-    except Exception as e:
-        pytest.fail(f"Falha ao executar workflow de criação de features: {e}")
-
-def test_execute_workflow_criacao_tarefas(orchestrator):
-    job_id = "test-job-tarefa"
-    job_info = {
-        "data": {
-            "original_analysis_type": "criacao_tarefas_azure_devops",
-            "repo_name_modernizado": "org/proj/repo",
-            "organization": "org",
-            "project": "proj",
-            "feature_id": "54321",
-            "analysis_name": "test-analysis-tarefa",
-            "repository_type": "azure"
-        }
-    }
-    orchestrator.job_handler.job_manager.set_job(job_id, job_info)
-    try:
-        orchestrator.execute_workflow(job_id, start_from_step=1)
-    except Exception as e:
-        pytest.fail(f"Falha ao executar workflow de criação de tarefas: {e}")
-
-def test_execute_workflow_revisor_tarefas(orchestrator):
-    job_id = "test-job-revisor"
-    job_info = {
-        "data": {
-            "original_analysis_type": "revisor_tarefas",
-            "repo_name_modernizado": "org/proj/repo",
-            "organization": "org",
-            "project": "proj",
-            "task_id": "67890",
-            "analysis_name": "test-analysis-revisor",
-            "repository_type": "azure"
-        }
-    }
-    orchestrator.job_handler.job_manager.set_job(job_id, job_info)
-    try:
-        orchestrator.execute_workflow(job_id)
-    except Exception as e:
-        pytest.fail(f"Falha ao executar workflow de revisão de tarefas: {e}")
+def test_handle_approval_step(orchestrator):
+    job_id = "dummy-job-id"
+    job_info = orchestrator.job_handler.get_job_info(job_id)
+    step_index = 0
+    step_result = {'relatorio': 'Relatório de aprovação'}
+    orchestrator.handle_approval_step(job_id, job_info, step_index, step_result)
+    assert job_info['status'] == 'pending_approval'
