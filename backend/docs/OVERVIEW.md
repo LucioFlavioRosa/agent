@@ -15,7 +15,7 @@ O backend implementa:
 
 Abaixo, o fluxo principal desde o frontend até o retorno da resposta, com os componentes envolvidos:
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -36,7 +36,7 @@ sequenceDiagram
     API->>MCP: POST /start-analysis (payload)
     MCP-->>API: job_id
     API-->>FE: job_id, blob_url, mensagem
-
+```
 
 ## 3. Etapas Críticas e Código Responsável
 
@@ -131,7 +131,7 @@ analysis_type: "criacao_epicos_azure_devops"
 
 
 ### b) Payload enviado para MCP Server
-
+```json
 {
   "analysis_type": "criacao_epicos_azure_devops",
   "instrucoes_extras": "Texto extraído do docx...",
@@ -139,17 +139,16 @@ analysis_type: "criacao_epicos_azure_devops"
   "analysis_name": "Reuniao_01",
   "usuario_executor": "user@example.com"
 }
-
+```
 
 ### c) Resposta (Backend → Frontend)
-
+```json
 {
   "job_id": "abc-123",
   "blob_url": "https://blobstorage.azure.com/user/projetoX/arquivos_recebidos/docx/Reuniao_01.docx",
   "message": "Arquivo recebido, salvo e análise iniciada com sucesso."
 }
-
-
+```
 ## 5. Resumo
 
 O endpoint `/upload/docx` implementa um fluxo seguro e eficiente para receber arquivos DOCX do frontend, validar o usuário e o arquivo, extrair o texto, armazenar o arquivo no Azure Blob Storage e acionar o MCP Server para análise. Todo o processo é protegido por autenticação JWT e possui tratamento robusto de erros para garantir confiabilidade na comunicação entre os componentes. Cada etapa é claramente mapeada para funções e arquivos do código, facilitando manutenção e auditoria.
