@@ -62,22 +62,24 @@ sequenceDiagram
   - **Arquivo:** [`backend/app/services/azure_ad_service.py`](../app/services/azure_ad_service.py)
   - **Função:** `AzureADService.validate_token(token: str)`
   - **Trecho relevante:**
+```text
     python
     claims = jwt.decode(token, options={"verify_signature": False, "verify_exp": True}, algorithms=["RS256", "HS256"])
     usuario_executor = claims.get("preferred_username") or claims.get("email") or claims.get("upn")
     if not usuario_executor:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="usuario_executor não encontrado no token Azure AD.")
     return AzureADTokenData(usuario_executor=usuario_executor, claims=claims)
-    
+``` 
 
 ### b) Validação de Extensão do Arquivo
 - **Arquivo:** [`backend/app/api/upload.py`](../app/api/upload.py)
 - **Função:** `upload_docx(...)`
 - **Trecho relevante:**
-  python
+```text
+python
   if not file.filename.lower().endswith(".docx"):
       raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
-  
+```  
 
 ### c) Extração de Texto do DOCX
 - **Arquivo:** [`backend/app/services/docx_parser_service.py`](../app/services/docx_parser_service.py)
@@ -127,7 +129,7 @@ sequenceDiagram
           response.raise_for_status()
           data = response.json()
           return MCPStartAnalysisResponse(**data)
-  ```text
+  ```
 
 ### f) Resposta ao Frontend
 - **Arquivo:** [`backend/app/api/upload.py`](../app/api/upload.py)
