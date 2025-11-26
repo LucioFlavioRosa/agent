@@ -14,7 +14,7 @@ Este documento apresenta o funcionamento essencial do backend, detalhando o flux
 7. O backend responde ao frontend com o `job_id`, URL do arquivo e mensagem de sucesso.
 
 ### Diagrama Mermaid: Fluxo de Upload e Análise
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -31,7 +31,7 @@ sequenceDiagram
     API->>MCP: POST /start-analysis (payload)
     MCP-->>API: job_id
     API-->>FE: job_id, blob_url, mensagem
-
+```
 
 ## Fluxo de Autenticação
 
