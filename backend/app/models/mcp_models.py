@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 
 class MCPStartAnalysisPayload(BaseModel):
@@ -7,6 +7,12 @@ class MCPStartAnalysisPayload(BaseModel):
     projeto: str = Field(..., description="Nome do projeto.")
     analysis_name: str = Field(..., description="Nome da tarefa/analise.")
     usuario_executor: str = Field(..., description="Usuário executor extraído do token JWT.")
+
+    @validator('analysis_type')
+    def analysis_type_must_not_be_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('analysis_type deve ser uma string não vazia')
+        return v
 
 class MCPStartAnalysisResponse(BaseModel):
     job_id: str = Field(..., description="Identificador do job criado no MCP.")
