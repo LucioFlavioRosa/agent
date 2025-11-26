@@ -1,35 +1,12 @@
 criacao_epicos_azure_devops:
-  description: Criação de épicos no Azure DevOps Boards
+  description: Criação de épicos para Azure DevOps a partir de transcrição de reunião
   steps:
-    - name: Revisar e criar épicos
-      agent_type: revisor_board
-      params:
-        tipo_analise: criacao_epicos_azure_devops
+    - name: Gerar épicos
+      agent: agente_revisor_board
+      prompt: tools/prompts/criacao_epicos.md
       requires_approval: false
-
-criacao_tarefas_azure_devops:
-  description: Criação de tarefas no Azure DevOps Boards
-  steps:
-    - name: Revisar e criar tarefas
-      agent_type: revisor_board
+      gerar_relatorio_apenas: true
       params:
-        tipo_analise: criacao_tarefas_azure_devops
-      requires_approval: false
-
-revisor_tarefas:
-  description: Revisão de tarefas no Azure DevOps Boards
-  steps:
-    - name: Revisar tarefas
-      agent_type: revisor_board
-      params:
-        tipo_analise: revisor_tarefas
-      requires_approval: false
-
-criacao_features_azure_devops:
-  description: Criação de features no Azure DevOps Boards
-  steps:
-    - name: Revisar e criar features
-      agent_type: revisor_board
-      params:
-        tipo_analise: criacao_features_azure_devops
-      requires_approval: false
+        # parâmetros específicos podem ser definidos aqui
+        # Exemplo: prioridade: alta
+  gerar_relatorio_apenas: true
