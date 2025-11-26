@@ -44,17 +44,14 @@ class BlobStorageService:
         return blob_client.download_blob().readall().decode('utf-8')
         
     def get_report_url(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name) -> str:
-        """Constrói e retorna a URL de um relatório sem fazer upload."""
         blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
         return blob_client.url
 
     def update_job_tracker(self, report_blob_url: str, job_id: str) -> None:
         try:
-            # Extrai o caminho do blob da URL
             from urllib.parse import urlparse
             path = urlparse(report_blob_url).path
-            # Remove o / inicial e o nome do container
             path_parts = path.lstrip('/').split('/', 1)
             if len(path_parts) != 2:
                 print(f"[BlobStorageService] Warning: Could not parse blob path from URL: {report_blob_url}")
