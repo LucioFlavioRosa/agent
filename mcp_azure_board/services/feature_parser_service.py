@@ -1,13 +1,9 @@
 import re
-from typing import List, Dict, Any
+from typing import List, Dict
 
 class FeatureParserService:
     @staticmethod
-    def parse_features_from_markdown(markdown_table: str) -> List[Dict[str, Any]]:
-        """
-        Parseia uma tabela Markdown de features e retorna uma lista de dicionários.
-        Espera colunas como: Feature, Descrição (Jornada/Valor), Critérios de Aceite, Perfis Envolvidos, Prioridade (MoSCoW), Estimativa (Sprints)
-        """
+    def parse_features_from_markdown(markdown_table: str) -> List[Dict[str, str]]:
         lines = [line for line in markdown_table.strip().splitlines() if line.strip() and not line.strip().startswith('|---')]
         if len(lines) < 2:
             return []
