@@ -1,0 +1,43 @@
+criacao_epicos_azure_devops:
+  description: "Criação de épicos no Azure DevOps Board a partir de transcrição de reunião."
+  steps:
+    - name: "Gerar relatório de épicos"
+      agent: "revisor_board"
+      requires_approval: true
+      status_update: "pending_approval"
+    - name: "Criar épicos no Azure Board"
+      agent: "revisor_board"
+      status_update: "completed"
+
+criacao_features_azure_devops:
+  description: "Criação de features a partir de épicos no Azure DevOps Board."
+  steps:
+    - name: "Gerar relatório de features"
+      agent: "revisor_board"
+      requires_approval: true
+      status_update: "pending_approval"
+    - name: "Criar features no Azure Board"
+      agent: "revisor_board"
+      status_update: "completed"
+
+criacao_tarefas_azure_devops:
+  description: "Criação de tarefas vinculadas a uma feature no Azure DevOps Board."
+  steps:
+    - name: "Gerar relatório de tarefas"
+      agent: "revisor_board"
+      requires_approval: true
+      status_update: "pending_approval"
+    - name: "Criar tarefas no Azure Board"
+      agent: "revisor_board"
+      status_update: "completed"
+
+revisor_tarefas:
+  description: "Revisão e atualização de tarefas no Azure DevOps Board."
+  steps:
+    - name: "Gerar relatório de revisão de tarefa"
+      agent: "revisor_board"
+      requires_approval: true
+      status_update: "pending_approval"
+    - name: "Atualizar discussão da tarefa"
+      agent: "revisor_board"
+      status_update: "completed"
