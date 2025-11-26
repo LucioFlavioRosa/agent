@@ -2,10 +2,6 @@ from pydantic import BaseModel, Field, validator, model_validator, ValidationErr
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 
-class EpicCreationPayload(BaseModel):
-    transcricao_reuniao: str = Field(..., description="Transcrição da reunião para geração de épicos")
-    criar_epicos_azure: bool = Field(False, description="Se True, após aprovação, cria os épicos no Azure DevOps Board")
-
 class PullRequestSummary(BaseModel):
     pull_request_url: str
     branch_name: str
@@ -71,14 +67,7 @@ class JobFields:
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
     REQUIRES_APPROVAL = 'requires_approval'
-    AZURE_ORGANIZATION = 'azure_organization'
-    AZURE_PROJECT = 'azure_project'
-    EPICOS_CRIADOS = 'epicos_criados'
-    EPIC_ID = 'epic_id'
-    ORGANIZATION = 'organization'
-    PROJECT = 'project'
-    TASK_ID = 'task_id'
-    FEATURE_ID = 'feature_id'
+    # Removidos: AZURE_ORGANIZATION, AZURE_PROJECT, EPICOS_CRIADOS, EPIC_ID, ORGANIZATION, PROJECT, TASK_ID, FEATURE_ID
 
 class JobActions:
     APPROVE = 'approve'
@@ -87,5 +76,4 @@ class JobActions:
 class ValidAnalysisTypes(str, Enum):
     MODERNIZACAO = 'modernizacao'
     IMPLEMENTACAO = 'implementacao'
-    CRIACAO_EPICOS = 'criacao_epicos'
-    REVISOR_TAREFAS = 'revisor_tarefas'
+    # Removidos: CRIACAO_EPICOS, REVISOR_TAREFAS
