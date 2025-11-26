@@ -40,7 +40,7 @@ sequenceDiagram
 3. Nas requisições protegidas, o JWT é validado pelo middleware antes do processamento.
 
 ### Diagrama Mermaid: Autenticação
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -52,7 +52,7 @@ sequenceDiagram
     API-->>FE: access_token
     FE->>API: Requisições protegidas (com JWT)
     API->>API: Middleware valida JWT
-
+```
 
 ## Componentes Principais
 - **API Routers**: Endpoints de autenticação e upload.
