@@ -24,7 +24,6 @@ class AgenteRevisorBoard:
             data['feature'] = self.azure_board_service.read_feature(feature_id)
         if task_id:
             data['task'] = self.azure_board_service.read_task(task_id)
-       
         return data
     def main(
         self,
@@ -45,7 +44,6 @@ class AgenteRevisorBoard:
     ) -> Dict[str, Any]:
         print(f"[AgenteRevisorBoard] [DEBUG] analysis_type recebido: {analysis_type}")
         print(f"[AgenteRevisorBoard] [DEBUG] TIPO DE ANALISE={analysis_type}")
-        
         print(f"[AgenteRevisorBoard] [DEBUG] Entrando no main. epic_id={epic_id}, task_id={task_id}, feature_id={feature_id}")
         if analysis_type == 'revisor_tarefas':
             if not task_id:
@@ -58,7 +56,6 @@ class AgenteRevisorBoard:
         epic_data = data.get('epic')
         feature_data = data.get('feature')
         task_data = data.get('task')
-        
         instrucoes_formatadas = (instrucoes_extras or "")
         if epic_data:
             if 'error' in epic_data:
@@ -68,7 +65,6 @@ class AgenteRevisorBoard:
                 instrucoes_formatadas += '\n\n--- DADOS DO ÉPICO (CONTEXTO) ---\n' + json.dumps(epic_data, indent=2, ensure_ascii=False)
         else:
             print(f"[AgenteRevisorBoard] DEBUG: Nenhum epic_id fornecido ou dados não encontrados. Contexto do épico pulado.")
-            
         if analysis_type == 'criacao_tarefas_azure_devops':
             if not feature_id:
                 raise ValueError("feature_id é obrigatório quando analysis_type == 'criacao_tarefas_azure_devops'.")
