@@ -30,6 +30,33 @@ Content-Type: application/json
 }
 
 
+O código responsável por este fluxo está em:
+- `backend/app/api/auth.py` (endpoint `/auth/login`)
+
+python
+@router.post("/auth/login", response_model=LoginResponse, tags=["Auth"])
+def login(request: LoginRequest):
+    app = msal.ConfidentialClientApplication(
+        AZURE_CLIENT_ID,
+        authority=AZURE_AUTHORITY,
+        client_credential=AZURE_CLIENT_SECRET
+    )
+    result = app.acquire_token_by_username_password(
+        username=request.username,
+        password=request.password,
+        scopes=AZURE_SCOPE
+    )
+    if "access_token" not in result:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Falha na autenticação Azure AD: {result.get('error_description', 'Erro desconhecido')}"
+        )
+    return LoginResponse(
+        access_token=result["access_token"],
+        expires_in=result.get("expires_in", 3600)
+    )
+
+
 ## 2. Estrutura do Token JWT e Claims Utilizados
 
 O token JWT emitido pelo Azure AD contém diversos claims que identificam o usuário e garantem a segurança da sessão. Os principais são:
@@ -55,7 +82,7 @@ O token JWT emitido pelo Azure AD contém diversos claims que identificam o usu�
 }
 
 
-## 3. Validação do Token pelo Middleware (AuthMiddleware)
+## 3. Fluxo de Autenticação com Código
 
 Todas as requisições protegidas passam pelo middleware de autenticação, que realiza as seguintes etapas:
 
@@ -64,25 +91,77 @@ Todas as requisições protegidas passam pelo middleware de autenticação, que 
 - Se o token for válido, extrai os dados do usuário e injeta no contexto da requisição (`request.state.user`).
 - Se inválido ou ausente, retorna HTTP 401 Unauthorized.
 
-**Pseudocódigo do fluxo:**
+### Middleware de Autenticação: `AuthMiddleware`
+
+O middleware está implementado em `backend/app/middleware/auth_middleware.py`.
+
+#### Função principal de extração do usuário:
 python
-auth = request.headers.get("Authorization")
-scheme, param = get_authorization_scheme_param(auth)
-if not auth or scheme.lower() != "bearer":
-    raise HTTPException(status_code=401)
-user = azure_ad_service.validate_token(param)
-request.state.user = user
+def get_current_user(request: Request) -> AzureADTokenData:
+    auth: str = request.headers.get("Authorization")
+    scheme, param = get_authorization_scheme_param(auth)
+    if not auth or scheme.lower() != "bearer":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cabeçalho Authorization ausente ou inválido.")
+    return azure_ad_service.validate_token(param)
 
 
-## 4. Extração do Usuário Autenticado nos Endpoints Protegidos
+- **Explicação:**
+    - Busca o header `Authorization` da requisição.
+    - Se o header não existir ou não for do tipo Bearer, retorna erro 401.
+    - Caso contrário, chama o serviço `azure_ad_service.validate_token(param)` para validar o token e extrair os dados do usuário.
+
+#### Validação do Token JWT:
+A validação do token ocorre em `backend/app/services/azure_ad_service.py`:
+
+python
+def validate_token(self, token: str) -> AzureADTokenData:
+    try:
+        import jwt
+        from jwt import InvalidTokenError, ExpiredSignatureError
+        claims = jwt.decode(token, options={"verify_signature": False, "verify_exp": True}, algorithms=["RS256", "HS256"])
+        usuario_executor = claims.get("preferred_username") or claims.get("email") or claims.get("upn")
+        if not usuario_executor:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="usuario_executor não encontrado no token Azure AD.")
+        return AzureADTokenData(usuario_executor=usuario_executor, claims=claims)
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Azure AD expirado.")
+    except InvalidTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Azure AD inválido.")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Erro ao validar token Azure AD: {str(e)}")
+
+
+- **Explicação:**
+    - Decodifica o JWT e verifica se está expirado.
+    - Extrai o usuário autenticado do claim `preferred_username`, `email` ou `upn`.
+    - Se não encontrar, retorna erro 401.
+    - Se o token estiver expirado ou inválido, retorna erro 401.
+
+#### Middleware propriamente dito:
+python
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        auth: str = request.headers.get("Authorization")
+        scheme, param = get_authorization_scheme_param(auth)
+        if not auth or scheme.lower() != "bearer":
+            return await call_next(request)
+        try:
+            user = azure_ad_service.validate_token(param)
+            request.state.user = user
+        except HTTPException:
+            return await call_next(request)
+        response = await call_next(request)
+        return response
+
+- **Explicação:**
+    - Intercepta todas as requisições.
+    - Se houver token Bearer, valida e injeta o usuário em `request.state.user`.
+    - Se não houver ou for inválido, segue o fluxo sem autenticação (dependendo do endpoint, pode resultar em erro 401 posteriormente).
+
+### Como acessar o usuário autenticado nos endpoints
 
 Para acessar dados do usuário autenticado dentro dos endpoints, utilize o método `get_current_user(request)`:
 
-- Recebe o objeto `Request`.
-- Retorna os dados do usuário extraídos do token JWT (ex: `usuario_executor`, `sub`).
-- Permite associar ações e permissões ao usuário logado.
-
-**Exemplo de uso em endpoint:**
 python
 from ..middleware.auth_middleware import get_current_user
 
@@ -92,7 +171,7 @@ def get_profile(request: Request):
     return {"usuario_executor": user.usuario_executor}
 
 
-## 5. Diagrama Mermaid: Fluxo de Autenticação
+## 4. Diagrama Mermaid: Fluxo de Autenticação
 
 mermaid
 sequenceDiagram
@@ -109,7 +188,7 @@ sequenceDiagram
     API-->>FE: Dados do usuário autenticado ou erro
 
 
-## 6. Boas Práticas de Segurança Implementadas e Recomendações
+## 5. Boas Práticas de Segurança Implementadas e Recomendações
 
 - **Validação robusta do JWT:** Assinatura, expiração e claims obrigatórios são verificados em todas as requisições protegidas.
 - **Uso de HTTPS:** Todo o tráfego entre frontend, backend e Azure AD deve ser protegido por TLS.
