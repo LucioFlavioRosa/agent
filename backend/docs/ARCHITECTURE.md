@@ -62,7 +62,7 @@ sequenceDiagram
 - **MCP Client Service**: Comunicação com MCP Server para análise e geração de relatório.
 
 ## Estrutura de Pastas
-
+```text
 backend/
 ├── app/
 │   ├── api/           # Endpoints principais
@@ -75,7 +75,7 @@ backend/
 ├── docs/              # Documentação
 ├── requirements.txt   # Dependências
 └── tests/             # Testes automatizados
-
+```
 
 ## Variáveis de Ambiente Essenciais
 - `AZURE_AD_CLIENT_ID`, `AZURE_AD_CLIENT_SECRET`, `AZURE_AD_TENANT_ID`: Credenciais Azure AD para autenticação.
