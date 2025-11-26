@@ -1,6 +1,6 @@
 # Fluxo da API: Upload de Arquivo DOCX
 
-Este documento detalha o funcionamento do endpoint principal de upload de arquivos DOCX, desde o recebimento da requisição pelo backend até o retorno da resposta ao frontend, incluindo processamento, comunicação com o MCP Server e tratamento de erros.
+Este documento apresenta de forma objetiva o fluxo principal do backend, detalhando o caminho da requisição desde o frontend até a geração e retorno do relatório via MCP Server. O foco está nos pontos críticos para o funcionamento da solução, com referências diretas ao código responsável em cada etapa.
 
 ## 1. Sequência Detalhada do Fluxo de Upload
 
@@ -22,7 +22,7 @@ Este documento detalha o funcionamento do endpoint principal de upload de arquiv
 
 ## 2. Diagrama Mermaid: Sequência de Interação
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -40,62 +40,118 @@ sequenceDiagram
     API->>MCP: POST /start-analysis (payload)
     MCP-->>API: job_id
     API-->>FE: job_id, blob_url, mensagem
-```
 
-## 3. Descrição das Etapas Críticas
+
+## 3. Descrição das Etapas Críticas com Código Responsável
 
 ### a) Validação JWT
-- O middleware intercepta a requisição e valida o token JWT.
-- Se inválido ou ausente, retorna HTTP 401 Unauthorized.
-- Usuário autenticado é extraído para uso nos próximos passos.
+- **Arquivo:** [`backend/app/middleware/auth_middleware.py`](../app/middleware/auth_middleware.py)
+- **Função:** `get_current_user(request: Request)`
+- **Resumo:** Intercepta o header `Authorization`, valida o token JWT e extrai o usuário autenticado.
+- **Exemplo de código:**
+  python
+  def get_current_user(request: Request) -> AzureADTokenData:
+      auth: str = request.headers.get("Authorization")
+      scheme, param = get_authorization_scheme_param(auth)
+      if not auth or scheme.lower() != "bearer":
+          raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cabeçalho Authorization ausente ou inválido.")
+      return azure_ad_service.validate_token(param)
+  
+- **Validação do token:**
+  - **Arquivo:** [`backend/app/services/azure_ad_service.py`](../app/services/azure_ad_service.py)
+  - **Função:** `AzureADService.validate_token(token: str)`
+  - **Trecho relevante:**
+    python
+    claims = jwt.decode(token, options={"verify_signature": False, "verify_exp": True}, algorithms=["RS256", "HS256"])
+    usuario_executor = claims.get("preferred_username") or claims.get("email") or claims.get("upn")
+    if not usuario_executor:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="usuario_executor não encontrado no token Azure AD.")
+    return AzureADTokenData(usuario_executor=usuario_executor, claims=claims)
+    
 
-### b) Validação de Extensão
-- Apenas arquivos com extensão `.docx` são aceitos.
-- Se outro formato, retorna HTTP 400 Bad Request.
+### b) Validação de Extensão do Arquivo
+- **Arquivo:** [`backend/app/api/upload.py`](../app/api/upload.py)
+- **Função:** `upload_docx(...)`
+- **Trecho relevante:**
+  python
+  if not file.filename.lower().endswith(".docx"):
+      raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
+  
 
-### c) Extração de Texto
-- O serviço lê o arquivo DOCX e extrai todo o texto.
-- Se falhar, retorna HTTP 400 Bad Request com mensagem de erro.
+### c) Extração de Texto do DOCX
+- **Arquivo:** [`backend/app/services/docx_parser_service.py`](../app/services/docx_parser_service.py)
+- **Função:** `extract_text_from_docx(file: UploadFile) -> str`
+- **Trecho relevante:**
+  python
+  async def extract_text_from_docx(file: UploadFile) -> str:
+      file.file.seek(0)
+      doc_bytes = await file.read()
+      doc_stream = io.BytesIO(doc_bytes)
+      document = Document(doc_stream)
+      full_text = []
+      for para in document.paragraphs:
+          full_text.append(para.text)
+      return '\n'.join(full_text)
+  
 
-### d) Upload para Blob Storage
-- O arquivo é salvo no Azure Blob Storage em background.
-- O caminho segue o padrão: `usuario_executor/projeto/arquivos_recebidos/docx/analysis_name.docx`
-- A URL pública do arquivo é gerada e retornada.
-- Se falhar, retorna HTTP 500 Internal Server Error.
+### d) Upload para Azure Blob Storage
+- **Arquivo:** [`backend/app/services/blob_storage_service.py`](../app/services/blob_storage_service.py)
+- **Função:** `upload_docx_to_blob(file, blob_folder, blob_filename, background_tasks)`
+- **Trecho relevante:**
+  python
+  async def upload_docx_to_blob(file: UploadFile, blob_folder: str, blob_filename: str, background_tasks: BackgroundTasks) -> str:
+      def upload_task():
+          _sync_upload(file, blob_folder, blob_filename)
+      background_tasks.add_task(upload_task)
+      blob_path = f"{blob_folder}/{blob_filename}"
+      blob_client = container_client.get_blob_client(blob_path)
+      return blob_client.url
+  
 
-### e) Chamada ao MCP Server
-- O backend monta o payload com:
-  - `analysis_type`, `instrucoes_extras` (texto extraído), `projeto`, `analysis_name`, `usuario_executor`
-- Envia POST para o endpoint `/start-analysis` do MCP Server.
-- Se MCP Server responder com erro, retorna HTTP 502 Bad Gateway.
+### e) Montagem do Payload e Comunicação com MCP Server
+- **Arquivo:** [`backend/app/services/mcp_client_service.py`](../app/services/mcp_client_service.py)
+- **Função:** `MCPClientService.start_analysis(payload)`
+- **Trecho relevante:**
+  python
+  async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
+      url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
+      async with httpx.AsyncClient(timeout=30) as client:
+          response = await client.post(
+              url,
+              json=payload.dict(),
+              headers={"Content-Type": "application/json"}
+          )
+          response.raise_for_status()
+          data = response.json()
+          return MCPStartAnalysisResponse(**data)
+  
 
-### f) Retorno ao Frontend
-- Resposta contém:
-  - `job_id` (identificador da análise no MCP)
-  - `blob_url` (URL pública do arquivo DOCX)
-  - `message` (mensagem de sucesso)
+### f) Resposta ao Frontend
+- **Arquivo:** [`backend/app/api/upload.py`](../app/api/upload.py)
+- **Função:** `upload_docx(...)`
+- **Trecho relevante:**
+  python
+  return UploadDocxResponse(job_id=job_id, blob_url=blob_url, message="Arquivo recebido, salvo e análise iniciada com sucesso.")
+  
 
 ## 4. Exemplos de Payloads
 
 ### a) Requisição (Frontend → Backend)
 
 **POST /upload/docx**
-```texte
-Form Data:
 http
+POST /upload/docx
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: multipart/form-data
+
 file: <arquivo.docx>
 projeto: "ProjetoX"
 analysis_name: "Reuniao_01"
 analysis_type: "criacao_epicos_azure_devops"
 
-Headers:
-http
-Authorization: Bearer <JWT_TOKEN>
-```
 
 ### b) Payload enviado para MCP Server
 
-```json
 {
   "analysis_type": "criacao_epicos_azure_devops",
   "instrucoes_extras": "Texto extraído do docx...",
@@ -103,20 +159,19 @@ Authorization: Bearer <JWT_TOKEN>
   "analysis_name": "Reuniao_01",
   "usuario_executor": "user@example.com"
 }
-```
+
 
 ### c) Resposta (Backend → Frontend)
 
-```json
 {
   "job_id": "abc-123",
   "blob_url": "https://blobstorage.azure.com/user/projetoX/arquivos_recebidos/docx/Reuniao_01.docx",
   "message": "Arquivo recebido, salvo e análise iniciada com sucesso."
 }
-```
+
 
 ## 5. Códigos de Status HTTP e Tratamento de Erros
-```text
+
 | Etapa                      | Código | Mensagem de Erro                                   |
 |---------------------------|--------|---------------------------------------------------|
 | Validação JWT             | 401    | Token JWT inválido ou ausente                     |
@@ -125,7 +180,7 @@ Authorization: Bearer <JWT_TOKEN>
 | Upload para Blob Storage  | 500    | Erro ao fazer upload do arquivo para o Blob       |
 | Comunicação MCP Server    | 502    | Erro ao comunicar com MCP Server                  |
 | Sucesso                   | 200    | job_id, blob_url, mensagem                        |
-```
+
 ## 6. Resumo do Funcionamento
 
-O endpoint `/upload/docx` implementa um fluxo seguro e eficiente para receber arquivos DOCX do frontend, validar o usuário e o arquivo, extrair o texto, armazenar o arquivo no Azure Blob Storage e acionar o MCP Server para análise. Todo o processo é protegido por autenticação JWT e possui tratamento robusto de erros para garantir confiabilidade na comunicação entre os componentes.
+O endpoint `/upload/docx` implementa um fluxo seguro e eficiente para receber arquivos DOCX do frontend, validar o usuário e o arquivo, extrair o texto, armazenar o arquivo no Azure Blob Storage e acionar o MCP Server para análise. Todo o processo é protegido por autenticação JWT e possui tratamento robusto de erros para garantir confiabilidade na comunicação entre os componentes. Cada etapa está claramente mapeada para funções e arquivos do código, facilitando manutenção e auditoria.
