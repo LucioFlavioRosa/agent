@@ -22,7 +22,7 @@ Este documento detalha o funcionamento do endpoint principal de upload de arquiv
 
 ## 2. Diagrama Mermaid: Sequência de Interação
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -40,7 +40,7 @@ sequenceDiagram
     API->>MCP: POST /start-analysis (payload)
     MCP-->>API: job_id
     API-->>FE: job_id, blob_url, mensagem
-
+```
 
 ## 3. Descrição das Etapas Críticas
 
@@ -80,7 +80,7 @@ sequenceDiagram
 ### a) Requisição (Frontend → Backend)
 
 **POST /upload/docx**
-
+```texte
 Form Data:
 http
 file: <arquivo.docx>
@@ -91,11 +91,11 @@ analysis_type: "criacao_epicos_azure_devops"
 Headers:
 http
 Authorization: Bearer <JWT_TOKEN>
-
+```
 
 ### b) Payload enviado para MCP Server
 
-
+```text
 {
   "analysis_type": "criacao_epicos_azure_devops",
   "instrucoes_extras": "Texto extraído do docx...",
@@ -103,20 +103,20 @@ Authorization: Bearer <JWT_TOKEN>
   "analysis_name": "Reuniao_01",
   "usuario_executor": "user@example.com"
 }
-
+```
 
 ### c) Resposta (Backend → Frontend)
 
-
+```text
 {
   "job_id": "abc-123",
   "blob_url": "https://blobstorage.azure.com/user/projetoX/arquivos_recebidos/docx/Reuniao_01.docx",
   "message": "Arquivo recebido, salvo e análise iniciada com sucesso."
 }
-
+```
 
 ## 5. Códigos de Status HTTP e Tratamento de Erros
-
+```text
 | Etapa                      | Código | Mensagem de Erro                                   |
 |---------------------------|--------|---------------------------------------------------|
 | Validação JWT             | 401    | Token JWT inválido ou ausente                     |
@@ -125,7 +125,7 @@ Authorization: Bearer <JWT_TOKEN>
 | Upload para Blob Storage  | 500    | Erro ao fazer upload do arquivo para o Blob       |
 | Comunicação MCP Server    | 502    | Erro ao comunicar com MCP Server                  |
 | Sucesso                   | 200    | job_id, blob_url, mensagem                        |
-
+```
 ## 6. Resumo do Funcionamento
 
 O endpoint `/upload/docx` implementa um fluxo seguro e eficiente para receber arquivos DOCX do frontend, validar o usuário e o arquivo, extrair o texto, armazenar o arquivo no Azure Blob Storage e acionar o MCP Server para análise. Todo o processo é protegido por autenticação JWT e possui tratamento robusto de erros para garantir confiabilidade na comunicação entre os componentes.
