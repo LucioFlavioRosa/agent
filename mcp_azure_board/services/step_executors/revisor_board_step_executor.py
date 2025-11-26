@@ -1,14 +1,22 @@
 from services.step_executors.base_step_executor import BaseStepExecutor
-from services.factories.agent_factory import AgentFactory
+from agents.agente_revisor_board import AgenteRevisorBoard
+from services.azure_board_service import AzureBoardService
+from services.factories.llm_provider_factory import LLMProviderFactory
 
 class RevisorBoardStepExecutor(BaseStepExecutor):
+    def __init__(self, job_handler):
+        super().__init__(job_handler)
+
     def execute(self, job_id, job_info, step, current_step_index, previous_step_result, repo_reader, llm_provider, agent_params):
-        agent = AgentFactory.create_agent(
-            agent_type='revisor_board',
-            azure_board_service=agent_params.get('azure_board_service'),
-            llm_provider=llm_provider
+        azure_board_service = AzureBoardService(
+            organization=job_info['data'].get('organization'),
+            project=job_info['data'].get('project')
         )
-        result = agent.main(
+        llm_provider = llm_provider or LLMProviderFactory.create_provider(
+            agent_params.get('model_name'), None
+        )
+        agente = AgenteRevisorBoard(azure_board_service=azure_board_service, llm_provider=llm_provider)
+        resultado = agente.main(
             analysis_type=agent_params.get('analysis_type'),
             instrucoes_extras=agent_params.get('instrucoes_extras', ''),
             usar_rag=agent_params.get('usar_rag', False),
@@ -23,4 +31,4 @@ class RevisorBoardStepExecutor(BaseStepExecutor):
             feature_id=agent_params.get('feature_id'),
             epic_id=agent_params.get('epic_id')
         )
-        return result
+        return resultado
