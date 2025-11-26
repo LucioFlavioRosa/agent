@@ -1,138 +1,133 @@
-from tools.job_store import RedisJobStore
-from services.workflow_orchestrator import WorkflowOrchestrator
-from services.job_manager import JobManager
-from services.blob_storage_service import BlobStorageService
-from services.analysis_name_service import AnalysisNameService, AnalysisNameCache
+import threading
 from services.workflow_registry_service import WorkflowRegistryService
+from services.api_service_factory import ApiServiceFactory
+from services.pull_request_extractor_service import PullRequestExtractorService
+from services.job_logging_service import JobLoggingService
+from services.response_builder_service import FinalStatusResponse
+from services.workflow_registry_loader import WorkflowRegistryLoader
+from services.job_data_service import JobDataService
+from services.job_validation_service import JobValidationService
+from services.repository_normalizer_service import RepositoryNormalizerService
 from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
 from services.commit_handler import CommitHandler
 from services.data_formatter import DataFormatter
-from tools.rag_retriever import AzureAISearchRAGRetriever
-from tools.preenchimento import ChangesetFiller
+from services.incremental_step_executor_service import IncrementalStepExecutorService
 from services.redis_cache_service import RedisCacheService
 from tools.azure_secret_manager import AzureSecretManager
-from services.azure_board_service import AzureBoardService
-from tools.readers.azure_board_reader import AzureBoardReader
-from domain.interfaces.board_reader_interface import IBoardReader
+from services.change_consolidator_service import ChangeConsolidatorService
+from services.priority_mapper_service import PriorityMapperService
+from services.step_dependency_analyzer import StepDependencyAnalyzer
+from services.step_strategies.step_strategy_factory import StepStrategyFactory
+from services.step_executors.step_executor_factory import StepExecutorFactory
+from services.feature_parser_service import FeatureParserService
+from services.task_parser_service import TaskParserService
+from services.job_manager import JobManager
+from services.blob_storage_service import BlobStorageService
+from tools.job_store import JobStore
 
 class DependencyContainer:
-    def __init__(self):
-        self._job_store = None
-        self._job_manager = None
-        self._blob_storage = None
-        self._workflow_registry_service = None
-        self._workflow_orchestrator = None
-        self._analysis_name_service = None
-        self._job_handler = None
-        self._report_handler = None
-        self._commit_handler = None
-        self._data_formatter = None
-        self._rag_retriever = None
-        self._changeset_filler = None
-        self._redis_cache_service = None
-        self._secret_manager = None
-        self._azure_board_service = None
-        self._board_reader = None
-    
-    def get_job_store(self) -> RedisJobStore:
-        if self._job_store is None:
-            self._job_store = RedisJobStore()
-        return self._job_store
-    
-    def get_job_manager(self) -> JobManager:
-        if self._job_manager is None:
-            self._job_manager = JobManager(self.get_job_store())
-        return self._job_manager
-    
-    def get_blob_storage(self) -> BlobStorageService:
-        if self._blob_storage is None:
-            self._blob_storage = BlobStorageService()
-        return self._blob_storage
-    
-    def get_workflow_registry_service(self) -> WorkflowRegistryService:
-        if self._workflow_registry_service is None:
-            self._workflow_registry_service = WorkflowRegistryService()
-        return self._workflow_registry_service
-    
-    def get_rag_retriever(self) -> AzureAISearchRAGRetriever:
-        if self._rag_retriever is None:
-            self._rag_retriever = AzureAISearchRAGRetriever()
-        return self._rag_retriever
-    
-    def get_changeset_filler(self) -> ChangesetFiller:
-        if self._changeset_filler is None:
-            self._changeset_filler = ChangesetFiller()
-        return self._changeset_filler
-    
-    def get_job_handler(self) -> JobHandler:
-        if self._job_handler is None:
-            self._job_handler = JobHandler(self.get_job_manager())
-        return self._job_handler
-    
-    def get_report_handler(self) -> ReportHandler:
-        if self._report_handler is None:
-            self._report_handler = ReportHandler(self.get_blob_storage())
-        return self._report_handler
-    
-    def get_commit_handler(self) -> CommitHandler:
-        if self._commit_handler is None:
-            self._commit_handler = CommitHandler()
-        return self._commit_handler
-    
-    def get_data_formatter(self) -> DataFormatter:
-        if self._data_formatter is None:
-            self._data_formatter = DataFormatter(self.get_changeset_filler())
-        return self._data_formatter
+    _instance = None
+    _lock = threading.Lock()
 
-    def get_secret_manager(self) -> AzureSecretManager:
-        if self._secret_manager is None:
-             self._secret_manager = AzureSecretManager()
-        return self._secret_manager
-    
-    def get_redis_cache_service(self) -> RedisCacheService:
-        if self._redis_cache_service is None:
-            job_store_instance = self.get_job_store()
-            self._redis_cache_service = RedisCacheService(job_store=job_store_instance)
-        return self._redis_cache_service
-    
-    def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
-        if self._workflow_orchestrator is None:
-            workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
-            # Passo 9: garantir que AzureBoardService seja injetado explicitamente se necessário
-            azure_board_service = self.get_azure_board_service()
-            self._workflow_orchestrator = WorkflowOrchestrator(
-                job_manager=self.get_job_manager(), 
-                blob_storage=self.get_blob_storage(), 
-                workflow_registry=workflow_registry,
-                rag_retriever=self.get_rag_retriever(),
-                job_handler=self.get_job_handler(),
-                report_handler=self.get_report_handler(),
-                commit_handler=self.get_commit_handler(),
-                data_formatter=self.get_data_formatter(),
-                secret_manager=self.get_secret_manager(),
-                cache_service=self.get_redis_cache_service(),
-                dependency_container=self,
-                # Injetar explicitamente o AzureBoardService se o WorkflowOrchestrator aceitar
-                azure_board_service=azure_board_service
-            )
-        return self._workflow_orchestrator
-    
-    def get_analysis_name_service(self) -> AnalysisNameService:
-        if self._analysis_name_service is None:
-            cache = AnalysisNameCache(self.get_job_store())
-            self._analysis_name_service = AnalysisNameService(cache)
-        return self._analysis_name_service
+    def __new__(cls):
+        if not cls._instance:
+            with cls._lock:
+                if not cls._instance:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialize()
+        return cls._instance
 
-    def get_azure_board_service(self) -> AzureBoardService:
-        if self._azure_board_service is None:
-            self._azure_board_service = AzureBoardService(secret_manager=self.get_secret_manager())
-            print(f"[DependencyContainer-DEBUG] Criando AzureBoardService. organization={self._azure_board_service.organization if self._azure_board_service else 'N/A'}, project={self._azure_board_service.project if self._azure_board_service else 'N/A'}")
-        else:
-            print(f"[DependencyContainer-DEBUG] AzureBoardService já existente. organization={self._azure_board_service.organization if self._azure_board_service else 'N/A'}, project={self._azure_board_service.project if self._azure_board_service else 'N/A'}")
-        return self._azure_board_service
+    def _initialize(self):
+        self.workflow_registry_service = WorkflowRegistryService()
+        self.api_service_factory = ApiServiceFactory(PullRequestExtractorService(), JobLoggingService())
+        self.workflow_registry_loader = WorkflowRegistryLoader()
+        self.job_data_service = JobDataService()
+        self.job_validation_service = JobValidationService()
+        self.repository_normalizer_service = RepositoryNormalizerService()
+        self.job_handler = JobHandler(JobManager())
+        self.report_handler = ReportHandler(BlobStorageService())
+        self.commit_handler = CommitHandler()
+        self.data_formatter = DataFormatter()
+        self.incremental_step_executor_service = IncrementalStepExecutorService()
+        self.redis_cache_service = RedisCacheService()
+        self.azure_secret_manager = AzureSecretManager()
+        self.change_consolidator_service = ChangeConsolidatorService()
+        self.priority_mapper_service = PriorityMapperService()
+        self.step_dependency_analyzer = StepDependencyAnalyzer()
+        self.step_strategy_factory = StepStrategyFactory()
+        self.step_executor_factory = StepExecutorFactory()
+        self.feature_parser_service = FeatureParserService()
+        self.task_parser_service = TaskParserService()
+        self.job_manager = JobManager()
+        self.blob_storage_service = BlobStorageService()
+        self.job_store = JobStore()
 
-    def get_board_reader(self) -> IBoardReader:
-        if self._board_reader is None:
-            self._board_reader = AzureBoardReader(azure_board_service=self.get_azure_board_service())
-        return self._board_reader
+    def get_workflow_registry_service(self):
+        return self.workflow_registry_service
+
+    def get_api_service_factory(self):
+        return self.api_service_factory
+
+    def get_workflow_registry_loader(self):
+        return self.workflow_registry_loader
+
+    def get_job_data_service(self):
+        return self.job_data_service
+
+    def get_job_validation_service(self):
+        return self.job_validation_service
+
+    def get_repository_normalizer_service(self):
+        return self.repository_normalizer_service
+
+    def get_job_handler(self):
+        return self.job_handler
+
+    def get_report_handler(self):
+        return self.report_handler
+
+    def get_commit_handler(self):
+        return self.commit_handler
+
+    def get_data_formatter(self):
+        return self.data_formatter
+
+    def get_incremental_step_executor_service(self):
+        return self.incremental_step_executor_service
+
+    def get_redis_cache_service(self):
+        return self.redis_cache_service
+
+    def get_azure_secret_manager(self):
+        return self.azure_secret_manager
+
+    def get_change_consolidator_service(self):
+        return self.change_consolidator_service
+
+    def get_priority_mapper_service(self):
+        return self.priority_mapper_service
+
+    def get_step_dependency_analyzer(self):
+        return self.step_dependency_analyzer
+
+    def get_step_strategy_factory(self):
+        return self.step_strategy_factory
+
+    def get_step_executor_factory(self):
+        return self.step_executor_factory
+
+    def get_feature_parser_service(self):
+        return self.feature_parser_service
+
+    def get_task_parser_service(self):
+        return self.task_parser_service
+
+    def get_job_manager(self):
+        return self.job_manager
+
+    def get_blob_storage(self):
+        return self.blob_storage_service
+
+    def get_job_store(self):
+        return self.job_store
