@@ -22,17 +22,17 @@ Content-Type: application/json
 
 
 **Exemplo de resposta:**
-
+```json
 {
   "access_token": "<JWT_TOKEN>",
   "token_type": "bearer",
   "expires_in": 3600
 }
-
+```
 
 O código responsável por este fluxo está em:
 - `backend/app/api/auth.py` (endpoint `/auth/login`)
-
+```text
 python
 @router.post("/auth/login", response_model=LoginResponse, tags=["Auth"])
 def login(request: LoginRequest):
@@ -55,7 +55,7 @@ def login(request: LoginRequest):
         access_token=result["access_token"],
         expires_in=result.get("expires_in", 3600)
     )
-
+```
 
 ## 2. Estrutura do Token JWT e Claims Utilizados
 
@@ -69,7 +69,7 @@ O token JWT emitido pelo Azure AD contém diversos claims que identificam o usu�
 - Outros claims: `preferred_username`, `email`, `roles`, etc.
 
 **Exemplo de payload do JWT:**
-
+```json
 {
   "sub": "a1b2c3d4",
   "usuario_executor": "usuario@example.com",
@@ -80,7 +80,7 @@ O token JWT emitido pelo Azure AD contém diversos claims que identificam o usu�
   "email": "usuario@example.com",
   "roles": ["user"]
 }
-
+```
 
 ## 3. Fluxo de Autenticação com Código
 
@@ -96,6 +96,7 @@ Todas as requisições protegidas passam pelo middleware de autenticação, que 
 O middleware está implementado em `backend/app/middleware/auth_middleware.py`.
 
 #### Função principal de extração do usuário:
+```text
 python
 def get_current_user(request: Request) -> AzureADTokenData:
     auth: str = request.headers.get("Authorization")
@@ -103,7 +104,7 @@ def get_current_user(request: Request) -> AzureADTokenData:
     if not auth or scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cabeçalho Authorization ausente ou inválido.")
     return azure_ad_service.validate_token(param)
-
+```
 
 - **Explicação:**
     - Busca o header `Authorization` da requisição.
@@ -112,7 +113,7 @@ def get_current_user(request: Request) -> AzureADTokenData:
 
 #### Validação do Token JWT:
 A validação do token ocorre em `backend/app/services/azure_ad_service.py`:
-
+```text
 python
 def validate_token(self, token: str) -> AzureADTokenData:
     try:
@@ -129,7 +130,7 @@ def validate_token(self, token: str) -> AzureADTokenData:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Azure AD inválido.")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Erro ao validar token Azure AD: {str(e)}")
-
+```
 
 - **Explicação:**
     - Decodifica o JWT e verifica se está expirado.
@@ -138,6 +139,7 @@ def validate_token(self, token: str) -> AzureADTokenData:
     - Se o token estiver expirado ou inválido, retorna erro 401.
 
 #### Middleware propriamente dito:
+```text
 python
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -152,7 +154,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         response = await call_next(request)
         return response
-
+```
 - **Explicação:**
     - Intercepta todas as requisições.
     - Se houver token Bearer, valida e injeta o usuário em `request.state.user`.
@@ -161,7 +163,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 ### Como acessar o usuário autenticado nos endpoints
 
 Para acessar dados do usuário autenticado dentro dos endpoints, utilize o método `get_current_user(request)`:
-
+```text
 python
 from ..middleware.auth_middleware import get_current_user
 
@@ -169,11 +171,11 @@ from ..middleware.auth_middleware import get_current_user
 def get_profile(request: Request):
     user = get_current_user(request)
     return {"usuario_executor": user.usuario_executor}
-
+```
 
 ## 4. Diagrama Mermaid: Fluxo de Autenticação
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -186,7 +188,7 @@ sequenceDiagram
     FE->>API: Requisições protegidas (com JWT)
     API->>API: Middleware valida JWT
     API-->>FE: Dados do usuário autenticado ou erro
-
+```
 
 ## 5. Boas Práticas de Segurança Implementadas e Recomendações
 
