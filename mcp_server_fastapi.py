@@ -53,9 +53,6 @@ class StartAnalysisPayload(BaseModel):
         True, description="[DEPRECATED: O valor False está descontinuado e será removido em versões futuras. Use sempre True.] Se True, os passos do relatório de implementação serão executados de forma incremental (um ou mais passos por vez, respeitando dependências), ao invés de enviar todas as mudanças de uma só vez. Útil para relatórios extensos que podem exceder limites de tokens da LLM.")
     max_steps_per_batch: Optional[int] = Field(3, description="Número máximo de steps por batch na execução incremental")
     executar_build_dotnet: bool = Field(False, description="Se True, executa o build do projeto .NET após o commit e retorna os erros de compilação, se houver.")
-    epic_id: Optional[str] = Field(None, description="ID do épico do Azure DevOps para geração de tarefas. Obrigatório quando analysis_type para 'criacao_features_azure_devops'.")
-    feature_id: Optional[str] = Field(None, description="ID da feature do Azure DevOps. Obrigatório apenas quando analysis_type for 'criacao_tarefas_azure_devops'.")
-    task_id: Optional[str] = Field(None, description="ID da tarefa do Azure DevOps. Obrigatório apenas quando analysis_type for 'revisor_tarefas'.")
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -95,41 +92,6 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     analysis_type_str = str(payload.analysis_type.value) if hasattr(payload.analysis_type, 'value') else str(payload.analysis_type)
-    if analysis_type_str != 'geracao_codigo_a_partir_de_reuniao':
-        if getattr(payload, 'criar_epicos_azure', False):
-            if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
-                raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para criar épicos.")
-            print(f"[DEBUG] Fluxo de criação de épicos acionado para repo: {payload.repo_name_modernizado}")
-        if getattr(payload, 'criar_tarefas_azure', False):
-            print(f"[DEBUG] criar_tarefas_azure recebido como True no payload para repo: {payload.repo_name_modernizado}")
-            if not getattr(payload, 'epic_id', None):
-                raise HTTPException(status_code=400, detail="epic_id é obrigatório quando criar_tarefas_azure=True.")
-        # Passo 8: validação explícita do task_id para revisor_tarefas
-        if analysis_type_str == 'revisor_tarefas':
-            if not getattr(payload, 'task_id', None) or (isinstance(payload.task_id, str) and not payload.task_id.strip()):
-                print(f"[DEBUG] task_id ausente ou vazio no payload para analysis_type == 'revisor_tarefas'.")
-                raise HTTPException(status_code=400, detail="task_id é obrigatório para análise do tipo revisor_tarefas.")
-            else:
-                print(f"[DEBUG] task_id propagado para revisor_tarefas: {payload.task_id}")
-        if analysis_type_str == 'criacao_tarefas_azure_devops':
-            if not getattr(payload, 'feature_id', None) or (isinstance(payload.feature_id, str) and not payload.feature_id.strip()):
-                raise HTTPException(status_code=400, detail="feature_id é obrigatório para análise do tipo criacao_tarefas_azure_devops.")
-                
-        if analysis_type_str == 'criacao_features_azure_devops':
-            if not getattr(payload, 'epic_id', None) or (isinstance(payload.epic_id, str) and not payload.epic_id.strip()):
-                raise HTTPException(status_code=400, detail="epic_id é obrigatório para análise do tipo criacao_features_azure_devops.")
-            repo_name = payload.repo_name_modernizado
-            repo_parts = repo_name.split('/') if repo_name else []
-            if len(repo_parts) < 3:
-                raise HTTPException(status_code=400, detail="repo_name_modernizado deve conter organização, projeto e repositório separados por '/'.")
-            payload_dict = payload.dict()
-            payload_dict['organization'] = repo_parts[0]
-            payload_dict['project'] = repo_parts[1]
-        if payload.executar_steps_incrementalmente is False and payload.gerar_relatorio_apenas is False:
-            raise HTTPException(status_code=400, detail="Modo não-incremental descontinuado. Use executar_steps_incrementalmente=True ou gerar_relatorio_apenas=True.")
-    else:
-        if not payload.instrucoes_extras or not str(payload.instrucoes_extras).strip():
-            raise HTTPException(status_code=400, detail="instrucoes_extras (transcrição da reunião) é obrigatório para este tipo de análise.")
     workflows = workflow_registry_service.get_workflow_registry()
     workflow = workflows.get(payload.analysis_type)
     first_step = None
@@ -150,26 +112,14 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict = payload.dict()
     if hasattr(payload.analysis_type, 'value'):
         payload_dict['analysis_type'] = payload.analysis_type.value
-    # Passo 2: extrair organization e project para criacao_tarefas_azure_devops e revisao de tarefas
-    if analysis_type_str in ['criacao_tarefas_azure_devops', "revisor_tarefas"]:
-        repo_parts = repo_name.split('/') if repo_name else []
-        if len(repo_parts) < 2:
-            raise HTTPException(status_code=400, detail="repo_name_modernizado deve conter organização e projeto separados por '/'.")
-        payload_dict['organization'] = repo_parts[0]
-        payload_dict['project'] = repo_parts[1]
     # Passo extra: garantir propagação de criar_tarefas_azure
     if 'criar_tarefas_azure' not in payload_dict:
         payload_dict['criar_tarefas_azure'] = False
-    # Passo 8: log de debug para task_id
-    if analysis_type_str == 'revisor_tarefas':
-        print(f"[DEBUG] (payload_dict) task_id para revisor_tarefas: {payload_dict.get('task_id')}")
     print(f"[DEBUG] Valor de criar_tarefas_azure no payload_dict antes de criar o job: {payload_dict.get('criar_tarefas_azure')}")
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, normalized_repo_name, analysis_name
     )
     print(f"[DEBUG] Valor de criar_tarefas_azure no initial_job_data: {initial_job_data.get('data', {}).get('criar_tarefas_azure')}")
-    if analysis_type_str == 'revisor_tarefas':
-        print(f"[DEBUG] (initial_job_data) task_id para revisor_tarefas: {initial_job_data.get('data', {}).get('task_id')}")
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, normalized_repo_name, analysis_name)
     if analysis_name:
@@ -267,8 +217,6 @@ def get_status(job_id: str = Path(..., title="O ID do Job a ser verificado")):
     print(f"[{job_id}] [get_status] gerar_relatorio_apenas: {gerar_relatorio_apenas}")
     print(f"[{job_id}] [get_status] Tamanho analysis_report: {len(analysis_report) if analysis_report else 0}")
     print(f"[{job_id}] [get_status] report_blob_url: {blob_url}")
-    if status == JobStatus.COMPLETED and job_data.get('criar_epicos_azure'):
-        print(f"[{job_id}] [get_status] Job de criação de épicos finalizado. Epicos criados: {job_data.get('epicos_criados')}")
     try:
         if status == JobStatus.COMPLETED:
             return response_builder_service.build_completed_response(job_id, job, blob_url)
