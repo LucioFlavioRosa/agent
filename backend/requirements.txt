@@ -3,3 +3,6 @@ python-docx
 azure-storage-blob
 httpx
 python-multipart
+azure-identity
+pydantic-settings
+python-jose[cryptography]

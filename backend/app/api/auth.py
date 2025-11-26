@@ -1,16 +1,18 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
-import jwt
+import msal
 import os
 from datetime import datetime, timedelta
 
 router = APIRouter()
 
-# Configurações (ideal: usar variáveis de ambiente seguras)
-JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "changeme-supersecret")
-JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 60))
+# Configurações Azure AD
+AZURE_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID", "<your-client-id>")
+AZURE_TENANT_ID = os.environ.get("AZURE_TENANT_ID", "<your-tenant-id>")
+AZURE_AUTHORITY = f"https://login.microsoftonline.com/{AZURE_TENANT_ID}"
+AZURE_CLIENT_SECRET = os.environ.get("AZURE_CLIENT_SECRET", "<your-client-secret>")
+AZURE_SCOPE = [os.environ.get("AZURE_SCOPE", "User.Read")]
 
 class LoginRequest(BaseModel):
     username: str
@@ -21,24 +23,25 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
 
-# Exemplo de validação simples (substitua por consulta real a banco/AD)
-def authenticate_user(username: str, password: str) -> Optional[dict]:
-    # Exemplo: usuário e senha fixos (NUNCA use em produção)
-    if username == "admin" and password == "admin123":
-        return {"sub": username, "usuario_executor": username}
-    return None
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
-
+# Autenticação via Azure AD
 @router.post("/auth/login", response_model=LoginResponse, tags=["Auth"])
 def login(request: LoginRequest):
-    user = authenticate_user(request.username, request.password)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário ou senha inválidos")
-    access_token = create_access_token(user)
-    return LoginResponse(access_token=access_token, expires_in=JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    app = msal.ConfidentialClientApplication(
+        AZURE_CLIENT_ID,
+        authority=AZURE_AUTHORITY,
+        client_credential=AZURE_CLIENT_SECRET
+    )
+    result = app.acquire_token_by_username_password(
+        username=request.username,
+        password=request.password,
+        scopes=AZURE_SCOPE
+    )
+    if "access_token" not in result:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Falha na autenticação Azure AD: {result.get('error_description', 'Erro desconhecido')}"
+        )
+    return LoginResponse(
+        access_token=result["access_token"],
+        expires_in=result.get("expires_in", 3600)
+    )
