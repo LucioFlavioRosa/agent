@@ -87,6 +87,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
             steps_to_run = workflow.get('steps', [])[start_from_step:]
             gerar_relatorio_apenas = job_info['data'].get('gerar_relatorio_apenas', False)
+            if len(steps_to_run) == 1:
+                print(f"[{job_id}] [INFO] Workflow com step único detectado.")
             for i, step in enumerate(steps_to_run):
                 current_step_index = start_from_step + i
                 print(f"[{job_id}] Executando step {current_step_index}/{len(workflow.get('steps', []))-1}")
