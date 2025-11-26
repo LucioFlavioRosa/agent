@@ -50,14 +50,13 @@ Este repositório implementa o backend para upload de arquivos DOCX, autenticaç
         - [Autenticação](docs/AUTHENTICATION.md)
         
 ## Diagrama de Alto Nível
-        
-        ```mermaid
-        flowchart TD
+```mermaid
+flowchart TD
         FE[Frontend] --> API[Backend API]
         API -->|Autenticação| AzureAD[Azure AD]
         API -->|Upload DOCX| Blob[Azure Blob Storage]
         API -->|Start Analysis| MCP[MCP Server]
         MCP -->|job_id| API
         API --> FE
-        ```
+```
         
