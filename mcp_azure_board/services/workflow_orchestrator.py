@@ -52,6 +52,28 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         if not workflow:
             raise ValueError("Workflow não encontrado.")
         try:
+            # Para 'criacao_epicos_azure_devops', força execução de apenas um step e gera relatório imediatamente
+            if analysis_type == 'criacao_epicos_azure_devops':
+                steps = workflow.get('steps', [])
+                if not steps:
+                    raise ValueError("Nenhum step definido para o workflow 'criacao_epicos_azure_devops'.")
+                step = steps[0]
+                current_step_index = 0
+                self.job_handler.update_job_status(job_id, step['status_update'])
+                previous_step_result = self.job_handler.get_step_result(job_info, start_from_step)
+                step_result = self._execute_step_with_strategy(
+                    job_id, job_info, step, current_step_index, previous_step_result, 0, start_from_step
+                )
+                report_text = self.report_handler.extract_report_text(step_result)
+                if report_text and report_text.strip():
+                    self._save_generated_report(job_id, job_info, step_result, current_step_index)
+                else:
+                    print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
+                    return
+                # Força status completed e não executa múltiplos steps ou aprovação
+                self.job_handler.update_job_status(job_id, 'completed')
+                return
+            # Demais workflows seguem lógica padrão
             analysis_name = job_info['data'].get('analysis_name')
             projeto = job_info['data'].get('projeto')
             repository_type = job_info['data'].get('repository_type')
