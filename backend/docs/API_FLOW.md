@@ -95,7 +95,7 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### b) Payload enviado para MCP Server
 
-```text
+```json
 {
   "analysis_type": "criacao_epicos_azure_devops",
   "instrucoes_extras": "Texto extraído do docx...",
@@ -107,7 +107,7 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### c) Resposta (Backend → Frontend)
 
-```text
+```json
 {
   "job_id": "abc-123",
   "blob_url": "https://blobstorage.azure.com/user/projetoX/arquivos_recebidos/docx/Reuniao_01.docx",
