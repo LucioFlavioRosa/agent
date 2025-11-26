@@ -16,10 +16,7 @@ from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 from services.incremental_step_executor_service import IncrementalStepExecutorService
-from tools.azure_secret_manager import AzureSecretManager
-from services.azure_board_service import AzureBoardService
 import traceback
-from services.task_discussion_updater_service import TaskDiscussionUpdaterService
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -34,9 +31,9 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service)
         self.commit_handler = commit_handler or CommitHandler()
         self.data_formatter = data_formatter or DataFormatter()
-        self.secret_manager = secret_manager or AzureSecretManager()
+        self.secret_manager = secret_manager
         self.dependency_container = dependency_container
-        self.azure_board_service = azure_board_service
+        self.azure_board_service = None
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para step {current_step_index}.")
@@ -64,8 +61,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info = self.job_handler.get_job_info(job_id)
         repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
         analysis_type = job_info['data'].get('original_analysis_type', '')
-        if not repo_name_modernizado and analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops']:
-            raise ValueError("O campo 'repo_name_modernizado' é obrigatório em job_info['data'] para execução do workflow.")
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
@@ -75,149 +70,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             repository_type = job_info['data'].get('repository_type')
             repo_name = job_info['data'].get('repo_name')
             branch_name = job_info['data'].get('branch_name_modernizado')
-
-            if start_from_step == 0 and analysis_type == 'criacao_tarefas_azure_devops':
-                print(f"[{job_id}] [DEBUG] Step 0 (criacao_tarefas_azure_devops): feature_id={job_info['data'].get('feature_id')}")
-                feature_id = job_info['data'].get('feature_id')
-                if not feature_id:
-                    raise ValueError(f"[{job_id}] ERRO: feature_id ausente em job_info['data'] para analysis_type == 'criacao_tarefas_azure_devops'.")
-                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-                if not organization or not project:
-                    raise ValueError(f"[{job_id}] ERRO: organization ou project ausentes para análise de tarefas Azure DevOps.")
-                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                print(f"[{job_id}] [DEBUG] Lendo dados da feature do Azure DevOps: feature_id={feature_id}")
-                feature_data = azure_board_service.read_feature(feature_id)
-                if not feature_data or 'error' in feature_data:
-                    raise ValueError(f"[{job_id}] ERRO: Não foi possível ler os dados da feature {feature_id}: {feature_data.get('error', 'Erro desconhecido')}")
-                job_info['data']['feature_title'] = feature_data.get('title')
-                job_info['data']['feature_description'] = feature_data.get('description')
-                job_info['data']['feature_acceptance_criteria'] = feature_data.get('acceptance_criteria')
-                job_info['data']['feature_data'] = feature_data
-                print(f"[{job_id}] [DEBUG] Dados da feature propagados para job_info['data']: {json.dumps(feature_data, ensure_ascii=False)[:200]}...")
-            
-            if start_from_step > 0 and analysis_type == 'criacao_features_azure_devops':
-                print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de features Azure. epic_id={job_info['data'].get('epic_id')}")
-                epic_id = job_info['data'].get('epic_id')
-                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-                report = job_info['data'].get('analysis_report')
-                print(f"[{job_id}] [DEBUG] Dados para criação de features: epic_id={epic_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
-                if not epic_id:
-                    raise ValueError(f"[{job_id}] ERRO: epic_id ausente em job_info['data'] para analysis_type == 'criacao_features_azure_devops'.")
-                if not report or not report.strip():
-                    raise ValueError(f"[{job_id}] ERRO: Relatório de features ausente ou vazio para criação de features no Azure.")
-                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_features_from_epic com epic_id={epic_id}")
-                created_features = azure_board_service.create_features_from_epic(epic_id, report)
-                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_features_from_epic: {created_features}")
-                if created_features and any('error' in feature for feature in created_features):
-                    error_message = next((feature['error'] for feature in created_features if 'error' in feature), "Erro desconhecido ao criar features no Azure.")
-                    print(f"[{job_id}] [ERROR] Falha detectada ao criar features no Azure: {error_message}")
-                    job_info['data']['features_criadas_erro'] = created_features
-                    self.job_handler.update_job(job_id, job_info)
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-                if created_features is not None and len(created_features) == 0:
-                    print(f"[{job_id}] [ERROR] Nenhuma feature foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.")
-                    job_info['data']['error_details'] = 'Nenhuma feature foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.'
-                    self.job_handler.update_job(job_id, job_info)
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-                job_info['data']['features_criadas'] = created_features
-                self.job_handler.update_job(job_id, job_info)
-                print(f"[{job_id}] [AZURE_FEATURES] Features criadas: {created_features}")
-                print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de features Azure.")
-                self.job_handler.update_job_status(job_id, 'completed')
-                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de features Azure.")
-                return
-            
-            if analysis_type == 'revisor_tarefas':
-                print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
-                if start_from_step == 0:
-                    task_id = job_info['data'].get('task_id')
-                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas) - task_id presente? {task_id is not None}, valor: {task_id}")
-                    if not task_id:
-                        raise ValueError(f"[{job_id}] ERRO: task_id ausente em job_info['data'] para analysis_type == 'revisor_tarefas'.")
-            # ==================================================================
-            # == MUDANÇA 2: Propagação explícita do feature_id para agent_params ==
-            # ==================================================================
-            # (Já está implementado no _execute_step_with_strategy e step_executors)
-            # ==================================================================
-
-            if start_from_step > 0 and analysis_type == 'criacao_tarefas_azure_devops':
-                print(f"[{job_id}] [DEBUG] Entrando no fluxo de criação de tarefas Azure (ligadas à feature).")
-                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-                feature_id = job_info['data'].get('feature_id')
-                report = job_info['data'].get('analysis_report')
-                if not feature_id:
-                    raise ValueError(f"[{job_id}] ERRO: feature_id ausente em job_info['data'] para analysis_type == 'criacao_tarefas_azure_devops'.")
-                if not report or not report.strip():
-                    raise ValueError(f"[{job_id}] ERRO: Relatório de tarefas ausente ou vazio para criação de tarefas no Azure.")
-                print(f"[{job_id}] [DEBUG] Dados para criação de tarefas: feature_id={feature_id}, organization={organization}, project={project}, tamanho do relatório={len(report) if report else 0}")
-                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_tasks_from_report_for_feature com feature_id={feature_id}")
-                created_tasks = azure_board_service.create_tasks_from_report_for_feature(feature_id, report)
-                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_tasks_from_report_for_feature: {created_tasks}")
-                if created_tasks and any('error' in task for task in created_tasks):
-                    error_message = next((task['error'] for task in created_tasks if 'error' in task), "Erro desconhecido ao criar tarefas no Azure.")
-                    print(f"[{job_id}] [ERROR] Falha detectada ao criar tarefas no Azure: {error_message}")
-                    job_info['data']['tarefas_criadas_erro'] = created_tasks
-                    self.job_handler.update_job(job_id, job_info)
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-                if created_tasks is not None and len(created_tasks) == 0:
-                    print(f"[{job_id}] [ERROR] Nenhuma tarefa foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.")
-                    job_info['data']['error_details'] = 'Nenhuma tarefa foi criada. Verifique o parsing do relatório e a conexão com o Azure DevOps.'
-                    self.job_handler.update_job(job_id, job_info)
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-                job_info['data']['tarefas_criadas'] = created_tasks
-                self.job_handler.update_job(job_id, job_info)
-                print(f"[{job_id}] [AZURE_TASKS] Tarefas criadas: {created_tasks}")
-                print(f"[{job_id}] [DEBUG] Atualizando status do job para 'completed' após criação de tarefas Azure.")
-                self.job_handler.update_job_status(job_id, 'completed')
-                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
-                return
-            if start_from_step > 0 and analysis_type == 'criacao_epicos_azure_devops':
-                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: agente={analysis_type}")
-                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-                report = job_info['data'].get('analysis_report')
-                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                created_epics = azure_board_service.create_epics(report)
-                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_epics: {created_epics}")
-                job_info['data']['epicos_criados'] = created_epics
-                self.job_handler.update_job(job_id, job_info)
-                print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
-                self.job_handler.update_job_status(job_id, 'completed')
-                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de épicos Azure.")
-                return
-
-            if analysis_type == 'revisor_tarefas' and start_from_step > 0:
-                task_id = job_info['data'].get('task_id')
-                report = job_info['data'].get('analysis_report')
-                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
-                task_discussion_updater_service = TaskDiscussionUpdaterService()
-                print(f"[{job_id}] [DEBUG][DISCUSSION] Antes de update_task_from_report: task_id={task_id}, tamanho_report={len(report) if report else 0}, report_preview={str(report)[:200] if report else ''}")
-                update_result = task_discussion_updater_service.update_task_from_report(task_id, report, azure_board_service)
-                print(f"[{job_id}] [DEBUG][DISCUSSION] Depois de update_task_from_report: update_result={update_result}")
-                job_info['data']['task_discussion_update_result'] = update_result
-                self.job_handler.update_job(job_id, job_info)
-                if update_result.get('error') or (not update_result.get('success', True)):
-                    print(f"[{job_id}] [ERROR][DISCUSSION] Falha ao atualizar discussion da task: {update_result}")
-                    self.job_handler.update_job_status(job_id, 'failed')
-                    return
-                print(f"[{job_id}] [DEBUG][DISCUSSION] Discussion da task atualizada com sucesso: {update_result}")
-                self.job_handler.update_job_status(job_id, 'completed')
-                return
             if start_from_step == 0:
                 print(f"[{job_id}] [DEBUG] Entrando no step 0. analysis_type={analysis_type}")
-                if analysis_type == 'revisor_tarefas':
-                    print(f"[{job_id}] [DEBUG] Step 0 (revisor_tarefas): task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={workflow.get('steps', [])[0].get('status_update')}")
                 report_from_blob = self.report_handler.blob_storage.read_report(
                     projeto=projeto,
                     analysis_type=analysis_type,
@@ -302,8 +156,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     previous_step_result = {'incremental_results': batch_results}
                     break
                 else:
-                    if current_step_index == 0 and analysis_type == 'revisor_tarefas':
-                        print(f"[{job_id}] [DEBUG] Executando step 0 com task_id={job_info['data'].get('task_id')}, epic_id={job_info['data'].get('epic_id')}, status_update={step.get('status_update')} (revisor_tarefas)")
                     print(f"[{job_id}] [DEBUG] Antes de chamar _execute_step_with_strategy para step {current_step_index} (analysis_type={analysis_type})")
                     step_result = self._execute_step_with_strategy(
                         job_id, job_info, step, current_step_index, previous_step_result, repo_reader, i, start_from_step
@@ -311,29 +163,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                     print(f"[{job_id}] [DEBUG] Depois de _execute_step_with_strategy para step {current_step_index} (analysis_type={analysis_type}), resultado: {str(step_result)[:300]}...")
                     if current_step_index == 0:
                         print(f"[{job_id}] [DEBUG] Step 0: resultado do agente: {str(step_result)[:300]}...")
-                        if analysis_type == 'revisor_tarefas':
-                            print(f"[{job_id}] [DEBUG] Step 0: análise revisor_tarefas, chamando _save_generated_report explicitamente.")
-                            report_saved = self._save_generated_report(job_id, job_info, step_result, current_step_index)
-                            print(f"[{job_id}] [DEBUG] Step 0: _save_generated_report retornou {report_saved}")
-                            if not report_saved:
-                                print(f"[{job_id}] [ERRO] Relatório não foi salvo no step 0 (revisor_tarefas). Lançando exceção.")
-                                raise ValueError(f"[{job_id}] ERRO: Relatório não foi salvo no step 0 para analysis_type='revisor_tarefas'.")
-                            if step.get('requires_approval', False):
-                                print(f"[{job_id}] [DEBUG] Step 0: requires_approval=True, chamando handle_approval_step")
-                                self.handle_approval_step(job_id, job_info, current_step_index, step_result)
-                                return
+                        report_text = self.report_handler.extract_report_text(step_result)
+                        if report_text and report_text.strip():
+                            print(f"[{job_id}] [DEBUG] Step 0: relatório gerado, salvando...")
+                            self._save_generated_report(job_id, job_info, step_result, current_step_index)
                         else:
-                            report_text = self.report_handler.extract_report_text(step_result)
-                            if report_text and report_text.strip():
-                                print(f"[{job_id}] [DEBUG] Step 0: relatório gerado, salvando...")
-                                self._save_generated_report(job_id, job_info, step_result, current_step_index)
-                                if step.get('requires_approval', False):
-                                    print(f"[{job_id}] [DEBUG] Step 0: requires_approval=True, chamando handle_approval_step")
-                                    self.handle_approval_step(job_id, job_info, current_step_index, step_result)
-                                    return
-                            else:
-                                print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
-                                return
+                            print(f"[{job_id}] [DEBUG] Relatório gerado pelo agente está vazio no step 0.")
+                            return
                         previous_step_result = step_result
                     if gerar_relatorio_apenas:
                         self.job_handler.update_job_status(job_id, 'completed')
@@ -364,35 +200,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_info['data'].get('original_analysis_type')
         agent_params['instrucoes_extras'] = job_info['data'].get('instrucoes_extras', '')
-        if agent_type == 'revisor_board':
-            epic_id = job_info['data'].get('epic_id') or job_info['data'].get('epic_id')
-            organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
-            project = job_info['data'].get('project') or job_info['data'].get('azure_project')
-            agent_params['epic_id'] = epic_id
-            agent_params['organization'] = organization
-            agent_params['project'] = project
-            agent_params['task_id'] = job_info['data'].get('task_id')
-            agent_params['feature_id'] = job_info['data'].get('feature_id')
-            if analysis_type == 'revisor_tarefas':
-                print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: analysis_type=revisor_tarefas, task_id propagado: {agent_params['task_id']}")
-            elif analysis_type == 'criacao_features_azure_devops':
-                print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: analysis_type={analysis_type}, feature_id propagado: {agent_params['feature_id']}")
-            elif analysis_type == 'criacao_tarefas_azure_devops':
-                print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: analysis_type=criacao_tarefas_azure_devops, feature_id propagado: {agent_params['feature_id']}")
-        elif agent_type == 'comparador':
-            agent_params.update({
-                'repo_name_modernizado': job_info['data'].get('repo_name_modernizado'),
-                'branch_name_modernizado': job_info['data'].get('branch_name_modernizado'),
-                'repo_name_original': job_info['data'].get('repo_name_original'),
-                'branch_name_original': job_info['data'].get('branch_name_original')
-            })
-        else:
-            repo_name = job_info['data'].get('repo_name_modernizado')
-            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops']:
-                branch_name = job_info['data'].get('branch_name_modernizado')
-                if branch_name:
-                    agent_params['nome_branch'] = branch_name
-            agent_params['repositorio'] = repo_name
+        repo_name = job_info['data'].get('repo_name_modernizado')
+        branch_name = job_info['data'].get('branch_name_modernizado')
+        if branch_name:
+            agent_params['nome_branch'] = branch_name
+        agent_params['repositorio'] = repo_name
         retornar_lista_arquivos = job_info.get('data', {}).get('retornar_lista_arquivos', False)
         agent_params.update({
             'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
@@ -407,8 +219,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['current_batch'] = batch_steps
         if agent_params_override:
             agent_params.update(agent_params_override)
-        if agent_type == 'revisor_board':
-            print(f"[{job_id}] [DEBUG] _execute_step_with_strategy: Antes de chamar AgentFactory, agent_type=revisor_board, epic_id={agent_params.get('epic_id')}, feature_id={agent_params.get('feature_id')}, task_id={agent_params.get('task_id')}")
         strategy = StepStrategyFactory.create_strategy(step, self.job_handler)
         print(f"[{job_id}] [DEBUG] Chamando strategy.execute_step para agent_type={agent_type}, step={current_step_index}")
         result = strategy.execute_step(
@@ -476,32 +286,3 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 if 'build_errors' not in commit:
                     print(f"[{job_id}] [ERRO CRÍTICO] build_errors ausente no commit_details[{idx}] quando executar_build_dotnet=True")
         self.job_handler.update_job_status(job_id, 'completed')
-    def _get_access_token(self, repository_type: str, repo_name: str) -> Optional[str]:
-        print(f"[WorkflowOrchestrator] Obtendo token. repository_type={repository_type}, repo_name={repo_name}")
-        if repository_type == 'azure':
-            parts = repo_name.split('/')
-            if len(parts) != 3:
-                raise ValueError(f"Nome do repositório '{repo_name}' tem formato inválido para Azure.")
-            org_name = parts[0]
-            platform = 'Azure'
-        elif repository_type == 'github':
-            org_name = repo_name.strip().split('/')[0]
-            platform = 'GitHub'
-        elif repository_type == 'gitlab':
-            org_name = repo_name.strip().split('/')[0]
-            platform = 'GitLab'
-        else:
-            raise ValueError(f"Tipo de repositório '{repository_type}' não suportado para obtenção de token.")
-        token_secret_name = f"{platform.lower()}-token-{org_name}"
-        try:
-            token = self.secret_manager.get_secret(token_secret_name)
-            print(f"[WorkflowOrchestrator] Token obtido com sucesso. secret_name={token_secret_name}, token presente: {bool(token)}")
-            return token
-        except Exception:
-            print(f"[WorkflowOrchestrator] Falha ao obter token. secret_name={token_secret_name}, tentando fallback...")
-            try:
-                token = self.secret_manager.get_secret(f"{platform.lower()}-token")
-                print(f"[WorkflowOrchestrator] Token obtido com sucesso. secret_name={platform.lower()}-token, token presente: {bool(token)}")
-                return token
-            except Exception:
-                raise ValueError(f"Não foi possível obter token para {platform} ({org_name})")
