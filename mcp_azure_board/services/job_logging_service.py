@@ -1,21 +1,47 @@
 import logging
-from typing import Any, Dict, Optional
+import json
+import os
+from datetime import datetime
 
 class JobLoggingService:
-    def __init__(self):
-        self.logger = logging.getLogger("JobLoggingService")
-        if not self.logger.hasHandlers():
-            handler = logging.StreamHandler()
+    def __init__(self, log_dir=None):
+        self.log_dir = log_dir or os.getenv('JOB_LOG_DIR', './logs')
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.logger = logging.getLogger('JobLogger')
+        self.logger.setLevel(logging.INFO)
+        if not self.logger.handlers:
+            handler = logging.FileHandler(os.path.join(self.log_dir, 'jobs.log'))
             formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
-        self.logger.setLevel(logging.INFO)
 
-    def log_starting_job(self, job_id: str, payload_dict: Dict[str, Any], normalized_repo_name: Optional[str], analysis_name: Optional[str]) -> None:
-        self.logger.info(f"Iniciando job {job_id}: repo={normalized_repo_name}, analysis_name={analysis_name}, payload={payload_dict}")
+    def log_starting_job(self, job_id, payload, repo_name, analysis_name):
+        entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'event': 'starting_job',
+            'job_id': job_id,
+            'repo_name': repo_name,
+            'analysis_name': analysis_name,
+            'payload': payload
+        }
+        self.logger.info(json.dumps(entry))
 
-    def log_job_status(self, job_id: str, status: str) -> None:
-        self.logger.info(f"Job {job_id} status atualizado para: {status}")
+    def log_job_status(self, job_id, status, details=None):
+        entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'event': 'job_status',
+            'job_id': job_id,
+            'status': status,
+            'details': details
+        }
+        self.logger.info(json.dumps(entry))
 
-    def log_error(self, job_id: str, error: str) -> None:
-        self.logger.error(f"Erro no job {job_id}: {error}")
+    def log_job_error(self, job_id, error_message, details=None):
+        entry = {
+            'timestamp': datetime.utcnow().isoformat(),
+            'event': 'job_error',
+            'job_id': job_id,
+            'error_message': error_message,
+            'details': details
+        }
+        self.logger.error(json.dumps(entry))

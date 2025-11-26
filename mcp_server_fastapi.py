@@ -112,7 +112,6 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     payload_dict = payload.dict()
     if hasattr(payload.analysis_type, 'value'):
         payload_dict['analysis_type'] = payload.analysis_type.value
-    # Passo extra: garantir propagação de criar_tarefas_azure
     if 'criar_tarefas_azure' not in payload_dict:
         payload_dict['criar_tarefas_azure'] = False
     print(f"[DEBUG] Valor de criar_tarefas_azure no payload_dict antes de criar o job: {payload_dict.get('criar_tarefas_azure')}")

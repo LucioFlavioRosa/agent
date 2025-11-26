@@ -1,34 +1,32 @@
+import redis
+import json
 from typing import Dict, Any, Optional
 
 class JobHandler:
-    """
-    Serviço auxiliar para manipulação de jobs: leitura, atualização, resultados de steps, etc.
-    """
-    def __init__(self, job_store):
-        self.job_store = job_store
+    def __init__(self, redis_client: redis.Redis):
+        self.redis_client = redis_client
 
     def get_job_info(self, job_id: str) -> Dict[str, Any]:
-        """Recupera as informações completas do job."""
-        return self.job_store.get_job(job_id)
+        job_data = self.redis_client.get(f"job:{job_id}")
+        if job_data:
+            return json.loads(job_data)
+        return {}
 
     def update_job(self, job_id: str, job_info: Dict[str, Any]) -> None:
-        """Atualiza as informações do job."""
-        self.job_store.set_job(job_id, job_info)
+        self.redis_client.set(f"job:{job_id}", json.dumps(job_info))
 
     def update_job_status(self, job_id: str, status: str) -> None:
-        """Atualiza o status do job."""
         job_info = self.get_job_info(job_id)
-        if job_info:
-            job_info['status'] = status
-            self.update_job(job_id, job_info)
-
-    def get_step_result(self, job_info: Dict[str, Any], step_index: int) -> Optional[Dict[str, Any]]:
-        """Obtém o resultado do step anterior, se existir."""
-        steps_results = job_info.get('data', {}).get('steps_results', [])
-        if step_index > 0 and step_index - 1 < len(steps_results):
-            return steps_results[step_index - 1]
-        return None
+        job_info['status'] = status
+        self.update_job(job_id, job_info)
 
     def set_paused_step(self, job_info: Dict[str, Any], step_index: int) -> None:
-        """Marca o step onde o workflow foi pausado para aprovação."""
+        if 'data' not in job_info:
+            job_info['data'] = {}
         job_info['data']['paused_at_step'] = step_index
+
+    def get_step_result(self, job_info: Dict[str, Any], step_index: int) -> Optional[Dict[str, Any]]:
+        steps = job_info.get('steps', [])
+        if 0 <= step_index < len(steps):
+            return steps[step_index]
+        return None

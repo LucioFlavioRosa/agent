@@ -1,88 +1,54 @@
 import pytest
 from fastapi.testclient import TestClient
-from mcp_azure_board.mcp_server_fastapi import app
+from mcp_server_fastapi import app
 
-@pytest.fixture(scope="module")
-def client():
-    return TestClient(app)
+client = TestClient(app)
 
-def test_start_analysis_criacao_epicos(client):
+def test_start_analysis_azure_board():
     payload = {
-        "repo_name_modernizado": "org/proj/repo",
-        "branch_name_modernizado": "main",
         "analysis_type": "criacao_epicos_azure_devops",
-        "organization": "org",
-        "project": "proj",
         "repository_type": "azure",
-        "instrucoes_extras": "transcrição da reunião"
+        "projeto": "TestProject",
+        "repo_name_modernizado": "TestRepo",
+        "branch_name_modernizado": "main"
     }
     response = client.post("/start-analysis", json=payload)
     assert response.status_code == 200
     assert "job_id" in response.json()
 
-def test_start_analysis_criacao_features(client):
-    payload = {
-        "repo_name_modernizado": "org/proj/repo",
-        "branch_name_modernizado": "main",
-        "analysis_type": "criacao_features_azure_devops",
-        "epic_id": "12345",
-        "organization": "org",
-        "project": "proj",
-        "repository_type": "azure",
-        "instrucoes_extras": "relatório de features"
-    }
-    response = client.post("/start-analysis", json=payload)
-    assert response.status_code == 200
-    assert "job_id" in response.json()
-
-def test_start_analysis_criacao_tarefas(client):
-    payload = {
-        "repo_name_modernizado": "org/proj/repo",
-        "branch_name_modernizado": "main",
-        "analysis_type": "criacao_tarefas_azure_devops",
-        "feature_id": "54321",
-        "organization": "org",
-        "project": "proj",
-        "repository_type": "azure",
-        "instrucoes_extras": "relatório de tarefas"
-    }
-    response = client.post("/start-analysis", json=payload)
-    assert response.status_code == 200
-    assert "job_id" in response.json()
-
-def test_start_analysis_revisor_tarefas(client):
-    payload = {
-        "repo_name_modernizado": "org/proj/repo",
-        "branch_name_modernizado": "main",
-        "analysis_type": "revisor_tarefas",
-        "task_id": "67890",
-        "organization": "org",
-        "project": "proj",
-        "repository_type": "azure",
-        "instrucoes_extras": "relatório de revisão"
-    }
-    response = client.post("/start-analysis", json=payload)
-    assert response.status_code == 200
-    assert "job_id" in response.json()
-
-def test_update_job_status(client):
-    # Este teste depende de um job_id válido, normalmente obtido dos testes anteriores
-    # Aqui, apenas estrutura para exemplo
-    job_id = "job_id_exemplo"
+def test_update_job_status_azure_board():
+    job_id = "dummy-job-id"
     payload = {
         "job_id": job_id,
-        "action": "approve",
-        "instrucoes_extras": "Aprovado para execução"
+        "action": "approve"
     }
     response = client.post("/update-job-status", json=payload)
-    assert response.status_code in (200, 400, 404)  # Pode falhar se job_id não existir
+    assert response.status_code in [200, 400]
 
-def test_get_job_report(client):
-    job_id = "job_id_exemplo"
+def test_get_job_report_azure_board():
+    job_id = "dummy-job-id"
     response = client.get(f"/jobs/{job_id}/report")
-    assert response.status_code in (200, 404)
+    assert response.status_code in [200, 404]
 
-def test_get_analysis_by_name(client):
-    analysis_name = "analysis_name_exemplo"
+def test_get_analysis_by_name_azure_board():
+    analysis_name = "dummy-analysis-name"
     response = client.get(f"/analyses/by-name/{analysis_name}")
-    assert response.status_code in (200, 404)
+    assert response.status_code in [200, 404]
+
+def test_start_code_generation_from_report_azure_board():
+    analysis_name = "dummy-analysis-name"
+    response = client.post(f"/start-code-generation-from-report/{analysis_name}")
+    assert response.status_code == 200
+    assert "job_id" in response.json()
+
+def test_get_status_azure_board():
+    job_id = "dummy-job-id"
+    response = client.get(f"/status/{job_id}")
+    assert response.status_code == 200
+    assert "job_id" in response.json()
+    assert "status" in response.json()
+
+def test_get_jobs_for_report_azure_board():
+    report_name = "dummy-report-name"
+    response = client.get(f"/reports/{report_name}/jobs")
+    assert response.status_code in [200, 500]

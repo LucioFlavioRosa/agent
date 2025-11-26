@@ -1,10 +1,19 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 
-class EpicCreationPayload(BaseModel):
-    transcricao_reuniao: str = Field(..., description="Transcrição da reunião para geração de épicos")
-    criar_epicos_azure: bool = Field(False, description="Se True, após aprovação, cria os épicos no Azure DevOps Board")
+class PullRequestSummary(BaseModel):
+    pull_request_url: str
+    branch_name: str
+    arquivos_modificados: List[str]
+
+class FinalStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    summary: Optional[List[PullRequestSummary]] = None
+    error_details: Optional[str] = None
+    analysis_report: Optional[str] = None
+    report_blob_url: Optional[str] = None
 
 class JobStatus:
     STARTING = 'starting'
@@ -19,35 +28,24 @@ class JobFields:
     DATA = 'data'
     ERROR_DETAILS = 'error_details'
     PROJETO = 'projeto'
-    ANALYSIS_TYPE = 'analysis_type'
     INSTRUCOES_EXTRAS = 'instrucoes_extras'
     MODEL_NAME = 'model_name'
     USAR_RAG = 'usar_rag'
     GERAR_RELATORIO_APENAS = 'gerar_relatorio_apenas'
+    ARQUIVOS_ESPECIFICOS = 'arquivos_especificos'
     ANALYSIS_NAME = 'analysis_name'
     REPOSITORY_TYPE = 'repository_type'
     ANALYSIS_REPORT = 'analysis_report'
     REPORT_BLOB_URL = 'report_blob_url'
     INSTRUCOES_EXTRAS_APROVACAO = 'instrucoes_extras_aprovacao'
     PAUSED_AT_STEP = 'paused_at_step'
-    SUCCESS = 'success'
-    ORGANIZATION = 'organization'
-    PROJECT = 'project'
-    EPIC_ID = 'epic_id'
-    FEATURE_ID = 'feature_id'
-    TASK_ID = 'task_id'
-    BUILD_ERRORS = 'build_errors'
-    EPICOS_CRIADOS = 'epicos_criados'
-    FEATURES_CRIADAS = 'features_criadas'
-    TAREFAS_CRIADAS = 'tarefas_criadas'
-    FEATURES_CRIADAS_ERRO = 'features_criadas_erro'
-    TAREFAS_CRIADAS_ERRO = 'tarefas_criadas_erro'
-    TASK_DISCUSSION_UPDATE_RESULT = 'task_discussion_update_result'
+    RETORNAR_LISTA_ARQUIVOS = 'retornar_lista_arquivos'
+    USUARIO_EXECUTOR = 'usuario_executor'
     EXECUTAR_STEPS_INCREMENTALMENTE = 'executar_steps_incrementalmente'
-    MAX_STEPS_PER_BATCH = 'max_steps_per_batch'
     STEP_BATCHES = 'step_batches'
     CURRENT_BATCH_INDEX = 'current_batch_index'
     BATCH_RESULTS = 'batch_results'
+    MAX_STEPS_PER_BATCH = 'max_steps_per_batch'
 
 class JobActions:
     APPROVE = 'approve'
