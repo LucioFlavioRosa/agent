@@ -12,9 +12,7 @@ class StepExecutorFactory:
             "processador": ProcessadorStepExecutor,
             "comparador": ComparadorStepExecutor
         }
-        
         executor_class = executors.get(agent_type)
         if not executor_class:
             raise ValueError(f"Tipo de agente desconhecido '{agent_type}'.")
-        
         return executor_class(job_handler)
