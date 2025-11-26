@@ -33,7 +33,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.data_formatter = data_formatter or DataFormatter()
         self.secret_manager = secret_manager
         self.dependency_container = dependency_container
-        self.azure_board_service = None
+        # Removido: self.azure_board_service
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para step {current_step_index}.")
