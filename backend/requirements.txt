@@ -1,5 +1,0 @@
-PyJWT
-python-docx
-azure-storage-blob
-httpx
-python-multipart
