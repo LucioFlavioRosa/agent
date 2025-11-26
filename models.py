@@ -67,7 +67,6 @@ class JobFields:
     BUILD_ERRORS = 'build_errors'
     BUILD_RESULT = 'build_result'
     REQUIRES_APPROVAL = 'requires_approval'
-    # Removidos: AZURE_ORGANIZATION, AZURE_PROJECT, EPICOS_CRIADOS, EPIC_ID, ORGANIZATION, PROJECT, TASK_ID, FEATURE_ID
 
 class JobActions:
     APPROVE = 'approve'
@@ -76,4 +75,3 @@ class JobActions:
 class ValidAnalysisTypes(str, Enum):
     MODERNIZACAO = 'modernizacao'
     IMPLEMENTACAO = 'implementacao'
-    # Removidos: CRIACAO_EPICOS, REVISOR_TAREFAS
