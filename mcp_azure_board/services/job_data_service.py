@@ -1,41 +1,64 @@
+from typing import Dict, Any, Optional
 import uuid
-from typing import Optional, Dict, Any
-from models import JobFields
 
 class JobDataService:
-    def create_initial_job_data(self, payload_dict: Dict[str, Any], normalized_repo_name: Optional[str], analysis_name: Optional[str]) -> Dict[str, Any]:
+    def create_initial_job_data(self, payload: Dict[str, Any], normalized_repo_name: Optional[str], analysis_name: Optional[str]) -> Dict[str, Any]:
         job_data = {
-            JobFields.STATUS: JobFields.STARTING,
-            JobFields.DATA: {
-                **payload_dict,
-                JobFields.REPO_NAME: normalized_repo_name,
-                JobFields.ANALYSIS_NAME: analysis_name,
-                JobFields.ERROR_DETAILS: None,
-                JobFields.REPORT_BLOB_URL: None,
-                JobFields.ANALYSIS_REPORT: None,
-                JobFields.COMMIT_DETAILS: [],
-                JobFields.DIAGNOSTIC_LOGS: {},
-                JobFields.BUILD_ERRORS: None
+            'status': 'starting',
+            'data': {
+                'repo_name_modernizado': payload.get('repo_name_modernizado'),
+                'branch_name_modernizado': payload.get('branch_name_modernizado'),
+                'projeto': payload.get('projeto'),
+                'analysis_type': payload.get('analysis_type'),
+                'instrucoes_extras': payload.get('instrucoes_extras'),
+                'usar_rag': payload.get('usar_rag', False),
+                'gerar_relatorio_apenas': payload.get('gerar_relatorio_apenas', False),
+                'model_name': payload.get('model_name'),
+                'arquivos_especificos': payload.get('arquivos_especificos'),
+                'analysis_name': analysis_name,
+                'repository_type': payload.get('repository_type'),
+                'repo_name_original': payload.get('repo_name_original'),
+                'branch_name_original': payload.get('branch_name_original'),
+                'retornar_lista_arquivos': payload.get('retornar_lista_arquivos', False),
+                'usuario_executor': payload.get('usuario_executor'),
+                'executar_steps_incrementalmente': payload.get('executar_steps_incrementalmente', True),
+                'max_steps_per_batch': payload.get('max_steps_per_batch', 3)
             }
         }
+        if normalized_repo_name:
+            job_data['data']['repo_name'] = normalized_repo_name
         return job_data
 
     def create_derived_job_data(self, original_job: Dict[str, Any], analysis_name: str, normalized_repo_name: Optional[str], report: Optional[str]) -> Dict[str, Any]:
-        derived_data = original_job[JobFields.DATA].copy()
-        derived_data[JobFields.REPO_NAME] = normalized_repo_name
-        derived_data[JobFields.ANALYSIS_NAME] = analysis_name
-        derived_data[JobFields.ANALYSIS_REPORT] = report
-        derived_data[JobFields.REPORT_BLOB_URL] = None
-        derived_data[JobFields.COMMIT_DETAILS] = []
-        derived_data[JobFields.BUILD_ERRORS] = None
-        derived_data[JobFields.ERROR_DETAILS] = None
-        derived_data[JobFields.DIAGNOSTIC_LOGS] = {}
-        return {
-            JobFields.STATUS: JobFields.STARTING,
-            JobFields.DATA: derived_data
+        original_data = original_job.get('data', {})
+        derived_data = {
+            'status': 'starting',
+            'data': {
+                'repo_name_modernizado': original_data.get('repo_name_modernizado'),
+                'branch_name_modernizado': original_data.get('branch_name_modernizado'),
+                'projeto': original_data.get('projeto'),
+                'analysis_type': original_data.get('analysis_type'),
+                'instrucoes_extras': original_data.get('instrucoes_extras'),
+                'usar_rag': original_data.get('usar_rag', False),
+                'gerar_relatorio_apenas': original_data.get('gerar_relatorio_apenas', False),
+                'model_name': original_data.get('model_name'),
+                'arquivos_especificos': original_data.get('arquivos_especificos'),
+                'analysis_name': analysis_name,
+                'repository_type': original_data.get('repository_type'),
+                'repo_name_original': original_data.get('repo_name_original'),
+                'branch_name_original': original_data.get('branch_name_original'),
+                'retornar_lista_arquivos': original_data.get('retornar_lista_arquivos', False),
+                'usuario_executor': original_data.get('usuario_executor'),
+                'executar_steps_incrementalmente': original_data.get('executar_steps_incrementalmente', True),
+                'max_steps_per_batch': original_data.get('max_steps_per_batch', 3),
+                'analysis_report': report
+            }
         }
+        if normalized_repo_name:
+            derived_data['data']['repo_name'] = normalized_repo_name
+        return derived_data
 
-    def generate_analysis_name(self, custom_name: Optional[str], job_id: str) -> str:
-        if custom_name and custom_name.strip():
-            return custom_name.strip()
-        return f"analysis_{job_id[:8]}"
+    def generate_analysis_name(self, analysis_name: Optional[str], job_id: str) -> str:
+        if analysis_name:
+            return analysis_name
+        return f"analysis-{job_id}"
