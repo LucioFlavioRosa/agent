@@ -1,12 +1,8 @@
 import re
-from typing import List, Dict, Any
+from typing import List, Dict
 
 class TaskParserService:
-    def parse_tasks_from_markdown(self, markdown_table: str) -> List[Dict[str, Any]]:
-        """
-        Parseia uma tabela Markdown de tarefas e retorna uma lista de dicionários.
-        Espera colunas como: título, descricao, criterios_aceite, perfis_sugeridos, estimativa_sp
-        """
+    def parse_tasks_from_markdown(self, markdown_table: str) -> List[Dict[str, str]]:
         lines = [line for line in markdown_table.strip().splitlines() if line.strip() and not line.strip().startswith('|---')]
         if len(lines) < 2:
             return []
@@ -15,7 +11,7 @@ class TaskParserService:
             header_line = header_line[1:]
         if header_line.endswith('|'):
             header_line = header_line[:-1]
-        header = [h.strip().lower() for h in header_line.split('|')]
+        header = [h.strip().lower().replace(' ', '_') for h in header_line.split('|')]
         tasks = []
         for line in lines[1:]:
             line = line.strip()
@@ -29,15 +25,7 @@ class TaskParserService:
             if len(cols) == len(header):
                 try:
                     task = dict(zip(header, cols))
-                    # Normaliza os campos esperados
-                    parsed_task = {
-                        'titulo': task.get('título') or task.get('titulo') or '',
-                        'descricao': task.get('descrição') or task.get('descricao') or '',
-                        'criterios_aceite': task.get('critérios de aceite') or task.get('criterios de aceite') or '',
-                        'perfis_sugeridos': task.get('perfis sugeridos') or '',
-                        'estimativa_sp': task.get('estimativa (sp)') or task.get('estimativa_sp') or ''
-                    }
-                    tasks.append(parsed_task)
+                    tasks.append(task)
                 except Exception:
                     continue
         return tasks
