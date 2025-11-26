@@ -1,19 +1,21 @@
 import yaml
+import os
 
 class WorkflowRegistryLoader:
-    def __init__(self, yaml_path):
-        self.yaml_path = yaml_path
+    def __init__(self, workflow_yaml_path=None):
+        self.workflow_yaml_path = workflow_yaml_path or os.path.join(os.path.dirname(__file__), '..', 'workflows.yaml')
         self._registry = None
-        self._valid_analysis_types = None
 
     def load_registry(self):
-        with open(self.yaml_path, 'r', encoding='utf-8') as f:
-            workflows = yaml.safe_load(f)
-        self._registry = workflows
-        self._valid_analysis_types = list(workflows.keys())
+        if self._registry is not None:
+            return self._registry
+        with open(self.workflow_yaml_path, 'r', encoding='utf-8') as f:
+            self._registry = yaml.safe_load(f)
         return self._registry
 
-    def get_valid_analysis_types(self):
-        if self._valid_analysis_types is None:
-            self.load_registry()
-        return self._valid_analysis_types
+    def get_workflow(self, analysis_type):
+        registry = self.load_registry()
+        return registry.get(analysis_type)
+
+    def get_all_workflows(self):
+        return self.load_registry()
