@@ -79,6 +79,13 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     job_id = str(uuid.uuid4())
     analysis_name = job_data_service.generate_analysis_name(payload.analysis_name, job_id)
     payload_dict = payload.dict()
+    # Validação e sobrescrita para criacao_epicos_azure_devops
+    if (hasattr(payload.analysis_type, 'value') and payload.analysis_type.value == "criacao_epicos_azure_devops") or (payload.analysis_type == "criacao_epicos_azure_devops"):
+        payload_dict['gerar_relatorio_apenas'] = True
+        logging_service.log_info(f"Workflow de criação de épicos iniciado (modo relatório apenas)")
+    elif payload_dict.get('analysis_type') == "criacao_epicos_azure_devops":
+        payload_dict['gerar_relatorio_apenas'] = True
+        logging_service.log_info(f"Workflow de criação de épicos iniciado (modo relatório apenas)")
     if hasattr(payload.analysis_type, 'value'):
         payload_dict['analysis_type'] = payload.analysis_type.value
     initial_job_data = job_data_service.create_initial_job_data(
