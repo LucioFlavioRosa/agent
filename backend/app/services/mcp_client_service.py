@@ -17,8 +17,12 @@ class MCPClientService:
     def __init__(self, base_url: str = None):
         self.base_url = base_url or settings.MCP_SERVER_BASE_URL.rstrip('/')
 
+    def get_mcp_endpoint(self, analysis_type: str) -> str:
+        endpoint_dict = getattr(settings, 'MCP_ENDPOINTS', {})
+        return endpoint_dict.get(analysis_type, self.base_url)
+
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
-        url = f"{self.base_url}/start-analysis"
+        url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(
