@@ -1,23 +1,30 @@
 # workflows.yaml
-# Atenção: Este arquivo agora contém apenas workflows NÃO relacionados ao Azure Board.
+# Removidas as definições de workflow para os analysis_type do Azure Boards:
+# 'criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops'
 
 workflows:
   modernizacao:
     steps:
       - agent: revisor
+        status_update: starting
         params:
           ...
       - agent: processador
+        status_update: processing
         params:
           ...
-      # outros workflows mantidos
+      - agent: comparador
+        status_update: completed
+        params:
+          ...
   implementacao:
     steps:
       - agent: processador
+        status_update: starting
         params:
           ...
-  # Removidos:
-  # - criacao_epicos_azure_devops
-  # - criacao_features_azure_devops
-  # - criacao_tarefas_azure_devops
-  # - revisor_tarefas
+      - agent: revisor
+        status_update: completed
+        params:
+          ...
+# Outros workflows permanecem inalterados.
