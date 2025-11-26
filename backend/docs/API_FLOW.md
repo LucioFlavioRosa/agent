@@ -22,7 +22,7 @@ Este documento apresenta de forma objetiva o fluxo principal do backend, detalha
 
 ## 2. Diagrama Mermaid: Sequência de Interação
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -40,7 +40,7 @@ sequenceDiagram
     API->>MCP: POST /start-analysis (payload)
     MCP-->>API: job_id
     API-->>FE: job_id, blob_url, mensagem
-
+```
 
 ## 3. Descrição das Etapas Críticas com Código Responsável
 
@@ -49,6 +49,7 @@ sequenceDiagram
 - **Função:** `get_current_user(request: Request)`
 - **Resumo:** Intercepta o header `Authorization`, valida o token JWT e extrai o usuário autenticado.
 - **Exemplo de código:**
+```text
   python
   def get_current_user(request: Request) -> AzureADTokenData:
       auth: str = request.headers.get("Authorization")
@@ -56,7 +57,7 @@ sequenceDiagram
       if not auth or scheme.lower() != "bearer":
           raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cabeçalho Authorization ausente ou inválido.")
       return azure_ad_service.validate_token(param)
-  
+  ```
 - **Validação do token:**
   - **Arquivo:** [`backend/app/services/azure_ad_service.py`](../app/services/azure_ad_service.py)
   - **Função:** `AzureADService.validate_token(token: str)`
@@ -112,6 +113,8 @@ sequenceDiagram
 - **Arquivo:** [`backend/app/services/mcp_client_service.py`](../app/services/mcp_client_service.py)
 - **Função:** `MCPClientService.start_analysis(payload)`
 - **Trecho relevante:**
+
+```text
   python
   async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
       url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
@@ -124,7 +127,7 @@ sequenceDiagram
           response.raise_for_status()
           data = response.json()
           return MCPStartAnalysisResponse(**data)
-  
+  ```text
 
 ### f) Resposta ao Frontend
 - **Arquivo:** [`backend/app/api/upload.py`](../app/api/upload.py)
@@ -151,7 +154,7 @@ analysis_type: "criacao_epicos_azure_devops"
 
 
 ### b) Payload enviado para MCP Server
-
+```json
 {
   "analysis_type": "criacao_epicos_azure_devops",
   "instrucoes_extras": "Texto extraído do docx...",
@@ -159,19 +162,21 @@ analysis_type: "criacao_epicos_azure_devops"
   "analysis_name": "Reuniao_01",
   "usuario_executor": "user@example.com"
 }
-
+```
 
 ### c) Resposta (Backend → Frontend)
 
+```json
 {
   "job_id": "abc-123",
   "blob_url": "https://blobstorage.azure.com/user/projetoX/arquivos_recebidos/docx/Reuniao_01.docx",
   "message": "Arquivo recebido, salvo e análise iniciada com sucesso."
 }
-
+```
 
 ## 5. Códigos de Status HTTP e Tratamento de Erros
 
+```text
 | Etapa                      | Código | Mensagem de Erro                                   |
 |---------------------------|--------|---------------------------------------------------|
 | Validação JWT             | 401    | Token JWT inválido ou ausente                     |
@@ -180,7 +185,7 @@ analysis_type: "criacao_epicos_azure_devops"
 | Upload para Blob Storage  | 500    | Erro ao fazer upload do arquivo para o Blob       |
 | Comunicação MCP Server    | 502    | Erro ao comunicar com MCP Server                  |
 | Sucesso                   | 200    | job_id, blob_url, mensagem                        |
-
+```
 ## 6. Resumo do Funcionamento
 
 O endpoint `/upload/docx` implementa um fluxo seguro e eficiente para receber arquivos DOCX do frontend, validar o usuário e o arquivo, extrair o texto, armazenar o arquivo no Azure Blob Storage e acionar o MCP Server para análise. Todo o processo é protegido por autenticação JWT e possui tratamento robusto de erros para garantir confiabilidade na comunicação entre os componentes. Cada etapa está claramente mapeada para funções e arquivos do código, facilitando manutenção e auditoria.
