@@ -88,4 +88,3 @@ class ValidAnalysisTypes(str, Enum):
     MODERNIZACAO = 'modernizacao'
     IMPLEMENTACAO = 'implementacao'
     CRIACAO_EPICOS = 'criacao_epicos'
-    REVISOR_TAREFAS = 'revisor_tarefas'
