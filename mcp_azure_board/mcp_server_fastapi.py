@@ -4,7 +4,7 @@ import time
 import traceback
 import os
 from typing import Optional, List, Dict, Any, Literal
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Path
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Path, Request
 from pydantic import BaseModel, Field, ValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from services.dependency_container import DependencyContainer
@@ -72,6 +72,10 @@ def run_workflow_task(job_id: str, start_from_step: int = 0):
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse, tags=["Jobs"])
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
+    # Validação extra para o tipo criacao_epicos_azure_devops
+    if (str(payload.analysis_type) == 'criacao_epicos_azure_devops'):
+        if not payload.usuario_executor or not payload.usuario_executor.strip():
+            raise HTTPException(status_code=400, detail="O campo 'usuario_executor' é obrigatório para o tipo 'criacao_epicos_azure_devops'.")
     workflows = workflow_registry_service.get_workflow_registry()
     workflow = workflows.get(payload.analysis_type)
     job_store = container.get_job_store()
@@ -84,6 +88,9 @@ def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTa
     initial_job_data = job_data_service.create_initial_job_data(
         payload_dict, None, analysis_name
     )
+    # Propaga usuario_executor corretamente para o job_info
+    if payload.usuario_executor:
+        initial_job_data['data']['usuario_executor'] = payload.usuario_executor
     job_store.set_job(job_id, initial_job_data)
     logging_service.log_starting_job(job_id, payload_dict, None, analysis_name)
     if analysis_name:

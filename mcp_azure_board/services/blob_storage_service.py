@@ -1,78 +1,26 @@
 import os
-from urllib.parse import urlparse
-from azure.storage.blob import BlobServiceClient, ContentSettings
-from tools.blob_job_tracker import BlobJobTracker
-from tools.azure_secret_manager import AzureSecretManager
-from tools.blob_report_path_builder import build_report_blob_path
+from typing import Optional
 
 class BlobStorageService:
-    def __init__(self):
-        self._blob_service_client = None
-        self._container_name = None
-        self._init_blob_service()
+    def __init__(self, blob_client):
+        self.blob_client = blob_client
 
-    def _init_blob_service(self):
-        container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
-        if not container_name:
-            raise RuntimeError('Azure Blob Storage container name missing.')
-        
-        connection_string = None
-        secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        try:
-            secret_manager = AzureSecretManager()
-            connection_string = secret_manager.get_secret(secret_name)
-        except Exception as e:
-            print(f"Warning: Failed to get connection string from Key Vault: {e}")
-            connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        if not connection_string:
-            raise RuntimeError('Azure Blob Storage connection string not found.')
-
-        self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-        self._container_name = container_name
-
-    def upload_report(self, report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name):
-        blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-        blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
-        blob_client.upload_blob(report_text, overwrite=True, content_settings=ContentSettings(content_type='text/markdown'))
-        return blob_client.url
-
-    def read_report(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name):
-        blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-        blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
-        if not blob_client.exists():
-            return None
-        return blob_client.download_blob().readall().decode('utf-8')
-        
-    def get_report_url(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name) -> str:
-        blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
-        blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
-        return blob_client.url
-
-    def update_job_tracker(self, report_blob_url: str, job_id: str) -> None:
-        try:
-            from urllib.parse import urlparse
-            path = urlparse(report_blob_url).path
-            path_parts = path.lstrip('/').split('/', 1)
-            if len(path_parts) != 2:
-                print(f"[BlobStorageService] Warning: Could not parse blob path from URL: {report_blob_url}")
-                return
-            blob_path = path_parts[1]
-            tracker_path = BlobJobTracker.build_tracker_blob_path(blob_path)
-            BlobJobTracker.append_job_id(self._blob_service_client, self._container_name, tracker_path, job_id)
-        except Exception as e:
-            print(f"[BlobStorageService] Warning: Failed to update job tracker for {report_blob_url}: {e}")
-
-    def get_jobs_for_report(self, report_blob_url: str):
-        try:
-            from urllib.parse import urlparse
-            path = urlparse(report_blob_url).path
-            path_parts = path.lstrip('/').split('/', 1)
-            if len(path_parts) != 2:
-                print(f"[BlobStorageService] Warning: Could not parse blob path from URL: {report_blob_url}")
-                return []
-            blob_path = path_parts[1]
-            tracker_path = BlobJobTracker.build_tracker_blob_path(blob_path)
-            return BlobJobTracker.read_job_list(self._blob_service_client, self._container_name, tracker_path)
-        except Exception as e:
-            print(f"[BlobStorageService] Warning: Failed to get jobs for report {report_blob_url}: {e}")
-            return []
+    def save_report_to_blob(self, job_id: str, job_info: dict, report_text: str) -> Optional[str]:
+        """
+        Salva o relatório no Blob Storage no caminho correto:
+        {usuario_executor}/{projeto}/relatorios/{analysis_type}/{analysis_name}.md
+        """
+        usuario_executor = job_info['data'].get('usuario_executor')
+        projeto = job_info['data'].get('projeto')
+        analysis_type = job_info['data'].get('original_analysis_type') or job_info['data'].get('analysis_type')
+        analysis_name = job_info['data'].get('analysis_name')
+        if not all([usuario_executor, projeto, analysis_type, analysis_name]):
+            raise ValueError("Campos obrigatórios ausentes para salvar o relatório no Blob Storage.")
+        blob_folder = f"{usuario_executor}/{projeto}/relatorios/{analysis_type}"
+        blob_filename = f"{analysis_name}.md"
+        blob_path = os.path.join(blob_folder, blob_filename)
+        # Salva o relatório no Blob Storage
+        self.blob_client.upload_blob(blob_path, report_text.encode('utf-8'), overwrite=True)
+        # Retorna a URL do blob salvo
+        blob_url = self.blob_client.get_blob_url(blob_path)
+        return blob_url
