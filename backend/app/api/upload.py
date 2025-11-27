@@ -26,7 +26,6 @@ async def upload_docx(
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
-    # Removida validação manual: if not usuario_executor: raise HTTPException(...)
     # A dependência já garante que o usuário está autenticado e lança erro específico se não estiver
     # 2. Validar extensão
     if not file.filename.lower().endswith(".docx"):
