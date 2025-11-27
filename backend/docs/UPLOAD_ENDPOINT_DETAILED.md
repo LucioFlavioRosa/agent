@@ -64,7 +64,7 @@ O endpoint `/upload/docx` interage diretamente com diversos componentes do backe
 ---
 
 ## Diagrama de Sequência (Mermaid)
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as /upload/docx Endpoint
@@ -84,12 +84,12 @@ sequenceDiagram
     API->>MCP: POST /start-analysis (payload)
     MCP-->>API: job_id
     API-->>FE: job_id, blob_url, mensagem
-
+```
 
 ---
 
 ## Diagrama de Fluxo de Dados (Mermaid)
-mermaid
+```mermaid
 graph TD
     FE[Frontend] -->|Arquivo DOCX + JWT| API[/upload/docx]
     API --> MW[AuthMiddleware]
@@ -102,7 +102,7 @@ graph TD
     API --> MCP[MCPClientService]
     MCP -->|job_id| API
     API --> FE
-
+```
 
 ---
 
