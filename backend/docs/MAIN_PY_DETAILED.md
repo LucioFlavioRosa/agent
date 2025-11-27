@@ -278,10 +278,11 @@ sequenceDiagram
 
 ### 1. Login
 **Requisição:**
-```json
+
 http
 POST /auth/login
 Content-Type: application/json
+```json
 {
   "username": "usuario@example.com",
   "password": "senha_segura"
@@ -299,6 +300,7 @@ Content-Type: application/json
 
 ### 2. Upload de Arquivo DOCX
 **Requisição:**
+```text
 http
 POST /upload/docx
 Authorization: Bearer <JWT_TOKEN>
@@ -307,19 +309,19 @@ file: <arquivo.docx>
 projeto: "ProjetoX"
 analysis_name: "Reuniao_01"
 analysis_type: "criacao_epicos_azure_devops"
-
+```
 **Resposta:**
-
+```json
 {
   "job_id": "abc-123",
   "blob_url": "https://blobstorage.azure.com/user/projetoX/arquivos_recebidos/docx/Reuniao_01.docx",
   "message": "Arquivo recebido, salvo e análise iniciada com sucesso."
 }
-
+```
 
 ### 3. Erros Comuns
 - **Token inválido ou ausente:**
-
+```json
 {
   "detail": "Token JWT inválido ou ausente."
 }
@@ -335,8 +337,7 @@ analysis_type: "criacao_epicos_azure_devops"
 {
   "detail": "Erro interno do servidor."
 }
-
-
+```
 ---
 
 ## Considerações de Segurança e Boas Práticas
