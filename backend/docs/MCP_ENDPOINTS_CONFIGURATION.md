@@ -15,12 +15,12 @@ O backend suporta múltiplos tipos de análise, cada um podendo ser processado p
 Você pode definir os endpoints MCP diretamente nas variáveis de ambiente, que serão carregadas pelo Pydantic Settings.
 
 Exemplo de variáveis no `.env`:
-
+```text
 env
 MCP_SERVER_BASE_URL=http://mcp-app-service.azurewebsites.net
 MCP_ENDPOINTS__criacao_epicos_azure_devops=https://mcp-epicos.azurewebsites.net
 MCP_ENDPOINTS__analise_reuniao=https://mcp-reuniao.azurewebsites.net
-
+```
 
 > **Nota:** O padrão do Pydantic Settings permite mapear dicionários usando prefixos separados por `__` (dois underlines).
 
