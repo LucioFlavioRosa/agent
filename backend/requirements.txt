@@ -6,3 +6,5 @@ python-multipart
 azure-identity
 pydantic-settings
 python-jose[cryptography]
+msal
+requests

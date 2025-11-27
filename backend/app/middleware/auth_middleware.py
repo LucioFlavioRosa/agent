@@ -1,7 +1,7 @@
 from fastapi import Request, HTTPException, status
 from fastapi.security.utils import get_authorization_scheme_param
 from starlette.middleware.base import BaseHTTPMiddleware
-from app.services.azure_ad_service import AzureADService, AzureADTokenData
+from backend.app.services.azure_ad_service import AzureADService, AzureADTokenData
 
 azure_ad_service = AzureADService()
 
@@ -13,6 +13,7 @@ def get_current_user(request: Request) -> AzureADTokenData:
     scheme, param = get_authorization_scheme_param(auth)
     if not auth or scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cabeçalho Authorization ausente ou inválido.")
+    # Validação segura do token JWT usando assinatura e chaves públicas (PyJWKClient, RS256)
     return azure_ad_service.validate_token(param)
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -22,6 +23,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not auth or scheme.lower() != "bearer":
             return await call_next(request)
         try:
+            # Validação segura do token JWT usando assinatura e chaves públicas (PyJWKClient, RS256)
             user = azure_ad_service.validate_token(param)
             request.state.user = user
         except HTTPException:
