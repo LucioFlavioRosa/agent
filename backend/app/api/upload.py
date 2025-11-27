@@ -15,7 +15,7 @@ class UploadDocxResponse(BaseModel):
     blob_url: str
     message: str
 
-@router.post("/upload/docx", response_model=UploadDocxResponse, tags=["Upload"])
+@router.post("/docx", response_model=UploadDocxResponse, tags=["Upload"])
 async def upload_docx(
     background_tasks: BackgroundTasks,
     request: Request,
@@ -25,10 +25,9 @@ async def upload_docx(
     analysis_type: str = Form(...),
     current_user: dict = Depends(get_current_user)
 ):
-    # 1. Extrair usuario_executor do JWT
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
-    if not usuario_executor:
-        raise HTTPException(status_code=401, detail="Usuário não autenticado no token.")
+    # Removida validação manual: if not usuario_executor: raise HTTPException(...)
+    # A dependência já garante que o usuário está autenticado e lança erro específico se não estiver
     # 2. Validar extensão
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
