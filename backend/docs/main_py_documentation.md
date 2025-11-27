@@ -38,10 +38,10 @@ O arquivo `main.py` é o ponto de entrada da aplicação backend desenvolvida co
 ## Configuração da Aplicação FastAPI
 
 A aplicação é instanciada com título, descrição e versão. Isso facilita a documentação automática e a identificação da API.
-
+```text
 python
 app = FastAPI(title="Backend API", description="Backend para upload e autenticação JWT", version="1.0.0")
-
+```
 
 ---
 
@@ -49,6 +49,7 @@ app = FastAPI(title="Backend API", description="Backend para upload e autentica�
 
 O CORS (Cross-Origin Resource Sharing) é configurado para permitir requisições de qualquer origem (`allow_origins=["*"]`). Isso é útil para ambientes de desenvolvimento, mas recomenda-se restringir em produção.
 
+```text
 python
 app.add_middleware(
     CORSMiddleware,
@@ -57,7 +58,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
-
+```
 
 - **Propósito**: Permitir que o frontend (mesmo hospedado em outro domínio) acesse a API sem bloqueios do navegador.
 - **Configuração**: Permissiva para facilitar integração, mas deve ser revisada para produção.
@@ -67,10 +68,10 @@ app.add_middleware(
 ## Middleware de Autenticação JWT
 
 O `AuthMiddleware` é adicionado para interceptar todas as requisições e validar o token JWT.
-
+```text
 python
 app.add_middleware(AuthMiddleware)
-
+```
 
 - **Fluxo**: Antes de qualquer endpoint ser acessado, o middleware verifica a presença e validade do JWT no header Authorization.
 - **Falha**: Se o token for inválido ou ausente, retorna HTTP 401.
@@ -80,11 +81,11 @@ app.add_middleware(AuthMiddleware)
 ## Registro de Routers
 
 Os routers são responsáveis por agrupar endpoints relacionados:
-
+```text
 python
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(upload_router, prefix="/upload", tags=["upload"])
-
+```
 
 - **auth_router**: Endpoints de autenticação (login, registro, etc).
 - **upload_router**: Endpoints para upload de arquivos.
@@ -115,7 +116,7 @@ Três tratadores são definidos para capturar e responder a erros de forma padro
 
 ## Fluxo de Requisição (Diagrama Mermaid)
 
-mermaid
+```mermaid
 sequenceDiagram
     participant Client
     participant FastAPI
@@ -130,48 +131,48 @@ sequenceDiagram
     Router->>Handler: (Se exceção)
     Router-->>Client: HTTP Response
     Handler-->>Client: HTTP Error Response
-
+```
 
 ---
 
 ## Exemplos Práticos
 
 ### 1. Requisição bem-sucedida com JWT válido
-
+```text
 bash
 curl -H "Authorization: Bearer <token_válido>" http://localhost:8000/upload/arquivo -F "file=@exemplo.txt"
-
+```
 
 ### 2. Requisição rejeitada por token inválido (401)
-
+```text
 bash
 curl -H "Authorization: Bearer token_invalido" http://localhost:8000/upload/arquivo -F "file=@exemplo.txt"
 # Resposta: {"detail": "Token JWT inválido ou ausente."}
-
+```
 
 ### 3. Tratamento de HTTPException
-
+```text
 python
 import requests
 r = requests.get('http://localhost:8000/upload/arquivo_inexistente', headers={"Authorization": "Bearer <token_válido>"})
 print(r.status_code, r.json())
 # Exemplo de resposta: 404 {'detail': 'Not Found'}
-
+```
 
 ### 4. Erro interno (500)
-
+```text
 python
 import requests
 r = requests.get('http://localhost:8000/rota_que_gera_erro', headers={"Authorization": "Bearer <token_válido>"})
 print(r.status_code, r.json())
 # Exemplo de resposta: 500 {'detail': 'Erro interno do servidor.'}
-
+```
 
 ---
 
 ## Arquitetura de Componentes (Mermaid)
 
-mermaid
+```mermaid
 graph LR
     A[FastAPI App]
     B[CORSMiddleware]
@@ -184,7 +185,7 @@ graph LR
     C --> D
     C --> E
     A --> F
-
+```
 
 ---
 
