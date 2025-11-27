@@ -325,15 +325,15 @@ analysis_type: "criacao_epicos_azure_devops"
 {
   "detail": "Token JWT inválido ou ausente."
 }
-
+```
 - **Arquivo não .docx:**
-
+```json
 {
   "detail": "Apenas arquivos .docx são permitidos."
 }
-
+```
 - **Erro interno:**
-
+```json
 {
   "detail": "Erro interno do servidor."
 }
