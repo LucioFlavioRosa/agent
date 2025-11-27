@@ -64,7 +64,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         job_info = self.job_handler.get_job_info(job_id)
         repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
         analysis_type = job_info['data'].get('original_analysis_type', '')
-        if not repo_name_modernizado and analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops']:
+        if not repo_name_modernizado and analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops', 'criacao_epicos_azure_devops_eurofarma']:
             raise ValueError("O campo 'repo_name_modernizado' é obrigatório em job_info['data'] para execução do workflow.")
         workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
         if not workflow:
@@ -181,6 +181,21 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de tarefas Azure.")
                 return
             if start_from_step > 0 and analysis_type == 'criacao_epicos_azure_devops':
+                print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: agente={analysis_type}")
+                organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
+                project = job_info['data'].get('project') or job_info['data'].get('azure_project')
+                report = job_info['data'].get('analysis_report')
+                azure_board_service = AzureBoardService(organization, project, self.secret_manager)
+                created_epics = azure_board_service.create_epics(report)
+                print(f"[{job_id}] [DEBUG] Resultado AzureBoardService.create_epics: {created_epics}")
+                job_info['data']['epicos_criados'] = created_epics
+                self.job_handler.update_job(job_id, job_info)
+                print(f"[{job_id}] [AZURE_EPICS] Épicos criados: {created_epics}")
+                self.job_handler.update_job_status(job_id, 'completed')
+                print(f"[{job_id}] [DEBUG] Workflow finalizado após criação de épicos Azure.")
+                return
+
+            if start_from_step > 0 and analysis_type == 'criacao_epicos_azure_devops_eurofarma':
                 print(f"[{job_id}] [DEBUG] Chamando AzureBoardService.create_epics: agente={analysis_type}")
                 organization = job_info['data'].get('organization') or job_info['data'].get('azure_organization')
                 project = job_info['data'].get('project') or job_info['data'].get('azure_project')
@@ -388,7 +403,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             })
         else:
             repo_name = job_info['data'].get('repo_name_modernizado')
-            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops']:
+            if analysis_type not in ['criacao_epicos_azure_devops', 'criacao_tarefas_azure_devops', 'revisor_tarefas', 'criacao_features_azure_devops', 'criacao_epicos_azure_devops_eurofarma']:
                 branch_name = job_info['data'].get('branch_name_modernizado')
                 if branch_name:
                     agent_params['nome_branch'] = branch_name
