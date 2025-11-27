@@ -1,62 +1,65 @@
 import pytest
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from starlette.testclient import TestClient
-from starlette.middleware.base import BaseHTTPMiddleware
 from unittest.mock import patch, MagicMock
 
-# Supondo que AuthMiddleware e AzureADService estão em backend/app/middleware/auth_middleware.py
-from backend.app.middleware.auth_middleware import AuthMiddleware
+# Supondo que get_current_user e AzureADTokenData estão em backend/app/main.py e backend/app/models/azure_ad_models.py
+from backend.app.main import get_current_user
+from backend.app.models.azure_ad_models import AzureADTokenData
 
 class MockAzureADService:
     @staticmethod
     def validate_token(token: str):
         if token == "valid-token":
-            return {"usuario_executor": "user123", "sub": "user123"}
+            return AzureADTokenData(oid="oid123", preferred_username="user123", email="user123@example.com", roles=["user"], name="User 123", exp=9999999999, iss="https://login.microsoftonline.com/", aud="api://backend-app", sub="user123")
         elif token == "invalid-token":
-            raise HTTPException(status_code=401, detail="Token inválido.")
+            raise HTTPException(status_code=401, detail="Assinatura inválida.")
         elif token == "expired-token":
             raise HTTPException(status_code=401, detail="Token expirado.")
+        elif token == "missing-claim-token":
+            raise HTTPException(status_code=401, detail="usuario_executor não encontrado no token Azure AD.")
         return None
 
-# App para testes
-def get_test_app():
-    app = FastAPI()
+@pytest.fixture
+def app():
+    test_app = FastAPI()
 
-    @app.get("/protected")
-    async def protected(request: Request):
-        user = getattr(request.state, "user", None)
-        if not user:
-            raise HTTPException(status_code=401, detail="Usuário não autenticado.")
-        return {"usuario_executor": user.get("usuario_executor")}
+    @test_app.get("/protected")
+    async def protected(current_user: AzureADTokenData = Depends(get_current_user)):
+        return {"usuario_executor": current_user.preferred_username or current_user.email or current_user.sub}
 
-    app.add_middleware(AuthMiddleware)
-    return app
+    return test_app
 
 @pytest.fixture
-def client():
-    app = get_test_app()
+def client(app):
     return TestClient(app)
 
-@patch("backend.app.middleware.auth_middleware.AzureADService", new=MockAzureADService)
-def test_valid_token_injects_user(client):
+@patch("backend.app.main.azure_ad_service", new=MockAzureADService)
+def test_valid_token(client):
     response = client.get("/protected", headers={"Authorization": "Bearer valid-token"})
     assert response.status_code == 200
     assert response.json()["usuario_executor"] == "user123"
 
-@patch("backend.app.middleware.auth_middleware.AzureADService", new=MockAzureADService)
-def test_invalid_token_returns_401(client):
+@patch("backend.app.main.azure_ad_service", new=MockAzureADService)
+def test_invalid_token_signature(client):
     response = client.get("/protected", headers={"Authorization": "Bearer invalid-token"})
     assert response.status_code == 401
-    assert "Token inválido" in response.json()["detail"]
+    assert "Assinatura inválida" in response.json()["detail"]
 
-@patch("backend.app.middleware.auth_middleware.AzureADService", new=MockAzureADService)
-def test_expired_token_returns_401(client):
+@patch("backend.app.main.azure_ad_service", new=MockAzureADService)
+def test_expired_token(client):
     response = client.get("/protected", headers={"Authorization": "Bearer expired-token"})
     assert response.status_code == 401
     assert "Token expirado" in response.json()["detail"]
 
-@patch("backend.app.middleware.auth_middleware.AzureADService", new=MockAzureADService)
-def test_missing_token_returns_401(client):
+@patch("backend.app.main.azure_ad_service", new=MockAzureADService)
+def test_missing_claim_token(client):
+    response = client.get("/protected", headers={"Authorization": "Bearer missing-claim-token"})
+    assert response.status_code == 401
+    assert "usuario_executor não encontrado" in response.json()["detail"]
+
+@patch("backend.app.main.azure_ad_service", new=MockAzureADService)
+def test_missing_token_header(client):
     response = client.get("/protected")
     assert response.status_code == 401
-    assert "Usuário não autenticado" in response.json()["detail"]
+    assert "Cabeçalho Authorization ausente ou inválido" in response.json()["detail"]
