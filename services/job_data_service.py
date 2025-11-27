@@ -29,6 +29,10 @@ class JobDataService:
             organization, project = self._parse_repository_name(normalized_repo_name)
             data[JobFields.AZURE_ORGANIZATION] = organization
             data[JobFields.AZURE_PROJECT] = project
+        if analysis_type == 'criacao_epicos_azure_devops_eurofarma':
+            organization, project = self._parse_repository_name(normalized_repo_name)
+            data[JobFields.AZURE_ORGANIZATION] = organization
+            data[JobFields.AZURE_PROJECT] = project
         if analysis_type == 'criacao_tarefas_azure_devops':
             feature_id = payload_dict.get('feature_id')
             organization, project = self._parse_repository_name(normalized_repo_name)
