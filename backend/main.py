@@ -1,11 +1,11 @@
 import os
+import msal
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form, BackgroundTasks, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.utils import get_authorization_scheme_param
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional
-import msal
 from pydantic import BaseModel
 from backend.app.core.config import settings
 from backend.app.services.blob_storage_service import upload_docx_to_blob
