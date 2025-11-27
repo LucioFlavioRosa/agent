@@ -3,10 +3,11 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_500_INTERNAL_SERVER_ERROR
-from backend.app.auth import router as auth_router
-from backend.app.upload import router as upload_router
-from backend.app.auth_middleware import AuthMiddleware
+from backend.app.api.auth import router as auth_router
+from backend.app.api.upload import router as upload_router
+from backend.app.middleware.auth_middleware import AuthMiddleware
 
+# Instância FastAPI exportável
 app = FastAPI(title="Backend API", description="Backend para upload e autenticação JWT", version="1.0.0")
 
 # Configurar CORS para permitir requisições do front-end
@@ -46,3 +47,6 @@ async def unauthorized_handler(request: Request, exc):
         status_code=HTTP_401_UNAUTHORIZED,
         content={"detail": "Token JWT inválido ou ausente."}
     )
+
+# Nenhuma lógica de execução direta (uvicorn.run, if __name__ == "__main__")
+# Apenas exporta a instância 'app' para ser usada por backend/main.py
