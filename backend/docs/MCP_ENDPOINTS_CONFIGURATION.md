@@ -27,7 +27,7 @@ MCP_ENDPOINTS__analise_reuniao=https://mcp-reuniao.azurewebsites.net
 ## 3. Estrutura do Dicionário MCP_ENDPOINTS em config.py
 
 No arquivo `backend/app/core/config.py`:
-
+```text
 python
 class Settings(BaseSettings):
     # ... outras configs ...
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-
+```
 
 Ao carregar o backend, o Pydantic irá popular o dicionário `MCP_ENDPOINTS` com base nas variáveis de ambiente que seguem o padrão `MCP_ENDPOINTS__<analysis_type>=<url>`.
 
@@ -48,7 +48,7 @@ Ao carregar o backend, o Pydantic irá popular o dicionário `MCP_ENDPOINTS` com
 O serviço responsável por enviar o payload ao MCP Server é o `MCPClientService`, localizado em `backend/app/services/mcp_client_service.py`.
 
 Trecho relevante:
-
+```text
 python
 class MCPClientService:
     def __init__(self, base_url: str = None):
@@ -61,7 +61,7 @@ class MCPClientService:
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
         url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
         # ... chamada HTTPX ...
-
+```
 
 Ou seja, o endpoint é resolvido assim:
 - Se existir um mapeamento para o `analysis_type` em `MCP_ENDPOINTS`, ele será usado.
@@ -71,7 +71,7 @@ Ou seja, o endpoint é resolvido assim:
 
 ### Payload enviado pelo backend para o MCP:
 
-
+```json
 {
   "analysis_type": "criacao_epicos_azure_devops",
   "instrucoes_extras": "Texto extraído do docx...",
@@ -79,11 +79,11 @@ Ou seja, o endpoint é resolvido assim:
   "analysis_name": "Reuniao_01",
   "usuario_executor": "user@example.com"
 }
-
+```
 
 ### Fluxo de Decisão (Diagrama Mermaid)
 
-mermaid
+```mermaid
 graph LR
     A[Frontend] -- analysis_type --> B[Backend]
     B -->|Consulta| C[MCP_ENDPOINTS em config.py]
@@ -92,7 +92,7 @@ graph LR
     D --> F[Chama endpoint específico]
     E --> F[Chama endpoint padrão]
     F --> G[MCP Server]
-
+```
 
 ## 6. Exemplo Prático
 
