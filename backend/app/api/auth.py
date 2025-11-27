@@ -12,7 +12,7 @@ class AuthConfigResponse(BaseModel):
     redirect_uri: str
     scope: str
 
-@router.get("/auth/config", response_model=AuthConfigResponse, tags=["Auth"])
+@router.get("/config", response_model=AuthConfigResponse, tags=["Auth"])
 def get_auth_config():
     """
     Endpoint público para o frontend obter as configurações necessárias para MSAL.js.
