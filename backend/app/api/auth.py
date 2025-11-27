@@ -30,6 +30,3 @@ def get_auth_config():
         redirect_uri=redirect_uri,
         scope=scope
     )
-
-# O endpoint POST /auth/login foi removido por segurança.
-# O fluxo recomendado agora é: o frontend obtém o token diretamente da Microsoft (MSAL.js) e envia o Bearer token para o backend.
