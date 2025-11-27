@@ -1,35 +1,57 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from pydantic import BaseModel
+from typing import Optional
+import msal
 import os
-from backend.app.core.config import settings
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
-class AuthConfigResponse(BaseModel):
-    client_id: str
-    tenant_id: str
-    authority: str
-    redirect_uri: str
-    scope: str
+# Configurações Azure AD
+AZURE_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID", "<your-client-id>")
+AZURE_TENANT_ID = os.environ.get("AZURE_TENANT_ID", "<your-tenant-id>")
+AZURE_AUTHORITY = f"https://login.microsoftonline.com/{AZURE_TENANT_ID}"
+AZURE_CLIENT_SECRET = os.environ.get("AZURE_CLIENT_SECRET", "<your-client-secret>")
+AZURE_SCOPE = [os.environ.get("AZURE_SCOPE", "User.Read")]
 
-@router.get("/auth/config", response_model=AuthConfigResponse, tags=["Auth"])
-def get_auth_config():
-    """
-    Endpoint público para o frontend obter as configurações necessárias para MSAL.js.
-    Não expõe segredos, apenas dados públicos de configuração.
-    """
-    client_id = os.environ.get("AZURE_AD_CLIENT_ID", getattr(settings, "AZURE_AD_CLIENT_ID", ""))
-    tenant_id = os.environ.get("AZURE_AD_TENANT_ID", getattr(settings, "AZURE_AD_TENANT_ID", ""))
-    redirect_uri = os.environ.get("AZURE_AD_REDIRECT_URI", getattr(settings, "AZURE_AD_REDIRECT_URI", "http://localhost:3000/auth/callback"))
-    scope = os.environ.get("AZURE_SCOPE", "User.Read")
-    authority = f"https://login.microsoftonline.com/{tenant_id}"
-    return AuthConfigResponse(
-        client_id=client_id,
-        tenant_id=tenant_id,
-        authority=authority,
-        redirect_uri=redirect_uri,
-        scope=scope
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+# Autenticação via Azure AD
+@router.post("/login", response_model=LoginResponse, tags=["Auth"])
+def login(request: LoginRequest):
+    app = msal.ConfidentialClientApplication(
+        AZURE_CLIENT_ID,
+        authority=AZURE_AUTHORITY,
+        client_credential=AZURE_CLIENT_SECRET
+    )
+    result = app.acquire_token_by_username_password(
+        username=request.username,
+        password=request.password,
+        scopes=AZURE_SCOPE
+    )
+    if "access_token" not in result:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Falha na autenticação Azure AD: {result.get('error_description', 'Erro desconhecido')}"
+        )
+    return LoginResponse(
+        access_token=result["access_token"],
+        expires_in=result.get("expires_in", 3600)
     )
 
-# O endpoint POST /auth/login foi removido por segurança.
-# O fluxo recomendado agora é: o frontend obtém o token diretamente da Microsoft (MSAL.js) e envia o Bearer token para o backend.
+# Endpoint de configuração (exemplo, se necessário)
+@router.get("/config", tags=["Auth"])
+def get_config():
+    return {
+        "client_id": AZURE_CLIENT_ID,
+        "tenant_id": AZURE_TENANT_ID,
+        "authority": AZURE_AUTHORITY,
+        "scope": AZURE_SCOPE
+    }
