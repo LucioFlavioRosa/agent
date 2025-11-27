@@ -7,6 +7,7 @@ from ..middleware.auth_middleware import get_current_user
 from ..services.blob_storage_service import upload_docx_to_blob
 from ..services.docx_parser_service import extract_text_from_docx
 from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayload
+from ..models.azure_ad_models import AzureADTokenData
 
 router = APIRouter()
 
@@ -23,12 +24,10 @@ async def upload_docx(
     projeto: str = Form(...),
     analysis_name: str = Form(...),
     analysis_type: str = Form(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: AzureADTokenData = Depends(get_current_user)
 ):
-    # 1. Extrair usuario_executor do JWT
-    usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
-    if not usuario_executor:
-        raise HTTPException(status_code=401, detail="Usuário não autenticado no token.")
+    # 1. Extrair usuario_executor do objeto autenticado
+    usuario_executor = current_user.usuario_executor
     # 2. Validar extensão
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
