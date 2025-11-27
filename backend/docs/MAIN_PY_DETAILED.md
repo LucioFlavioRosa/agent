@@ -42,15 +42,16 @@ O arquivo `backend/main.py` é o ponto de entrada unificado da aplicação FastA
 
 ## Configuração da Instância FastAPI
 A aplicação é instanciada com título, descrição e versão, facilitando a documentação automática e a identificação da API.
+```text
 python
 app = FastAPI(title="Backend API", description="Backend para upload e autenticação JWT", version="1.0.0")
-
+```
 
 ---
 
 ## Middleware CORS
 O CORS (Cross-Origin Resource Sharing) é configurado para permitir requisições de qualquer origem (`allow_origins=["*"]`).
-
+```text
 python
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +60,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
-
+```
 - **Implicações de segurança:**
   - Permite que qualquer frontend acesse a API. Ideal para desenvolvimento, mas deve ser restrito em produção para domínios confiáveis.
 
@@ -67,7 +68,7 @@ app.add_middleware(
 
 ## Middleware de Autenticação JWT (AuthMiddleware)
 O middleware intercepta todas as requisições e, se houver header Authorization do tipo Bearer, valida o token JWT usando o serviço AzureADService. Se válido, injeta o usuário autenticado em `request.state.user`.
-
+```text
 python
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -82,7 +83,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         response = await call_next(request)
         return response
-
+```
 - **Fluxo:**
   - Se não houver Authorization Bearer, segue sem autenticação.
   - Se houver, tenta validar e injeta o usuário.
@@ -92,7 +93,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 ## Função get_current_user
 Valida o token JWT da requisição e retorna os dados do usuário autenticado. Usada como dependência nos endpoints protegidos.
-
+```text
 python
 def get_current_user(request: Request):
     auth: str = request.headers.get("Authorization")
@@ -100,7 +101,7 @@ def get_current_user(request: Request):
     if not auth or scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cabeçalho Authorization ausente ou inválido.")
     return azure_ad_service.validate_token(param)
-
+```
 - **Papel:**
   - Garante que endpoints protegidos só sejam acessados por usuários autenticados.
   - Retorna um objeto com os dados do usuário extraídos do token.
@@ -109,7 +110,7 @@ def get_current_user(request: Request):
 
 ## Endpoint /auth/login
 Realiza autenticação do usuário via Azure AD utilizando a biblioteca MSAL. Recebe username e password, retorna access_token JWT, tipo de token e tempo de expiração.
-
+```text
 python
 @app.post("/auth/login", response_model=LoginResponse, tags=["Auth"])
 def login(request: LoginRequest):
@@ -137,7 +138,7 @@ def login(request: LoginRequest):
         access_token=result["access_token"],
         expires_in=result.get("expires_in", 3600)
     )
-
+```
 - **Fluxo:**
   1. Recebe credenciais do usuário.
   2. Autentica no Azure AD via MSAL.
@@ -148,7 +149,7 @@ def login(request: LoginRequest):
 
 ## Endpoint /upload/docx
 Endpoint assíncrono para upload de arquivos DOCX, protegido por autenticação JWT.
-
+```text
 python
 @app.post("/upload/docx", response_model=UploadDocxResponse, tags=["Upload"])
 async def upload_docx(
@@ -186,7 +187,7 @@ async def upload_docx(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com MCP Server: {str(e)}")
     return UploadDocxResponse(job_id=job_id, blob_url=blob_url, message="Arquivo recebido, salvo e análise iniciada com sucesso.")
-
+```
 
 - **Fluxo detalhado:**
   1. Valida usuário autenticado via JWT.
@@ -201,7 +202,7 @@ async def upload_docx(
 
 ## Tratadores de Exceções Globais
 Tratadores globais garantem respostas padronizadas para erros comuns e inesperados.
-
+```text
 python
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -223,7 +224,7 @@ async def unauthorized_handler(request: Request, exc):
         status_code=401,
         content={"detail": "Token JWT inválido ou ausente."}
     )
-
+```
 - **Cobre:**
   - HTTPException: Erros conhecidos (ex: 400, 401, 404).
   - Exception: Erros inesperados (500).
@@ -234,7 +235,7 @@ async def unauthorized_handler(request: Request, exc):
 ## Diagramas Mermaid
 
 ### 1. Fluxo Completo de Requisição
-mermaid
+```mermaid
 sequenceDiagram
     participant Client
     participant FastAPI
@@ -255,10 +256,10 @@ sequenceDiagram
     Endpoint->>MCP: POST /start-analysis
     MCP-->>Endpoint: job_id
     Endpoint-->>Client: Resposta JSON
-
+```
 
 ### 2. Fluxo de Autenticação
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant API as Backend API
@@ -269,7 +270,7 @@ sequenceDiagram
     API-->>FE: access_token
     FE->>API: Requisições protegidas (com JWT)
     API->>API: Middleware valida JWT
-
+```
 
 ---
 
@@ -277,6 +278,7 @@ sequenceDiagram
 
 ### 1. Login
 **Requisição:**
+```json
 http
 POST /auth/login
 Content-Type: application/json
@@ -284,15 +286,16 @@ Content-Type: application/json
   "username": "usuario@example.com",
   "password": "senha_segura"
 }
+```
 
 **Resposta:**
-
+```json
 {
   "access_token": "<JWT_TOKEN>",
   "token_type": "bearer",
   "expires_in": 3600
 }
-
+```
 
 ### 2. Upload de Arquivo DOCX
 **Requisição:**
