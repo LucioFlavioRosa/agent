@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import Dict, Optional
 from backend.app.services.azure_secret_manager import AzureSecretManager, VaultType
+import logging
 
 class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
@@ -38,6 +39,43 @@ class Settings(BaseSettings):
             self.AZURE_AD_ISSUER = f"https://login.microsoftonline.com/{self.AZURE_AD_TENANT_ID}/v2.0"
         if not self.AZURE_AD_AUDIENCE and self.AZURE_AD_CLIENT_ID:
             self.AZURE_AD_AUDIENCE = self.AZURE_AD_CLIENT_ID
+        # Validação dos campos sensíveis (apenas loga aviso, não lança erro)
+        self._log_missing_sensitive_fields()
+
+    def _log_missing_sensitive_fields(self):
+        logger = logging.getLogger("Settings")
+        # Os nomes dos campos sensíveis devem ser os nomes dos atributos do objeto settings (com underscores)
+        sensitive_fields = [
+            "AZURE_STORAGE_CONNECTION_STRING",
+            "AZURE_STORAGE_CONTAINER_NAME",
+            "AZURE_AD_CLIENT_SECRET",
+            "JWT_SECRET_KEY",
+            "MCP_SERVER_BASE_URL"
+        ]
+        for field in sensitive_fields:
+            value = getattr(self, field, None)
+            if not value:
+                logger.warning(f"[Settings] Campo sensível '{field}' está vazio após inicialização. Ele será preenchido após o carregamento dos segredos.")
+                # Adicional: alerta se o nome do campo não está alinhado com padrão Azure Key Vault (hífens)
+                if '_' in field:
+                    logger.warning(f"[Settings] Atenção: O nome do segredo '{field}' contém underscores. No Azure Key Vault, utilize hífens: '{field.lower().replace('_', '-')}'.")
+
+    def validate_required_fields(self):
+        """
+        Verifica se campos críticos estão preenchidos após o carregamento dos segredos.
+        Lança ValueError se algum campo obrigatório estiver vazio.
+        """
+        # Os nomes dos campos obrigatórios devem ser os nomes dos atributos do objeto settings (com underscores)
+        required_fields = [
+            "AZURE_STORAGE_CONNECTION_STRING",
+            "AZURE_STORAGE_CONTAINER_NAME",
+            "AZURE_AD_CLIENT_SECRET",
+            "JWT_SECRET_KEY",
+            "MCP_SERVER_BASE_URL"
+        ]
+        missing = [field for field in required_fields if not getattr(self, field, None)]
+        if missing:
+            raise ValueError(f"Os seguintes campos obrigatórios estão vazios após o carregamento dos segredos: {', '.join(missing)}")
 
     def get_secret_manager(self, vault_type: str) -> AzureSecretManager:
         """

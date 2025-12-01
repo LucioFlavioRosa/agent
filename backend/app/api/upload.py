@@ -3,12 +3,14 @@ from fastapi.responses import JSONResponse
 from typing import Optional
 from pydantic import BaseModel
 import os
+import logging
 from ..middleware.auth_middleware import get_current_user
 from ..services.blob_storage_service import upload_docx_to_blob
 from ..services.docx_parser_service import extract_text_from_docx
 from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayload
 
 router = APIRouter()
+logger = logging.getLogger("upload_api")
 
 class UploadDocxResponse(BaseModel):
     job_id: str
@@ -38,7 +40,14 @@ async def upload_docx(
     # 4. Salvar arquivo no Blob Storage (em background) usando serviço
     blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
     blob_filename = f"{analysis_name}.docx"
-    blob_url = await upload_docx_to_blob(file, blob_folder, blob_filename, background_tasks)
+    try:
+        blob_url = await upload_docx_to_blob(file, blob_folder, blob_filename, background_tasks)
+    except ValueError as ve:
+        logger.error(f"Erro de configuração do Blob Storage: {ve}")
+        raise HTTPException(status_code=503, detail="Serviço de armazenamento temporariamente indisponível")
+    except Exception as e:
+        logger.error(f"Erro inesperado ao salvar arquivo no Blob Storage: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo no Blob Storage: {str(e)}")
     # 5. Montar payload para MCP: analysis_type, projeto, analysis_name do frontend; instrucoes_extras e usuario_executor do backend
     payload = MCPStartAnalysisPayload(
         analysis_type=analysis_type,

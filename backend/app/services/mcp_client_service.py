@@ -18,7 +18,9 @@ class MCPClientService:
         self.base_url = base_url or settings.MCP_SERVER_BASE_URL.rstrip('/')
 
     def get_mcp_endpoint(self, analysis_type: str) -> str:
-        endpoint_dict = getattr(settings, 'MCP_ENDPOINTS', {})
+        endpoint_dict = getattr(settings, 'MCP_ENDPOINTS', None)
+        if not endpoint_dict or not isinstance(endpoint_dict, dict) or not endpoint_dict:
+            raise ValueError("O mapeamento de endpoints MCP (settings.MCP_ENDPOINTS) não está configurado ou está vazio.")
         return endpoint_dict.get(analysis_type, self.base_url)
 
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
