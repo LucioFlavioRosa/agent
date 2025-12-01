@@ -47,6 +47,7 @@ class AzureADService:
         self.jwks_uri = settings.AZURE_AD_JWKS_URI
         self.issuer = settings.AZURE_AD_ISSUER
         self.audience = settings.AZURE_AD_AUDIENCE
+        # Busca o client_secret do atributo correto do settings (com underscores)
         self.client_secret = getattr(settings, 'AZURE_AD_CLIENT_SECRET', None)
         self._validate_config()
         self.logger.info("AzureADService configurado: JWKS_URI, ISSUER, AUDIENCE definidos.")
@@ -54,11 +55,15 @@ class AzureADService:
     def _validate_config(self):
         # Validação dos campos sensíveis após carregamento dos segredos
         if not self.client_secret:
-            self.logger.error("AZURE_AD_CLIENT_SECRET não está definido após carregamento dos segredos.")
-            raise RuntimeError("AZURE_AD_CLIENT_SECRET não está definido. Certifique-se que foi carregado do Key Vault ou variável de ambiente.")
+            self.logger.error("AZURE_AD_CLIENT_SECRET não está definido após carregamento dos segredos. Certifique-se que o segredo foi carregado corretamente do Key Vault (nome com hífens) e mapeado para a variável local (com underscores).")
         if not self.jwks_uri or not self.issuer or not self.audience:
             self.logger.error("Configuração Azure AD incompleta: JWKS_URI, ISSUER ou AUDIENCE ausentes.")
             raise RuntimeError("Configuração Azure AD incompleta. Verifique se JWKS_URI, ISSUER e AUDIENCE foram corretamente populados.")
+        # Log detalhado dos valores carregados
+        self.logger.debug(f"AZURE_AD_CLIENT_SECRET: {'SET' if self.client_secret else 'NOT SET'}")
+        self.logger.debug(f"AZURE_AD_JWKS_URI: {self.jwks_uri}")
+        self.logger.debug(f"AZURE_AD_ISSUER: {self.issuer}")
+        self.logger.debug(f"AZURE_AD_AUDIENCE: {self.audience}")
 
     def validate_token(self, token: str) -> AzureADTokenData:
         try:

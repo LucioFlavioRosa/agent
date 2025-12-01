@@ -95,5 +95,11 @@ def on_startup():
             raise RuntimeError("AZURE_STORAGE_CONNECTION_STRING não carregado do Key Vault ou variável de ambiente. Inicialização abortada.")
         logging.info("Segredos carregados e validados com sucesso.")
     except Exception as e:
-        logging.critical(f"Falha ao carregar segredos do Key Vault: {e}")
-        raise RuntimeError(f"Falha crítica na inicialização: {e}")
+        # Bloco try-except mais robusto para erros de nomenclatura de segredos
+        error_message = str(e)
+        if "not found" in error_message or "404" in error_message or "Segredo" in error_message:
+            logging.critical(f"Falha ao carregar segredos do Key Vault: {error_message}")
+            logging.critical("Verifique se os nomes dos segredos no Azure Key Vault estão usando hífens (-) ao invés de underscores (_), conforme exigido pela plataforma.")
+        else:
+            logging.critical(f"Falha ao carregar segredos do Key Vault: {error_message}")
+        raise RuntimeError(f"Falha crítica na inicialização: {error_message}")

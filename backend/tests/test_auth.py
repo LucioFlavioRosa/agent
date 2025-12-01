@@ -10,8 +10,19 @@ def client():
 @pytest.fixture(autouse=True)
 def mock_key_vault_secrets(monkeypatch):
     # Simula carregamento dos segredos do Key Vault antes dos testes
+    # No Key Vault, os nomes dos segredos DEVEM usar hífens (-), não underscores (_)
+    # Exemplo: 'azure-storage-connection-string' ao invés de 'AZURE_STORAGE_CONNECTION_STRING'
+    def secret_side_effect(secret_name):
+        # Simula comportamento real do Key Vault: nomes com hífens
+        # Para testes, retorna valor mockado para ambos formatos
+        if '-' in secret_name:
+            return f"mocked-{secret_name}-value"
+        elif '_' in secret_name:
+            # Simula fallback para variável local (não Key Vault)
+            return f"mocked-env-{secret_name}-value"
+        return f"mocked-{secret_name}-value"
     with patch("backend.app.services.azure_secret_manager.AzureSecretManager.get_secret") as mock_get_secret:
-        mock_get_secret.side_effect = lambda secret_name: f"mocked-{secret_name}-value"
+        mock_get_secret.side_effect = secret_side_effect
         yield
 
 # Exemplo de teste de autenticação

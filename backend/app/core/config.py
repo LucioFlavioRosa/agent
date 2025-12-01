@@ -44,6 +44,7 @@ class Settings(BaseSettings):
 
     def _log_missing_sensitive_fields(self):
         logger = logging.getLogger("Settings")
+        # Os nomes dos campos sensíveis devem ser os nomes dos atributos do objeto settings (com underscores)
         sensitive_fields = [
             "AZURE_STORAGE_CONNECTION_STRING",
             "AZURE_STORAGE_CONTAINER_NAME",
@@ -55,12 +56,16 @@ class Settings(BaseSettings):
             value = getattr(self, field, None)
             if not value:
                 logger.warning(f"[Settings] Campo sensível '{field}' está vazio após inicialização. Ele será preenchido após o carregamento dos segredos.")
+                # Adicional: alerta se o nome do campo não está alinhado com padrão Azure Key Vault (hífens)
+                if '_' in field:
+                    logger.warning(f"[Settings] Atenção: O nome do segredo '{field}' contém underscores. No Azure Key Vault, utilize hífens: '{field.lower().replace('_', '-')}'.")
 
     def validate_required_fields(self):
         """
         Verifica se campos críticos estão preenchidos após o carregamento dos segredos.
         Lança ValueError se algum campo obrigatório estiver vazio.
         """
+        # Os nomes dos campos obrigatórios devem ser os nomes dos atributos do objeto settings (com underscores)
         required_fields = [
             "AZURE_STORAGE_CONNECTION_STRING",
             "AZURE_STORAGE_CONTAINER_NAME",

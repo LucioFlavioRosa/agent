@@ -22,16 +22,24 @@ class ConfigLoaderService:
         'github': 'kv-codeai-github-dev-usc',
         'llm': 'kv-codeai-llm-dev-usc'
     }
+    # Passo 1: Corrigir nomes dos segredos para hífens
     _secrets_by_vault = {
         'azure': [
-            'AZURE_AD_CLIENT_SECRET',
-            'AZURE_STORAGE_CONNECTION_STRING',
-            'AZURE_STORAGE_CONTAINER_NAME',
-            'JWT_SECRET_KEY'
+            'azure-ad-client-secret',
+            'azure-storage-connection-string',
+            'azure-storage-container-name',
+            'jwt-secret-key'
         ],
         'devops': [],
         'github': [],
         'llm': []
+    }
+    # Passo 2: Mapeamento de nomes do Key Vault (hífens) para settings (underscores)
+    _secret_name_to_settings_attr = {
+        'azure-ad-client-secret': 'AZURE_AD_CLIENT_SECRET',
+        'azure-storage-connection-string': 'AZURE_STORAGE_CONNECTION_STRING',
+        'azure-storage-container-name': 'AZURE_STORAGE_CONTAINER_NAME',
+        'jwt-secret-key': 'JWT_SECRET_KEY'
     }
 
     def _get_secret_manager(self, vault_key):
@@ -47,6 +55,8 @@ class ConfigLoaderService:
                 secret_manager = self._get_secret_manager(vault_key)
                 for secret_name in secrets:
                     cache_key = f"{vault_key}:{secret_name}"
+                    settings_attr = self._secret_name_to_settings_attr.get(secret_name, secret_name.upper().replace('-', '_'))
+                    secret_value = None
                     if cache_key in self._secret_cache:
                         secret_value = self._secret_cache[cache_key]
                         logger.info(f"Segredo '{secret_name}' recuperado do cache para Key Vault '{vault_key}'.")
@@ -56,14 +66,19 @@ class ConfigLoaderService:
                             self._secret_cache[cache_key] = secret_value
                             logger.info(f"Segredo '{secret_name}' carregado com sucesso do Key Vault '{vault_key}'.")
                         except Exception as e:
-                            logger.error(f"Erro ao buscar segredo '{secret_name}' do Key Vault '{vault_key}': {e}")
-                            secret_value = os.environ.get(secret_name) or getattr(settings, secret_name, None)
-                            if secret_value:
-                                logger.warning(f"Fallback: Segredo '{secret_name}' não encontrado no Key Vault '{vault_key}', usando variável de ambiente ou valor default.")
+                            # Passo 5: Tratamento de erro robusto
+                            error_msg = str(e)
+                            if '404' in error_msg or 'not found' in error_msg.lower():
+                                logger.error(f"[KeyVault] Segredo '{secret_name}' NÃO encontrado no Key Vault '{vault_key}' (404). Tentando fallback para variável de ambiente ou settings.")
                             else:
-                                logger.error(f"Falha crítica: Segredo '{secret_name}' não encontrado no Key Vault '{vault_key}' nem nas variáveis de ambiente.")
-                    # Atualiza dinamicamente o objeto settings
-                    setattr(settings, secret_name, secret_value)
+                                logger.error(f"Erro ao buscar segredo '{secret_name}' do Key Vault '{vault_key}': {e}")
+                            secret_value = os.environ.get(settings_attr) or getattr(settings, settings_attr, None)
+                            if secret_value:
+                                logger.warning(f"Fallback: Segredo '{secret_name}' não encontrado no Key Vault '{vault_key}', usando variável de ambiente ou valor default para '{settings_attr}'.")
+                            else:
+                                logger.critical(f"Falha crítica: Segredo '{secret_name}' não encontrado no Key Vault '{vault_key}' nem nas variáveis de ambiente/settings para '{settings_attr}'.")
+                    # Passo 2: Atualiza dinamicamente o objeto settings usando o mapeamento
+                    setattr(settings, settings_attr, secret_value)
             except Exception as e:
                 logger.error(f"Falha ao inicializar SecretManager para Key Vault '{vault_key}': {e}")
         logger.info("Todos os segredos sensíveis foram carregados do Key Vault (com fallback para env quando necessário).")

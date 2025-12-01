@@ -19,9 +19,10 @@ class StartupValidator:
 
     def validate_key_vault(self):
         try:
-            # Tenta instanciar e buscar um segredo simples
+            # Tenta instanciar e buscar um segredo simples usando hífens no nome
             manager = AzureSecretManager(vault_type=VaultType.AZURE)
-            secret = manager.get_secret("AZURE_STORAGE_CONNECTION_STRING")
+            # O nome do segredo no Azure Key Vault deve usar hífens, não underscores
+            secret = manager.get_secret("azure-storage-connection-string")
             self.status_report['key_vault'] = {
                 'status': 'ok',
                 'detail': 'Key Vault acessível e segredo lido com sucesso.'
