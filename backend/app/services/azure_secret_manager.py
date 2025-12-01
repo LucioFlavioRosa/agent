@@ -1,40 +1,51 @@
 import os
+from enum import Enum
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from domain.interfaces.secret_manager_interface import ISecretManager
+from backend.app.models.key_vault_models import KeyVaultConfig
+from backend.app.core.config import settings
+
+class VaultType(str, Enum):
+    AZURE = 'azure'
+    DEVOPS = 'devops'
+    GITHUB = 'github'
+    LLM = 'llm'
 
 class AzureSecretManager(ISecretManager):
     """
-    Implementação do gerenciador de segredos usando Azure Key Vault.
-    Responsabilidade única: gerenciar segredos do Azure Key Vault.
+    Gerenciador de segredos usando Azure Key Vault, suportando múltiplos cofres por objetivo.
     """
-    def __init__(self):
+    def __init__(self, vault_type: VaultType):
         self._secret_client = None
-        self._key_vault_url = os.environ.get("KEY_VAULT_URL")
+        self.vault_type = vault_type
+        self._vault_urls = {
+            VaultType.AZURE: settings.AZURE_KV_URL,
+            VaultType.DEVOPS: settings.DEVOPS_KV_URL,
+            VaultType.GITHUB: settings.GITHUB_KV_URL,
+            VaultType.LLM: settings.LLM_KV_URL
+        }
+        self._key_vault_url = self._vault_urls.get(self.vault_type)
         if not self._key_vault_url:
-            raise EnvironmentError("A variável de ambiente KEY_VAULT_URL não foi configurada.")
-    
+            raise EnvironmentError(f"A URL do Key Vault para o tipo '{self.vault_type}' não foi configurada.")
+
     def _get_secret_client(self) -> SecretClient:
-        """Lazy initialization do cliente de segredos."""
+        """Inicialização lazy do cliente de segredos para o cofre correto."""
         if self._secret_client is None:
-            print("Conectando ao Azure Key Vault...")
             credential = DefaultAzureCredential()
             self._secret_client = SecretClient(
-                vault_url=self._key_vault_url, 
+                vault_url=self._key_vault_url,
                 credential=credential
             )
         return self._secret_client
-    
+
     def get_secret(self, secret_name: str) -> str:
         """
-        Obtém um segredo do Azure Key Vault.
-        
+        Obtém um segredo do Azure Key Vault do cofre configurado para o tipo.
         Args:
             secret_name: Nome do segredo no Key Vault
-            
         Returns:
             str: Valor do segredo
-            
         Raises:
             ValueError: Se o segredo não for encontrado
         """
@@ -42,7 +53,7 @@ class AzureSecretManager(ISecretManager):
             secret_client = self._get_secret_client()
             secret = secret_client.get_secret(secret_name)
             if not secret.value:
-                raise ValueError(f"Segredo '{secret_name}' está vazio no Key Vault.")
+                raise ValueError(f"Segredo '{secret_name}' está vazio no Key Vault '{self._key_vault_url}'.")
             return secret.value
         except Exception as e:
-            raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault: {e}") from e
+            raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}': {e}") from e
