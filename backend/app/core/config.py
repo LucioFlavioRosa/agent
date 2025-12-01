@@ -19,6 +19,28 @@ class Settings(BaseSettings):
     AZURE_AD_ISSUER: Optional[str] = None    # Ex: https://login.microsoftonline.com/{tenant_id}/v2.0
     AZURE_AD_AUDIENCE: Optional[str] = None  # Geralmente o client_id da API registrada no Azure AD
 
+    def load_secrets_from_keyvault(self):
+        """
+        Método explícito para buscar segredos e atualizar o settings.
+        Deve ser chamado no startup do app.
+        """
+        try:
+            # Instancia o gerenciador (ajuste o vault_type conforme sua lógica)
+            secret_manager = self.get_secret_manager(vault_type="azure") 
+            
+            # Busca o segredo. O nome "azure-storage-connection-string" deve ser o nome exato NO KEY VAULT
+            # O Key Vault geralmente usa hífens, o Python usa underscores.
+            conn_string = secret_manager.get_secret("azure-storage-connection-string")
+            
+            if conn_string:
+                self.AZURE_STORAGE_CONNECTION_STRING = conn_string
+                print("Segredos carregados do Key Vault com sucesso.")
+            else:
+                print("AVISO: Connection String não encontrada no Key Vault.")
+                
+        except Exception as e:
+            print(f"Erro crítico ao carregar segredos do Key Vault: {e}")
+
     # Mapeamento de analysis_type para endpoints MCP
     MCP_ENDPOINTS: Dict[str, str] = {
         "criacao_epicos_azure_devops": "https://mcp-epicos.azurewebsites.net"
