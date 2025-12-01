@@ -7,8 +7,6 @@ from backend.app.core.config import settings
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# --- FUNÇÕES AUXILIARES (Sua Lógica) ---
-
 def _get_blob_clients():
     """
     Inicializa BlobServiceClient e ContainerClient sob demanda (lazy loading).
