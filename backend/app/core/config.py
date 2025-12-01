@@ -1,28 +1,35 @@
 from pydantic_settings import BaseSettings
-from typing import Dict
+from typing import Dict, Optional
+from backend.app.services.azure_secret_manager import AzureSecretManager, VaultType
 
 class Settings(BaseSettings):
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
-    AZURE_STORAGE_CONNECTION_STRING: str
+    AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER_NAME: str
     MCP_SERVER_BASE_URL: str = "http://mcp-app-service.azurewebsites.net"
 
     # Novos campos para Azure AD (moderno, sem ROPC)
     AZURE_AD_TENANT_ID: str
     AZURE_AD_CLIENT_ID: str
-    AZURE_AD_CLIENT_SECRET: str
+    AZURE_AD_CLIENT_SECRET: str = ""
     
     # Novos campos para validação JWT segura
-    AZURE_AD_JWKS_URI: str = None  # Ex: https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys
-    AZURE_AD_ISSUER: str = None    # Ex: https://login.microsoftonline.com/{tenant_id}/v2.0
-    AZURE_AD_AUDIENCE: str = None  # Geralmente o client_id da API registrada no Azure AD
+    AZURE_AD_JWKS_URI: Optional[str] = None  # Ex: https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys
+    AZURE_AD_ISSUER: Optional[str] = None    # Ex: https://login.microsoftonline.com/{tenant_id}/v2.0
+    AZURE_AD_AUDIENCE: Optional[str] = None  # Geralmente o client_id da API registrada no Azure AD
 
     # Mapeamento de analysis_type para endpoints MCP
     MCP_ENDPOINTS: Dict[str, str] = {
         "criacao_epicos_azure_devops": "https://mcp-epicos.azurewebsites.net"
         # Adicione outros mapeamentos conforme necessário
     }
+
+    # URLs dos cofres do Key Vault
+    AZURE_KV_URL: Optional[str] = None
+    DEVOPS_KV_URL: Optional[str] = None
+    GITHUB_KV_URL: Optional[str] = None
+    LLM_KV_URL: Optional[str] = None
     
     class Config:
         env_file = ".env"
@@ -37,5 +44,21 @@ class Settings(BaseSettings):
             self.AZURE_AD_ISSUER = f"https://login.microsoftonline.com/{self.AZURE_AD_TENANT_ID}/v2.0"
         if not self.AZURE_AD_AUDIENCE and self.AZURE_AD_CLIENT_ID:
             self.AZURE_AD_AUDIENCE = self.AZURE_AD_CLIENT_ID
+
+    def get_secret_manager(self, vault_type: str) -> AzureSecretManager:
+        """
+        Retorna uma instância do AzureSecretManager configurada para o cofre correto.
+        Args:
+            vault_type: Tipo do cofre ('azure', 'devops', 'github', 'llm')
+        Returns:
+            AzureSecretManager: Instância pronta para uso
+        Raises:
+            ValueError: Se o tipo for inválido
+        """
+        try:
+            vt_enum = VaultType(vault_type)
+        except ValueError:
+            raise ValueError(f"Tipo de Key Vault inválido: {vault_type}. Esperado: 'azure', 'devops', 'github', 'llm'.")
+        return AzureSecretManager(vault_type=vt_enum)
 
 settings = Settings()
