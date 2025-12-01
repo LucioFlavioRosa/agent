@@ -1,9 +1,14 @@
 import os
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from fastapi import UploadFile, HTTPException, BackgroundTasks
+from backend.app.core.config import settings
 
-AZURE_BLOB_CONNECTION_STRING = os.getenv("AZURE_BLOB_CONNECTION_STRING")
-AZURE_BLOB_CONTAINER = os.getenv("AZURE_BLOB_CONTAINER", "arquivos")
+# Validação da connection string (padrão: deve ser carregada do Key Vault via settings)
+if not getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None):
+    raise RuntimeError("AZURE_STORAGE_CONNECTION_STRING não está configurada. Certifique-se de que o segredo foi carregado do Azure Key Vault corretamente.")
+
+AZURE_BLOB_CONNECTION_STRING = settings.AZURE_STORAGE_CONNECTION_STRING
+AZURE_BLOB_CONTAINER = getattr(settings, "AZURE_STORAGE_CONTAINER_NAME", "arquivos")
 blob_service_client = BlobServiceClient.from_connection_string(AZURE_BLOB_CONNECTION_STRING)
 container_client = blob_service_client.get_container_client(AZURE_BLOB_CONTAINER)
 
