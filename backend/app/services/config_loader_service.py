@@ -27,9 +27,9 @@ class ConfigLoaderService:
     }
 
     def _get_secret_manager(self, vault_key):
-        vault_url = f"https://{self._vault_map[vault_key]}.vault.azure.net/"
-        os.environ['KEY_VAULT_URL'] = vault_url
-        return AzureSecretManager()
+        # Não define mais os.environ['KEY_VAULT_URL'] dinamicamente
+        # O AzureSecretManager recebe o vault_type e resolve a URL via variáveis de ambiente internamente
+        return AzureSecretManager(vault_type=vault_key)
 
     def load_secrets_from_key_vault(self):
         logger = logging.getLogger("ConfigLoaderService")
