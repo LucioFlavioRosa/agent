@@ -2,8 +2,6 @@ import os
 from enum import Enum
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
-from domain.interfaces.secret_manager_interface import ISecretManager
-from backend.app.models.key_vault_models import KeyVaultConfig
 from backend.app.core.config import settings
 
 class VaultType(str, Enum):
@@ -12,7 +10,7 @@ class VaultType(str, Enum):
     GITHUB = 'github'
     LLM = 'llm'
 
-class AzureSecretManager(ISecretManager):
+class AzureSecretManager:
     """
     Gerenciador de segredos usando Azure Key Vault, suportando múltiplos cofres por objetivo.
     """
@@ -20,14 +18,14 @@ class AzureSecretManager(ISecretManager):
         self._secret_client = None
         self.vault_type = vault_type
         self._vault_urls = {
-            VaultType.AZURE: settings.AZURE_KV_URL,
-            VaultType.DEVOPS: settings.DEVOPS_KV_URL,
-            VaultType.GITHUB: settings.GITHUB_KV_URL,
-            VaultType.LLM: settings.LLM_KV_URL
+            VaultType.AZURE: os.environ.get('AZURE_KV_URL'),
+            VaultType.DEVOPS: os.environ.get('DEVOPS_KV_URL'),
+            VaultType.GITHUB: os.environ.get('GITHUB_KV_URL'),
+            VaultType.LLM: os.environ.get('LLM_KV_URL')
         }
         self._key_vault_url = self._vault_urls.get(self.vault_type)
         if not self._key_vault_url:
-            raise EnvironmentError(f"A URL do Key Vault para o tipo '{self.vault_type}' não foi configurada.")
+            raise EnvironmentError(f"A URL do Key Vault para o tipo '{self.vault_type}' não foi configurada na variável de ambiente.")
 
     def _get_secret_client(self) -> SecretClient:
         """Inicialização lazy do cliente de segredos para o cofre correto."""
