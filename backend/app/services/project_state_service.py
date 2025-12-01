@@ -1,0 +1,41 @@
+import json
+import datetime
+from typing import Optional, Dict, Any
+from backend.app.core.config import settings
+from backend.app.services.blob_storage_service import _get_blob_clients
+
+class ProjectStateService:
+    @staticmethod
+    async def save_state_to_blob(session_data) -> str:
+        state = session_data.to_project_state()
+        usuario_executor = state.get("usuario_executor")
+        projeto = state.get("projeto")
+        timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        blob_folder = f"{usuario_executor}/{projeto}/estados"
+        blob_filename = f"estado_{timestamp}.json"
+        blob_path = f"{blob_folder}/{blob_filename}"
+        _, container_client = _get_blob_clients()
+        blob_client = container_client.get_blob_client(blob_path)
+        state_bytes = json.dumps(state, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        blob_client.upload_blob(state_bytes, overwrite=True, content_settings=None)
+        return blob_client.url
+
+    @staticmethod
+    async def load_latest_state_from_blob(usuario_executor: str, projeto: str) -> Optional[Dict[str, Any]]:
+        blob_folder = f"{usuario_executor}/{projeto}/estados"
+        _, container_client = _get_blob_clients()
+        blobs = list(container_client.list_blobs(name_starts_with=blob_folder+"/"))
+        if not blobs:
+            return None
+        blobs_sorted = sorted(
+            [b for b in blobs if b.name.endswith(".json")],
+            key=lambda b: b.name,
+            reverse=True
+        )
+        if not blobs_sorted:
+            return None
+        latest_blob = blobs_sorted[0]
+        blob_client = container_client.get_blob_client(latest_blob.name)
+        state_bytes = blob_client.download_blob().readall()
+        state = json.loads(state_bytes.decode("utf-8"))
+        return state
