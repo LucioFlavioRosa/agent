@@ -26,8 +26,9 @@ def validate_env_vars():
 # Carrega segredos sensíveis do Key Vault antes de inicializar endpoints
 try:
     ConfigLoaderService().load_secrets_from_key_vault()
+    logging.info("Segredos sensíveis carregados do Key Vault com sucesso.")
 except Exception as e:
     logging.error(f"Erro ao carregar segredos do Key Vault na inicialização: {e}")
-    # Modo degradado: prossegue com variáveis de ambiente se o Key Vault estiver indisponível
+    logging.warning("Inicializando em modo degradado: apenas variáveis de ambiente locais serão usadas.")
 
 validate_env_vars()
