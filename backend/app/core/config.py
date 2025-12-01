@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import Dict, Optional
 from backend.app.services.azure_secret_manager import AzureSecretManager, VaultType
+import logging
 
 class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
@@ -18,28 +19,6 @@ class Settings(BaseSettings):
     AZURE_AD_JWKS_URI: Optional[str] = None  # Ex: https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys
     AZURE_AD_ISSUER: Optional[str] = None    # Ex: https://login.microsoftonline.com/{tenant_id}/v2.0
     AZURE_AD_AUDIENCE: Optional[str] = None  # Geralmente o client_id da API registrada no Azure AD
-
-    def load_secrets_from_keyvault(self):
-        """
-        Método explícito para buscar segredos e atualizar o settings.
-        Deve ser chamado no startup do app.
-        """
-        try:
-            # Instancia o gerenciador (ajuste o vault_type conforme sua lógica)
-            secret_manager = self.get_secret_manager(vault_type="azure") 
-            
-            # Busca o segredo. O nome "azure-storage-connection-string" deve ser o nome exato NO KEY VAULT
-            # O Key Vault geralmente usa hífens, o Python usa underscores.
-            conn_string = secret_manager.get_secret("azure-storage-connection-string")
-            
-            if conn_string:
-                self.AZURE_STORAGE_CONNECTION_STRING = conn_string
-                print("Segredos carregados do Key Vault com sucesso.")
-            else:
-                print("AVISO: Connection String não encontrada no Key Vault.")
-                
-        except Exception as e:
-            print(f"Erro crítico ao carregar segredos do Key Vault: {e}")
 
     # Mapeamento de analysis_type para endpoints MCP
     MCP_ENDPOINTS: Dict[str, str] = {
@@ -60,6 +39,38 @@ class Settings(BaseSettings):
             self.AZURE_AD_ISSUER = f"https://login.microsoftonline.com/{self.AZURE_AD_TENANT_ID}/v2.0"
         if not self.AZURE_AD_AUDIENCE and self.AZURE_AD_CLIENT_ID:
             self.AZURE_AD_AUDIENCE = self.AZURE_AD_CLIENT_ID
+        # Validação dos campos sensíveis (apenas loga aviso, não lança erro)
+        self._log_missing_sensitive_fields()
+
+    def _log_missing_sensitive_fields(self):
+        logger = logging.getLogger("Settings")
+        sensitive_fields = [
+            "AZURE_STORAGE_CONNECTION_STRING",
+            "AZURE_STORAGE_CONTAINER_NAME",
+            "AZURE_AD_CLIENT_SECRET",
+            "JWT_SECRET_KEY",
+            "MCP_SERVER_BASE_URL"
+        ]
+        for field in sensitive_fields:
+            value = getattr(self, field, None)
+            if not value:
+                logger.warning(f"[Settings] Campo sensível '{field}' está vazio após inicialização. Ele será preenchido após o carregamento dos segredos.")
+
+    def validate_required_fields(self):
+        """
+        Verifica se campos críticos estão preenchidos após o carregamento dos segredos.
+        Lança ValueError se algum campo obrigatório estiver vazio.
+        """
+        required_fields = [
+            "AZURE_STORAGE_CONNECTION_STRING",
+            "AZURE_STORAGE_CONTAINER_NAME",
+            "AZURE_AD_CLIENT_SECRET",
+            "JWT_SECRET_KEY",
+            "MCP_SERVER_BASE_URL"
+        ]
+        missing = [field for field in required_fields if not getattr(self, field, None)]
+        if missing:
+            raise ValueError(f"Os seguintes campos obrigatórios estão vazios após o carregamento dos segredos: {', '.join(missing)}")
 
     def get_secret_manager(self, vault_type: str) -> AzureSecretManager:
         """
