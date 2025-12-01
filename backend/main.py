@@ -11,7 +11,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend.app.services.config_loader_service import ConfigLoaderService
 from backend.app.core.config import settings
 
-# Importando as rotas (Note a adição do analysis_router)
 from backend.app.api.auth import router as auth_router
 from backend.app.api.upload import router as upload_router
 from backend.app.api.analysis import router as analysis_router
