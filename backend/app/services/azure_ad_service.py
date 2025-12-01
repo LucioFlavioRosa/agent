@@ -45,6 +45,12 @@ class AzureADService:
         self.jwks_uri = settings.AZURE_AD_JWKS_URI
         self.issuer = settings.AZURE_AD_ISSUER
         self.audience = settings.AZURE_AD_AUDIENCE
+        self.client_secret = getattr(settings, 'AZURE_AD_CLIENT_SECRET', None)
+        # Validação dos campos sensíveis
+        if not self.client_secret:
+            raise RuntimeError("AZURE_AD_CLIENT_SECRET não está definido. Certifique-se que foi carregado do Key Vault ou variável de ambiente.")
+        if not self.jwks_uri or not self.issuer or not self.audience:
+            raise RuntimeError("Configuração Azure AD incompleta. Verifique se JWKS_URI, ISSUER e AUDIENCE foram corretamente populados.")
 
     def validate_token(self, token: str) -> AzureADTokenData:
         try:
