@@ -1,8 +1,12 @@
 import os
 from dotenv import load_dotenv
+import logging
 
 # Carrega variáveis de ambiente do arquivo .env na raiz do backend
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'), override=True)
+
+# Importa o serviço de carregamento de segredos
+from backend.app.services.config_loader_service import ConfigLoaderService
 
 # Aqui pode-se adicionar validações de configuração, logs de inicialização, ou outras rotinas necessárias
 
@@ -18,5 +22,12 @@ def validate_env_vars():
     missing = [var for var in required_vars if not os.getenv(var)]
     if missing:
         raise RuntimeError(f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing)}")
+
+# Carrega segredos sensíveis do Key Vault antes de inicializar endpoints
+try:
+    ConfigLoaderService().load_secrets_from_key_vault()
+except Exception as e:
+    logging.error(f"Erro ao carregar segredos do Key Vault na inicialização: {e}")
+    # Modo degradado: prossegue com variáveis de ambiente se o Key Vault estiver indisponível
 
 validate_env_vars()
