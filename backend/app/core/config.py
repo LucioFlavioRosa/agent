@@ -6,12 +6,12 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     AZURE_STORAGE_CONNECTION_STRING: str = ""
-    AZURE_STORAGE_CONTAINER_NAME: str
+    AZURE_STORAGE_CONTAINER_NAME: str = ""
     MCP_SERVER_BASE_URL: str = "http://mcp-app-service.azurewebsites.net"
 
     # Novos campos para Azure AD (moderno, sem ROPC)
-    AZURE_AD_TENANT_ID: str
-    AZURE_AD_CLIENT_ID: str
+    AZURE_AD_TENANT_ID: str = ""
+    AZURE_AD_CLIENT_ID: str = ""
     AZURE_AD_CLIENT_SECRET: str = ""
     
     # Novos campos para validação JWT segura
@@ -24,12 +24,6 @@ class Settings(BaseSettings):
         "criacao_epicos_azure_devops": "https://mcp-epicos.azurewebsites.net"
         # Adicione outros mapeamentos conforme necessário
     }
-
-    # URLs dos cofres do Key Vault
-    AZURE_KV_URL: Optional[str] = None
-    DEVOPS_KV_URL: Optional[str] = None
-    GITHUB_KV_URL: Optional[str] = None
-    LLM_KV_URL: Optional[str] = None
     
     class Config:
         env_file = ".env"
