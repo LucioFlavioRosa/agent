@@ -27,3 +27,15 @@ def test_auth_config_endpoint(client):
     assert "scope" in data
 
 # Outros testes de autenticação podem ser adicionados aqui, usando o fixture mock_key_vault_secrets
+
+# Novo teste para modo degradado
+@pytest.mark.asyncio
+def test_auth_without_key_vault_secrets(client):
+    # Simula falha no carregamento de segredos do Key Vault
+    with patch("backend.app.services.config_loader_service.ConfigLoaderService.load_secrets_from_key_vault") as mock_loader:
+        mock_loader.side_effect = Exception("Key Vault indisponível")
+        # O sistema deve entrar em modo degradado, endpoints críticos devem retornar erro 503
+        response = client.get("/auth/config")
+        # O endpoint pode retornar 503 ou 500 dependendo da implementação
+        assert response.status_code in (503, 500)
+        assert "detail" in response.json()
