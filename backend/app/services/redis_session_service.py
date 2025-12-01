@@ -93,3 +93,19 @@ class RedisSessionService:
         session_data = json.loads(session_json)
         session_data[REPORT_TYPES[report_type]] = report_data
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+
+    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_name: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
+        session_id = self.create_session(usuario_executor, projeto, analysis_name, analysis_type)
+        key = f"session:{session_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+        session_data = json.loads(session_json)
+        session_data["epicos_report"] = project_state.get("epicos_report")
+        session_data["features_report"] = project_state.get("features_report")
+        session_data["times_descricao_report"] = project_state.get("times_descricao_report")
+        session_data["alocacao_times_report"] = project_state.get("alocacao_times_report")
+        session_data["premissas_riscos_report"] = project_state.get("premissas_riscos_report")
+        session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
+        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        return session_id
