@@ -34,7 +34,7 @@ app.add_middleware(
 # Registrando as rotas
 app.include_router(auth_router, prefix="/auth")
 app.include_router(upload_router, prefix="/upload")
-app.include_router(analysis_router, prefix="/analysis") # Nova rota registrada
+app.include_router(analysis_router, prefix="/analysis")
 
 # --- HANDLERS DE ERRO GLOBAIS ---
 @app.exception_handler(StarletteHTTPException)
