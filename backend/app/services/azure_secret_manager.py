@@ -3,6 +3,7 @@ from enum import Enum
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from backend.app.core.config import settings
+import logging
 
 class VaultType(str, Enum):
     AZURE = 'azure'
@@ -47,6 +48,10 @@ class AzureSecretManager:
         Raises:
             ValueError: Se o segredo não for encontrado
         """
+        logger = logging.getLogger("AzureSecretManager")
+        # Validação: loga aviso se o nome do segredo contiver underscores
+        if '_' in secret_name:
+            logger.warning(f"[AzureSecretManager] O nome do segredo '{secret_name}' contém underscores. O Azure Key Vault não permite underscores, apenas hífens. Use '{secret_name.lower().replace('_', '-')}' como nome do segredo no Key Vault.")
         try:
             secret_client = self._get_secret_client()
             secret = secret_client.get_secret(secret_name)
