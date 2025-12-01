@@ -6,6 +6,14 @@ from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
 
+REPORT_TYPES = {
+    'epicos': 'epicos_report',
+    'features': 'features_report',
+    'times_descricao': 'times_descricao_report',
+    'alocacao_times': 'alocacao_times_report',
+    'premissas_riscos': 'premissas_riscos_report'
+}
+
 class RedisSessionService:
     def __init__(self):
         self.redis_client = redis.Redis(
@@ -27,7 +35,13 @@ class RedisSessionService:
             "analysis_name": analysis_name,
             "analysis_type": analysis_type,
             "created_at": created_at,
-            "steps": []
+            "steps": [],
+            "epicos_report": None,
+            "features_report": None,
+            "times_descricao_report": None,
+            "alocacao_times_report": None,
+            "premissas_riscos_report": None,
+            "last_saved_to_blob": None
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, json.dumps(session_data))
         return session_id
@@ -67,4 +81,15 @@ class RedisSessionService:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = json.loads(session_json)
         session_data["status"] = status
+        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+
+    def update_report(self, session_id: str, report_type: str, report_data: Any):
+        if report_type not in REPORT_TYPES:
+            raise ValueError(f"Tipo de relatório inválido: {report_type}")
+        key = f"session:{session_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+        session_data = json.loads(session_json)
+        session_data[REPORT_TYPES[report_type]] = report_data
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
