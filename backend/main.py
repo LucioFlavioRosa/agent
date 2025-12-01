@@ -2,11 +2,13 @@
 import os
 import logging
 import json
+
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from backend.app.services.config_loader_service import ConfigLoaderService
 from backend.app.core.config import settings
 
