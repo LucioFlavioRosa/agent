@@ -39,3 +39,15 @@ class ProjectStateService:
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
         return state
+
+    @staticmethod
+    async def get_latest_analysis_metadata(usuario_executor: str, projeto: str) -> Dict[str, str]:
+        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
+        if not state:
+            return {}
+        analysis_name = state.get("analysis_name")
+        analysis_type = state.get("analysis_type")
+        return {
+            "analysis_name": analysis_name,
+            "analysis_type": analysis_type
+        }
