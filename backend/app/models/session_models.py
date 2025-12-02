@@ -23,6 +23,7 @@ class SessionData(BaseModel):
     alocacao_times_report: Optional[Any] = Field(default=None)
     premissas_riscos_report: Optional[Any] = Field(default=None)
     last_saved_to_blob: Optional[datetime] = Field(default=None)
+    docx_files: List[str] = Field(default_factory=list)
 
     def to_project_state(self) -> Dict[str, Any]:
         return {
@@ -36,5 +37,6 @@ class SessionData(BaseModel):
             "features_report": self.features_report,
             "times_descricao_report": self.times_descricao_report,
             "alocacao_times_report": self.alocacao_times_report,
-            "premissas_riscos_report": self.premissas_riscos_report
+            "premissas_riscos_report": self.premissas_riscos_report,
+            "docx_files": self.docx_files
         }
