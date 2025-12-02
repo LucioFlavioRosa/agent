@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     A[Frontend] -->|1. Requisição| B(API Layer)
     B -->|2. Validação de Token| C[Auth Middleware]
@@ -24,14 +24,17 @@ flowchart TD
     B -->|14. Resposta para Frontend| A
     A -->|15. Seleção Projeto Existente| B
     B -->|Busca Estado Projeto| E
-```
+    B -->|16. Recebe comentario_usuario| F
+    F -->|17. Armazena comentario_usuario| F
+    F -->|18. Envia comentario_usuario para MCP| I
+
 
 ---
 
 ## Etapas do Fluxo e Código Responsável
 
 ### 1. Recebimento da Requisição do Frontend
-- **Descrição:** O frontend envia requisições para o backend via endpoints HTTP (upload de DOCX, iniciar análise, salvar estado, etc).
+- **Descrição:** O frontend envia requisições para o backend via endpoints HTTP (upload de DOCX, iniciar análise, salvar estado, etc). O campo opcional `comentario_usuario` pode ser enviado junto com o arquivo DOCX ou na solicitação de análise.
 - **Código responsável:**
   - `backend/app/api/upload.py` (função `upload_docx`)
   - `backend/app/api/analysis.py` (função `start_analysis`)
@@ -51,10 +54,11 @@ flowchart TD
   - Chamado dentro de `upload_docx` em `backend/app/api/upload.py`
 
 ### 4. Salvamento dos Dados no Redis
-- **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado.
+- **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado. O campo opcional `comentario_usuario` é armazenado na sessão Redis.
 - **Código responsável:**
   - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`, `add_docx_file`)
   - Chamado em endpoints de análise e sessão
+  - Campo `comentario_usuario` em `SessionData` (`backend/app/models/session_models.py`)
 
 ### 5. Salvamento do caminho do DOCX no estado da sessão
 - **Descrição:** Todo arquivo DOCX enviado tem seu caminho salvo no campo `docx_files` do estado da sessão, garantindo histórico completo dos arquivos utilizados para geração e recuperação de todas as histórias.
@@ -101,7 +105,7 @@ flowchart TD
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
 ### 12. Envio para o MCP Server
-- **Descrição:** Payload de análise é enviado para o MCP Server via HTTP.
+- **Descrição:** Payload de análise é enviado para o MCP Server via HTTP. O campo opcional `comentario_usuario` é incluído no payload enviado ao MCP Server.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
@@ -123,32 +127,27 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py` quando detectado projeto existente
 
----
+### 16. Recebimento do comentario_usuario do frontend
+- **Descrição:** O campo opcional `comentario_usuario` é recebido do frontend nos endpoints de upload e análise.
+- **Código responsável:**
+  - `backend/app/api/upload.py` (função `upload_docx`)
+  - `backend/app/api/analysis.py` (função `start_analysis`)
 
-## Fluxo Resumido
+### 17. Armazenamento do comentario_usuario na sessão Redis
+- **Descrição:** O campo opcional `comentario_usuario` é persistido na sessão Redis para uso posterior.
+- **Código responsável:**
+  - `backend/app/services/redis_session_service.py` (função `create_session`, campo em SessionData)
 
-1. O frontend faz uma requisição (ex: upload de DOCX ou iniciar análise).
-2. O backend valida o token do usuário (Azure AD).
-3. O backend verifica se o projeto já existe para o usuário no Blob Storage.
-4. Se o projeto não existir, o upload do DOCX é obrigatório para criar o projeto.
-5. Se o projeto existir, o upload do DOCX é opcional e pode ser omitido. Para projetos existentes, basta informar o nome do projeto e o usuário autenticado; os campos `analysis_name` e `analysis_type` são opcionais e serão buscados automaticamente do estado mais recente do projeto.
-6. O arquivo DOCX (se enviado) é processado e o texto extraído.
-7. O arquivo é salvo no Azure Blob Storage.
-8. Uma sessão é criada ou restaurada no Redis, persistindo dados relevantes.
-9. Todo arquivo DOCX enviado tem seu caminho salvo no campo `docx_files` do estado da sessão, garantindo histórico completo para recuperação futura.
-10. Variáveis de ambiente e segredos do Key Vault são carregados para configuração.
-11. O estado do projeto/sessão é salvo periodicamente no Blob Storage.
-12. O estado pode ser lido do Blob Storage para restaurar sessões.
-13. O payload de análise é enviado para o MCP Server.
-14. A resposta do MCP Server é recebida e processada.
-15. O backend envia a resposta final para o frontend.
-16. Quando o usuário seleciona um projeto existente, o estado é buscado no Blob Storage e restaurado.
+### 18. Envio do comentario_usuario para MCP Server
+- **Descrição:** O campo opcional `comentario_usuario` é propagado no payload enviado ao MCP Server.
+- **Código responsável:**
+  - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
+  - Chamado dentro de `backend/app/api/analysis.py`
 
 ---
 
 ## Observações
-- O backend só exige o upload do DOCX se o projeto não existir previamente para o usuário.
-- Para projetos existentes, basta informar o nome do projeto e o usuário autenticado; os campos `analysis_name` e `analysis_type` são opcionais e serão buscados automaticamente do estado mais recente do projeto.
+- O campo opcional `comentario_usuario` pode ser enviado tanto no upload do DOCX quanto na solicitação de análise, e será armazenado na sessão Redis e propagado para o MCP Server.
 - Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
-- O diagrama Mermaid foi atualizado para incluir a etapa de busca de metadados do projeto no Blob Storage.
-- O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras.
+- O diagrama Mermaid foi atualizado para incluir a etapa de recebimento, armazenamento e envio do campo `comentario_usuario`.
+- O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras, e permite o envio de comentários adicionais pelo usuário.
