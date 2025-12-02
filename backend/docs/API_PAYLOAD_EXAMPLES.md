@@ -13,41 +13,41 @@ Este documento apresenta exemplos práticos de payloads enviados pelo frontend p
 O backend aceita apenas um dos três formatos de payload abaixo (todos os campos obrigatórios, exceto onde indicado como opcional):
 
 **Exemplo 1:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "<arquivo .docx>",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-
+```
 
 **Exemplo 2:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "<arquivo .docx>"
 }
-
+```
 
 **Exemplo 3:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário sem arquivo."
 }
-
+```
 
 **Resposta de Sucesso:**
-
+```json
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 ---
 
@@ -56,7 +56,7 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 O backend sempre envia para o MCP um dos três payloads abaixo, conforme o recebido do frontend:
 
 **Exemplo 1:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
@@ -65,10 +65,10 @@ O backend sempre envia para o MCP um dos três payloads abaixo, conforme o receb
   "usuario_executor": "user@example.com",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 **Exemplo 2:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
@@ -76,10 +76,10 @@ O backend sempre envia para o MCP um dos três payloads abaixo, conforme o receb
   "usuario_executor": "user@example.com",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 **Exemplo 3:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
@@ -87,7 +87,7 @@ O backend sempre envia para o MCP um dos três payloads abaixo, conforme o receb
   "usuario_executor": "user@example.com",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 ---
 
@@ -108,14 +108,14 @@ POST /upload/docx
 - is_new_project: false
 
 **Resposta:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
 }
-
+```
 
 ---
 
@@ -166,19 +166,19 @@ HTTP 401
 
 **Exemplo:**
 POST /analysis/start
-
+```json
 {
   "projeto": "ProjetoNovo"
   // Faltando analysis_type e arquivo_docx/comentario_usuario
 }
-
+```
 **Resposta:**
 HTTP 400
-
+```json
 {
   "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios."
 }
-
+```
 
 ---
 
@@ -189,11 +189,11 @@ GET /projects/check?projeto=ProjetoInexistente
 
 **Resposta:**
 HTTP 200
-
+```json
 {
   "exists": false
 }
-
+```
 
 ---
 
@@ -201,20 +201,20 @@ HTTP 200
 
 **Exemplo:**
 POST /analysis/start
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops"
   // Faltando arquivo_docx e comentario_usuario
 }
-
+```
 **Resposta:**
 HTTP 400
-
+```json
 {
   "detail": "O upload do DOCX ou um comentário é obrigatório para novos projetos."
 }
-
+```
 
 ---
 
@@ -226,11 +226,11 @@ POST /analysis/start
 
 **Resposta:**
 HTTP 502
-
+```json
 {
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): ..."
 }
-
+```
 
 ---
 
@@ -242,11 +242,11 @@ POST /session/{session_id}/save-state
 
 **Resposta:**
 HTTP 500
-
+```json
 {
   "detail": "Erro ao salvar estado: ..."
 }
-
+```
 
 ---
 
@@ -258,11 +258,11 @@ GET /session/{session_id}/reports
 
 **Resposta:**
 HTTP 404
-
+```json
 {
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 
 ---
 
