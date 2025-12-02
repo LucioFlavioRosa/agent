@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     A[Frontend] -->|1. Requisição| B(API Layer)
     B -->|2. Validação de Token| C[Auth Middleware]
@@ -18,12 +18,13 @@ flowchart TD
     G -->|8. Carregamento Segredos| H[Azure Key Vault]
     F -->|9. Salvamento Estado| E
     B -->|10. Verificação Projeto Existente| E
-    B -->|11. Envio para MCP| I[MCP Server]
-    I -->|12. Resposta MCP| B
-    B -->|13. Resposta para Frontend| A
-    A -->|14. Seleção Projeto Existente| B
+    B -->|11. Busca Metadados Projeto| E
+    B -->|12. Envio para MCP| I[MCP Server]
+    I -->|13. Resposta MCP| B
+    B -->|14. Resposta para Frontend| A
+    A -->|15. Seleção Projeto Existente| B
     B -->|Busca Estado Projeto| E
-```
+
 
 ---
 
@@ -93,24 +94,30 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
-### 11. Envio para o MCP Server
+### 11. Busca de Metadados do Projeto no Blob Storage
+- **Descrição:** Para projetos existentes, se `analysis_name` e `analysis_type` não forem informados, o backend busca esses metadados automaticamente do estado mais recente do projeto no Blob Storage usando o usuário autenticado.
+- **Código responsável:**
+  - `backend/app/services/project_state_service.py` (função `get_latest_analysis_metadata`)
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
+
+### 12. Envio para o MCP Server
 - **Descrição:** Payload de análise é enviado para o MCP Server via HTTP.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
-### 12. Recebimento da Resposta do MCP Server
+### 13. Recebimento da Resposta do MCP Server
 - **Descrição:** A resposta do MCP Server é processada e o job_id é extraído.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis` - retorno)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
-### 13. Envio para o Frontend
+### 14. Envio para o Frontend
 - **Descrição:** A resposta final (incluindo URLs, job_id, mensagens e dados de sessão) é enviada para o frontend.
 - **Código responsável:**
   - `backend/app/api/analysis.py`, `backend/app/api/upload.py`, `backend/app/api/session.py`, `backend/app/api/auth.py` (retorno das funções FastAPI)
 
-### 14. Busca do Estado do Projeto no Blob Storage (Projeto Existente)
+### 15. Busca do Estado do Projeto no Blob Storage (Projeto Existente)
 - **Descrição:** Quando o usuário seleciona um projeto existente, o estado é recuperado do Blob Storage e restaurado na sessão Redis.
 - **Código responsável:**
   - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
@@ -124,7 +131,7 @@ flowchart TD
 2. O backend valida o token do usuário (Azure AD).
 3. O backend verifica se o projeto já existe para o usuário no Blob Storage.
 4. Se o projeto não existir, o upload do DOCX é obrigatório para criar o projeto.
-5. Se o projeto existir, o upload do DOCX é opcional e pode ser omitido.
+5. Se o projeto existir, o upload do DOCX é opcional e pode ser omitido. Para projetos existentes, basta informar o nome do projeto e o usuário autenticado; os campos `analysis_name` e `analysis_type` são opcionais e serão buscados automaticamente do estado mais recente do projeto.
 6. O arquivo DOCX (se enviado) é processado e o texto extraído.
 7. O arquivo é salvo no Azure Blob Storage.
 8. Uma sessão é criada ou restaurada no Redis, persistindo dados relevantes.
@@ -141,6 +148,7 @@ flowchart TD
 
 ## Observações
 - O backend só exige o upload do DOCX se o projeto não existir previamente para o usuário.
+- Para projetos existentes, basta informar o nome do projeto e o usuário autenticado; os campos `analysis_name` e `analysis_type` são opcionais e serão buscados automaticamente do estado mais recente do projeto.
 - Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
-- O diagrama Mermaid foi atualizado para incluir a etapa de salvamento do caminho do DOCX no estado da sessão.
-- O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload.
+- O diagrama Mermaid foi atualizado para incluir a etapa de busca de metadados do projeto no Blob Storage.
+- O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras.
