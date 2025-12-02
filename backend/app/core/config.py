@@ -22,14 +22,14 @@ class Settings(BaseSettings):
         "criacao_epicos_azure_devops": "https://mcp-epicos.azurewebsites.net"
     }
 
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
+    REDIS_HOST: Optional[str] = None
+    REDIS_PORT: Optional[int] = None
     REDIS_PASSWORD: Optional[str] = None
-    REDIS_DB: int = 0
+    REDIS_DB: Optional[int] = None
     REDIS_SESSION_TTL: int = 86400
     PROJECT_STATE_SAVE_INTERVAL_MINUTES: int = 10
-    REDIS_USE_SSL: bool = True
-    REDIS_SSL_CERT_REQS: Optional[str] = 'required'
+    REDIS_USE_SSL: Optional[bool] = None
+    REDIS_SSL_CERT_REQS: Optional[str] = None
     
     class Config:
         env_file = ".env"
@@ -52,7 +52,13 @@ class Settings(BaseSettings):
             "AZURE_STORAGE_CONTAINER_NAME",
             "AZURE_AD_CLIENT_SECRET",
             "JWT_SECRET_KEY",
-            "MCP_SERVER_BASE_URL"
+            "MCP_SERVER_BASE_URL",
+            "REDIS_HOST",
+            "REDIS_PORT",
+            "REDIS_PASSWORD",
+            "REDIS_DB",
+            "REDIS_USE_SSL",
+            "REDIS_SSL_CERT_REQS"
         ]
         for field in sensitive_fields:
             value = getattr(self, field, None)
@@ -67,9 +73,15 @@ class Settings(BaseSettings):
             "AZURE_STORAGE_CONTAINER_NAME",
             "AZURE_AD_CLIENT_SECRET",
             "JWT_SECRET_KEY",
-            "MCP_SERVER_BASE_URL"
+            "MCP_SERVER_BASE_URL",
+            "REDIS_HOST",
+            "REDIS_PORT",
+            "REDIS_PASSWORD",
+            "REDIS_DB",
+            "REDIS_USE_SSL",
+            "REDIS_SSL_CERT_REQS"
         ]
-        missing = [field for field in required_fields if not getattr(self, field, None)]
+        missing = [field for field in required_fields if getattr(self, field, None) in (None, "")]
         if missing:
             raise ValueError(f"Os seguintes campos obrigatórios estão vazios após o carregamento dos segredos: {', '.join(missing)}")
 
