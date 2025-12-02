@@ -3,72 +3,72 @@
 ## 1. Iniciar Análise com DOCX (Novo Projeto)
 
 **Requisição:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_name": "Sprint 1",
   "analysis_type": "criacao_epicos_azure_devops",
   "extracted_text": "Texto extraído do DOCX da reunião"
 }
-
+```
 
 **Resposta de Sucesso:**
-
+```json
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 **Resposta de Erro (faltando DOCX para novo projeto):**
-
+```json
 {
   "detail": "O upload do DOCX é obrigatório para novos projetos."
 }
-
+```
 
 ---
 
 ## 2. Iniciar Análise sem DOCX (Projeto Existente)
 
 **Requisição:**
-
+```json
 {
   "projeto": "ProjetoExistente",
   "analysis_name": "Sprint 2",
   "analysis_type": "criacao_epicos_azure_devops"
 }
-
+```
 
 **Resposta de Sucesso:**
-
+```json
 {
   "job_id": "789012",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "ghijkl-uuid"
 }
-
+```
 
 ---
 
 ## 3. Iniciar Análise sem DOCX para Projeto Inexistente (Erro)
 
 **Requisição:**
-
+```json
 {
   "projeto": "ProjetoInexistente",
   "analysis_name": "Sprint 3",
   "analysis_type": "criacao_epicos_azure_devops"
 }
-
+```
 
 **Resposta de Erro:**
-
+```json
 {
   "detail": "O upload do DOCX é obrigatório para novos projetos."
 }
-
+```
 
 ---
 
@@ -80,21 +80,21 @@ GET /session/{session_id}/docx-files
 
 
 **Exemplo de resposta com lista vazia:**
-
+```json
 {
   "docx_files": []
 }
-
+```
 
 **Exemplo de resposta com múltiplos arquivos:**
-
+```json
 {
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint1.docx",
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
 }
-
+```
 
 ---
 
