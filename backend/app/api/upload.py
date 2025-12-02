@@ -26,6 +26,7 @@ async def upload_docx(
     is_new_project: bool = Form(True),
     session_id: Optional[str] = Form(None),
     analysis_type: Optional[str] = Form(None),
+    comentario_usuario: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
