@@ -1,15 +1,236 @@
-# Exemplos de Payloads: /analysis/start
+# Exemplos de Payloads: Comunicação Frontend → Backend
 
-## 0. Login e Listagem de Projetos do Usuário
+Este documento apresenta exemplos práticos de payloads enviados pelo frontend para o backend Peers CodeAI, cobrindo os principais fluxos de uso, cenários comuns e casos de erro. Inclui exemplos de chamadas HTTP, headers, corpo da requisição e respostas esperadas.
+
+---
+
+## 1. Exemplos de Payloads por Cenário de Uso
+
+### 1.1 Iniciar Análise com DOCX e Comentário em Projeto Novo
+
+**Endpoint:**
+POST /analysis/start
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+- Content-Type: application/json
+
+**Body:**
+
+{
+  "projeto": "ProjetoNovo",
+  "analysis_name": "Sprint 1",
+  "analysis_type": "criacao_epicos_azure_devops",
+  "extracted_text": "Texto extraído do DOCX da reunião",
+  "comentario_usuario": "Este é um comentário adicional do usuário."
+}
+
+**Resposta de Sucesso:**
+
+{
+  "job_id": "123456",
+  "message": "Análise solicitada com sucesso ao agente.",
+  "session_id": "abcdef-uuid"
+}
+
+
+---
+
+### 1.2 Iniciar Análise em Projeto Existente apenas com Nome do Projeto
+
+**Endpoint:**
+POST /analysis/start
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+- Content-Type: application/json
+
+**Body:**
+
+{
+  "projeto": "ProjetoExistente",
+  "comentario_usuario": "Comentário para análise apenas com nome do projeto."
+}
+
+**Resposta de Sucesso:**
+
+{
+  "job_id": "789012",
+  "message": "Análise solicitada com sucesso ao agente.",
+  "session_id": "ghijkl-uuid"
+}
+
+
+---
+
+### 1.3 Iniciar Análise em Projeto Existente informando analysis_name e analysis_type
+
+**Endpoint:**
+POST /analysis/start
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+- Content-Type: application/json
+
+**Body:**
+
+{
+  "projeto": "ProjetoExistente",
+  "analysis_name": "Sprint 2",
+  "analysis_type": "criacao_epicos_azure_devops",
+  "comentario_usuario": "Comentário para análise existente."
+}
+
+**Resposta de Sucesso:**
+
+{
+  "job_id": "789012",
+  "message": "Análise solicitada com sucesso ao agente.",
+  "session_id": "ghijkl-uuid"
+}
+
+
+---
+
+### 1.4 Upload de DOCX Adicional em Projeto Existente
+
+**Endpoint:**
+POST /upload/docx
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+- Content-Type: multipart/form-data
+
+**Form Data:**
+- file: arquivo .docx
+- projeto: "ProjetoExistente"
+- analysis_name: "Sprint 2"
+- session_id: "ghijkl-uuid"
+- is_new_project: false
+
+**Resposta:**
+
+{
+  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
+  "extracted_text": "Texto extraído do DOCX da reunião",
+  "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
+  "session_id": "ghijkl-uuid"
+}
+
+
+---
+
+### 1.5 Consulta de Relatórios de Sessão
+
+**Endpoint:**
+GET /session/{session_id}/reports
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+
+**Resposta:**
+
+{
+  "epicos_report": {...},
+  "features_report": {...},
+  "times_descricao_report": {...},
+  "alocacao_times_report": {...},
+  "premissas_riscos_report": {...}
+}
+
+
+---
+
+### 1.6 Atualização de Relatório Específico
+
+**Endpoint:**
+PUT /session/{session_id}/report
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+- Content-Type: application/json
+
+**Body:**
+
+{
+  "report_type": "epicos",
+  "report_data": { "campo": "valor" }
+}
+
+**Resposta:**
+
+{
+  "status": "ok"
+}
+
+
+---
+
+### 1.7 Salvamento Manual de Estado da Sessão
+
+**Endpoint:**
+POST /session/{session_id}/save-state
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+
+**Resposta:**
+
+{
+  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T130000Z.json"
+}
+
+
+---
+
+### 1.8 Verificação de Projeto com Resposta de Estado Completo
+
+**Endpoint:**
+GET /projects/check?projeto=ProjetoExistente
+
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
+
+**Resposta para projeto existente:**
+
+{
+  "exists": true,
+  "state": {
+    "usuario_executor": "user@example.com",
+    "projeto": "ProjetoExistente",
+    "analysis_name": "Sprint 2",
+    "analysis_type": "criacao_epicos_azure_devops",
+    "created_at": "2024-06-01T12:34:56Z",
+    "last_saved_to_blob": "2024-06-01T13:00:00Z",
+    "epicos_report": null,
+    "features_report": null,
+    "times_descricao_report": null,
+    "alocacao_times_report": null,
+    "premissas_riscos_report": null,
+    "docx_files": ["https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"],
+    "comentario_usuario": "Comentário salvo no estado."
+  }
+}
+
+**Resposta para projeto inexistente:**
+
+{
+  "exists": false
+}
+
+
+---
+
+### 1.9 Listagem de Projetos após Login
 
 **Endpoint:**
 POST /auth/login
 
-**Requisição:**
-- Header: Authorization: Bearer <token_jwt_azure_ad>
+**Headers:**
+- Authorization: Bearer <token_jwt_azure_ad>
 
-**Resposta de Sucesso:**
-```json
+**Resposta:**
+
 {
   "user_info": {
     "sub": "user-teste-id-123",
@@ -35,218 +256,180 @@ POST /auth/login
     }
   ]
 }
-```
 
-**Resposta de Sucesso (sem projetos):**
-```json
-{
-  "user_info": {
-    "sub": "user-teste-id-123",
-    "usuario_executor": "dev_tester_local",
-    "name": "Desenvolvedor Teste",
-    "email": "dev@peers.com.br",
-    "roles": ["admin"]
-  },
-  "projects": []
-}
-```
 
-**Resposta de Erro 401 (token inválido):**
-```json
+---
+
+## 2. Fluxo Completo de Uso (Sequência Típica de Chamadas)
+
+1. **Login e obtenção do token JWT Azure AD**
+   - O frontend autentica o usuário e obtém o token via Azure AD/MSAL.
+
+2. **Listagem de projetos do usuário**
+   - POST /auth/login
+   - Header: Authorization: Bearer <token>
+
+3. **Verificação de projeto existente**
+   - GET /projects/check?projeto=ProjetoX
+   - Header: Authorization: Bearer <token>
+
+4. **Upload de DOCX (se novo projeto)**
+   - POST /upload/docx
+   - FormData: file, projeto, analysis_name, analysis_type, comentario_usuario
+
+5. **Iniciar análise**
+   - POST /analysis/start
+   - Body: conforme exemplos acima
+
+6. **Consulta de status/relatórios**
+   - GET /session/{session_id}/reports
+
+7. **Salvamento de estado**
+   - POST /session/{session_id}/save-state
+
+---
+
+## 3. Casos de Erro Comuns
+
+### 3.1 Token JWT inválido ou expirado
+
+**Requisição:**
+- Qualquer endpoint protegido
+- Header: Authorization: Bearer <token_invalido>
+
+**Resposta:**
+HTTP 401
+
 {
   "detail": "Usuário não autenticado."
 }
-```
 
-**Resposta de Erro 500 (erro ao buscar projetos):**
-```json
-{
-  "detail": "Erro ao buscar projetos do usuário: ..."
-}
-```
 
 ---
 
-## 1. Iniciar Análise com DOCX (Novo Projeto)
+### 3.2 Campos obrigatórios ausentes
 
-**Requisição:**
-```json
-{
-  "projeto": "ProjetoNovo",
-  "analysis_name": "Sprint 1",
-  "analysis_type": "criacao_epicos_azure_devops",
-  "extracted_text": "Texto extraído do DOCX da reunião",
-  "comentario_usuario": "Este é um comentário adicional do usuário."
-}
-```
-**Resposta de Sucesso:**
-```json
-{
-  "job_id": "123456",
-  "message": "Análise solicitada com sucesso ao agente.",
-  "session_id": "abcdef-uuid"
-}
-```
-**Resposta de Erro (faltando DOCX para novo projeto):**
-```json
-{
-  "detail": "O upload do DOCX é obrigatório para novos projetos."
-}
-```
----
+**Exemplo:**
+POST /analysis/start
 
-## 2. Iniciar Análise sem DOCX (Projeto Existente)
-
-**Requisição:**
-```json
 {
-  "projeto": "ProjetoExistente",
-  "analysis_name": "Sprint 2",
-  "analysis_type": "criacao_epicos_azure_devops",
-  "comentario_usuario": "Comentário para análise existente."
+  "projeto": "ProjetoNovo"
+  // Faltando analysis_name, analysis_type e extracted_text
 }
-```
-**Resposta de Sucesso:**
-```json
-{
-  "job_id": "789012",
-  "message": "Análise solicitada com sucesso ao agente.",
-  "session_id": "ghijkl-uuid"
-}
-```
----
-
-## 2a. Iniciar Análise em Projeto Existente informando apenas o nome do projeto
-
-**Requisição:**
-```json
-{
-  "projeto": "ProjetoExistente",
-  "comentario_usuario": "Comentário para análise apenas com nome do projeto."
-}
-```
-**Resposta de Sucesso:**
-```json
-{
-  "job_id": "789012",
-  "message": "Análise solicitada com sucesso ao agente.",
-  "session_id": "ghijkl-uuid"
-}
-```
-**Resposta de Erro (projeto não encontrado):**
-```json
-{
-  "detail": "Projeto não encontrado para o usuário informado."
-}
-```
----
-
-## 3. Iniciar Análise sem DOCX para Projeto Inexistente (Erro)
-
-**Requisição:**
-```json
-{
-  "projeto": "ProjetoInexistente",
-  "analysis_name": "Sprint 3",
-  "analysis_type": "criacao_epicos_azure_devops",
-  "comentario_usuario": "Comentário para projeto inexistente."
-}
-```
-**Resposta de Erro:**
-```json
-{
-  "detail": "O upload do DOCX é obrigatório para novos projetos."
-}
-```
----
-
-## 4. Upload de DOCX com comentário do usuário
-
-**Endpoint:**
-POST /upload/docx
-
-**Payload Form Data:**
-- file: arquivo .docx
-- projeto: "ProjetoNovo"
-- analysis_name: "Sprint 1"
-- analysis_type: "criacao_epicos_azure_devops"
-- comentario_usuario: "Comentário do usuário para upload."
 
 **Resposta:**
-```json
+HTTP 400
+
 {
-  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint1.docx",
-  "extracted_text": "Texto extraído do DOCX da reunião",
-  "message": "Arquivo processado com sucesso. Pronto para análise.",
-  "session_id": "abcdef-uuid"
+  "detail": "Os campos 'analysis_name' e 'analysis_type' são obrigatórios para novos projetos."
 }
-```
+
+
 ---
 
-## 5. Consultar arquivos DOCX enviados para uma sessão
+### 3.3 Projeto não encontrado
 
-**Endpoint:**
-GET /session/{session_id}/docx-files
+**Exemplo:**
+GET /projects/check?projeto=ProjetoInexistente
 
-**Exemplo de resposta com lista vazia:**
-```json
-{
-  "docx_files": []
-}
-```
-**Exemplo de resposta com múltiplos arquivos:**
-```json
-{
-  "docx_files": [
-    "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint1.docx",
-    "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
-  ]
-}
-```
----
+**Resposta:**
+HTTP 200
 
-## 6. Verificar existência de projeto antes de qualquer operação
-
-**Endpoint:**
-GET /projects/check?projeto=ProjetoExistente
-
-**Exemplo de requisição:**
-GET /projects/check?projeto=ProjetoExistente
-
-**Exemplo de resposta para projeto existente:**
-```json
-{
-  "exists": true,
-  "state": {
-    "usuario_executor": "user@example.com",
-    "projeto": "ProjetoExistente",
-    "analysis_name": "Sprint 2",
-    "analysis_type": "criacao_epicos_azure_devops",
-    "created_at": "2024-06-01T12:34:56Z",
-    "last_saved_to_blob": "2024-06-01T13:00:00Z",
-    "epicos_report": null,
-    "features_report": null,
-    "times_descricao_report": null,
-    "alocacao_times_report": null,
-    "premissas_riscos_report": null,
-    "docx_files": ["https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"],
-    "comentario_usuario": "Comentário salvo no estado."
-  }
-}
-```
-**Exemplo de resposta para projeto inexistente:**
-```json
 {
   "exists": false
 }
-```
+
+
 ---
 
-## Observações
-- O frontend deve sempre chamar `/auth/login` após o login, para validar o token e obter a lista de projetos do usuário.
-- O campo `extracted_text` só é obrigatório se o projeto não existir previamente para o usuário.
-- Para projetos existentes, basta informar o nome do projeto. O backend irá buscar o usuário autenticado e os metadados necessários (`analysis_name` e `analysis_type`) automaticamente do estado mais recente no Blob Storage.
-- O campo opcional `comentario_usuario` pode ser enviado tanto no upload do DOCX quanto na solicitação de análise, e será propagado para o MCP Server.
-- O backend faz a verificação automática do estado do projeto no Blob Storage.
-- Todo arquivo DOCX enviado tem seu caminho salvo no campo `docx_files` do estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
-- O endpoint `GET /session/{session_id}/docx-files` retorna o histórico completo de arquivos DOCX enviados para a sessão.
+### 3.4 Arquivo DOCX obrigatório não enviado para novo projeto
+
+**Exemplo:**
+POST /analysis/start
+
+{
+  "projeto": "ProjetoNovo",
+  "analysis_name": "Sprint 1",
+  "analysis_type": "criacao_epicos_azure_devops"
+  // Faltando extracted_text
+}
+
+**Resposta:**
+HTTP 400
+
+{
+  "detail": "O upload do DOCX é obrigatório para novos projetos."
+}
+
+
+---
+
+### 3.5 Erro de comunicação com MCP Server
+
+**Exemplo:**
+POST /analysis/start
+- (Simule MCP Server offline)
+
+**Resposta:**
+HTTP 502
+
+{
+  "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): ..."
+}
+
+
+---
+
+### 3.6 Erro ao salvar no Blob Storage
+
+**Exemplo:**
+POST /session/{session_id}/save-state
+- (Simule falha de conexão com Blob Storage)
+
+**Resposta:**
+HTTP 500
+
+{
+  "detail": "Erro ao salvar estado: ..."
+}
+
+
+---
+
+### 3.7 Erro ao conectar ao Redis
+
+**Exemplo:**
+GET /session/{session_id}/reports
+- (Simule falha de conexão Redis)
+
+**Resposta:**
+HTTP 404
+
+{
+  "detail": "Sessão não encontrada: ..."
+}
+
+
+---
+
+### 3.8 IP não autorizado
+
+**Exemplo:**
+- Qualquer endpoint acessado de IP não permitido
+
+**Resposta:**
+HTTP 403
+
+{
+  "detail": "Acesso negado. IP <ip> não autorizado."
+}
+
+
+---
+
+## Observações Gerais
+- O campo opcional `comentario_usuario` pode ser enviado tanto no upload do DOCX quanto na solicitação de análise.
+- O campo `extracted_text` é obrigatório apenas para novos projetos.
+- Para projetos existentes, basta informar o nome do projeto ou, opcionalmente, analysis_name e analysis_type.
+- O header Authorization é obrigatório para todos os endpoints protegidos.
+- Todos os exemplos de resposta seguem o padrão JSON.
