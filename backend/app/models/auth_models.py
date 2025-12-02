@@ -8,7 +8,3 @@ class TokenData(BaseModel):
     iss: Optional[str] = Field(None, description="Issuer do token.")
     aud: Optional[str] = Field(None, description="Audience do token.")
     additional_claims: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Outros claims presentes no JWT.")
-
-class LoginRequest(BaseModel):
-    username: str = Field(..., description="Nome de usuário para login.")
-    password: str = Field(..., description="Senha do usuário.")
