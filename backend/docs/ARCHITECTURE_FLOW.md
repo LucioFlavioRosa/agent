@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     Z[Frontend] -->|0. Login| AA(API Layer)
     AA -->|1. Validação do Token| AB[Auth Middleware]
@@ -33,14 +33,14 @@ flowchart TD
     B -->|22. Resposta para Frontend| Z
     J -->|23. Resposta MCP → Backend| B
     B -->|24. Resposta Backend → Frontend| Z
-```
+
 
 > **Observação:** Os exemplos de payload de cada etapa (incluindo MCP → Backend e Backend → Frontend) estão documentados em detalhes em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 
 ---
 
 ## Etapa 0: Login e Listagem de Projetos
-- **Descrição:** Após o login no frontend, o backend recebe o token, valida via Azure AD e busca todos os projetos do usuário no Blob Storage. A resposta inclui as informações do usuário autenticado e a lista de projetos encontrados.
+- **Descrição:** Após o login no frontend, o backend recebe o token via header `Authorization`, valida via Azure AD e busca todos os projetos do usuário no Blob Storage. A resposta inclui as informações do usuário autenticado e a lista de projetos encontrados. Nenhum corpo de requisição é enviado, apenas o token.
 - **Código responsável:**
   - `backend/app/api/auth.py` (endpoint `POST /auth/login`)
   - `backend/app/middleware/auth_middleware.py` (função `get_current_user`)
