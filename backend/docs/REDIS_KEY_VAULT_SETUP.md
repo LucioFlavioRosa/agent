@@ -14,6 +14,7 @@ Crie os seguintes segredos no Key Vault, usando nomes com hífens:
 - `redis-ssl-cert-reqs`     → `required` (requer certificado SSL)
 
 ## 3. Como Criar os Segredos no Azure CLI
+```text
 sh
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-host --value "your-redis-cache.redis.cache.windows.net"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-port --value "6380"
@@ -21,14 +22,15 @@ az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-passwor
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-db --value "0"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-use-ssl --value "True"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-ssl-cert-reqs --value "required"
-
+```
 
 ## 4. Validação dos Segredos
 Após criar os segredos, valide que eles estão presentes:
+```text
 sh
 az keyvault secret list --vault-name kv-codeai-azure-dev-usc
 az keyvault secret show --vault-name kv-codeai-azure-dev-usc --name redis-host
-
+```
 
 ## 5. Testando a Conectividade do Backend
 Após o deploy, acesse o endpoint `/health/infrastructure` para verificar se o backend está conseguindo conectar ao Redis usando os segredos do Key Vault. Se algum segredo estiver ausente, o backend irá reportar erro crítico na inicialização.
