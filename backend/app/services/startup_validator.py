@@ -73,11 +73,11 @@ class StartupValidator:
             # Validação adicional: busca de metadados do projeto existente
             try:
                 metadata = None
-                metadata = ProjectStateService.get_latest_analysis_metadata_sync(test_usuario, test_projeto)
-                if metadata and metadata.get("analysis_name") and metadata.get("analysis_type"):
+                metadata = LocalProjectHelper.get_latest_analysis_metadata_sync(test_usuario, test_projeto)
+                if metadata and metadata.get("analysis_type"):
                     self.status_report['blob_storage_metadata'] = {
                         'status': 'ok',
-                        'detail': 'Metadados analysis_name e analysis_type recuperados com sucesso do estado mais recente do projeto.'
+                        'detail': 'Metadados e analysis_type recuperados com sucesso do estado mais recente do projeto.'
                     }
                 else:
                     self.status_report['blob_storage_metadata'] = {
@@ -145,7 +145,7 @@ class StartupValidator:
             if missing:
                 self.status_report['redis'] = {
                     'status': 'fail',
-                    'detail': f'Segredos do Redis não carregados do Key Vault: {', '.join(missing)}'
+                    'detail': f"Segredos do Redis não carregados do Key Vault: {', '.join(missing)}"
                 }
                 self.logger.error(f"Redis secrets missing: {missing}")
                 return
@@ -181,9 +181,7 @@ class StartupValidator:
         self.validate_redis_connection()
         return self.status_report
 
-# Função síncrona para buscar metadados do projeto existente para validação de startup
-# Utiliza a lógica de get_latest_analysis_metadata mas sem await
-class ProjectStateService:
+class LocalProjectHelper:
     @staticmethod
     def get_latest_analysis_metadata_sync(usuario_executor: str, projeto: str):
         from backend.app.services.blob_storage_service import _get_blob_clients
@@ -204,9 +202,7 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
-        analysis_name = state.get("analysis_name")
         analysis_type = state.get("analysis_type")
         return {
-            "analysis_name": analysis_name,
             "analysis_type": analysis_type
         }
