@@ -10,6 +10,8 @@
 | REDIS_PORT                      | Porta do Redis (6380 para SSL)                          | Sim         | 6379         | 6380                                                         |
 | REDIS_PASSWORD                  | Senha do Redis                                          | Sim         | -            | <obtido-no-portal-azure>                                     |
 | REDIS_DB                        | Database Redis                                          | Sim         | 0            | 0                                                            |
+| REDIS_USE_SSL                   | Habilita conexão SSL/TLS com Redis (obrigatório para endpoint privado) | Sim         | True         | True                                                         |
+| REDIS_SSL_CERT_REQS             | Requisição de certificado SSL ('required' recomendado para Azure) | Sim         | required     | required                                                     |
 | AZURE_STORAGE_CONNECTION_STRING | String de conexão do Blob Storage (via Key Vault)       | Sim         | -            | DefaultEndpointsProtocol=https;AccountName=...               |
 | AZURE_STORAGE_CONTAINER_NAME    | Nome do container de arquivos                           | Sim         | arquivos     | arquivos                                                     |
 | AZURE_AD_CLIENT_ID              | Client ID do Azure AD                                   | Sim         | -            | <client-id>                                                  |
@@ -22,3 +24,4 @@
 | LOG_LEVEL                       | Nível de log (INFO, DEBUG, ERROR)                       | Não         | INFO         | INFO                                                         |
 
 > **Observação:** Segredos sensíveis devem ser criados no Key Vault usando nomes com hífens. O backend faz o mapeamento automaticamente.
+> **Observação:** Para ambientes com Azure Cache for Redis em subrede privada, é obrigatório configurar `REDIS_USE_SSL=True` e `REDIS_SSL_CERT_REQS=required` para garantir conexão segura via endpoint privado. O App Service deve estar integrado à mesma VNET/subrede do Redis.
