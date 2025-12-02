@@ -43,7 +43,8 @@ class RedisSessionService:
             "times_descricao_report": None,
             "alocacao_times_report": None,
             "premissas_riscos_report": None,
-            "last_saved_to_blob": None
+            "last_saved_to_blob": None,
+            "docx_files": []
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, json.dumps(session_data))
         return session_id
@@ -109,5 +110,18 @@ class RedisSessionService:
         session_data["alocacao_times_report"] = project_state.get("alocacao_times_report")
         session_data["premissas_riscos_report"] = project_state.get("premissas_riscos_report")
         session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
+        session_data["docx_files"] = project_state.get("docx_files", [])
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
         return session_id
+
+    def add_docx_file(self, session_id: str, blob_url: str):
+        key = f"session:{session_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+        session_data = json.loads(session_json)
+        if "docx_files" not in session_data or not isinstance(session_data["docx_files"], list):
+            session_data["docx_files"] = []
+        if blob_url not in session_data["docx_files"]:
+            session_data["docx_files"].append(blob_url)
+        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
