@@ -31,8 +31,24 @@ app = FastAPI(
 
 SKIP_AUTH_FOR_TESTING = True
 
+SKIP_AUTH_FOR_TESTING = True
+
 if SKIP_AUTH_FOR_TESTING:
-    async def mock_get_current_user():
+    # Adicione 'request: Request' para ler os headers
+    async def mock_get_current_user(request: Request):
+        # Tenta pegar dados do usuário enviados pelo Colab no header
+        test_user_header = request.headers.get("X-Test-User-Json")
+        
+        if test_user_header:
+            try:
+                # Se o Colab mandou um usuário específico, usamos ele
+                user_data = json.loads(test_user_header)
+                logging.info(f"🧪 [MOCK] Usando usuário dinâmico do Header: {user_data.get('email')}")
+                return user_data
+            except json.JSONDecodeError:
+                logging.error("Erro ao decodificar X-Test-User-Json")
+        
+        # Fallback padrão se não mandar nada
         return {
             "sub": "user-teste-id-123",
             "usuario_executor": "dev_tester_local",
@@ -40,8 +56,9 @@ if SKIP_AUTH_FOR_TESTING:
             "email": "dev@peers.com.br",
             "roles": ["admin"]
         }
+    
     app.dependency_overrides[get_current_user] = mock_get_current_user
-    logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação desabilitada.")
+    logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação via Header habilitada.")
 
 ALLOWED_IPS = ["127.0.0.1", "localhost", "::1"]
 env_ips_str = os.environ.get("ALLOWED_IPS", "")
