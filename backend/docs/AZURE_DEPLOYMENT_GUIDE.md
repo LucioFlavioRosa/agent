@@ -25,15 +25,17 @@ No portal do Azure, acesse seu App Service > Configurações > Configurações d
 - O backend buscará este valor automaticamente via Managed Identity.
 
 ## 5. Configuração da Conexão com o Cache Redis
+- Os segredos do Redis **NÃO** devem ser definidos como variáveis de ambiente no App Service.
 - No portal do Azure, acesse seu Redis Cache e copie:
-  - Host: `REDIS_HOST`
-  - Porta: `REDIS_PORT` (use 6380 para SSL)
-  - Senha: `REDIS_PASSWORD`
-  - Database: `REDIS_DB` (normalmente 0)
-- Defina estas variáveis no App Service.
+  - Host: `REDIS_HOST` (crie como segredo `redis-host` no Key Vault)
+  - Porta: `REDIS_PORT` (crie como segredo `redis-port` no Key Vault, use 6380 para SSL)
+  - Senha: `REDIS_PASSWORD` (crie como segredo `redis-password` no Key Vault)
+  - Database: `REDIS_DB` (crie como segredo `redis-db` no Key Vault, normalmente 0)
+  - `REDIS_USE_SSL` (crie como segredo `redis-use-ssl` no Key Vault, valor `True`)
+  - `REDIS_SSL_CERT_REQS` (crie como segredo `redis-ssl-cert-reqs` no Key Vault, valor `required`)
+- Estes segredos devem ser criados no Key Vault `kv-codeai-azure-dev-usc` usando nomes com hífens.
+- O backend irá carregar automaticamente esses valores do Key Vault via Managed Identity.
 - Para ambientes com Redis em subrede privada, utilize o endpoint privado do Redis. O App Service deve estar integrado à mesma VNET/subrede do Redis (VNET Integration).
-- Configure as variáveis `REDIS_USE_SSL=True` e `REDIS_SSL_CERT_REQS=required` para garantir conexão segura via SSL/TLS.
-- O Redis NÃO será acessível de fora da subrede; apenas o App Service (integrado à VNET) terá acesso ao endpoint privado do Redis.
 
 ## 6. Managed Identity Setup
 - No App Service, habilite "Identidade Gerenciada" (System-assigned).
