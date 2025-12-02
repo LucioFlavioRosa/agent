@@ -37,7 +37,6 @@ async def start_analysis(
     redis_service = RedisSessionService()
     session_id = None
     texto_extraido = None
-    # Criação ou restauração de sessão
     project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
     if project_state:
         session_id = redis_service.restore_session_from_state(
