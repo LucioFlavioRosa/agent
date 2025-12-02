@@ -22,13 +22,14 @@ class Settings(BaseSettings):
         "criacao_epicos_azure_devops": "https://mcp-epicos.azurewebsites.net"
     }
 
-    # Novos campos de configuração para Redis e salvamento periódico
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: Optional[str] = None
     REDIS_DB: int = 0
     REDIS_SESSION_TTL: int = 86400
     PROJECT_STATE_SAVE_INTERVAL_MINUTES: int = 10
+    REDIS_USE_SSL: bool = True
+    REDIS_SSL_CERT_REQS: Optional[str] = 'required'
     
     class Config:
         env_file = ".env"
