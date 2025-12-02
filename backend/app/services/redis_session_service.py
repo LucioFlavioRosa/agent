@@ -21,7 +21,9 @@ class RedisSessionService:
             port=int(getattr(settings, 'REDIS_PORT', 6379)),
             password=getattr(settings, 'REDIS_PASSWORD', None),
             db=int(getattr(settings, 'REDIS_DB', 0)),
-            decode_responses=True
+            decode_responses=True,
+            ssl=getattr(settings, 'REDIS_USE_SSL', True),
+            ssl_cert_reqs=getattr(settings, 'REDIS_SSL_CERT_REQS', 'required')
         )
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
 
