@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     A[Frontend] -->|1. Requisição| B(API Layer)
     B -->|2. Validação de Token| C[Auth Middleware]
@@ -16,13 +16,13 @@ flowchart TD
     B -->|6. Leitura Variáveis Ambiente| G[Config Loader Service]
     G -->|7. Carregamento Segredos| H[Azure Key Vault]
     F -->|8. Salvamento Estado| E
-    B -->|9. Leitura Estado| E
+    B -->|9. Verificação Projeto Existente| E
     B -->|10. Envio para MCP| I[MCP Server]
     I -->|11. Resposta MCP| B
     B -->|12. Resposta para Frontend| A
     A -->|13. Seleção Projeto Existente| B
     B -->|Busca Estado Projeto| E
-```
+
 
 ---
 
@@ -79,11 +79,11 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (função `save_state_to_blob`)
   - `backend/app/services/background_state_saver.py` (classe `BackgroundStateSaver`, método `schedule_periodic_save`)
 
-### 9. Leitura de Status no Storage
-- **Descrição:** O estado mais recente do projeto/sessão é recuperado do Blob Storage.
+### 9. Verificação de Projeto Existente no Blob Storage
+- **Descrição:** Antes de exigir o upload do DOCX, o backend verifica se já existe um estado do projeto para o usuário no Blob Storage. Se existir, o upload não é obrigatório. Se não existir, o upload do DOCX é obrigatório para criar o projeto.
 - **Código responsável:**
   - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py` quando necessário
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
 ### 10. Envio para o MCP Server
 - **Descrição:** Payload de análise é enviado para o MCP Server via HTTP.
@@ -114,19 +114,23 @@ flowchart TD
 
 1. O frontend faz uma requisição (ex: upload de DOCX ou iniciar análise).
 2. O backend valida o token do usuário (Azure AD).
-3. O arquivo DOCX é processado e o texto extraído.
-4. O arquivo é salvo no Azure Blob Storage.
-5. Uma sessão é criada ou restaurada no Redis, persistindo dados relevantes.
-6. Variáveis de ambiente e segredos do Key Vault são carregados para configuração.
-7. O estado do projeto/sessão é salvo periodicamente no Blob Storage.
-8. O estado pode ser lido do Blob Storage para restaurar sessões.
-9. O payload de análise é enviado para o MCP Server.
-10. A resposta do MCP Server é recebida e processada.
-11. O backend envia a resposta final para o frontend.
-12. Quando o usuário seleciona um projeto existente, o estado é buscado no Blob Storage e restaurado.
+3. O backend verifica se o projeto já existe para o usuário no Blob Storage.
+4. Se o projeto não existir, o upload do DOCX é obrigatório para criar o projeto.
+5. Se o projeto existir, o upload do DOCX é opcional e pode ser omitido.
+6. O arquivo DOCX (se enviado) é processado e o texto extraído.
+7. O arquivo é salvo no Azure Blob Storage.
+8. Uma sessão é criada ou restaurada no Redis, persistindo dados relevantes.
+9. Variáveis de ambiente e segredos do Key Vault são carregados para configuração.
+10. O estado do projeto/sessão é salvo periodicamente no Blob Storage.
+11. O estado pode ser lido do Blob Storage para restaurar sessões.
+12. O payload de análise é enviado para o MCP Server.
+13. A resposta do MCP Server é recebida e processada.
+14. O backend envia a resposta final para o frontend.
+15. Quando o usuário seleciona um projeto existente, o estado é buscado no Blob Storage e restaurado.
 
 ---
 
 ## Observações
-- Cada etapa do fluxo está fortemente acoplada a um ou mais arquivos de serviço, garantindo separação de responsabilidades e fácil manutenção.
-- O diagrama Mermaid pode ser visualizado em ferramentas compatíveis para uma visão gráfica do fluxo.
+- O backend só exige o upload do DOCX se o projeto não existir previamente para o usuário.
+- O diagrama Mermaid foi atualizado para incluir a etapa de verificação de projeto existente no Blob Storage antes do processamento do DOCX.
+- O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload.
