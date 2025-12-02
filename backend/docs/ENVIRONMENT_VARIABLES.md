@@ -17,6 +17,8 @@
 | ALLOWED_IPS                     | Lista de IPs permitidos (separados por vírgula)         | Não         | 127.0.0.1    | 177.104.212.42,200.100.50.25                                 |
 | LOG_LEVEL                       | Nível de log (INFO, DEBUG, ERROR)                       | Não         | INFO         | INFO                                                         |
 
+> **Importante:** O valor de `AZURE_STORAGE_CONNECTION_STRING` é carregado automaticamente do Key Vault `kv-codeai-azure-dev-usc` (segredo: `azure-storage-connection-string`). Não defina como variável de ambiente no App Service.
+
 > **Observação Importante:** As variáveis do Redis (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_USE_SSL`, `REDIS_SSL_CERT_REQS`) **NÃO** devem ser definidas como variáveis de ambiente no App Service. Elas devem ser criadas como segredos no Key Vault `kv-codeai-azure-dev-usc` usando nomes com hífens (exemplo: `redis-host`). O backend irá carregar automaticamente esses valores do Key Vault via Managed Identity.
 
 > **Observação:** Segredos sensíveis devem ser criados no Key Vault usando nomes com hífens. O backend faz o mapeamento automaticamente.
