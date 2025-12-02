@@ -9,4 +9,4 @@ python-jose[cryptography]
 msal
 requests
 azure-keyvault-secrets>=4.7.0
-redis>=4.5.0
+redis>=4.5.0  # Necessário para suporte SSL/TLS ao conectar ao Azure Cache for Redis via endpoint privado em subrede
