@@ -6,12 +6,6 @@
 | DEVOPS_KV_URL                   | URL do Key Vault DevOps                                 | Não         | -            | https://kv-codeai-devops-dev-usc.vault.azure.net/            |
 | GITHUB_KV_URL                   | URL do Key Vault GitHub                                 | Não         | -            | https://kv-codeai-github-dev-usc.vault.azure.net/            |
 | LLM_KV_URL                      | URL do Key Vault LLM                                    | Não         | -            | https://kv-codeai-llm-dev-usc.vault.azure.net/               |
-| REDIS_HOST                      | Host do Azure Redis Cache                               | Sim         | localhost    | your-redis-cache.redis.cache.windows.net                     |
-| REDIS_PORT                      | Porta do Redis (6380 para SSL)                          | Sim         | 6379         | 6380                                                         |
-| REDIS_PASSWORD                  | Senha do Redis                                          | Sim         | -            | <obtido-no-portal-azure>                                     |
-| REDIS_DB                        | Database Redis                                          | Sim         | 0            | 0                                                            |
-| REDIS_USE_SSL                   | Habilita conexão SSL/TLS com Redis (obrigatório para endpoint privado) | Sim         | True         | True                                                         |
-| REDIS_SSL_CERT_REQS             | Requisição de certificado SSL ('required' recomendado para Azure) | Sim         | required     | required                                                     |
 | AZURE_STORAGE_CONNECTION_STRING | String de conexão do Blob Storage (via Key Vault)       | Sim         | -            | DefaultEndpointsProtocol=https;AccountName=...               |
 | AZURE_STORAGE_CONTAINER_NAME    | Nome do container de arquivos                           | Sim         | arquivos     | arquivos                                                     |
 | AZURE_AD_CLIENT_ID              | Client ID do Azure AD                                   | Sim         | -            | <client-id>                                                  |
@@ -23,5 +17,7 @@
 | ALLOWED_IPS                     | Lista de IPs permitidos (separados por vírgula)         | Não         | 127.0.0.1    | 177.104.212.42,200.100.50.25                                 |
 | LOG_LEVEL                       | Nível de log (INFO, DEBUG, ERROR)                       | Não         | INFO         | INFO                                                         |
 
+> **Observação Importante:** As variáveis do Redis (`REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`, `REDIS_USE_SSL`, `REDIS_SSL_CERT_REQS`) **NÃO** devem ser definidas como variáveis de ambiente no App Service. Elas devem ser criadas como segredos no Key Vault `kv-codeai-azure-dev-usc` usando nomes com hífens (exemplo: `redis-host`). O backend irá carregar automaticamente esses valores do Key Vault via Managed Identity.
+
 > **Observação:** Segredos sensíveis devem ser criados no Key Vault usando nomes com hífens. O backend faz o mapeamento automaticamente.
-> **Observação:** Para ambientes com Azure Cache for Redis em subrede privada, é obrigatório configurar `REDIS_USE_SSL=True` e `REDIS_SSL_CERT_REQS=required` para garantir conexão segura via endpoint privado. O App Service deve estar integrado à mesma VNET/subrede do Redis.
+> **Observação:** Para ambientes com Azure Cache for Redis em subrede privada, é obrigatório configurar os segredos do Redis no Key Vault e garantir que o App Service esteja integrado à mesma VNET/subrede do Redis.
