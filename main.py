@@ -31,8 +31,6 @@ app = FastAPI(
 
 SKIP_AUTH_FOR_TESTING = True
 
-SKIP_AUTH_FOR_TESTING = True
-
 if SKIP_AUTH_FOR_TESTING:
     # Adicione 'request: Request' para ler os headers
     async def mock_get_current_user(request: Request):
