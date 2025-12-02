@@ -1,15 +1,21 @@
 import httpx
-from typing import Any, Dict
-from pydantic import BaseModel
-from app.core.config import settings
+from typing import Any, Dict, Optional
+from pydantic import BaseModel, Field, validator
+from backend.app.core.config import settings
 
 class MCPStartAnalysisPayload(BaseModel):
-    analysis_type: str
-    instrucoes_extras: str = None
-    projeto: str
-    analysis_name: str
-    usuario_executor: str
-    session_id: str
+    projeto: str = Field(...)
+    analysis_type: str = Field(...)
+    arquivo_docx: Optional[str] = Field(None)
+    comentario_usuario: Optional[str] = Field(None)
+    usuario_executor: str = Field(...)
+    session_id: str = Field(...)
+
+    @validator('analysis_type')
+    def analysis_type_must_not_be_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('analysis_type deve ser uma string não vazia')
+        return v
 
 class MCPStartAnalysisResponse(BaseModel):
     job_id: str
@@ -28,8 +34,6 @@ class MCPClientService:
         url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
         try:
             payload_dict = payload.dict()
-            if payload_dict.get('instrucoes_extras', None) is None:
-                payload_dict.pop('instrucoes_extras', None)
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(
                     url,

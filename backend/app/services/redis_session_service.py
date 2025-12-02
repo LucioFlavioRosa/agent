@@ -27,14 +27,13 @@ class RedisSessionService:
         )
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
 
-    def create_session(self, usuario_executor: str, projeto: str, analysis_name: str, analysis_type: str, comentario_usuario: Optional[str] = None) -> str:
+    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None) -> str:
         session_id = str(uuid.uuid4())
         created_at = datetime.utcnow().isoformat()
         session_data = {
             "session_id": session_id,
             "usuario_executor": usuario_executor,
             "projeto": projeto,
-            "analysis_name": analysis_name,
             "analysis_type": analysis_type,
             "created_at": created_at,
             "steps": [],
@@ -98,9 +97,9 @@ class RedisSessionService:
         session_data[REPORT_TYPES[report_type]] = report_data
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
 
-    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_name: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
+    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
-        session_id = self.create_session(usuario_executor, projeto, analysis_name, analysis_type, comentario_usuario=comentario_usuario)
+        session_id = self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario)
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
