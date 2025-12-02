@@ -5,7 +5,7 @@ from app.core.config import settings
 
 class MCPStartAnalysisPayload(BaseModel):
     analysis_type: str
-    instrucoes_extras: str
+    instrucoes_extras: str = None
     projeto: str
     analysis_name: str
     usuario_executor: str
@@ -27,10 +27,13 @@ class MCPClientService:
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
         url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
         try:
+            payload_dict = payload.dict()
+            if payload_dict.get('instrucoes_extras', None) is None:
+                payload_dict.pop('instrucoes_extras', None)
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(
                     url,
-                    json=payload.dict(),
+                    json=payload_dict,
                     headers={"Content-Type": "application/json"}
                 )
                 response.raise_for_status()
