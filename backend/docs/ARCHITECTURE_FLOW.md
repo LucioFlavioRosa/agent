@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     Z[Frontend] -->|0. Login| AA(API Layer)
     AA -->|1. Validação do Token| AB[Auth Middleware]
@@ -19,8 +19,8 @@ flowchart TD
     C -->|8. Busca Estado no Blob Storage| D[Blob Storage]
     D -->|9. Resposta Estado| B
     B -->|10. Resposta para Frontend| Z
-    Z -->|11. Upload DOCX/Análise| B
-    B -->|12. Processamento DOCX| E[Docx Parser Service]
+    Z -->|11. Iniciar Análise| B
+    B -->|12. Processamento DOCX (se enviado)| E[Docx Parser Service]
     E -->|13. Salvamento DOCX| F[Blob Storage Service]
     B -->|14. Salvamento Sessão| G[Redis Session Service]
     G -->|15. Salvamento caminho do DOCX| G
@@ -34,7 +34,7 @@ flowchart TD
     Z -->|23. Recebe comentario_usuario| G
     G -->|24. Armazena comentario_usuario| G
     G -->|25. Envia comentario_usuario para MCP| J
-```
+
 
 ---
 
@@ -56,30 +56,26 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
 
 ### 2. Recebimento da Requisição do Frontend
-- **Descrição:** O frontend envia requisições para o backend via endpoints HTTP (upload de DOCX, iniciar análise, salvar estado, etc). O campo opcional `comentario_usuario` pode ser enviado junto com o arquivo DOCX ou na solicitação de análise.
+- **Descrição:** O frontend envia requisições para o backend via endpoints HTTP para iniciar análise. O campo opcional `comentario_usuario` pode ser enviado junto com o arquivo DOCX ou na solicitação de análise.
 - **Código responsável:**
-  - `backend/app/api/upload.py` (função `upload_docx`)
   - `backend/app/api/analysis.py` (função `start_analysis`)
-  - `backend/app/api/session.py` (funções `get_session_reports`, `update_session_report`, `save_session_state`, `get_session_docx_files`)
-  - `backend/app/api/auth.py` (função `get_auth_config`)
 
-### 3. Processamento do DOCX
-- **Descrição:** O arquivo DOCX enviado pelo frontend é processado para extrair o texto.
+### 3. Processamento do DOCX (se enviado)
+- **Descrição:** Se o campo `arquivo_docx` for enviado, o arquivo DOCX é processado para extrair o texto.
 - **Código responsável:**
   - `backend/app/services/docx_parser_service.py` (função `extract_text_from_docx`)
-  - Chamado dentro de `upload_docx` em `backend/app/api/upload.py`
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
 ### 4. Salvamento do DOCX
 - **Descrição:** O arquivo DOCX é salvo no Azure Blob Storage na pasta do usuário/projeto.
 - **Código responsável:**
   - `backend/app/services/blob_storage_service.py` (função `upload_docx_to_blob`)
-  - Chamado dentro de `upload_docx` em `backend/app/api/upload.py`
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
 ### 5. Salvamento dos Dados no Redis
 - **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado. O campo opcional `comentario_usuario` é armazenado na sessão Redis.
 - **Código responsável:**
   - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`, `add_docx_file`)
-  - Chamado em endpoints de análise e sessão
   - Campo `comentario_usuario` em `SessionData` (`backend/app/models/session_models.py`)
 
 ### 6. Salvamento do caminho do DOCX no estado da sessão
@@ -87,7 +83,7 @@ flowchart TD
 - **Código responsável:**
   - `backend/app/services/redis_session_service.py` (função `add_docx_file`)
   - `backend/app/models/session_models.py` (campo `docx_files` em `SessionData`)
-  - Chamado em `upload_docx` e durante restauração de sessão
+  - Chamado em `start_analysis` e durante restauração de sessão
 
 ### 7. Validação de Tokens
 - **Descrição:** O token JWT do Azure AD é validado para autenticação e autorização do usuário.
@@ -120,47 +116,38 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
-### 12. Busca de Metadados do Projeto no Blob Storage
-- **Descrição:** Para projetos existentes, se `analysis_name` e `analysis_type` não forem informados, o backend busca esses metadados automaticamente do estado mais recente do projeto no Blob Storage usando o usuário autenticado.
-- **Código responsável:**
-  - `backend/app/services/project_state_service.py` (função `get_latest_analysis_metadata`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
-
-### 13. Envio para o MCP Server
-- **Descrição:** Payload de análise é enviado para o MCP Server via HTTP. O campo opcional `comentario_usuario` é incluído no payload enviado ao MCP Server.
+### 12. Envio para o MCP Server
+- **Descrição:** O backend envia para o MCP um dos três formatos de payload, conforme o recebido do frontend:
+  - Com `arquivo_docx` e `comentario_usuario`
+  - Apenas com `arquivo_docx`
+  - Apenas com `comentario_usuario`
+  O campo `analysis_name` NÃO é enviado.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
-### 14. Recebimento da Resposta do MCP Server
+### 13. Recebimento da Resposta do MCP Server
 - **Descrição:** A resposta do MCP Server é processada e o job_id é extraído.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis` - retorno)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
-### 15. Envio para o Frontend
+### 14. Envio para o Frontend
 - **Descrição:** A resposta final (incluindo URLs, job_id, mensagens e dados de sessão) é enviada para o frontend.
 - **Código responsável:**
   - `backend/app/api/analysis.py`, `backend/app/api/upload.py`, `backend/app/api/session.py`, `backend/app/api/auth.py` (retorno das funções FastAPI)
 
-### 16. Busca do Estado do Projeto no Blob Storage (Projeto Existente)
-- **Descrição:** Quando o usuário seleciona um projeto existente, o estado é recuperado do Blob Storage e restaurado na sessão Redis.
+### 15. Recebimento do comentario_usuario do frontend
+- **Descrição:** O campo opcional `comentario_usuario` é recebido do frontend nos endpoints de análise.
 - **Código responsável:**
-  - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py` quando detectado projeto existente
-
-### 17. Recebimento do comentario_usuario do frontend
-- **Descrição:** O campo opcional `comentario_usuario` é recebido do frontend nos endpoints de upload e análise.
-- **Código responsável:**
-  - `backend/app/api/upload.py` (função `upload_docx`)
   - `backend/app/api/analysis.py` (função `start_analysis`)
 
-### 18. Armazenamento do comentario_usuario na sessão Redis
+### 16. Armazenamento do comentario_usuario na sessão Redis
 - **Descrição:** O campo opcional `comentario_usuario` é persistido na sessão Redis para uso posterior.
 - **Código responsável:**
   - `backend/app/services/redis_session_service.py` (função `create_session`, campo em SessionData)
 
-### 19. Envio do comentario_usuario para MCP Server
+### 17. Envio do comentario_usuario para MCP Server
 - **Descrição:** O campo opcional `comentario_usuario` é propagado no payload enviado ao MCP Server.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
@@ -169,7 +156,8 @@ flowchart TD
 ---
 
 ## Observações
-- O frontend deve sempre chamar `/auth/login` após o login, para validar o token e obter a lista de projetos do usuário.
-- O campo opcional `comentario_usuario` pode ser enviado tanto no upload do DOCX quanto na solicitação de análise, e será armazenado na sessão Redis e propagado para o MCP Server.
+- O campo `analysis_name` foi removido de todos os fluxos e payloads.
+- O backend aceita apenas três formatos de payload para iniciar análise, conforme descrito em `API_PAYLOAD_EXAMPLES.md`.
+- O backend sempre envia para o MCP um dos três formatos de payload, sem `analysis_name`.
 - Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
 - O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras, e permite o envio de comentários adicionais pelo usuário.
