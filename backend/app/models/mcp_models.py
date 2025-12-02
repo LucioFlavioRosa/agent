@@ -4,7 +4,7 @@ from typing import Optional
 class MCPStartAnalysisPayload(BaseModel):
     projeto: str = Field(..., description="Nome do projeto.")
     analysis_type: str = Field(..., description="Tipo de análise a ser realizada pelo MCP.")
-    arquivo_docx: Optional[str] = Field(None, description="Texto extraído do arquivo docx com a transcrição da reunião.")
+    arquivo_docx: Optional[str] = Field(None, description="Texto extraído do arquivo docx com a transcrição da reunião. NÃO é a URL do Blob Storage.")
     comentario_usuario: Optional[str] = Field(None, description="Comentário adicional enviado pelo usuário.")
     usuario_executor: str = Field(..., description="Usuário executor extraído do token JWT.")
     session_id: str = Field(..., description="Identificador da sessão.")
