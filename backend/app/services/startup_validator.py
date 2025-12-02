@@ -4,24 +4,16 @@ from backend.app.core.config import settings
 from backend.app.services.azure_secret_manager import AzureSecretManager, VaultType
 from backend.app.services.blob_storage_service import BlobServiceClient
 import httpx
+import redis
 
 class StartupValidator:
-    """
-    Serviço que centraliza validações críticas de inicialização:
-    - Key Vault acessível
-    - Segredos carregados
-    - Blob Storage conectável
-    - MCP Server respondendo
-    """
     def __init__(self):
         self.status_report = {}
         self.logger = logging.getLogger("StartupValidator")
 
     def validate_key_vault(self):
         try:
-            # Tenta instanciar e buscar um segredo simples usando hífens no nome
             manager = AzureSecretManager(vault_type=VaultType.AZURE)
-            # O nome do segredo no Azure Key Vault deve usar hífens, não underscores
             secret = manager.get_secret("azure-storage-connection-string")
             self.status_report['key_vault'] = {
                 'status': 'ok',
@@ -61,7 +53,6 @@ class StartupValidator:
                 raise ValueError("Connection string do Blob Storage não configurada.")
             blob_service_client = BlobServiceClient.from_connection_string(conn_str)
             container_client = blob_service_client.get_container_client(container_name)
-            # Tenta listar blobs para validar conexão
             _ = list(container_client.list_blobs(name_starts_with=None, results_per_page=1))
             self.status_report['blob_storage'] = {
                 'status': 'ok',
@@ -99,13 +90,44 @@ class StartupValidator:
             }
             self.logger.error(f"MCP Server validation failed: {e}")
 
+    def validate_redis_connection(self):
+        try:
+            host = getattr(settings, 'REDIS_HOST', None)
+            port = int(getattr(settings, 'REDIS_PORT', 6379))
+            password = getattr(settings, 'REDIS_PASSWORD', None)
+            db = int(getattr(settings, 'REDIS_DB', 0))
+            use_ssl = getattr(settings, 'REDIS_USE_SSL', True)
+            ssl_cert_reqs = getattr(settings, 'REDIS_SSL_CERT_REQS', 'required')
+            if not host:
+                raise ValueError("REDIS_HOST não configurado.")
+            client = redis.Redis(
+                host=host,
+                port=port,
+                password=password,
+                db=db,
+                ssl=use_ssl,
+                ssl_cert_reqs=ssl_cert_reqs,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+                decode_responses=True
+            )
+            client.ping()
+            self.status_report['redis'] = {
+                'status': 'ok',
+                'detail': 'Conexão com Redis via endpoint privado e SSL bem-sucedida.'
+            }
+        except Exception as e:
+            self.status_report['redis'] = {
+                'status': 'fail',
+                'detail': f'Erro ao conectar ao Redis (endpoint privado): {e}'
+            }
+            self.logger.error(f"Redis connection validation failed: {e}")
+
     def validate_all_configs(self):
-        """
-        Executa todas as validações e retorna um relatório detalhado.
-        """
         self.status_report = {}
         self.validate_key_vault()
         self.validate_secrets_loaded()
         self.validate_blob_storage()
         self.validate_mcp_server()
+        self.validate_redis_connection()
         return self.status_report
