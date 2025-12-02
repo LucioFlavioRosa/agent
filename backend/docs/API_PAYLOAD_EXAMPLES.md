@@ -16,7 +16,7 @@ POST /analysis/start
 - Content-Type: application/json
 
 **Body:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_name": "Sprint 1",
@@ -24,15 +24,15 @@ POST /analysis/start
   "extracted_text": "Texto extraído do DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-
+```
 **Resposta de Sucesso:**
-
+```json
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 ---
 
@@ -46,20 +46,20 @@ POST /analysis/start
 - Content-Type: application/json
 
 **Body:**
-
+```json
 {
   "projeto": "ProjetoExistente",
   "comentario_usuario": "Comentário para análise apenas com nome do projeto."
 }
-
+```
 **Resposta de Sucesso:**
-
+```json
 {
   "job_id": "789012",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "ghijkl-uuid"
 }
-
+```
 
 ---
 
@@ -73,22 +73,22 @@ POST /analysis/start
 - Content-Type: application/json
 
 **Body:**
-
+```json
 {
   "projeto": "ProjetoExistente",
   "analysis_name": "Sprint 2",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário para análise existente."
 }
-
+```
 **Resposta de Sucesso:**
-
+```json
 {
   "job_id": "789012",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "ghijkl-uuid"
 }
-
+```
 
 ---
 
@@ -109,14 +109,14 @@ POST /upload/docx
 - is_new_project: false
 
 **Resposta:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
 }
-
+```
 
 ---
 
@@ -129,7 +129,7 @@ GET /session/{session_id}/reports
 - Authorization: Bearer <token_jwt_azure_ad>
 
 **Resposta:**
-
+```json
 {
   "epicos_report": {...},
   "features_report": {...},
@@ -137,7 +137,7 @@ GET /session/{session_id}/reports
   "alocacao_times_report": {...},
   "premissas_riscos_report": {...}
 }
-
+```
 
 ---
 
@@ -151,18 +151,18 @@ PUT /session/{session_id}/report
 - Content-Type: application/json
 
 **Body:**
-
+```json
 {
   "report_type": "epicos",
   "report_data": { "campo": "valor" }
 }
-
+```
 **Resposta:**
-
+```json
 {
   "status": "ok"
 }
-
+```
 
 ---
 
@@ -175,11 +175,11 @@ POST /session/{session_id}/save-state
 - Authorization: Bearer <token_jwt_azure_ad>
 
 **Resposta:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T130000Z.json"
 }
-
+```
 
 ---
 
@@ -192,7 +192,7 @@ GET /projects/check?projeto=ProjetoExistente
 - Authorization: Bearer <token_jwt_azure_ad>
 
 **Resposta para projeto existente:**
-
+```json
 {
   "exists": true,
   "state": {
@@ -211,13 +211,13 @@ GET /projects/check?projeto=ProjetoExistente
     "comentario_usuario": "Comentário salvo no estado."
   }
 }
-
+```
 **Resposta para projeto inexistente:**
-
+```json
 {
   "exists": false
 }
-
+```
 
 ---
 
@@ -230,7 +230,7 @@ POST /auth/login
 - Authorization: Bearer <token_jwt_azure_ad>
 
 **Resposta:**
-
+```json
 {
   "user_info": {
     "sub": "user-teste-id-123",
@@ -256,7 +256,7 @@ POST /auth/login
     }
   ]
 }
-
+```
 
 ---
 
@@ -299,11 +299,11 @@ POST /auth/login
 
 **Resposta:**
 HTTP 401
-
+```json
 {
   "detail": "Usuário não autenticado."
 }
-
+```
 
 ---
 
@@ -311,19 +311,19 @@ HTTP 401
 
 **Exemplo:**
 POST /analysis/start
-
+```json
 {
   "projeto": "ProjetoNovo"
   // Faltando analysis_name, analysis_type e extracted_text
 }
-
+```
 **Resposta:**
 HTTP 400
-
+```json
 {
   "detail": "Os campos 'analysis_name' e 'analysis_type' são obrigatórios para novos projetos."
 }
-
+```
 
 ---
 
@@ -334,11 +334,11 @@ GET /projects/check?projeto=ProjetoInexistente
 
 **Resposta:**
 HTTP 200
-
+```json
 {
   "exists": false
 }
-
+```
 
 ---
 
@@ -346,21 +346,21 @@ HTTP 200
 
 **Exemplo:**
 POST /analysis/start
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_name": "Sprint 1",
   "analysis_type": "criacao_epicos_azure_devops"
   // Faltando extracted_text
 }
-
+```
 **Resposta:**
 HTTP 400
-
+```json
 {
   "detail": "O upload do DOCX é obrigatório para novos projetos."
 }
-
+```
 
 ---
 
@@ -372,11 +372,11 @@ POST /analysis/start
 
 **Resposta:**
 HTTP 502
-
+```json
 {
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): ..."
 }
-
+```
 
 ---
 
@@ -388,11 +388,11 @@ POST /session/{session_id}/save-state
 
 **Resposta:**
 HTTP 500
-
+```json
 {
   "detail": "Erro ao salvar estado: ..."
 }
-
+```
 
 ---
 
@@ -404,11 +404,11 @@ GET /session/{session_id}/reports
 
 **Resposta:**
 HTTP 404
-
+```json
 {
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 
 ---
 
@@ -419,11 +419,11 @@ HTTP 404
 
 **Resposta:**
 HTTP 403
-
+```json
 {
   "detail": "Acesso negado. IP <ip> não autorizado."
 }
-
+```
 
 ---
 
