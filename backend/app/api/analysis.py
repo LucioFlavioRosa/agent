@@ -16,7 +16,7 @@ class StartAnalysisRequest(BaseModel):
     projeto: str
     analysis_name: str
     analysis_type: str
-    extracted_text: str
+    extracted_text: Optional[str] = None
     blob_url: Optional[str] = None
 
 class StartAnalysisResponse(BaseModel):
@@ -42,17 +42,22 @@ async def start_analysis(
             payload_request.analysis_type,
             project_state
         )
+        instrucoes_extras = payload_request.extracted_text if payload_request.extracted_text is not None else ""
     else:
+        if not payload_request.extracted_text:
+            logger.error("Para criar um novo projeto, o campo 'extracted_text' (texto extraído do DOCX) é obrigatório.")
+            raise HTTPException(status_code=400, detail="O upload do DOCX é obrigatório para novos projetos.")
         session_id = redis_service.create_session(
             usuario_executor,
             payload_request.projeto,
             payload_request.analysis_name,
             payload_request.analysis_type
         )
+        instrucoes_extras = payload_request.extracted_text
     BackgroundStateSaver.schedule_periodic_save(session_id)
     mcp_payload = MCPStartAnalysisPayload(
         analysis_type=payload_request.analysis_type,
-        instrucoes_extras=payload_request.extracted_text,
+        instrucoes_extras=instrucoes_extras,
         projeto=payload_request.projeto,
         analysis_name=payload_request.analysis_name,
         usuario_executor=usuario_executor,
