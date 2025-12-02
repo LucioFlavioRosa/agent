@@ -1,6 +1,6 @@
 import json
 import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from backend.app.core.config import settings
 from backend.app.services.blob_storage_service import _get_blob_clients
 import logging
@@ -57,3 +57,38 @@ class ProjectStateService:
             "analysis_name": analysis_name,
             "analysis_type": analysis_type
         }
+
+    @staticmethod
+    async def list_user_projects(usuario_executor: str) -> List[Dict[str, Any]]:
+        logger = logging.getLogger("ProjectStateService")
+        projects = {}
+        try:
+            _, container_client = _get_blob_clients()
+            prefix = f"{usuario_executor}/"
+            blobs = list(container_client.list_blobs(name_starts_with=prefix))
+            for blob in blobs:
+                parts = blob.name.split('/')
+                if len(parts) >= 4 and parts[2] == 'estados' and blob.name.endswith('.json'):
+                    projeto = parts[1]
+                    if projeto not in projects:
+                        projects[projeto] = []
+                    projects[projeto].append(blob)
+            result = []
+            for projeto, blob_list in projects.items():
+                blob_list_sorted = sorted(blob_list, key=lambda b: b.name, reverse=True)
+                latest_blob = blob_list_sorted[0]
+                blob_client = container_client.get_blob_client(latest_blob.name)
+                state_bytes = blob_client.download_blob().readall()
+                state = json.loads(state_bytes.decode("utf-8"))
+                item = {
+                    "projeto": state.get("projeto", projeto),
+                    "analysis_name": state.get("analysis_name"),
+                    "analysis_type": state.get("analysis_type"),
+                    "created_at": state.get("created_at"),
+                    "last_saved_to_blob": state.get("last_saved_to_blob")
+                }
+                result.append(item)
+            return result
+        except Exception as e:
+            logger.error(f"Erro ao listar projetos do usuário {usuario_executor}: {e}")
+            return []
