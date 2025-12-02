@@ -3,6 +3,7 @@ import datetime
 from typing import Optional, Dict, Any
 from backend.app.core.config import settings
 from backend.app.services.blob_storage_service import _get_blob_clients
+import logging
 
 class ProjectStateService:
     @staticmethod
@@ -22,10 +23,13 @@ class ProjectStateService:
 
     @staticmethod
     async def load_latest_state_from_blob(usuario_executor: str, projeto: str) -> Optional[Dict[str, Any]]:
+        logger = logging.getLogger("ProjectStateService")
+        logger.info(f"Buscando estado para usuario_executor={usuario_executor}, projeto={projeto}")
         blob_folder = f"{usuario_executor}/{projeto}/estados"
         _, container_client = _get_blob_clients()
         blobs = list(container_client.list_blobs(name_starts_with=blob_folder+"/"))
         if not blobs:
+            logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}")
             return None
         blobs_sorted = sorted(
             [b for b in blobs if b.name.endswith(".json")],
@@ -33,11 +37,13 @@ class ProjectStateService:
             reverse=True
         )
         if not blobs_sorted:
+            logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}")
             return None
         latest_blob = blobs_sorted[0]
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
+        logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
         return state
 
     @staticmethod
