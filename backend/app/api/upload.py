@@ -56,6 +56,10 @@ async def upload_docx(
         redis_service.add_docx_file(session_id, blob_url)
     except Exception as e:
         logger.error(f"Erro ao adicionar arquivo DOCX à sessão: {e}")
+    try:
+        redis_service.update_session_extracted_text(session_id, texto_extraido)
+    except Exception as e:
+        logger.error(f"Erro ao salvar texto extraído na sessão: {e}")
     mensagem = "Arquivo processado com sucesso. Pronto para análise."
     return UploadDocxResponse(
         blob_url=blob_url,
