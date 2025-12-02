@@ -9,23 +9,16 @@ def client():
 
 @pytest.fixture(autouse=True)
 def mock_key_vault_secrets(monkeypatch):
-    # Simula carregamento dos segredos do Key Vault antes dos testes
-    # No Key Vault, os nomes dos segredos DEVEM usar hífens (-), não underscores (_)
-    # Exemplo: 'azure-storage-connection-string' ao invés de 'AZURE_STORAGE_CONNECTION_STRING'
     def secret_side_effect(secret_name):
-        # Simula comportamento real do Key Vault: nomes com hífens
-        # Para testes, retorna valor mockado para ambos formatos
         if '-' in secret_name:
             return f"mocked-{secret_name}-value"
         elif '_' in secret_name:
-            # Simula fallback para variável local (não Key Vault)
             return f"mocked-env-{secret_name}-value"
         return f"mocked-{secret_name}-value"
     with patch("backend.app.services.azure_secret_manager.AzureSecretManager.get_secret") as mock_get_secret:
         mock_get_secret.side_effect = secret_side_effect
         yield
 
-# Exemplo de teste de autenticação
 @pytest.mark.asyncio
 def test_auth_config_endpoint(client):
     response = client.get("/auth/config")
@@ -37,16 +30,37 @@ def test_auth_config_endpoint(client):
     assert "redirect_uri" in data
     assert "scope" in data
 
-# Outros testes de autenticação podem ser adicionados aqui, usando o fixture mock_key_vault_secrets
-
-# Novo teste para modo degradado
 @pytest.mark.asyncio
 def test_auth_without_key_vault_secrets(client):
-    # Simula falha no carregamento de segredos do Key Vault
     with patch("backend.app.services.config_loader_service.ConfigLoaderService.load_secrets_from_key_vault") as mock_loader:
         mock_loader.side_effect = Exception("Key Vault indisponível")
-        # O sistema deve entrar em modo degradado, endpoints críticos devem retornar erro 503
         response = client.get("/auth/config")
-        # O endpoint pode retornar 503 ou 500 dependendo da implementação
         assert response.status_code in (503, 500)
         assert "detail" in response.json()
+
+@pytest.mark.asyncio
+def test_session_docx_files_field(client):
+    session_id = "test-session-id"
+    with patch("backend.app.services.redis_session_service.RedisSessionService.get_session") as mock_get_session:
+        mock_get_session.return_value = type("SessionData", (), {
+            "epicos_report": None,
+            "features_report": None,
+            "times_descricao_report": None,
+            "alocacao_times_report": None,
+            "premissas_riscos_report": None,
+            "docx_files": ["https://blob/docx1.docx", "https://blob/docx2.docx"]
+        })()
+        response = client.get(f"/session/{session_id}/reports")
+        assert response.status_code == 200
+        data = response.json()
+        assert "epicos_report" in data
+        assert "features_report" in data
+        assert "times_descricao_report" in data
+        assert "alocacao_times_report" in data
+        assert "premissas_riscos_report" in data
+        response_files = client.get(f"/session/{session_id}/docx-files")
+        assert response_files.status_code == 200
+        files_data = response_files.json()
+        assert "docx_files" in files_data
+        assert isinstance(files_data["docx_files"], list)
+        assert files_data["docx_files"] == ["https://blob/docx1.docx", "https://blob/docx2.docx"]
