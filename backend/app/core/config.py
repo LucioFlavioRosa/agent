@@ -64,8 +64,6 @@ class Settings(BaseSettings):
             value = getattr(self, field, None)
             if not value:
                 logger.warning(f"[Settings] Campo sensível '{field}' está vazio após inicialização. Ele será preenchido após o carregamento dos segredos.")
-                if field == "AZURE_STORAGE_CONNECTION_STRING":
-                    logger.info("Campo 'AZURE_STORAGE_CONNECTION_STRING' será carregado do Key Vault 'kv-codeai-azure-dev-usc' com o nome 'azure-storage-connection-string'.")
                 if '_' in field:
                     logger.warning(f"[Settings] Atenção: O nome do segredo '{field}' contém underscores. No Azure Key Vault, utilize hífens: '{field.lower().replace('_', '-')}'.")
 
