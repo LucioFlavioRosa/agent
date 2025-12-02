@@ -19,6 +19,7 @@ class StartAnalysisRequest(BaseModel):
     extracted_text: Optional[str] = None
     blob_url: Optional[str] = None
     session_id: Optional[str] = None
+    user_comment: Optional[str] = None
 
     @root_validator
     def validate_fields(cls, values):
@@ -27,7 +28,6 @@ class StartAnalysisRequest(BaseModel):
         analysis_type = values.get("analysis_type")
         extracted_text = values.get("extracted_text")
         session_id = values.get("session_id")
-        # Validação será feita na lógica do endpoint, pois depende do estado do projeto
         return values
 
 class StartAnalysisResponse(BaseModel):
@@ -47,8 +47,6 @@ async def start_analysis(
     session_id = payload_request.session_id
     project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, payload_request.projeto)
     if project_state:
-        # Projeto existe: analysis_name e analysis_type podem ser omitidos
-        # Se não fornecidos, buscar do estado mais recente
         if not payload_request.analysis_name or not payload_request.analysis_type:
             metadata = await ProjectStateService.get_latest_analysis_metadata(usuario_executor, payload_request.projeto)
             analysis_name = payload_request.analysis_name or metadata.get("analysis_name")
@@ -66,9 +64,16 @@ async def start_analysis(
             analysis_type,
             project_state
         )
-        instrucoes_extras = payload_request.extracted_text if payload_request.extracted_text is not None else ""
+        if payload_request.extracted_text:
+            if payload_request.user_comment:
+                instrucoes_extras = f"{payload_request.extracted_text}\n\n--- Comentário do Usuário ---\n{payload_request.user_comment}"
+            else:
+                instrucoes_extras = payload_request.extracted_text
+        elif payload_request.user_comment:
+            instrucoes_extras = payload_request.user_comment
+        else:
+            instrucoes_extras = ""
     else:
-        # Projeto não existe: analysis_name e analysis_type obrigatórios
         if not payload_request.analysis_name or not payload_request.analysis_type:
             logger.error("Para criar um novo projeto, os campos 'analysis_name' e 'analysis_type' são obrigatórios.")
             raise HTTPException(status_code=400, detail="Os campos 'analysis_name' e 'analysis_type' são obrigatórios para novos projetos.")
@@ -83,7 +88,15 @@ async def start_analysis(
         )
         analysis_name = payload_request.analysis_name
         analysis_type = payload_request.analysis_type
-        instrucoes_extras = payload_request.extracted_text
+        if payload_request.extracted_text:
+            if payload_request.user_comment:
+                instrucoes_extras = f"{payload_request.extracted_text}\n\n--- Comentário do Usuário ---\n{payload_request.user_comment}"
+            else:
+                instrucoes_extras = payload_request.extracted_text
+        elif payload_request.user_comment:
+            instrucoes_extras = payload_request.user_comment
+        else:
+            instrucoes_extras = ""
         if payload_request.blob_url:
             try:
                 redis_service.add_docx_file(session_id, payload_request.blob_url)
@@ -96,7 +109,8 @@ async def start_analysis(
         projeto=payload_request.projeto,
         analysis_name=analysis_name,
         usuario_executor=usuario_executor,
-        session_id=session_id
+        session_id=session_id,
+        user_comment=payload_request.user_comment
     )
     mcp_client = MCPClientService()
     try:
