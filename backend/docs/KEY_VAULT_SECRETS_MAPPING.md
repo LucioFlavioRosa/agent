@@ -13,11 +13,12 @@
 ## Como criar segredos no Key Vault
 
 ### Usando Azure CLI:
+```text
 bash
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-storage-connection-string --value "<sua-string-de-conexao>"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-ad-client-secret --value "<seu-client-secret>"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name jwt-secret-key --value "<seu-jwt-secret>"
-
+```
 
 - Use nomes **com hífens** no Key Vault.
 - O backend faz o mapeamento para atributos com underscores automaticamente.
