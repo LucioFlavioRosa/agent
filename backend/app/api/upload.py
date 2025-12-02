@@ -26,6 +26,7 @@ async def upload_docx(
     is_new_project: bool = Form(True),
     session_id: Optional[str] = Form(None),
     analysis_type: Optional[str] = Form(None),
+    user_comment: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
@@ -34,7 +35,7 @@ async def upload_docx(
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
 
     try:
-        texto_extraido = await extract_text_from_docx(file)
+        texto_extraido = await extract_text_from_docx(file, user_comment=user_comment)
         await file.seek(0)
     except Exception as e:
         logger.error(f"Erro ao extrair texto: {e}")
