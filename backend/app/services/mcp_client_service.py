@@ -9,6 +9,7 @@ class MCPStartAnalysisPayload(BaseModel):
     projeto: str
     analysis_name: str
     usuario_executor: str
+    session_id: str
 
 class MCPStartAnalysisResponse(BaseModel):
     job_id: str
