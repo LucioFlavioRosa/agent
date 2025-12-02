@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 import os
 from backend.app.core.config import settings
@@ -40,7 +40,6 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
     try:
         projects = await ProjectStateService.list_user_projects(usuario_executor)
-        # Remove analysis_name de cada projeto se existir
         for p in projects:
             if isinstance(p, dict):
                 p.pop("analysis_name", None)
