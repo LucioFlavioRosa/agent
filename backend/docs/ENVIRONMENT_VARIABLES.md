@@ -6,8 +6,6 @@
 | DEVOPS_KV_URL                   | URL do Key Vault DevOps                                 | Não         | -            | https://kv-codeai-devops-dev-usc.vault.azure.net/            |
 | GITHUB_KV_URL                   | URL do Key Vault GitHub                                 | Não         | -            | https://kv-codeai-github-dev-usc.vault.azure.net/            |
 | LLM_KV_URL                      | URL do Key Vault LLM                                    | Não         | -            | https://kv-codeai-llm-dev-usc.vault.azure.net/               |
-| AZURE_STORAGE_CONNECTION_STRING | String de conexão do Blob Storage (via Key Vault)       | Sim         | -            | DefaultEndpointsProtocol=https;AccountName=...               |
-| AZURE_STORAGE_CONTAINER_NAME    | Nome do container de arquivos                           | Sim         | arquivos     | arquivos                                                     |
 | AZURE_AD_CLIENT_ID              | Client ID do Azure AD                                   | Sim         | -            | <client-id>                                                  |
 | AZURE_AD_TENANT_ID              | Tenant ID do Azure AD                                   | Sim         | -            | <tenant-id>                                                  |
 | AZURE_AD_CLIENT_SECRET          | Client Secret do Azure AD (via Key Vault)               | Sim         | -            | <client-secret>                                              |
