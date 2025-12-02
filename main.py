@@ -69,18 +69,26 @@ if env_ips_str:
 async def ip_restriction_middleware(request: Request, call_next):
     client_ip = request.client.host
     forwarded = request.headers.get("X-Forwarded-For")
+    
     if forwarded:
         client_ip = forwarded.split(",")[0].strip()
+
+    if ":" in client_ip and "." in client_ip:  
+        client_ip = client_ip.split(":")[0]
+    # -----------------------------------------------
+
     if client_ip not in ALLOWED_IPS:
+        # Permite acesso à documentação mesmo bloqueado
         if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
             logging.warning(f"⛔ Acesso negado: IP {client_ip}")
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": f"Acesso negado. IP {client_ip} não autorizado."}
             )
+            
     response = await call_next(request)
     return response
-
+    
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
