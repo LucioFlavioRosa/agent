@@ -43,7 +43,7 @@ if SKIP_AUTH_FOR_TESTING:
     app.dependency_overrides[get_current_user] = mock_get_current_user
     logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação desabilitada.")
 
-
+ALLOWED_IPS = ["127.0.0.1", "localhost", "::1"]
 env_ips_str = os.environ.get("ALLOWED_IPS", "")
 if env_ips_str:
     extra_ips = [ip.strip() for ip in env_ips_str.split(",") if ip.strip()]
