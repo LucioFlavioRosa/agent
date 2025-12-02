@@ -8,9 +8,7 @@
 | LLM_KV_URL                      | URL do Key Vault LLM                                    | Não         | -            | https://kv-codeai-llm-dev-usc.vault.azure.net/               |
 | AZURE_AD_CLIENT_ID              | Client ID do Azure AD                                   | Sim         | -            | <client-id>                                                  |
 | AZURE_AD_TENANT_ID              | Tenant ID do Azure AD                                   | Sim         | -            | <tenant-id>                                                  |
-| AZURE_AD_CLIENT_SECRET          | Client Secret do Azure AD (via Key Vault)               | Sim         | -            | <client-secret>                                              |
 | AZURE_AD_REDIRECT_URI           | URI de redirecionamento do Azure AD                     | Não         | http://localhost:3000/auth/callback | https://your-app.azurewebsites.net/auth/callback |
-| JWT_SECRET_KEY                  | Chave secreta JWT (via Key Vault)                       | Sim         | -            | <jwt-secret>                                                 |
 | MCP_SERVER_BASE_URL             | URL base do MCP Server                                  | Sim         | -            | https://mcp-app-service.azurewebsites.net                    |
 | ALLOWED_IPS                     | Lista de IPs permitidos (separados por vírgula)         | Não         | 127.0.0.1    | 177.104.212.42,200.100.50.25                                 |
 | LOG_LEVEL                       | Nível de log (INFO, DEBUG, ERROR)                       | Não         | INFO         | INFO                                                         |
