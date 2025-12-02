@@ -76,6 +76,8 @@ class Settings(BaseSettings):
             "AZURE_STORAGE_CONNECTION_STRING",
             "AZURE_STORAGE_CONTAINER_NAME",
             "AZURE_AD_CLIENT_SECRET",
+            "AZURE_AD_TENANT_ID",
+            "AZURE_AD_CLIENT_SECRET",
             "JWT_SECRET_KEY",
             "MCP_SERVER_BASE_URL",
             "REDIS_HOST",
