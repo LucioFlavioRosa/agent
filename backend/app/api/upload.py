@@ -1,10 +1,12 @@
 import logging
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Depends, Request
 from pydantic import BaseModel
+from typing import Optional
 
 from ..middleware.auth_middleware import get_current_user
 from ..services.blob_storage_service import upload_docx_to_blob
 from ..services.docx_parser_service import extract_text_from_docx
+from ..services.redis_session_service import RedisSessionService
 
 router = APIRouter()
 logger = logging.getLogger("upload_api")
@@ -13,6 +15,7 @@ class UploadDocxResponse(BaseModel):
     blob_url: str
     extracted_text: str
     message: str
+    session_id: Optional[str] = None
 
 @router.post("/docx", response_model=UploadDocxResponse, tags=["Upload"])
 async def upload_docx(
@@ -21,6 +24,8 @@ async def upload_docx(
     projeto: str = Form(...),
     analysis_name: str = Form(...),
     is_new_project: bool = Form(True),
+    session_id: Optional[str] = Form(None),
+    analysis_type: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
@@ -47,6 +52,26 @@ async def upload_docx(
         logger.error(f"Erro inesperado no Blob Storage: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo: {str(e)}")
 
+    redis_service = RedisSessionService()
+    used_session_id = session_id
+    if session_id:
+        try:
+            redis_service.add_docx_file(session_id, blob_url)
+        except Exception as e:
+            logger.error(f"Erro ao adicionar arquivo DOCX à sessão: {e}")
+    else:
+        if is_new_project and analysis_type:
+            used_session_id = redis_service.create_session(
+                usuario_executor,
+                projeto,
+                analysis_name,
+                analysis_type
+            )
+            try:
+                redis_service.add_docx_file(used_session_id, blob_url)
+            except Exception as e:
+                logger.error(f"Erro ao adicionar arquivo DOCX à sessão recém-criada: {e}")
+
     mensagem = "Arquivo processado com sucesso. Pronto para análise."
     if is_new_project:
         mensagem += " (Upload obrigatório para novos projetos)"
@@ -56,5 +81,6 @@ async def upload_docx(
     return UploadDocxResponse(
         blob_url=blob_url,
         extracted_text=texto_extraido,
-        message=mensagem
+        message=mensagem,
+        session_id=used_session_id
     )
