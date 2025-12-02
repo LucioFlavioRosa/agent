@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     Z[Frontend] -->|0. Login| AA(API Layer)
     AA -->|1. Validação do Token| AB[Auth Middleware]
@@ -20,7 +20,7 @@ flowchart TD
     D -->|9. Resposta Estado| B
     B -->|10. Resposta para Frontend| Z
     Z -->|11. Iniciar Análise| B
-    B -->|"12. Processamento DOCX (se enviado)"| E[Docx Parser Service]
+    B -->|12. Processamento DOCX (se enviado)"| E[Docx Parser Service]
     E -->|13. Salvamento DOCX| F[Blob Storage Service]
     B -->|14. Salvamento Sessão| G[Redis Session Service]
     G -->|15. Salvamento caminho do DOCX| G
@@ -33,7 +33,7 @@ flowchart TD
     B -->|22. Resposta para Frontend| Z
     J -->|23. Resposta MCP → Backend| B
     B -->|24. Resposta Backend → Frontend| Z
-```
+
 
 > **Observação:** Os exemplos de payload de cada etapa (incluindo MCP → Backend e Backend → Frontend) estão documentados em detalhes em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 
@@ -74,10 +74,10 @@ flowchart TD
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
 ### 5. Salvamento dos Dados no Redis
-- **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado. O campo opcional `comentario_usuario` é armazenado na sessão Redis.
+- **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado. O campo opcional `comentario_usuario` é armazenado na sessão Redis. O texto extraído do DOCX é armazenado no campo `extracted_text` da sessão Redis.
 - **Código responsável:**
-  - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`, `add_docx_file`)
-  - Campo `comentario_usuario` em `SessionData` (`backend/app/models/session_models.py`)
+  - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`, `add_docx_file`, `update_session_extracted_text`)
+  - Campo `comentario_usuario` e `extracted_text` em `SessionData` (`backend/app/models/session_models.py`)
 
 ### 6. Salvamento do caminho do DOCX no estado da sessão
 - **Descrição:** Todo arquivo DOCX enviado tem seu caminho salvo no campo `docx_files` do estado da sessão, garantindo histórico completo dos arquivos utilizados para geração e recuperação de todas as histórias.
@@ -122,7 +122,7 @@ flowchart TD
   - Com `arquivo_docx` e `comentario_usuario`
   - Apenas com `arquivo_docx`
   - Apenas com `comentario_usuario`
-  O campo `analysis_name` NÃO é enviado.
+  O campo `analysis_name` NÃO é enviado. O campo `arquivo_docx` sempre contém o texto extraído do DOCX, nunca a URL do arquivo.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
@@ -150,8 +150,14 @@ flowchart TD
 - **Código responsável:**
   - `backend/app/services/redis_session_service.py` (função `create_session`, campo em SessionData)
 
-### 17. Envio do comentario_usuario para MCP Server
-- **Descrição:** O campo opcional `comentario_usuario` é propagado no payload enviado ao MCP Server.
+### 17. Armazenamento do texto extraído do DOCX na sessão Redis
+- **Descrição:** O texto extraído do DOCX é armazenado no campo `extracted_text` da sessão Redis durante o upload do arquivo.
+- **Código responsável:**
+  - `backend/app/services/redis_session_service.py` (função `update_session_extracted_text`)
+  - Chamado dentro de `backend/app/api/upload.py` após upload do DOCX
+
+### 18. Envio do texto extraído para MCP Server
+- **Descrição:** O campo `arquivo_docx` enviado para o MCP Server sempre contém o texto extraído do DOCX, nunca a URL do arquivo.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
   - Chamado dentro de `backend/app/api/analysis.py`
@@ -163,5 +169,6 @@ flowchart TD
 - O backend aceita apenas três formatos de payload para iniciar análise, conforme descrito em `API_PAYLOAD_EXAMPLES.md`.
 - O backend sempre envia para o MCP um dos três formatos de payload, sem `analysis_name`.
 - Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
+- O texto extraído do DOCX é armazenado na sessão Redis e enviado ao MCP.
 - O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras, e permite o envio de comentários adicionais pelo usuário.
 - Exemplos completos de payload de resposta do MCP para o backend e do backend para o frontend estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
