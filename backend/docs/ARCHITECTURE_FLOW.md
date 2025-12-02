@@ -6,29 +6,44 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
-    A[Frontend] -->|1. Seleção de Projeto| B(API Layer)
-    B -->|2. Verificação de Projeto Existente| C[ProjectStateService]
-    C -->|3. Busca Estado no Blob Storage| D[Blob Storage]
-    D -->|4. Resposta Estado| B
-    B -->|5. Resposta para Frontend| A
-    A -->|6. Upload DOCX/Análise| B
-    B -->|7. Processamento DOCX| E[Docx Parser Service]
-    E -->|8. Salvamento DOCX| F[Blob Storage Service]
-    B -->|9. Salvamento Sessão| G[Redis Session Service]
-    G -->|10. Salvamento caminho do DOCX| G
-    B -->|11. Leitura Variáveis Ambiente| H[Config Loader Service]
-    H -->|12. Carregamento Segredos| I[Azure Key Vault]
-    G -->|13. Salvamento Estado| F
-    B -->|14. Busca Metadados Projeto| F
-    B -->|15. Envio para MCP| J[MCP Server]
-    J -->|16. Resposta MCP| B
-    B -->|17. Resposta para Frontend| A
-    A -->|18. Recebe comentario_usuario| G
-    G -->|19. Armazena comentario_usuario| G
-    G -->|20. Envia comentario_usuario para MCP| J
-```
+    Z[Frontend] -->|0. Login| AA(API Layer)
+    AA -->|1. Validação do Token| AB[Auth Middleware]
+    AB -->|2. Busca Projetos do Usuário| AC[ProjectStateService]
+    AC -->|3. Busca Estado no Blob Storage| AD[Blob Storage]
+    AD -->|4. Lista de Projetos| AA
+    AA -->|5. Resposta para Frontend| Z
+    Z -->|6. Seleção de Projeto| B(API Layer)
+    B -->|7. Verificação de Projeto Existente| C[ProjectStateService]
+    C -->|8. Busca Estado no Blob Storage| D[Blob Storage]
+    D -->|9. Resposta Estado| B
+    B -->|10. Resposta para Frontend| Z
+    Z -->|11. Upload DOCX/Análise| B
+    B -->|12. Processamento DOCX| E[Docx Parser Service]
+    E -->|13. Salvamento DOCX| F[Blob Storage Service]
+    B -->|14. Salvamento Sessão| G[Redis Session Service]
+    G -->|15. Salvamento caminho do DOCX| G
+    B -->|16. Leitura Variáveis Ambiente| H[Config Loader Service]
+    H -->|17. Carregamento Segredos| I[Azure Key Vault]
+    G -->|18. Salvamento Estado| F
+    B -->|19. Busca Metadados Projeto| F
+    B -->|20. Envio para MCP| J[MCP Server]
+    J -->|21. Resposta MCP| B
+    B -->|22. Resposta para Frontend| Z
+    Z -->|23. Recebe comentario_usuario| G
+    G -->|24. Armazena comentario_usuario| G
+    G -->|25. Envia comentario_usuario para MCP| J
+
+
+---
+
+## Etapa 0: Login e Listagem de Projetos
+- **Descrição:** Após o login no frontend, o backend recebe o token, valida via Azure AD e busca todos os projetos do usuário no Blob Storage. A resposta inclui as informações do usuário autenticado e a lista de projetos encontrados.
+- **Código responsável:**
+  - `backend/app/api/auth.py` (endpoint `POST /auth/login`)
+  - `backend/app/middleware/auth_middleware.py` (função `get_current_user`)
+  - `backend/app/services/project_state_service.py` (função `list_user_projects`)
 
 ---
 
@@ -154,7 +169,7 @@ flowchart TD
 ---
 
 ## Observações
-- O frontend deve sempre chamar `/projects/check` antes de qualquer outra operação (upload, análise) para garantir que o projeto existe e obter o último estado salvo.
+- O frontend deve sempre chamar `/auth/login` após o login, para validar o token e obter a lista de projetos do usuário.
 - O campo opcional `comentario_usuario` pode ser enviado tanto no upload do DOCX quanto na solicitação de análise, e será armazenado na sessão Redis e propagado para o MCP Server.
 - Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
 - O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras, e permite o envio de comentários adicionais pelo usuário.
