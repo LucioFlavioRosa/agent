@@ -18,6 +18,7 @@ class StartAnalysisRequest(BaseModel):
     analysis_type: str
     extracted_text: Optional[str] = None
     blob_url: Optional[str] = None
+    session_id: Optional[str] = None
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -33,6 +34,7 @@ async def start_analysis(
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
     logger.info(f"Iniciando análise '{payload_request.analysis_name}' do tipo '{payload_request.analysis_type}' para usuário {usuario_executor}")
     redis_service = RedisSessionService()
+    session_id = payload_request.session_id
     project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, payload_request.projeto)
     if project_state:
         session_id = redis_service.restore_session_from_state(
@@ -54,6 +56,11 @@ async def start_analysis(
             payload_request.analysis_type
         )
         instrucoes_extras = payload_request.extracted_text
+        if payload_request.blob_url:
+            try:
+                redis_service.add_docx_file(session_id, payload_request.blob_url)
+            except Exception as e:
+                logger.error(f"Erro ao adicionar arquivo DOCX à sessão durante análise: {e}")
     BackgroundStateSaver.schedule_periodic_save(session_id)
     mcp_payload = MCPStartAnalysisPayload(
         analysis_type=payload_request.analysis_type,
