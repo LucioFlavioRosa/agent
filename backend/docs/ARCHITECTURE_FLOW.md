@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-mermaid
+```mermaid
 flowchart TD
     A[Frontend] -->|1. Requisição| B(API Layer)
     B -->|2. Validação de Token| C[Auth Middleware]
@@ -23,7 +23,7 @@ flowchart TD
     B -->|13. Resposta para Frontend| A
     A -->|14. Seleção Projeto Existente| B
     B -->|Busca Estado Projeto| E
-
+```
 
 ---
 
