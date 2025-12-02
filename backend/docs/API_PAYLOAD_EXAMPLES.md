@@ -65,11 +65,11 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 **Resposta de Sucesso:**
 
 {
-  "epicos_report": {"...": "..."},
-  "features_report": {"...": "..."},
-  "times_descricao_report": {"...": "..."},
-  "alocacao_times_report": {"...": "..."},
-  "premissas_riscos_report": {"...": "..."}
+  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
+  "features_report": {"features": [{"id": 1, "nome": "Login"}]},
+  "times_descricao_report": {},
+  "alocacao_times_report": {},
+  "premissas_riscos_report": {}
 }
 
 
@@ -91,11 +91,11 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "epicos_report": {"...": "..."},
-    "features_report": {"...": "..."},
-    "times_descricao_report": {"...": "..."},
-    "alocacao_times_report": {"...": "..."},
-    "premissas_riscos_report": {"...": "..."},
+    "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
+    "features_report": {"features": [{"id": 1, "nome": "Login"}]},
+    "times_descricao_report": {},
+    "alocacao_times_report": {},
+    "premissas_riscos_report": {},
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo"
   }
@@ -146,6 +146,53 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
+}
+
+
+#### /session/{session_id}/report (atualização de relatório)
+**Resposta de Sucesso:**
+
+{
+  "status": "ok"
+}
+
+
+**Resposta de Erro:**
+
+{
+  "detail": "Erro ao atualizar relatório: ..."
+}
+
+
+#### /session/{session_id}/save-state (salvamento de estado)
+**Resposta de Sucesso:**
+
+{
+  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
+}
+
+
+**Resposta de Erro:**
+
+{
+  "detail": "Erro ao salvar estado: ..."
+}
+
+
+#### /session/{session_id}/docx-files
+**Resposta de Sucesso:**
+
+{
+  "docx_files": [
+    "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
+  ]
+}
+
+
+**Resposta de Erro:**
+
+{
+  "detail": "Sessão não encontrada: ..."
 }
 
 
@@ -227,6 +274,7 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "session_id": "abcdef-uuid"
 }
 
+
 **Erro:**
 
 {
@@ -244,6 +292,7 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "alocacao_times_report": {},
   "premissas_riscos_report": {}
 }
+
 
 **Erro:**
 
@@ -273,6 +322,7 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   }
 }
 
+
 **Projeto não encontrado:**
 
 {
@@ -301,6 +351,7 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   ]
 }
 
+
 **Erro:**
 
 {
@@ -316,6 +367,53 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
+}
+
+
+### 3.6 /session/{session_id}/report (atualização de relatório)
+**Sucesso:**
+
+{
+  "status": "ok"
+}
+
+
+**Erro:**
+
+{
+  "detail": "Erro ao atualizar relatório: ..."
+}
+
+
+### 3.7 /session/{session_id}/save-state (salvamento de estado)
+**Sucesso:**
+
+{
+  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
+}
+
+
+**Erro:**
+
+{
+  "detail": "Erro ao salvar estado: ..."
+}
+
+
+### 3.8 /session/{session_id}/docx-files
+**Sucesso:**
+
+{
+  "docx_files": [
+    "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
+  ]
+}
+
+
+**Erro:**
+
+{
+  "detail": "Sessão não encontrada: ..."
 }
 
 
