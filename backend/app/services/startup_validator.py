@@ -37,7 +37,7 @@ class StartupValidator:
         if missing:
             self.status_report['secrets'] = {
                 'status': 'fail',
-                'detail': f'Segredos não carregados: {', '.join(missing)}'
+                'detail': f"Segredos não carregados: {', '.join(missing)}"
             }
             self.logger.error(f"Secrets missing: {missing}")
         else:
