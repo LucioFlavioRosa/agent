@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     Z[Frontend] -->|0. Login| AA(API Layer)
     AA -->|1. Validação do Token| AB[Auth Middleware]
@@ -20,7 +20,7 @@ flowchart TD
     D -->|9. Resposta Estado| B
     B -->|10. Resposta para Frontend| Z
     Z -->|11. Iniciar Análise| B
-    B -->|"12. Processamento DOCX (se enviado)"| E[Docx Parser Service]
+    B -->|12. Processamento DOCX (se enviado)| E[Docx Parser Service]
     E -->|13. Salvamento DOCX| F[Blob Storage Service]
     B -->|14. Salvamento Sessão| G[Redis Session Service]
     G -->|15. Salvamento caminho do DOCX| G
@@ -31,10 +31,11 @@ flowchart TD
     B -->|20. Envio para MCP| J[MCP Server]
     J -->|21. Resposta MCP| B
     B -->|22. Resposta para Frontend| Z
-    Z -->|23. Recebe comentario_usuario| G
-    G -->|24. Armazena comentario_usuario| G
-    G -->|25. Envia comentario_usuario para MCP| J
-```
+    J -->|23. Resposta MCP → Backend| B
+    B -->|24. Resposta Backend → Frontend| Z
+
+
+> **Observação:** Os exemplos de payload de cada etapa (incluindo MCP → Backend e Backend → Frontend) estão documentados em detalhes em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 
 ---
 
@@ -126,16 +127,18 @@ flowchart TD
   - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
-### 13. Recebimento da Resposta do MCP Server
-- **Descrição:** A resposta do MCP Server é processada e o job_id é extraído.
+### 13. Recebimento da Resposta do MCP Server (MCP → Backend)
+- **Descrição:** A resposta do MCP Server é processada e o job_id é extraído. Notificações de progresso, relatórios parciais e status de conclusão são recebidos e processados pelo backend.
 - **Código responsável:**
   - `backend/app/services/mcp_client_service.py` (função `start_analysis` - retorno)
   - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
+- **Exemplos de payload:** Veja `backend/docs/API_PAYLOAD_EXAMPLES.md`, seção "Exemplos de Respostas MCP → Backend".
 
-### 14. Envio para o Frontend
-- **Descrição:** A resposta final (incluindo URLs, job_id, mensagens e dados de sessão) é enviada para o frontend.
+### 14. Envio da Resposta para o Frontend (Backend → Frontend)
+- **Descrição:** A resposta final (incluindo URLs, job_id, mensagens e dados de sessão) é enviada para o frontend. O backend propaga erros do MCP para o frontend quando necessário.
 - **Código responsável:**
   - `backend/app/api/analysis.py`, `backend/app/api/upload.py`, `backend/app/api/session.py`, `backend/app/api/auth.py` (retorno das funções FastAPI)
+- **Exemplos de payload:** Veja `backend/docs/API_PAYLOAD_EXAMPLES.md`, seção "Exemplos de Respostas Backend → Frontend".
 
 ### 15. Recebimento do comentario_usuario do frontend
 - **Descrição:** O campo opcional `comentario_usuario` é recebido do frontend nos endpoints de análise.
@@ -161,3 +164,4 @@ flowchart TD
 - O backend sempre envia para o MCP um dos três formatos de payload, sem `analysis_name`.
 - Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
 - O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras, e permite o envio de comentários adicionais pelo usuário.
+- Exemplos completos de payload de resposta do MCP para o backend e do backend para o frontend estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
