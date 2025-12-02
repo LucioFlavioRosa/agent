@@ -27,7 +27,7 @@ class RedisSessionService:
         )
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
 
-    def create_session(self, usuario_executor: str, projeto: str, analysis_name: str, analysis_type: str) -> str:
+    def create_session(self, usuario_executor: str, projeto: str, analysis_name: str, analysis_type: str, comentario_usuario: Optional[str] = None) -> str:
         session_id = str(uuid.uuid4())
         created_at = datetime.utcnow().isoformat()
         session_data = {
@@ -44,7 +44,8 @@ class RedisSessionService:
             "alocacao_times_report": None,
             "premissas_riscos_report": None,
             "last_saved_to_blob": None,
-            "docx_files": []
+            "docx_files": [],
+            "comentario_usuario": comentario_usuario
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, json.dumps(session_data))
         return session_id
@@ -98,7 +99,8 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_name: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
-        session_id = self.create_session(usuario_executor, projeto, analysis_name, analysis_type)
+        comentario_usuario = project_state.get("comentario_usuario")
+        session_id = self.create_session(usuario_executor, projeto, analysis_name, analysis_type, comentario_usuario=comentario_usuario)
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
@@ -111,6 +113,7 @@ class RedisSessionService:
         session_data["premissas_riscos_report"] = project_state.get("premissas_riscos_report")
         session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
         session_data["docx_files"] = project_state.get("docx_files", [])
+        session_data["comentario_usuario"] = comentario_usuario
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
         return session_id
 
