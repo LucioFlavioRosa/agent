@@ -42,3 +42,23 @@ class SessionData(BaseModel):
             "docx_files": self.docx_files,
             "comentario_usuario": self.comentario_usuario
         }
+
+    @classmethod
+    def from_project_state(cls, state: Dict[str, Any]) -> "SessionData":
+        return cls(
+            session_id=state.get("session_id", ""),
+            usuario_executor=state.get("usuario_executor", ""),
+            projeto=state.get("projeto", ""),
+            analysis_name=state.get("analysis_name", ""),
+            analysis_type=state.get("analysis_type", ""),
+            created_at=datetime.fromisoformat(state["created_at"]) if state.get("created_at") else datetime.utcnow(),
+            steps=[],
+            epicos_report=state.get("epicos_report"),
+            features_report=state.get("features_report"),
+            times_descricao_report=state.get("times_descricao_report"),
+            alocacao_times_report=state.get("alocacao_times_report"),
+            premissas_riscos_report=state.get("premissas_riscos_report"),
+            last_saved_to_blob=datetime.fromisoformat(state["last_saved_to_blob"]) if state.get("last_saved_to_blob") else None,
+            docx_files=state.get("docx_files", []),
+            comentario_usuario=state.get("comentario_usuario")
+        )
