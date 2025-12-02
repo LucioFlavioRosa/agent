@@ -19,6 +19,7 @@
 ## Como criar segredos no Key Vault
 
 ### Usando Azure CLI:
+```text
 text
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-host --value "your-redis-cache.redis.cache.windows.net"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-port --value "6380"
@@ -26,4 +27,4 @@ az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-passwor
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-db --value "0"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-use-ssl --value "True"
 az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-ssl-cert-reqs --value "required"
-
+```
