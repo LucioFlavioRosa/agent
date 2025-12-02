@@ -23,6 +23,12 @@ No portal do Azure, acesse seu App Service > Configurações > Configurações d
   - Nome do segredo: `azure-storage-connection-string` (use hífens)
   - Valor: string de conexão do Blob Storage (obtida no portal do Storage Account)
 - O backend buscará este valor automaticamente via Managed Identity.
+- **Importante:** O segredo `AZURE_STORAGE_CONNECTION_STRING` deve estar no Key Vault `kv-codeai-azure-dev-usc` com o nome `azure-storage-connection-string`. Não defina como variável de ambiente no App Service.
+- Exemplo de comando Azure CLI:
+
+sh
+az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-storage-connection-string --value "<sua-string-de-conexao>"
+
 
 ## 5. Configuração da Conexão com o Cache Redis
 - Os segredos do Redis **NÃO** devem ser definidos como variáveis de ambiente no App Service.
