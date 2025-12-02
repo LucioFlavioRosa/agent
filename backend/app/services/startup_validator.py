@@ -55,10 +55,21 @@ class StartupValidator:
             blob_service_client = BlobServiceClient.from_connection_string(conn_str)
             container_client = blob_service_client.get_container_client(container_name)
             _ = list(container_client.list_blobs(name_starts_with=None, results_per_page=1))
-            self.status_report['blob_storage'] = {
-                'status': 'ok',
-                'detail': 'Conexão com Blob Storage bem-sucedida.'
-            }
+            # Validação adicional: verifica se é possível listar blobs de projetos existentes
+            test_usuario = os.environ.get("TEST_EXISTING_USER", "test_user_validator")
+            test_projeto = os.environ.get("TEST_EXISTING_PROJECT", "test_project_validator")
+            blob_folder = f"{test_usuario}/{test_projeto}/estados"
+            blobs = list(container_client.list_blobs(name_starts_with=blob_folder + "/"))
+            if blobs:
+                self.status_report['blob_storage'] = {
+                    'status': 'ok',
+                    'detail': 'Conexão com Blob Storage bem-sucedida e blobs de projetos existentes encontrados.'
+                }
+            else:
+                self.status_report['blob_storage'] = {
+                    'status': 'ok',
+                    'detail': 'Conexão com Blob Storage bem-sucedida, mas nenhum projeto existente encontrado para teste.'
+                }
         except Exception as e:
             self.status_report['blob_storage'] = {
                 'status': 'fail',
