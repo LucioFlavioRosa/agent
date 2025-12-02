@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File
 from pydantic import BaseModel, root_validator
 from typing import Optional
 
@@ -8,27 +8,15 @@ from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayl
 from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
 from ..services.background_state_saver import BackgroundStateSaver
+from ..services.docx_parser_service import extract_text_from_docx
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
 
 class StartAnalysisRequest(BaseModel):
     projeto: str
-    analysis_name: Optional[str] = None
-    analysis_type: Optional[str] = None
-    extracted_text: Optional[str] = None
-    blob_url: Optional[str] = None
-    session_id: Optional[str] = None
+    analysis_type: str
     comentario_usuario: Optional[str] = None
-
-    @root_validator
-    def validate_fields(cls, values):
-        projeto = values.get("projeto")
-        analysis_name = values.get("analysis_name")
-        analysis_type = values.get("analysis_type")
-        extracted_text = values.get("extracted_text")
-        session_id = values.get("session_id")
-        return values
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -37,62 +25,57 @@ class StartAnalysisResponse(BaseModel):
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
-    payload_request: StartAnalysisRequest,
     background_tasks: BackgroundTasks,
+    projeto: str = Body(...),
+    analysis_type: str = Body(...),
+    arquivo_docx: Optional[UploadFile] = File(None),
+    comentario_usuario: Optional[str] = Body(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
-    logger.info(f"Iniciando análise para projeto '{payload_request.projeto}' (analysis_name: '{payload_request.analysis_name}', analysis_type: '{payload_request.analysis_type}') para usuário {usuario_executor}")
+    logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
-    session_id = payload_request.session_id
-    project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, payload_request.projeto)
+    session_id = None
+    texto_extraido = None
+    if arquivo_docx is not None:
+        try:
+            texto_extraido = await extract_text_from_docx(arquivo_docx)
+            await arquivo_docx.seek(0)
+        except Exception as e:
+            logger.error(f"Erro ao extrair texto do arquivo DOCX: {e}")
+            raise HTTPException(status_code=400, detail=f"Erro ao processar o arquivo DOCX: {str(e)}")
+    # Criação ou restauração de sessão
+    project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
     if project_state:
-        if not payload_request.analysis_name or not payload_request.analysis_type:
-            metadata = await ProjectStateService.get_latest_analysis_metadata(usuario_executor, payload_request.projeto)
-            analysis_name = payload_request.analysis_name or metadata.get("analysis_name")
-            analysis_type = payload_request.analysis_type or metadata.get("analysis_type")
-            if not analysis_name or not analysis_type:
-                logger.error("Metadados do projeto existente não encontrados no estado. Informe analysis_name e analysis_type.")
-                raise HTTPException(status_code=400, detail="Metadados do projeto existente não encontrados. Informe analysis_name e analysis_type.")
-        else:
-            analysis_name = payload_request.analysis_name
-            analysis_type = payload_request.analysis_type
         session_id = redis_service.restore_session_from_state(
             usuario_executor,
-            payload_request.projeto,
-            analysis_name,
+            projeto,
             analysis_type,
             project_state
         )
-        instrucoes_extras = payload_request.extracted_text if payload_request.extracted_text is not None else ""
-    else:
-        if not payload_request.analysis_name or not payload_request.analysis_type:
-            logger.error("Para criar um novo projeto, os campos 'analysis_name' e 'analysis_type' são obrigatórios.")
-            raise HTTPException(status_code=400, detail="Os campos 'analysis_name' e 'analysis_type' são obrigatórios para novos projetos.")
-        if not payload_request.extracted_text:
-            logger.error("Para criar um novo projeto, o campo 'extracted_text' (texto extraído do DOCX) é obrigatório.")
-            raise HTTPException(status_code=400, detail="O upload do DOCX é obrigatório para novos projetos.")
-        session_id = redis_service.create_session(
-            usuario_executor,
-            payload_request.projeto,
-            payload_request.analysis_name,
-            payload_request.analysis_type
-        )
-        analysis_name = payload_request.analysis_name
-        analysis_type = payload_request.analysis_type
-        instrucoes_extras = payload_request.extracted_text
-        if payload_request.blob_url:
+        if arquivo_docx is not None:
             try:
-                redis_service.add_docx_file(session_id, payload_request.blob_url)
+                redis_service.add_docx_file(session_id, f"arquivo_docx_{session_id}")
             except Exception as e:
                 logger.error(f"Erro ao adicionar arquivo DOCX à sessão durante análise: {e}")
+    else:
+        session_id = redis_service.create_session(
+            usuario_executor,
+            projeto,
+            analysis_type,
+            comentario_usuario=comentario_usuario
+        )
+        if arquivo_docx is not None:
+            try:
+                redis_service.add_docx_file(session_id, f"arquivo_docx_{session_id}")
+            except Exception as e:
+                logger.error(f"Erro ao adicionar arquivo DOCX à sessão recém-criada: {e}")
     BackgroundStateSaver.schedule_periodic_save(session_id)
     mcp_payload = MCPStartAnalysisPayload(
+        projeto=projeto,
         analysis_type=analysis_type,
-        instrucoes_extras=instrucoes_extras,
-        comentario_usuario=payload_request.comentario_usuario,
-        projeto=payload_request.projeto,
-        analysis_name=analysis_name,
+        arquivo_docx=texto_extraido,
+        comentario_usuario=comentario_usuario,
         usuario_executor=usuario_executor,
         session_id=session_id
     )
