@@ -50,7 +50,8 @@ async def upload_docx(
         usuario_executor,
         projeto,
         analysis_type,
-        comentario_usuario=comentario_usuario
+        comentario_usuario=comentario_usuario,
+        extracted_text=texto_extraido
     )
     try:
         redis_service.add_docx_file(session_id, blob_url)
