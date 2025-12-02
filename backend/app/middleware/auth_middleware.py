@@ -1,22 +1,54 @@
-from fastapi import Request, HTTPException, status, Depends
+import logging
+from fastapi import Request, HTTPException, status
 from fastapi.security.utils import get_authorization_scheme_param
-from backend.app.services.azure_ad_service import AzureADService, AzureADTokenData
+from backend.app.services.azure_ad_service import AzureADService
 
-azure_ad_service = AzureADService()
+# Configura o logger
+logger = logging.getLogger("AuthMiddleware")
+
+# Variável global para armazenar a instância (começa vazia)
+_azure_ad_service_instance = None
+
+def get_azure_ad_service() -> AzureADService:
+    """
+    Cria a instância do serviço apenas quando for necessária (Lazy Loading).
+    Isso impede que o código tente validar configurações antes que o Key Vault seja carregado no startup.
+    """
+    global _azure_ad_service_instance
+    if _azure_ad_service_instance is None:
+        logger.info("Inicializando AzureADService sob demanda (primeira requisição)...")
+        try:
+            _azure_ad_service_instance = AzureADService()
+        except Exception as e:
+            logger.critical(f"Falha crítica ao inicializar AzureADService: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+                detail="Erro interno na configuração de autenticação."
+            )
+    return _azure_ad_service_instance
 
 def get_current_user(request: Request) -> dict:
     auth: str = request.headers.get("Authorization")
-    scheme, param = get_authorization_scheme_param(auth)
     if not auth:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Cabeçalho Authorization ausente.")
+    
+    scheme, param = get_authorization_scheme_param(auth)
+    
     if scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tipo de autenticação inválido. Use Bearer.")
+    
     try:
-        user = azure_ad_service.validate_token(param)
+        # Chama a função auxiliar que garante que o serviço existe e os segredos estão carregados
+        service = get_azure_ad_service()
+        
+        user = service.validate_token(param)
+        
         if hasattr(user, "claims"):
             return user.claims
         return user
+        
     except HTTPException as exc:
         raise exc
     except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Erro inesperado na validação do token: {str(exc)}")
+        logger.error(f"Erro inesperado na validação do token: {str(exc)}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Erro inesperado na validação do token.")
