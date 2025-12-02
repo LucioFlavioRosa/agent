@@ -6,6 +6,12 @@
 | azure-storage-container-name        | AZURE_STORAGE_CONTAINER_NAME       | kv-codeai-azure-dev-usc            | Nome do container de arquivos                           |
 | azure-ad-client-secret              | AZURE_AD_CLIENT_SECRET             | kv-codeai-azure-dev-usc            | Client Secret do Azure AD                               |
 | jwt-secret-key                      | JWT_SECRET_KEY                     | kv-codeai-azure-dev-usc            | Chave secreta JWT                                       |
+| redis-host                          | REDIS_HOST                         | kv-codeai-azure-dev-usc            | Host do Azure Redis Cache                               |
+| redis-port                          | REDIS_PORT                         | kv-codeai-azure-dev-usc            | Porta do Redis (6380 para SSL)                          |
+| redis-password                      | REDIS_PASSWORD                     | kv-codeai-azure-dev-usc            | Senha do Redis                                          |
+| redis-db                            | REDIS_DB                           | kv-codeai-azure-dev-usc            | Database Redis                                          |
+| redis-use-ssl                       | REDIS_USE_SSL                      | kv-codeai-azure-dev-usc            | Habilita conexão SSL/TLS com Redis                      |
+| redis-ssl-cert-reqs                 | REDIS_SSL_CERT_REQS                | kv-codeai-azure-dev-usc            | Requisição de certificado SSL ('required' recomendado)   |
 | devops-token                        | DEVOPS_TOKEN                       | kv-codeai-devops-dev-usc           | Token de integração DevOps                              |
 | github-token                        | GITHUB_TOKEN                       | kv-codeai-github-dev-usc           | Token de integração GitHub                              |
 | llm-api-key                         | LLM_API_KEY                        | kv-codeai-llm-dev-usc              | Chave de API para LLM                                   |
@@ -13,13 +19,11 @@
 ## Como criar segredos no Key Vault
 
 ### Usando Azure CLI:
-```text
-bash
-az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-storage-connection-string --value "<sua-string-de-conexao>"
-az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-ad-client-secret --value "<seu-client-secret>"
-az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name jwt-secret-key --value "<seu-jwt-secret>"
-```
+text
+az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-host --value "your-redis-cache.redis.cache.windows.net"
+az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-port --value "6380"
+az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-password --value "<obtido-no-portal-azure>"
+az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-db --value "0"
+az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-use-ssl --value "True"
+az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name redis-ssl-cert-reqs --value "required"
 
-- Use nomes **com hífens** no Key Vault.
-- O backend faz o mapeamento para atributos com underscores automaticamente.
-- Para múltiplos Key Vaults, defina as URLs nas variáveis de ambiente e crie os segredos em cada cofre conforme a tabela acima.
