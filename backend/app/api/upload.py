@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Depends
 from pydantic import BaseModel
 from typing import Optional
 
@@ -22,28 +22,21 @@ async def upload_docx(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     projeto: str = Form(...),
-    analysis_name: str = Form(...),
-    is_new_project: bool = Form(True),
-    session_id: Optional[str] = Form(None),
-    analysis_type: Optional[str] = Form(None),
+    analysis_type: str = Form(...),
     comentario_usuario: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
-
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
-
     try:
         texto_extraido = await extract_text_from_docx(file)
         await file.seek(0)
     except Exception as e:
         logger.error(f"Erro ao extrair texto: {e}")
         raise HTTPException(status_code=400, detail=f"Erro ao processar o arquivo DOCX: {str(e)}")
-
     blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
-    blob_filename = f"{analysis_name}.docx"
-
+    blob_filename = f"{analysis_type}.docx"
     try:
         blob_url = await upload_docx_to_blob(file, blob_folder, blob_filename, background_tasks)
     except ValueError as ve:
@@ -52,36 +45,21 @@ async def upload_docx(
     except Exception as e:
         logger.error(f"Erro inesperado no Blob Storage: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo: {str(e)}")
-
     redis_service = RedisSessionService()
-    used_session_id = session_id
-    if session_id:
-        try:
-            redis_service.add_docx_file(session_id, blob_url)
-        except Exception as e:
-            logger.error(f"Erro ao adicionar arquivo DOCX à sessão: {e}")
-    else:
-        if is_new_project and analysis_type:
-            used_session_id = redis_service.create_session(
-                usuario_executor,
-                projeto,
-                analysis_name,
-                analysis_type
-            )
-            try:
-                redis_service.add_docx_file(used_session_id, blob_url)
-            except Exception as e:
-                logger.error(f"Erro ao adicionar arquivo DOCX à sessão recém-criada: {e}")
-
+    session_id = redis_service.create_session(
+        usuario_executor,
+        projeto,
+        analysis_type,
+        comentario_usuario=comentario_usuario
+    )
+    try:
+        redis_service.add_docx_file(session_id, blob_url)
+    except Exception as e:
+        logger.error(f"Erro ao adicionar arquivo DOCX à sessão: {e}")
     mensagem = "Arquivo processado com sucesso. Pronto para análise."
-    if is_new_project:
-        mensagem += " (Upload obrigatório para novos projetos)"
-    else:
-        mensagem += " (Upload opcional para projetos existentes)"
-
     return UploadDocxResponse(
         blob_url=blob_url,
         extracted_text=texto_extraido,
         message=mensagem,
-        session_id=used_session_id
+        session_id=session_id
     )
