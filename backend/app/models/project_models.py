@@ -4,7 +4,6 @@ from datetime import datetime
 
 class ProjectListItem(BaseModel):
     projeto: str = Field(...)
-    analysis_name: Optional[str] = Field(None)
     analysis_type: Optional[str] = Field(None)
     created_at: Optional[datetime] = Field(None)
     last_saved_to_blob: Optional[datetime] = Field(None)
