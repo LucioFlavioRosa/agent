@@ -19,6 +19,7 @@ class StartAnalysisRequest(BaseModel):
     extracted_text: Optional[str] = None
     blob_url: Optional[str] = None
     session_id: Optional[str] = None
+    comentario_usuario: Optional[str] = None
 
     @root_validator
     def validate_fields(cls, values):
@@ -27,7 +28,6 @@ class StartAnalysisRequest(BaseModel):
         analysis_type = values.get("analysis_type")
         extracted_text = values.get("extracted_text")
         session_id = values.get("session_id")
-        # Validação será feita na lógica do endpoint, pois depende do estado do projeto
         return values
 
 class StartAnalysisResponse(BaseModel):
@@ -47,8 +47,6 @@ async def start_analysis(
     session_id = payload_request.session_id
     project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, payload_request.projeto)
     if project_state:
-        # Projeto existe: analysis_name e analysis_type podem ser omitidos
-        # Se não fornecidos, buscar do estado mais recente
         if not payload_request.analysis_name or not payload_request.analysis_type:
             metadata = await ProjectStateService.get_latest_analysis_metadata(usuario_executor, payload_request.projeto)
             analysis_name = payload_request.analysis_name or metadata.get("analysis_name")
@@ -68,7 +66,6 @@ async def start_analysis(
         )
         instrucoes_extras = payload_request.extracted_text if payload_request.extracted_text is not None else ""
     else:
-        # Projeto não existe: analysis_name e analysis_type obrigatórios
         if not payload_request.analysis_name or not payload_request.analysis_type:
             logger.error("Para criar um novo projeto, os campos 'analysis_name' e 'analysis_type' são obrigatórios.")
             raise HTTPException(status_code=400, detail="Os campos 'analysis_name' e 'analysis_type' são obrigatórios para novos projetos.")
@@ -93,6 +90,7 @@ async def start_analysis(
     mcp_payload = MCPStartAnalysisPayload(
         analysis_type=analysis_type,
         instrucoes_extras=instrucoes_extras,
+        comentario_usuario=payload_request.comentario_usuario,
         projeto=payload_request.projeto,
         analysis_name=analysis_name,
         usuario_executor=usuario_executor,
