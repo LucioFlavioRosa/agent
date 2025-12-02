@@ -12,7 +12,6 @@
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
 
-
 **Resposta de Sucesso:**
 
 {
@@ -21,13 +20,11 @@
   "session_id": "abcdef-uuid"
 }
 
-
 **Resposta de Erro (faltando DOCX para novo projeto):**
 
 {
   "detail": "O upload do DOCX é obrigatório para novos projetos."
 }
-
 
 ---
 
@@ -42,7 +39,6 @@
   "comentario_usuario": "Comentário para análise existente."
 }
 
-
 **Resposta de Sucesso:**
 
 {
@@ -50,7 +46,6 @@
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "ghijkl-uuid"
 }
-
 
 ---
 
@@ -63,7 +58,6 @@
   "comentario_usuario": "Comentário para análise apenas com nome do projeto."
 }
 
-
 **Resposta de Sucesso:**
 
 {
@@ -72,13 +66,11 @@
   "session_id": "ghijkl-uuid"
 }
 
-
 **Resposta de Erro (projeto não encontrado):**
 
 {
   "detail": "Projeto não encontrado para o usuário informado."
 }
-
 
 ---
 
@@ -93,13 +85,11 @@
   "comentario_usuario": "Comentário para projeto inexistente."
 }
 
-
 **Resposta de Erro:**
 
 {
   "detail": "O upload do DOCX é obrigatório para novos projetos."
 }
-
 
 ---
 
@@ -124,7 +114,6 @@ POST /upload/docx
   "session_id": "abcdef-uuid"
 }
 
-
 ---
 
 ## 5. Consultar arquivos DOCX enviados para uma sessão
@@ -138,7 +127,6 @@ GET /session/{session_id}/docx-files
   "docx_files": []
 }
 
-
 **Exemplo de resposta com múltiplos arquivos:**
 
 {
@@ -148,10 +136,45 @@ GET /session/{session_id}/docx-files
   ]
 }
 
+---
+
+## 6. Verificar existência de projeto antes de qualquer operação
+
+**Endpoint:**
+GET /projects/check?projeto=ProjetoExistente
+
+**Exemplo de requisição:**
+GET /projects/check?projeto=ProjetoExistente
+
+**Exemplo de resposta para projeto existente:**
+{
+  "exists": true,
+  "state": {
+    "usuario_executor": "user@example.com",
+    "projeto": "ProjetoExistente",
+    "analysis_name": "Sprint 2",
+    "analysis_type": "criacao_epicos_azure_devops",
+    "created_at": "2024-06-01T12:34:56Z",
+    "last_saved_to_blob": "2024-06-01T13:00:00Z",
+    "epicos_report": null,
+    "features_report": null,
+    "times_descricao_report": null,
+    "alocacao_times_report": null,
+    "premissas_riscos_report": null,
+    "docx_files": ["https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"],
+    "comentario_usuario": "Comentário salvo no estado."
+  }
+}
+
+**Exemplo de resposta para projeto inexistente:**
+{
+  "exists": false
+}
 
 ---
 
 ## Observações
+- O frontend deve sempre chamar `/projects/check` antes de qualquer outra operação (upload, análise) para garantir que o projeto existe e obter o último estado salvo.
 - O campo `extracted_text` só é obrigatório se o projeto não existir previamente para o usuário.
 - Para projetos existentes, basta informar o nome do projeto. O backend irá buscar o usuário autenticado e os metadados necessários (`analysis_name` e `analysis_type`) automaticamente do estado mais recente no Blob Storage.
 - O campo opcional `comentario_usuario` pode ser enviado tanto no upload do DOCX quanto na solicitação de análise, e será propagado para o MCP Server.
