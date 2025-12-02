@@ -49,6 +49,7 @@ class StartupValidator:
         try:
             conn_str = getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None)
             container_name = getattr(settings, "AZURE_STORAGE_CONTAINER_NAME", "arquivos")
+            self.logger.info("Validando Blob Storage usando connection string carregada do Key Vault 'kv-codeai-azure-dev-usc'.")
             if not conn_str:
                 raise ValueError("Connection string do Blob Storage não configurada.")
             blob_service_client = BlobServiceClient.from_connection_string(conn_str)
