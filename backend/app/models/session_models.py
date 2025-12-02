@@ -13,7 +13,6 @@ class SessionData(BaseModel):
     session_id: str = Field(...)
     usuario_executor: str = Field(...)
     projeto: str = Field(...)
-    analysis_name: str = Field(...)
     analysis_type: str = Field(...)
     created_at: datetime = Field(...)
     steps: List[SessionStep] = Field(default_factory=list)
@@ -30,7 +29,6 @@ class SessionData(BaseModel):
         return {
             "usuario_executor": self.usuario_executor,
             "projeto": self.projeto,
-            "analysis_name": self.analysis_name,
             "analysis_type": self.analysis_type,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_saved_to_blob": self.last_saved_to_blob.isoformat() if self.last_saved_to_blob else None,
@@ -49,7 +47,6 @@ class SessionData(BaseModel):
             session_id=state.get("session_id", ""),
             usuario_executor=state.get("usuario_executor", ""),
             projeto=state.get("projeto", ""),
-            analysis_name=state.get("analysis_name", ""),
             analysis_type=state.get("analysis_type", ""),
             created_at=datetime.fromisoformat(state["created_at"]) if state.get("created_at") else datetime.utcnow(),
             steps=[],
