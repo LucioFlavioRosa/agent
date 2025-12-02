@@ -13,32 +13,32 @@ Este documento apresenta exemplos práticos de payloads enviados pelo frontend p
 O backend aceita apenas um dos três formatos de payload abaixo (todos os campos obrigatórios, exceto onde indicado como opcional):
 
 **Exemplo 1:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "<arquivo .docx>",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-
+```
 
 **Exemplo 2:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "<arquivo .docx>"
 }
-
+```
 
 **Exemplo 3:**
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário sem arquivo."
 }
-
+```
 
 ---
 
@@ -46,24 +46,24 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 #### /analysis/start
 **Resposta de Sucesso:**
-
+```json
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 **Resposta de Erro:**
-
+```json
 {
   "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios."
 }
-
+```
 
 #### /session/{session_id}/reports
 **Resposta de Sucesso:**
-
+```json
 {
   "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
   "features_report": {"features": [{"id": 1, "nome": "Login"}]},
@@ -71,18 +71,18 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "alocacao_times_report": {},
   "premissas_riscos_report": {}
 }
-
+```
 
 **Resposta de Erro:**
-
+```json
 {
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 
 #### /projects/check
 **Projeto encontrado:**
-
+```json
 {
   "exists": true,
   "state": {
@@ -100,18 +100,18 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     "comentario_usuario": "Comentário salvo"
   }
 }
-
+```
 
 **Projeto não encontrado:**
-
+```json
 {
   "exists": false
 }
-
+```
 
 #### /auth/login
 **Resposta de Sucesso:**
-
+```json
 {
   "user_info": {
     "usuario_executor": "user@example.com",
@@ -129,86 +129,86 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     }
   ]
 }
-
+```
 
 **Resposta de Erro:**
-
+```json
 {
   "detail": "Usuário não autenticado."
 }
-
+```
 
 #### /upload/docx
 **Resposta de Sucesso:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
 }
-
+```
 
 #### /session/{session_id}/report (atualização de relatório)
 **Resposta de Sucesso:**
-
+```json
 {
   "status": "ok"
 }
-
+```
 
 **Resposta de Erro:**
-
+```json
 {
   "detail": "Erro ao atualizar relatório: ..."
 }
-
+```
 
 #### /session/{session_id}/save-state (salvamento de estado)
 **Resposta de Sucesso:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
 }
-
+```
 
 **Resposta de Erro:**
-
+```json
 {
   "detail": "Erro ao salvar estado: ..."
 }
-
+```
 
 #### /session/{session_id}/docx-files
 **Resposta de Sucesso:**
-
+```json
 {
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
 }
-
+```
 
 **Resposta de Erro:**
-
+```json
 {
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 
 ---
 
 ## 2. Exemplos de Respostas MCP → Backend
 
 ### 2.1 Resposta de Sucesso (job criado)
-
+```json
 {
   "job_id": "123456"
 }
-
+```
 
 ### 2.2 Notificação de Progresso (webhook MCP → Backend)
-
+```json
 {
   "job_id": "123456",
   "status": "in_progress",
@@ -220,10 +220,10 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     ]
   }
 }
-
+```
 
 ### 2.3 Resposta de Conclusão
-
+```json
 {
   "job_id": "123456",
   "status": "done",
@@ -235,20 +235,20 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     ]
   }
 }
-
+```
 
 ### 2.4 Resposta de Erro (MCP → Backend)
-
+```json
 {
   "job_id": "123456",
   "status": "error",
   "error_type": "timeout",
   "error_message": "Tempo limite excedido ao processar análise."
 }
-
+```
 
 ### 2.5 Exemplo para analysis_type diferente
-
+```json
 {
   "job_id": "7891011",
   "status": "done",
@@ -259,7 +259,7 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     ]
   }
 }
-
+```
 
 ---
 
@@ -267,24 +267,24 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 ### 3.1 /analysis/start
 **Sucesso:**
-
+```json
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 **Erro:**
-
+```json
 {
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
 }
-
+```
 
 ### 3.2 /session/{session_id}/reports
 **Sucesso:**
-
+```json
 {
   "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
   "features_report": {"features": [{"id": 1, "nome": "Login"}]},
@@ -292,18 +292,18 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "alocacao_times_report": {},
   "premissas_riscos_report": {}
 }
-
+```
 
 **Erro:**
-
+```json
 {
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 
 ### 3.3 /projects/check
 **Projeto encontrado:**
-
+```json
 {
   "exists": true,
   "state": {
@@ -321,18 +321,18 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     "comentario_usuario": "Comentário salvo"
   }
 }
-
+```
 
 **Projeto não encontrado:**
-
+```json
 {
   "exists": false
 }
-
+```
 
 ### 3.4 /auth/login
 **Sucesso:**
-
+```json
 {
   "user_info": {
     "usuario_executor": "user@example.com",
@@ -350,72 +350,72 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     }
   ]
 }
-
+```
 
 **Erro:**
-
+```json
 {
   "detail": "Usuário não autenticado."
 }
-
+```
 
 ### 3.5 /upload/docx
 **Sucesso:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
 }
-
+```
 
 ### 3.6 /session/{session_id}/report (atualização de relatório)
 **Sucesso:**
-
+```json
 {
   "status": "ok"
 }
-
+```
 
 **Erro:**
-
+```json
 {
   "detail": "Erro ao atualizar relatório: ..."
 }
-
+```
 
 ### 3.7 /session/{session_id}/save-state (salvamento de estado)
 **Sucesso:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
 }
-
+```
 
 **Erro:**
-
+```json
 {
   "detail": "Erro ao salvar estado: ..."
 }
-
+```
 
 ### 3.8 /session/{session_id}/docx-files
 **Sucesso:**
-
+```json
 {
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
 }
-
+```
 
 **Erro:**
-
+```json
 {
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 
 ---
 
@@ -423,18 +423,18 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 **1. Frontend → Backend**
 - Payload enviado para `/analysis/start`:
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "<arquivo .docx>",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-
+```
 
 **2. Backend → MCP**
 - Payload enviado do backend para o MCP:
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
@@ -443,17 +443,17 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "usuario_executor": "user@example.com",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 **3. MCP → Backend**
 - Resposta do MCP ao backend (job criado):
-
+```json
 {
   "job_id": "123456"
 }
-
+```
 - Resposta de progresso ou conclusão:
-
+```json
 {
   "job_id": "123456",
   "status": "done",
@@ -464,17 +464,17 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     ]
   }
 }
-
+```
 
 **4. Backend → Frontend**
 - Resposta do backend para o frontend:
-
+```json
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid"
 }
-
+```
 
 **Diagrama Textual do Fluxo:**
 1. Frontend envia requisição para Backend (`/analysis/start`)
@@ -487,7 +487,7 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 ## 5. Exemplos de Respostas do MCP para Diferentes analysis_type
 
 ### Para `criacao_epicos_azure_devops`
-
+```json
 {
   "job_id": "123456",
   "status": "done",
@@ -499,10 +499,10 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     ]
   }
 }
-
+```
 
 ### Para `features_generation` (exemplo futuro)
-
+```json
 {
   "job_id": "7891011",
   "status": "done",
@@ -513,29 +513,27 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     ]
   }
 }
-
-
+```
 ---
 
 ## 6. Exemplos de Respostas de Erro do MCP e Propagação para o Frontend
 
 ### MCP retorna erro (exemplo: timeout)
-
+```json
 {
   "job_id": "123456",
   "status": "error",
   "error_type": "timeout",
   "error_message": "Tempo limite excedido ao processar análise."
 }
-
+```
 
 ### Backend propaga erro para o frontend
-
+```
 {
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
 }
-
-
+```
 ---
 
 ## 7. Observações Gerais
