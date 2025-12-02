@@ -13,12 +13,7 @@ from backend.app.services.config_loader_service import ConfigLoaderService
 def validate_env_vars():
     required_vars = [
         'AZURE_STORAGE_CONNECTION_STRING',
-        'AZURE_AD_CLIENT_ID',
-        'AZURE_AD_TENANT_ID',
-        'AZURE_AD_CLIENT_SECRET',
         'AZURE_STORAGE_CONTAINER_NAME',
-        'MCP_SERVER_BASE_URL',
-        'JWT_SECRET_KEY'
     ]
     missing = [var for var in required_vars if not os.getenv(var)]
     if missing:
