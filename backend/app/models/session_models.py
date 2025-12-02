@@ -24,6 +24,7 @@ class SessionData(BaseModel):
     last_saved_to_blob: Optional[datetime] = Field(default=None)
     docx_files: List[str] = Field(default_factory=list)
     comentario_usuario: Optional[str] = Field(default=None)
+    extracted_text: Optional[str] = Field(default=None)
 
     def to_project_state(self) -> Dict[str, Any]:
         return {
@@ -38,7 +39,8 @@ class SessionData(BaseModel):
             "alocacao_times_report": self.alocacao_times_report,
             "premissas_riscos_report": self.premissas_riscos_report,
             "docx_files": self.docx_files,
-            "comentario_usuario": self.comentario_usuario
+            "comentario_usuario": self.comentario_usuario,
+            "extracted_text": self.extracted_text
         }
 
     @classmethod
@@ -57,5 +59,6 @@ class SessionData(BaseModel):
             premissas_riscos_report=state.get("premissas_riscos_report"),
             last_saved_to_blob=datetime.fromisoformat(state["last_saved_to_blob"]) if state.get("last_saved_to_blob") else None,
             docx_files=state.get("docx_files", []),
-            comentario_usuario=state.get("comentario_usuario")
+            comentario_usuario=state.get("comentario_usuario"),
+            extracted_text=state.get("extracted_text")
         )
