@@ -1,50 +1,63 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
 
 from ..middleware.auth_middleware import get_current_user
 from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayload
+from ..services.redis_session_service import RedisSessionService
+from ..services.project_state_service import ProjectStateService
+from ..services.background_state_saver import BackgroundStateSaver
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
 
-# Modelo de entrada para iniciar a análise (JSON Body)
 class StartAnalysisRequest(BaseModel):
     projeto: str
     analysis_name: str
     analysis_type: str
-    extracted_text: str  # O texto que veio do upload (ou foi editado pelo usuário)
-    blob_url: Optional[str] = None # Opcional, apenas para referência se necessário
+    extracted_text: str
+    blob_url: Optional[str] = None
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
     message: str
+    session_id: str
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
     payload_request: StartAnalysisRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user)
 ):
-    """
-    Inicia o processo de análise via MCP Server.
-    Espera receber o texto já extraído (e possivelmente curado) pelo frontend.
-    """
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
-
     logger.info(f"Iniciando análise '{payload_request.analysis_name}' do tipo '{payload_request.analysis_type}' para usuário {usuario_executor}")
-
-    # 1. Montar payload para o serviço MCP
-    # Mapeamos o request do front para o objeto que o MCPClientService espera
+    redis_service = RedisSessionService()
+    project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, payload_request.projeto)
+    if project_state:
+        session_id = redis_service.restore_session_from_state(
+            usuario_executor,
+            payload_request.projeto,
+            payload_request.analysis_name,
+            payload_request.analysis_type,
+            project_state
+        )
+    else:
+        session_id = redis_service.create_session(
+            usuario_executor,
+            payload_request.projeto,
+            payload_request.analysis_name,
+            payload_request.analysis_type
+        )
+    BackgroundStateSaver.schedule_periodic_save(session_id)
     mcp_payload = MCPStartAnalysisPayload(
         analysis_type=payload_request.analysis_type,
-        instrucoes_extras=payload_request.extracted_text, # O texto do docx entra aqui como contexto/instrução
+        instrucoes_extras=payload_request.extracted_text,
         projeto=payload_request.projeto,
         analysis_name=payload_request.analysis_name,
-        usuario_executor=usuario_executor
+        usuario_executor=usuario_executor,
+        session_id=session_id
     )
-
-    # 2. Chamar MCP Server
     mcp_client = MCPClientService()
     try:
         mcp_response = await mcp_client.start_analysis(mcp_payload)
@@ -52,8 +65,8 @@ async def start_analysis(
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
-
     return StartAnalysisResponse(
         job_id=job_id,
-        message="Análise solicitada com sucesso ao agente."
+        message="Análise solicitada com sucesso ao agente.",
+        session_id=session_id
     )
