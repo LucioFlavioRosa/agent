@@ -8,7 +8,6 @@ from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayl
 from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
 from ..services.background_state_saver import BackgroundStateSaver
-from ..services.docx_parser_service import extract_text_from_docx
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
@@ -17,6 +16,7 @@ class StartAnalysisRequest(BaseModel):
     projeto: str
     analysis_type: str
     comentario_usuario: Optional[str] = None
+    arquivo_docx: Optional[str] = None  # Agora é texto extraído
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -28,8 +28,8 @@ async def start_analysis(
     background_tasks: BackgroundTasks,
     projeto: str = Body(...),
     analysis_type: str = Body(...),
-    arquivo_docx: Optional[UploadFile] = File(None),
     comentario_usuario: Optional[str] = Body(None),
+    arquivo_docx: Optional[str] = Body(None),  # Texto extraído
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
@@ -37,13 +37,6 @@ async def start_analysis(
     redis_service = RedisSessionService()
     session_id = None
     texto_extraido = None
-    if arquivo_docx is not None:
-        try:
-            texto_extraido = await extract_text_from_docx(arquivo_docx)
-            await arquivo_docx.seek(0)
-        except Exception as e:
-            logger.error(f"Erro ao extrair texto do arquivo DOCX: {e}")
-            raise HTTPException(status_code=400, detail=f"Erro ao processar o arquivo DOCX: {str(e)}")
     # Criação ou restauração de sessão
     project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
     if project_state:
@@ -53,11 +46,6 @@ async def start_analysis(
             analysis_type,
             project_state
         )
-        if arquivo_docx is not None:
-            try:
-                redis_service.add_docx_file(session_id, f"arquivo_docx_{session_id}")
-            except Exception as e:
-                logger.error(f"Erro ao adicionar arquivo DOCX à sessão durante análise: {e}")
     else:
         session_id = redis_service.create_session(
             usuario_executor,
@@ -65,12 +53,17 @@ async def start_analysis(
             analysis_type,
             comentario_usuario=comentario_usuario
         )
-        if arquivo_docx is not None:
-            try:
-                redis_service.add_docx_file(session_id, f"arquivo_docx_{session_id}")
-            except Exception as e:
-                logger.error(f"Erro ao adicionar arquivo DOCX à sessão recém-criada: {e}")
     BackgroundStateSaver.schedule_periodic_save(session_id)
+    # Busca o texto extraído da sessão Redis, a menos que seja enviado diretamente
+    if arquivo_docx is not None:
+        texto_extraido = arquivo_docx
+    else:
+        try:
+            session = redis_service.get_session(session_id)
+            texto_extraido = getattr(session, "extracted_text", None)
+        except Exception as e:
+            logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
+            texto_extraido = None
     mcp_payload = MCPStartAnalysisPayload(
         projeto=projeto,
         analysis_type=analysis_type,
