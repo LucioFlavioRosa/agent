@@ -1,6 +1,6 @@
 # Resumo Executivo
 
-Este documento descreve o fluxo completo da aplicação Peers CodeAI Backend, desde o recebimento da requisição do frontend até o envio da resposta, incluindo integração com Azure Key Vault, Blob Storage, Redis e MCP Server. Cada etapa do processo está detalhada, com referência ao arquivo de código responsável e um diagrama ilustrativo em Mermaid.
+Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebimento da requisição do frontend até o envio da resposta, incluindo integrações com Azure Key Vault, Blob Storage, Redis e MCP Server. Cada etapa está explicada, com referência ao arquivo de código responsável e um diagrama ilustrativo em Mermaid.
 
 ---
 
@@ -29,72 +29,84 @@ flowchart TD
 ## Etapas do Fluxo e Código Responsável
 
 ### 1. Recebimento da Requisição do Frontend
-- **Arquivo:** `backend/app/api/upload.py`, `backend/app/api/analysis.py`, `backend/app/api/session.py`, `backend/app/api/auth.py`
-- **Funções:**
-  - Upload de DOCX: `upload_docx`
-  - Iniciar análise: `start_analysis`
-  - Sessão/relatórios: `get_session_reports`, `update_session_report`, `save_session_state`
-  - Configuração de autenticação: `get_auth_config`
+- **Descrição:** O frontend envia requisições para o backend via endpoints HTTP (upload de DOCX, iniciar análise, salvar estado, etc).
+- **Código responsável:**
+  - `backend/app/api/upload.py` (função `upload_docx`)
+  - `backend/app/api/analysis.py` (função `start_analysis`)
+  - `backend/app/api/session.py` (funções `get_session_reports`, `update_session_report`, `save_session_state`)
+  - `backend/app/api/auth.py` (função `get_auth_config`)
 
 ### 2. Processamento do DOCX
-- **Arquivo:** `backend/app/services/docx_parser_service.py`
-- **Função:** `extract_text_from_docx`
-- O arquivo DOCX é lido e o texto extraído para uso posterior.
+- **Descrição:** O arquivo DOCX enviado pelo frontend é processado para extrair o texto.
+- **Código responsável:**
+  - `backend/app/services/docx_parser_service.py` (função `extract_text_from_docx`)
+  - Chamado dentro de `upload_docx` em `backend/app/api/upload.py`
 
 ### 3. Salvamento do DOCX
-- **Arquivo:** `backend/app/services/blob_storage_service.py`
-- **Função:** `upload_docx_to_blob`
-- O arquivo é salvo no Azure Blob Storage, na pasta do usuário/projeto.
+- **Descrição:** O arquivo DOCX é salvo no Azure Blob Storage na pasta do usuário/projeto.
+- **Código responsável:**
+  - `backend/app/services/blob_storage_service.py` (função `upload_docx_to_blob`)
+  - Chamado dentro de `upload_docx` em `backend/app/api/upload.py`
 
 ### 4. Salvamento dos Dados no Redis
-- **Arquivo:** `backend/app/services/redis_session_service.py`
-- **Funções:** `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`
-- Sessões e relatórios são persistidos no Redis para rastreamento do estado.
+- **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado.
+- **Código responsável:**
+  - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`)
+  - Chamado em endpoints de análise e sessão
 
 ### 5. Validação de Tokens
-- **Arquivo:** `backend/app/middleware/auth_middleware.py`, `backend/app/services/azure_ad_service.py`
-- **Funções:** `get_current_user`, `validate_token`
-- O token JWT do Azure AD é validado para autenticação e autorização.
+- **Descrição:** O token JWT do Azure AD é validado para autenticação e autorização do usuário.
+- **Código responsável:**
+  - `backend/app/middleware/auth_middleware.py` (função `get_current_user`)
+  - `backend/app/services/azure_ad_service.py` (função `validate_token`)
 
 ### 6. Leitura das Variáveis de Ambiente
-- **Arquivo:** `backend/app/core/config.py`, `backend/app/services/config_loader_service.py`, `startup.py`
-- **Funções:** `Settings`, `ConfigLoaderService.load_secrets_from_key_vault`, `validate_env_vars`
-- Variáveis de ambiente são lidas para configuração inicial.
+- **Descrição:** Variáveis de ambiente são lidas para configuração inicial do backend.
+- **Código responsável:**
+  - `backend/app/core/config.py` (classe `Settings`)
+  - `startup.py` (função `validate_env_vars`)
+  - `backend/app/services/config_loader_service.py` (classe `ConfigLoaderService`)
 
 ### 7. Key Vault
-- **Arquivo:** `backend/app/services/azure_secret_manager.py`, `backend/app/services/config_loader_service.py`
-- **Funções:** `AzureSecretManager.get_secret`, `ConfigLoaderService.load_secrets_from_key_vault`
-- Segredos sensíveis são carregados do Azure Key Vault.
+- **Descrição:** Segredos sensíveis são carregados do Azure Key Vault usando Managed Identity.
+- **Código responsável:**
+  - `backend/app/services/azure_secret_manager.py` (classe `AzureSecretManager`)
+  - `backend/app/services/config_loader_service.py` (classe `ConfigLoaderService`, método `load_secrets_from_key_vault`)
 
 ### 8. Salvamento do Status no Blob Storage
-- **Arquivo:** `backend/app/services/project_state_service.py`, `backend/app/services/background_state_saver.py`
-- **Funções:** `save_state_to_blob`, `BackgroundStateSaver.schedule_periodic_save`
-- O estado da sessão/projeto é salvo periodicamente no Blob Storage.
+- **Descrição:** O estado da sessão/projeto é salvo periodicamente no Blob Storage.
+- **Código responsável:**
+  - `backend/app/services/project_state_service.py` (função `save_state_to_blob`)
+  - `backend/app/services/background_state_saver.py` (classe `BackgroundStateSaver`, método `schedule_periodic_save`)
 
 ### 9. Leitura de Status no Storage
-- **Arquivo:** `backend/app/services/project_state_service.py`
-- **Função:** `load_latest_state_from_blob`
-- O estado mais recente do projeto/sessão é recuperado do Blob Storage.
+- **Descrição:** O estado mais recente do projeto/sessão é recuperado do Blob Storage.
+- **Código responsável:**
+  - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py` quando necessário
 
 ### 10. Envio para o MCP Server
-- **Arquivo:** `backend/app/services/mcp_client_service.py`
-- **Função:** `start_analysis`
-- Payload de análise é enviado para o MCP Server via HTTP.
+- **Descrição:** Payload de análise é enviado para o MCP Server via HTTP.
+- **Código responsável:**
+  - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
 ### 11. Recebimento da Resposta do MCP Server
-- **Arquivo:** `backend/app/services/mcp_client_service.py`
-- **Função:** `start_analysis` (retorno)
-- A resposta do MCP Server é processada e o job_id é extraído.
+- **Descrição:** A resposta do MCP Server é processada e o job_id é extraído.
+- **Código responsável:**
+  - `backend/app/services/mcp_client_service.py` (função `start_analysis` - retorno)
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
 
 ### 12. Envio para o Frontend
-- **Arquivo:** `backend/app/api/analysis.py`, `backend/app/api/upload.py`, `backend/app/api/session.py`, `backend/app/api/auth.py`
-- **Funções:** Retorno das funções FastAPI
-- A resposta final é enviada para o frontend, incluindo URLs, job_id, mensagens e dados de sessão.
+- **Descrição:** A resposta final (incluindo URLs, job_id, mensagens e dados de sessão) é enviada para o frontend.
+- **Código responsável:**
+  - `backend/app/api/analysis.py`, `backend/app/api/upload.py`, `backend/app/api/session.py`, `backend/app/api/auth.py` (retorno das funções FastAPI)
 
 ### 13. Busca do Estado do Projeto no Blob Storage (Projeto Existente)
-- **Arquivo:** `backend/app/services/project_state_service.py`, `backend/app/api/analysis.py`
-- **Funções:** `load_latest_state_from_blob`, chamada dentro de `start_analysis`
-- Quando o usuário seleciona um projeto existente, o estado é recuperado do Blob Storage e restaurado na sessão Redis.
+- **Descrição:** Quando o usuário seleciona um projeto existente, o estado é recuperado do Blob Storage e restaurado na sessão Redis.
+- **Código responsável:**
+  - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py` quando detectado projeto existente
 
 ---
 
