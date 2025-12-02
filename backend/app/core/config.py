@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     AZURE_STORAGE_CONNECTION_STRING: str = ""
     AZURE_STORAGE_CONTAINER_NAME: str = ""
-    MCP_SERVER_BASE_URL: str = "http://mcp-app-service.azurewebsites.net"
+    MCP_SERVER_BASE_URL: str = ""
 
     AZURE_AD_TENANT_ID: str = ""
     AZURE_AD_CLIENT_ID: str = ""
@@ -50,6 +50,8 @@ class Settings(BaseSettings):
         sensitive_fields = [
             "AZURE_STORAGE_CONNECTION_STRING",
             "AZURE_STORAGE_CONTAINER_NAME",
+            "AZURE_AD_CLIENT_SECRET",
+            "AZURE_AD_TENANT_ID",
             "AZURE_AD_CLIENT_SECRET",
             "JWT_SECRET_KEY",
             "MCP_SERVER_BASE_URL",
