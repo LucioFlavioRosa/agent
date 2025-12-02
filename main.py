@@ -1,6 +1,7 @@
 import os
 import logging
 import json
+from dotenv import load_dotenv
 
 from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request, status
@@ -19,6 +20,8 @@ from backend.app.api.projects import router as projects_router
 from backend.app.api.session import router as session_router
 
 from backend.app.middleware.auth_middleware import get_current_user
+
+load_dotenv(override=True)
 
 app = FastAPI(
     title="Peers CodeAI Backend", 
@@ -40,7 +43,7 @@ if SKIP_AUTH_FOR_TESTING:
     app.dependency_overrides[get_current_user] = mock_get_current_user
     logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação desabilitada.")
 
-ALLOWED_IPS = ["127.0.0.1", "localhost", "::1"]
+
 env_ips_str = os.environ.get("ALLOWED_IPS", "")
 if env_ips_str:
     extra_ips = [ip.strip() for ip in env_ips_str.split(",") if ip.strip()]
