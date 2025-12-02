@@ -1,3 +1,8 @@
+fastapi==0.116.1
+gunicorn==23.0.0
+uvicorn==0.38.0
+starlette==0.47.2
+
 PyJWT
 python-docx
 azure-storage-blob
