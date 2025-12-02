@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ..middleware.auth_middleware import get_current_user
-from ..services.blob_storage_service import upload_docx_to_blob
+from ..services.blob_storage_service import upload_file_to_blob
 from ..services.docx_parser_service import extract_text_from_docx
 from ..services.redis_session_service import RedisSessionService
 
