@@ -75,7 +75,7 @@ app.include_router(auth_router, prefix="/auth")
 app.include_router(upload_router, prefix="/upload")
 app.include_router(analysis_router, prefix="/analysis")
 app.include_router(projects_router, prefix="/projects")
-app.include_router(session_router, tags=["Session & Reports"])
+app.include_router(session_router, prefix=["/session"])
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
