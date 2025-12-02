@@ -31,6 +31,9 @@ No portal do Azure, acesse seu App Service > Configurações > Configurações d
   - Senha: `REDIS_PASSWORD`
   - Database: `REDIS_DB` (normalmente 0)
 - Defina estas variáveis no App Service.
+- Para ambientes com Redis em subrede privada, utilize o endpoint privado do Redis. O App Service deve estar integrado à mesma VNET/subrede do Redis (VNET Integration).
+- Configure as variáveis `REDIS_USE_SSL=True` e `REDIS_SSL_CERT_REQS=required` para garantir conexão segura via SSL/TLS.
+- O Redis NÃO será acessível de fora da subrede; apenas o App Service (integrado à VNET) terá acesso ao endpoint privado do Redis.
 
 ## 6. Managed Identity Setup
 - No App Service, habilite "Identidade Gerenciada" (System-assigned).
@@ -42,9 +45,10 @@ No portal do Azure, acesse seu App Service > Configurações > Configurações d
 2. Configure as variáveis de ambiente no App Service.
 3. Crie os segredos nos Key Vaults (veja `KEY_VAULT_SECRETS_MAPPING.md`).
 4. Habilite Managed Identity e configure permissões.
-5. Faça deploy do código (zip, GitHub Actions, ou Azure CLI).
-6. Reinicie o App Service.
-7. Teste conectividade usando o endpoint `/health/infrastructure`.
+5. Configure o App Service para VNET Integration com a mesma subrede do Redis.
+6. Faça deploy do código (zip, GitHub Actions, ou Azure CLI).
+7. Reinicie o App Service.
+8. Teste conectividade usando o endpoint `/health/infrastructure`.
 
 ## 8. Testando o Backend
 - Use os exemplos de payload em `API_PAYLOAD_EXAMPLES.md` para testar os endpoints.
