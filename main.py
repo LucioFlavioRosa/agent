@@ -15,6 +15,7 @@ from backend.app.services.startup_validator import StartupValidator
 from backend.app.api.auth import router as auth_router
 from backend.app.api.upload import router as upload_router
 from backend.app.api.analysis import router as analysis_router
+from backend.app.api.projects import router as projects_router
 
 from backend.app.middleware.auth_middleware import get_current_user
 
@@ -72,6 +73,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/auth")
 app.include_router(upload_router, prefix="/upload")
 app.include_router(analysis_router, prefix="/analysis")
+app.include_router(projects_router, prefix="/projects")
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
