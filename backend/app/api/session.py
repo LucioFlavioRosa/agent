@@ -43,3 +43,12 @@ async def save_session_state(session_id: str):
         return {"blob_url": url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao salvar estado: {e}")
+
+@router.get("/session/{session_id}/docx-files")
+def get_session_docx_files(session_id: str):
+    redis_service = RedisSessionService()
+    try:
+        session = redis_service.get_session(session_id)
+        return {"docx_files": session.docx_files}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Sessão não encontrada: {e}")
