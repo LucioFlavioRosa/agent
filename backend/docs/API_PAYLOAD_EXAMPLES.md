@@ -42,162 +42,6 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 ---
 
-### 1.2 Resposta do Backend para o Frontend (Backend → Frontend)
-
-#### /analysis/start
-**Resposta de Sucesso:**
-
-{
-  "job_id": "123456",
-  "message": "Análise solicitada com sucesso ao agente.",
-  "session_id": "abcdef-uuid"
-}
-
-
-**Resposta de Erro:**
-
-{
-  "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios."
-}
-
-
-#### /session/{session_id}/reports
-**Resposta de Sucesso:**
-
-{
-  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-  "features_report": {"features": [{"id": 1, "nome": "Login"}]},
-  "times_descricao_report": {},
-  "alocacao_times_report": {},
-  "premissas_riscos_report": {}
-}
-
-
-**Resposta de Erro:**
-
-{
-  "detail": "Sessão não encontrada: ..."
-}
-
-
-#### /projects/check
-**Projeto encontrado:**
-
-{
-  "exists": true,
-  "state": {
-    "usuario_executor": "user@example.com",
-    "projeto": "ProjetoNovo",
-    "analysis_type": "criacao_epicos_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-    "features_report": {"features": [{"id": 1, "nome": "Login"}]},
-    "times_descricao_report": {},
-    "alocacao_times_report": {},
-    "premissas_riscos_report": {},
-    "docx_files": ["https://.../arquivo1.docx"],
-    "comentario_usuario": "Comentário salvo"
-  }
-}
-
-
-**Projeto não encontrado:**
-
-{
-  "exists": false
-}
-
-
-#### /auth/login
-**Resposta de Sucesso:**
-
-{
-  "user_info": {
-    "usuario_executor": "user@example.com",
-    "sub": "uuid",
-    "name": "Nome do Usuário",
-    "email": "user@example.com",
-    "roles": ["admin"]
-  },
-  "projects": [
-    {
-      "projeto": "ProjetoNovo",
-      "analysis_type": "criacao_epicos_azure_devops",
-      "created_at": "2024-06-01T12:00:00Z",
-      "last_saved_to_blob": "2024-06-01T12:30:00Z"
-    }
-  ]
-}
-
-
-**Resposta de Erro:**
-
-{
-  "detail": "Usuário não autenticado."
-}
-
-
-#### /upload/docx
-**Resposta de Sucesso:**
-
-{
-  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
-  "extracted_text": "Texto extraído do DOCX da reunião",
-  "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
-  "session_id": "ghijkl-uuid"
-}
-
-
-#### /session/{session_id}/report (atualização de relatório)
-**Resposta de Sucesso:**
-
-{
-  "status": "ok"
-}
-
-
-**Resposta de Erro:**
-
-{
-  "detail": "Erro ao atualizar relatório: ..."
-}
-
-
-#### /session/{session_id}/save-state (salvamento de estado)
-**Resposta de Sucesso:**
-
-{
-  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
-}
-
-
-**Resposta de Erro:**
-
-{
-  "detail": "Erro ao salvar estado: ..."
-}
-
-
-#### /session/{session_id}/docx-files
-**Resposta de Sucesso:**
-
-{
-  "docx_files": [
-    "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
-  ]
-}
-
-
-**Resposta de Erro:**
-
-{
-  "detail": "Sessão não encontrada: ..."
-}
-
-
----
-
 ## 2. Exemplos de Respostas MCP → Backend
 
 ### 2.1 Resposta de Sucesso (job criado)
@@ -538,7 +382,39 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 ---
 
-## 7. Observações Gerais
+## 7. Exemplos de Respostas do Backend para o Frontend em Cenários de Sessão
+
+### Estrutura de `SessionData` serializada (exemplo)
+
+{
+  "session_id": "abcdef-uuid",
+  "usuario_executor": "user@example.com",
+  "projeto": "ProjetoNovo",
+  "analysis_type": "criacao_epicos_azure_devops",
+  "created_at": "2024-06-01T12:00:00Z",
+  "steps": [
+    {
+      "step_id": "step-uuid-1",
+      "timestamp": "2024-06-01T12:00:01Z",
+      "action": "start",
+      "status": "ok",
+      "metadata": {}
+    }
+  ],
+  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
+  "features_report": {"features": [{"id": 1, "nome": "Login"}]},
+  "times_descricao_report": {},
+  "alocacao_times_report": {},
+  "premissas_riscos_report": {},
+  "last_saved_to_blob": "2024-06-01T12:30:00Z",
+  "docx_files": ["https://.../arquivo1.docx"],
+  "comentario_usuario": "Comentário salvo"
+}
+
+
+---
+
+## 8. Observações Gerais
 - O campo `analysis_name` foi removido de todos os fluxos.
 - O campo opcional `comentario_usuario` pode ser enviado tanto no upload do DOCX quanto na solicitação de análise.
 - O campo `arquivo_docx` é obrigatório apenas se não houver `comentario_usuario`.
