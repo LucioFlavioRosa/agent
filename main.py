@@ -121,3 +121,22 @@ def on_startup():
             logging.critical(f"Erro crítico: Falha ao conectar ao Redis via endpoint privado: {validator.status_report['redis']['detail']}")
     except Exception as e:
         logging.error(f"⚠️ Aviso de Startup (não crítico para teste local): {str(e)}")
+
+@app.post("/fake-mcp/api/v1/analysis/start")
+async def fake_mcp_start(request: Request):
+    """
+    Simula o endpoint do MCP.
+    Recebe o payload que o backend enviou e retorna um Job ID falso.
+    """
+    body = await request.json()
+    
+    # Log para você ver no console que o payload chegou "do outro lado"
+    logging.info(f"🧪 [FAKE MCP] Recebi uma solicitação de análise!")
+    logging.info(f"📦 [FAKE MCP] Dados recebidos: {json.dumps(body, indent=2)}")
+    
+    # Retorna exatamente o que o seu Backend espera receber do MCP real
+    return {
+        "job_id": "job-teste-mock-12345",
+        "status": "queued",
+        "message": "Job aceito pelo MCP Falso"
+    }
