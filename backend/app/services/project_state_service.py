@@ -17,7 +17,7 @@ class ProjectStateService:
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
-        state_bytes = json.dumps(state, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        state_bytes = json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8")
         blob_client.upload_blob(state_bytes, overwrite=True, content_settings=None)
         return blob_client.url
 
@@ -51,10 +51,8 @@ class ProjectStateService:
         state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
         if not state:
             return {}
-        analysis_name = state.get("analysis_name")
         analysis_type = state.get("analysis_type")
         return {
-            "analysis_name": analysis_name,
             "analysis_type": analysis_type
         }
 
@@ -82,7 +80,6 @@ class ProjectStateService:
                 state = json.loads(state_bytes.decode("utf-8"))
                 item = {
                     "projeto": state.get("projeto", projeto),
-                    "analysis_name": state.get("analysis_name"),
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob")
