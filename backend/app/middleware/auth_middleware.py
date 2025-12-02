@@ -13,12 +13,10 @@ def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tipo de autenticação inválido. Use Bearer.")
     try:
         user = azure_ad_service.validate_token(param)
-        # Retorna claims como dict para compatibilidade
         if hasattr(user, "claims"):
             return user.claims
         return user
     except HTTPException as exc:
-        # Propaga o erro com mensagem detalhada (ex: Token expirado, assinatura inválida)
         raise exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Erro inesperado na validação do token: {str(exc)}")
