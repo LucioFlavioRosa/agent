@@ -35,15 +35,16 @@ class MCPClientService:
         return endpoint_dict.get(analysis_type, self.base_url)
 
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
-        # 1. Obtém a URL base configurada na variável de ambiente
-        base = self.get_mcp_endpoint(payload.analysis_type).rstrip("/")
+        # 1. Pega a configuração bruta
+        raw_base = self.get_mcp_endpoint(payload.analysis_type)
         
-        # --- CORREÇÃO: REMOVIDA A LÓGICA DE LOCALHOST ---
-        # Como o Mock está em outro servidor, usamos a URL pública direta.
+        # --- LOG DE DEBUG FORENSE ---
+        logging.info(f"🕵️ [DEBUG URL] Bruta vinda da env: '[{raw_base}]'")
         
+        base = raw_base.strip().rstrip("/")
         url = f"{base}/start"
         
-        logging.info(f"🔌 [MCP Client] Enviando requisição para: {url}")
+        logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
     
         try:
             # 2. Compatibilidade Pydantic
