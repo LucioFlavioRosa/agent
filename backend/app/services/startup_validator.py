@@ -6,6 +6,7 @@ from backend.app.services.blob_storage_service import BlobServiceClient
 from backend.app.services.project_state_service import ProjectStateService
 import httpx
 import redis
+import asyncio
 
 class StartupValidator:
     def __init__(self):
@@ -73,7 +74,8 @@ class StartupValidator:
             # Validação adicional: busca de metadados do projeto existente
             try:
                 metadata = None
-                metadata = LocalProjectHelper.get_latest_analysis_metadata_sync(test_usuario, test_projeto)
+                # Chamada direta ao ProjectStateService.load_latest_state_from_blob (async para sync)
+                metadata = asyncio.run(ProjectStateService.load_latest_state_from_blob(test_usuario, test_projeto))
                 if metadata and metadata.get("analysis_type"):
                     self.status_report['blob_storage_metadata'] = {
                         'status': 'ok',
@@ -180,29 +182,3 @@ class StartupValidator:
         self.validate_mcp_server()
         self.validate_redis_connection()
         return self.status_report
-
-class LocalProjectHelper:
-    @staticmethod
-    def get_latest_analysis_metadata_sync(usuario_executor: str, projeto: str):
-        from backend.app.services.blob_storage_service import _get_blob_clients
-        import json
-        blob_folder = f"{usuario_executor}/{projeto}/estados"
-        _, container_client = _get_blob_clients()
-        blobs = list(container_client.list_blobs(name_starts_with=blob_folder+"/"))
-        if not blobs:
-            return {}
-        blobs_sorted = sorted(
-            [b for b in blobs if b.name.endswith(".json")],
-            key=lambda b: b.name,
-            reverse=True
-        )
-        if not blobs_sorted:
-            return {}
-        latest_blob = blobs_sorted[0]
-        blob_client = container_client.get_blob_client(latest_blob.name)
-        state_bytes = blob_client.download_blob().readall()
-        state = json.loads(state_bytes.decode("utf-8"))
-        analysis_type = state.get("analysis_type")
-        return {
-            "analysis_type": analysis_type
-        }
