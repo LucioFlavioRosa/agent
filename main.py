@@ -29,7 +29,7 @@ class FakeMCPStartPayload(BaseModel):
 
 # --- DADOS MOCKADOS (A "Inteligência" Falsa) ---
 MOCK_RESPONSES = {
-    "criacao_epicos_azure_devops": {
+    "epicos_report": {
         "report_type": "epicos_report",
         "report_data": {
             "epicos": [
