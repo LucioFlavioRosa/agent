@@ -43,6 +43,13 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
         for p in projects:
             if isinstance(p, dict):
                 p.pop("analysis_name", None)
+        # Adiciona project_id em cada projeto retornado
+        for idx, p in enumerate(projects):
+            if isinstance(p, dict):
+                if "project_id" not in p:
+                    p["project_id"] = p.get("project_id")
+        # Filtro para garantir que project_id esteja presente
+        projects = [p for p in projects if "project_id" in p]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar projetos do usuário: {str(e)}")
     return AuthLoginResponse(user_info=current_user, projects=projects)
