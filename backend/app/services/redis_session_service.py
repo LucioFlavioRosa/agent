@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
-from backend.app.services.background_state_saver import BackgroundStateSaver
 
 REPORT_TYPES = {
     'epicos': 'epicos_report',
@@ -153,6 +152,7 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def update_session_on_state_change(self, session_id: str, updated_fields: Dict[str, Any]):
+        from backend.app.services.background_state_saver import BackgroundStateSaver
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
