@@ -19,7 +19,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
-}```
+}
+```
 
 **Exemplo 2:**
 
@@ -27,7 +28,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião"
-}```
+}
+```
 
 **Exemplo 3:**
 
@@ -35,7 +37,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário sem arquivo."
-}```
+}
+```
 
 ---
 
@@ -49,13 +52,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
-}```
+}
+```
 
 **Resposta de Erro:**
 
 ```json{
   "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios."
-}```
+}
+```
 
 #### /session/```json{session_id}```/reports
 **Resposta de Sucesso:**
@@ -66,13 +71,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "times_descricao_report": ```json{}```,
   "alocacao_times_report": ```json{}```,
   "premissas_riscos_report": ```json{}```
-}```
+}
+```
 
 **Resposta de Erro:**
 
 ```json{
   "detail": "Sessão não encontrada: ..."
-}```
+}
+```
 
 #### /projects/check
 **Projeto encontrado:**
@@ -95,13 +102,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
     "project_id": "projeto-uuid-123"
   }```
-}```
+}
+```
 
 **Projeto não encontrado:**
 
 ```json{
   "exists": false
-}```
+}
+```
 
 #### /auth/login
 **Resposta de Sucesso:**
@@ -123,13 +132,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       "project_id": "projeto-uuid-123"
     }```
   ]
-}```
+}
+```
 
 **Resposta de Erro:**
 
 ```json{
   "detail": "Usuário não autenticado."
-}```
+}
+```
 
 #### /upload/docx
 **Resposta de Sucesso:**
@@ -139,33 +150,38 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
-}```
+}
+```
 
 #### /session/```json{session_id}```/report (atualização de relatório)
 **Resposta de Sucesso:**
 
 ```json{
   "status": "ok"
-}```
+}
+```
 
 **Resposta de Erro:**
 
 ```json{
   "detail": "Erro ao atualizar relatório: ..."
-}```
+}
+```
 
 #### /session/```json{session_id}```/save-state (salvamento de estado)
 **Resposta de Sucesso:**
 
 ```json{
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
-}```
+}
+```
 
 **Resposta de Erro:**
 
 ```json{
   "detail": "Erro ao salvar estado: ..."
-}```
+}
+```
 
 #### /session/```json{session_id}```/docx-files
 **Resposta de Sucesso:**
@@ -174,13 +190,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
-}```
+}
+```
 
 **Resposta de Erro:**
 
 ```json{
   "detail": "Sessão não encontrada: ..."
-}```
+}
+```
 
 ---
 
@@ -190,7 +208,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 ```json{
   "job_id": "123456"
-}```
+}
+```
 
 - O campo "arquivo_docx" enviado para o MCP sempre contém o texto extraído do DOCX, nunca a URL do arquivo.
 
@@ -206,7 +225,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       ```json{"id": 1, "titulo": "Como usuário...", "descricao": "..."}```
     ]
   }```
-}```
+}
+```
 
 ### 2.3 Resposta de Conclusão
 
@@ -220,7 +240,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       ```json{"id": 2, "titulo": "Como admin...", "descricao": "..."}```
     ]
   }```
-}```
+}
+```
 
 ### 2.4 Resposta de Erro (MCP → Backend)
 
@@ -229,7 +250,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "status": "error",
   "error_type": "timeout",
   "error_message": "Tempo limite excedido ao processar análise."
-}```
+}
+```
 
 ### 2.5 Exemplo para analysis_type diferente
 
@@ -242,7 +264,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       ```json{"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}```
     ]
   }```
-}```
+}
+```
 
 ---
 
@@ -256,13 +279,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
-}```
+}
+```
 
 **Erro:**
 
 ```json{
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
-}```
+}
+```
 
 ### 3.2 /session/```json{session_id}```/reports
 **Sucesso:**
@@ -273,13 +298,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "times_descricao_report": ```json{}```,
   "alocacao_times_report": ```json{}```,
   "premissas_riscos_report": ```json{}```
-}```
+}
+```
 
 **Erro:**
 
 ```json{
   "detail": "Sessão não encontrada: ..."
-}```
+}
+```
 
 ### 3.3 /projects/check
 **Projeto encontrado:**
@@ -302,13 +329,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
     "project_id": "projeto-uuid-123"
   }```
-}```
+}
+```
 
 **Projeto não encontrado:**
 
 ```json{
   "exists": false
-}```
+}
+```
 
 ### 3.4 /auth/login
 **Sucesso:**
@@ -330,7 +359,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       "project_id": "projeto-uuid-123"
     }```
   ]
-}```
+}
+```
 
 **Erro:**
 
@@ -346,33 +376,38 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
-}```
+}
+```
 
 ### 3.6 /session/```json{session_id}```/report (atualização de relatório)
 **Sucesso:**
 
 ```json{
   "status": "ok"
-}```
+}
+```
 
 **Erro:**
 
 ```json{
   "detail": "Erro ao atualizar relatório: ..."
-}```
+}
+```
 
 ### 3.7 /session/```json{session_id}```/save-state (salvamento de estado)
 **Sucesso:**
 
 ```json{
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
-}```
+}
+```
 
 **Erro:**
 
 ```json{
   "detail": "Erro ao salvar estado: ..."
-}```
+}
+```
 
 ### 3.8 /session/```json{session_id}```/docx-files
 **Sucesso:**
@@ -381,13 +416,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
-}```
+}
+```
 
 **Erro:**
 
 ```json{
   "detail": "Sessão não encontrada: ..."
-}```
+}
+```
 
 ---
 
@@ -401,7 +438,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
-}```
+}
+```
 
 **2. Backend → MCP**
 - Payload enviado do backend para o MCP:
@@ -413,14 +451,16 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "comentario_usuario": "Este é um comentário adicional do usuário.",
   "usuario_executor": "user@example.com",
   "session_id": "abcdef-uuid"
-}```
+}
+```
 
 **3. MCP → Backend**
 - Resposta do MCP ao backend (job criado):
 
 ```json{
   "job_id": "123456"
-}```
+}
+```
 
 - Resposta de progresso ou conclusão:
 
@@ -433,7 +473,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       ```json{"id": 1, "titulo": "Como usuário...", "descricao": "..."}```
     ]
   }```
-}```
+}
+```
 
 **4. Backend → Frontend**
 - Resposta do backend para o frontend:
@@ -443,7 +484,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
-}```
+}
+```
 
 **Diagrama Textual do Fluxo:**
 1. Frontend envia requisição para Backend (`/analysis/start`)
@@ -467,7 +509,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       ```json{"id": 2, "titulo": "Como admin...", "descricao": "..."}```
     ]
   }```
-}```
+}
+```
 
 ### Para `features_generation` (exemplo futuro)
 
@@ -480,7 +523,8 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
       ```json{"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}```
     ]
   }```
-}```
+}
+```
 
 ---
 
@@ -493,13 +537,15 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
   "status": "error",
   "error_type": "timeout",
   "error_message": "Tempo limite excedido ao processar análise."
-}```
+}
+```
 
 ### Backend propaga erro para o frontend
 
 ```json{
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
-}```
+}
+```
 
 ---
 
