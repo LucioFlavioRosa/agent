@@ -52,7 +52,6 @@ async def upload_docx(
     mensagem = "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)"
     return UploadDocxResponse(
         blob_url=blob_url,
-        job_id=job_id_gerado,
         extracted_text=texto_extraido,
         message=mensagem,
         session_id=session_id
