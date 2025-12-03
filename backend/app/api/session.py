@@ -30,6 +30,8 @@ def update_session_report(session_id: str, req: UpdateReportRequest):
     redis_service = RedisSessionService()
     try:
         redis_service.update_report(session_id, req.report_type, req.report_data)
+        # Atualiza o estado e agenda salvamento automático
+        redis_service.update_session_on_state_change(session_id, {})
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao atualizar relatório: {e}")
