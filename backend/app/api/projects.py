@@ -18,10 +18,10 @@ async def check_project(
     try:
         state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
         if state:
-            # Remove analysis_name do estado se existir
             state.pop("analysis_name", None)
             logger.info(f"Projeto '{projeto}' encontrado para usuario_executor='{usuario_executor}'. Estado retornado.")
-            return {"exists": True, "state": state}
+            project_id = state.get("project_id")
+            return {"exists": True, "state": {**state, "project_id": project_id}}
         else:
             logger.info(f"Projeto '{projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
             return {"exists": False}
@@ -34,10 +34,14 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
     usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
     try:
         projects = await ProjectStateService.list_user_projects(usuario_executor)
-        # Remove analysis_name de cada projeto se existir
         for p in projects:
             if isinstance(p, dict):
                 p.pop("analysis_name", None)
+        for p in projects:
+            if isinstance(p, dict):
+                if "project_id" not in p:
+                    p["project_id"] = p.get("project_id")
+        projects = [p for p in projects if "project_id" in p]
         return projects
     except Exception as e:
         logger.error(f"Erro ao listar projetos do usuário {usuario_executor}: {e}")
