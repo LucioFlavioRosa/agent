@@ -46,7 +46,7 @@ async def start_analysis_mock(payload: FakeMCPStartPayload):
     return {
         "job_id": job_id,
         "status": "queued",
-        "message": "Job aceito pelo Mock Standalone (Serviço Separado)"
+        "message": {"epicos_report": "Job aceito pelo Mock Standalone (Serviço Separado)"}
     }
 
 # Registra a rota com o prefixo correto
