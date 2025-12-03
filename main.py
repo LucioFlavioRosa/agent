@@ -61,7 +61,7 @@ async def simulate_webhook_callback(session_id: str, analysis_type: str):
     await asyncio.sleep(3)
     
     # 1. Seleciona os dados
-    mock_content = MOCK_RESPONSES.get(analysis_type, MOCK_RESPONSES["default"])
+    mock_content = MOCK_RESPONSES['criacao_epicos_azure_devop']
     
     # 2. Monta a URL do Webhook no Backend Principal
     # O Mock (Slot B) chama o Backend (Slot A)
