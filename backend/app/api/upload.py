@@ -4,8 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ..middleware.auth_middleware import get_current_user
-from ..services.blob_storage_service import upload_docx_to_blob
-from ..services.docx_parser_service import extract_text_from_docx
+from ..services.blob_storage_service import upload_and_extract_docx
 from ..services.redis_session_service import RedisSessionService
 
 router = APIRouter()
@@ -30,21 +29,15 @@ async def upload_docx(
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
     try:
-        texto_extraido = await extract_text_from_docx(file)
-        await file.seek(0)
-    except Exception as e:
-        logger.error(f"Erro ao extrair texto: {e}")
-        raise HTTPException(status_code=400, detail=f"Erro ao processar o arquivo DOCX: {str(e)}")
-    blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
-    blob_filename = f"{analysis_type}.docx"
-    try:
-        blob_url = await upload_docx_to_blob(file, blob_folder, blob_filename, background_tasks)
+        blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
+        blob_filename = f"{analysis_type}.docx"
+        blob_url, texto_extraido = await upload_and_extract_docx(file, blob_folder, blob_filename, background_tasks)
     except ValueError as ve:
         logger.error(f"Erro de configuração do Blob Storage: {ve}")
         raise HTTPException(status_code=503, detail="Serviço de armazenamento temporariamente indisponível")
     except Exception as e:
-        logger.error(f"Erro inesperado no Blob Storage: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo: {str(e)}")
+        logger.error(f"Erro inesperado no Blob Storage ou extração: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo ou extrair texto: {str(e)}")
     redis_service = RedisSessionService()
     session_id = redis_service.create_session(
         usuario_executor,
@@ -61,7 +54,7 @@ async def upload_docx(
         redis_service.update_session_extracted_text(session_id, texto_extraido)
     except Exception as e:
         logger.error(f"Erro ao salvar texto extraído na sessão: {e}")
-    mensagem = "Arquivo processado com sucesso. Pronto para análise."
+    mensagem = "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)"
     return UploadDocxResponse(
         blob_url=blob_url,
         extracted_text=texto_extraido,
