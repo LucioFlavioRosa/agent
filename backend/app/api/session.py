@@ -10,7 +10,7 @@ class UpdateReportRequest(BaseModel):
     report_type: str
     report_data: Any
 
-@router.get("/session/{session_id}/reports")
+@router.get("/{session_id}/reports")
 def get_session_reports(session_id: str):
     redis_service = RedisSessionService()
     try:
@@ -19,7 +19,7 @@ def get_session_reports(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Sessão não encontrada: {e}")
 
-@router.put("/session/{session_id}/report")
+@router.put("/{session_id}/report")
 def update_session_report(session_id: str, req: UpdateReportRequest):
     redis_service = RedisSessionService()
     try:
@@ -29,7 +29,7 @@ def update_session_report(session_id: str, req: UpdateReportRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao atualizar relatório: {e}")
 
-@router.post("/session/{session_id}/save-state")
+@router.post("/{session_id}/save-state")
 async def save_session_state(session_id: str):
     redis_service = RedisSessionService()
     try:
@@ -39,7 +39,7 @@ async def save_session_state(session_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao salvar estado: {e}")
 
-@router.get("/session/{session_id}/docx-files")
+@router.get("/{session_id}/docx-files")
 def get_session_docx_files(session_id: str):
     redis_service = RedisSessionService()
     try:
