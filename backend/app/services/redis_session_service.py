@@ -6,14 +6,6 @@ from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
 
-REPORT_TYPES = {
-    'epicos': 'epicos_report',
-    'features': 'features_report',
-    'times_descricao': 'times_descricao_report',
-    'alocacao_times': 'alocacao_times_report',
-    'premissas_riscos': 'premissas_riscos_report'
-}
-
 class RedisSessionService:
     def __init__(self):
         self.redis_client = redis.Redis(
@@ -45,16 +37,12 @@ class RedisSessionService:
             "analysis_type": analysis_type,
             "created_at": created_at,
             "steps": [],
-            "epicos_report": None,
-            "features_report": None,
-            "times_descricao_report": None,
-            "alocacao_times_report": None,
-            "premissas_riscos_report": None,
             "last_saved_to_blob": None,
             "docx_files": [],
             "comentario_usuario": comentario_usuario,
             "extracted_text": extracted_text,
-            "project_id": project_id
+            "project_id": project_id,
+            "reports": {}
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
         return session_id
@@ -96,15 +84,26 @@ class RedisSessionService:
         session_data["status"] = status
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
-    def update_report(self, session_id: str, report_type: str, report_data: Any):
-        if report_type not in REPORT_TYPES:
-            raise ValueError(f"Tipo de relatório inválido: {report_type}")
+    def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None):
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        session_data[REPORT_TYPES[report_type]] = report_data
+        # Determina analysis_type
+        analysis_type_in_session = session_data.get("analysis_type")
+        analysis_type = analysis_type or analysis_type_in_session
+        # Busca o campo de relatório correto via mcp_config_registry
+        report_field = None
+        if hasattr(settings, "mcp_config_registry") and settings.mcp_config_registry and hasattr(settings.mcp_config_registry, "agents") and analysis_type in settings.mcp_config_registry.agents:
+            agent_cfg = settings.mcp_config_registry.agents[analysis_type]
+            if hasattr(agent_cfg, "report_mapping") and report_type in agent_cfg.report_mapping:
+                report_field = agent_cfg.report_mapping[report_type]
+        if not report_field:
+            report_field = f"{report_type}_report"
+        if "reports" not in session_data or not isinstance(session_data["reports"], dict):
+            session_data["reports"] = {}
+        session_data["reports"][report_field] = report_data
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
@@ -117,11 +116,19 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        session_data["epicos_report"] = project_state.get("epicos_report")
-        session_data["features_report"] = project_state.get("features_report")
-        session_data["times_descricao_report"] = project_state.get("times_descricao_report")
-        session_data["alocacao_times_report"] = project_state.get("alocacao_times_report")
-        session_data["premissas_riscos_report"] = project_state.get("premissas_riscos_report")
+        # Migração dos campos antigos para o novo campo 'reports'
+        reports = {}
+        # Se já existir 'reports' no project_state, utiliza
+        if "reports" in project_state and isinstance(project_state["reports"], dict):
+            reports.update(project_state["reports"])
+        # Migra campos legados se existirem
+        legacy_fields = [
+            "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
+        ]
+        for field in legacy_fields:
+            if field in project_state and project_state[field] is not None:
+                reports[field] = project_state[field]
+        session_data["reports"] = reports
         session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["comentario_usuario"] = comentario_usuario
