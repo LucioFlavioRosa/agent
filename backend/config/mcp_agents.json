@@ -2,7 +2,7 @@
   "agents": {
     "criacao_epicos_azure_devops": {
       "agent_name": "Planejamento",
-      "mcp_url": "https://mcp-planejamento.peers.com.br",
+      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
       "report_fields": ["epicos_report"],
       "report_mapping": {
         "epicos": "epicos_report"
@@ -10,7 +10,7 @@
     },
     "refinamento_epicos_azure_devops": {
       "agent_name": "Planejamento",
-      "mcp_url": "https://mcp-planejamento.peers.com.br",
+      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
       "report_fields": ["epicos_report"],
       "report_mapping": {
         "epicos": "epicos_report"
@@ -18,7 +18,7 @@
     },
     "criacao_features_azure_devops": {
       "agent_name": "Planejamento",
-      "mcp_url": "https://mcp-planejamento.peers.com.br",
+      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
       "report_fields": ["features_report"],
       "report_mapping": {
         "features": "features_report"
@@ -26,7 +26,7 @@
     },
     "refinamento_features_azure_devops": {
       "agent_name": "Planejamento",
-      "mcp_url": "https://mcp-planejamento.peers.com.br",
+      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
       "report_fields": ["features_report"],
       "report_mapping": {
         "features": "features_report"
@@ -34,7 +34,7 @@
     },
     "criacao_planejamento_azure_devops": {
       "agent_name": "Planejamento",
-      "mcp_url": "https://mcp-planejamento.peers.com.br",
+      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
       "report_fields": ["times_descricao_report", "alocacao_times_report", "premissas_riscos_report"],
       "report_mapping": {
         "times": "times_descricao_report",
@@ -44,7 +44,7 @@
     },
     "refinamento_planejamento_azure_devops": {
       "agent_name": "Planejamento",
-      "mcp_url": "https://mcp-planejamento.peers.com.br",
+      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
       "report_fields": ["times_descricao_report", "alocacao_times_report", "premissas_riscos_report"],
       "report_mapping": {
         "times": "times_descricao_report",
