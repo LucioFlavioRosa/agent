@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
+from backend.app.services.background_state_saver import BackgroundStateSaver
 
 REPORT_TYPES = {
     'epicos': 'epicos_report',
@@ -27,9 +28,11 @@ class RedisSessionService:
         )
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
 
-    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None) -> str:
+    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None, project_id: Optional[str] = None) -> str:
         session_id = str(uuid.uuid4())
         created_at = datetime.utcnow().isoformat()
+        if not project_id:
+            project_id = str(uuid.uuid4())
         session_data = {
             "session_id": session_id,
             "usuario_executor": usuario_executor,
@@ -45,7 +48,8 @@ class RedisSessionService:
             "last_saved_to_blob": None,
             "docx_files": [],
             "comentario_usuario": comentario_usuario,
-            "extracted_text": extracted_text
+            "extracted_text": extracted_text,
+            "project_id": project_id
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, json.dumps(session_data))
         return session_id
@@ -101,7 +105,8 @@ class RedisSessionService:
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
         extracted_text = project_state.get("extracted_text")
-        session_id = self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text)
+        project_id = project_state.get("project_id")
+        session_id = self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id)
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
@@ -116,6 +121,7 @@ class RedisSessionService:
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["comentario_usuario"] = comentario_usuario
         session_data["extracted_text"] = extracted_text
+        session_data["project_id"] = project_id
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
         return session_id
 
@@ -139,3 +145,14 @@ class RedisSessionService:
         session_data = json.loads(session_json)
         session_data["extracted_text"] = extracted_text
         self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+
+    def update_session_on_state_change(self, session_id: str, updated_fields: Dict[str, Any]):
+        key = f"session:{session_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+        session_data = json.loads(session_json)
+        session_data.update(updated_fields)
+        session_data["last_modified"] = datetime.utcnow().isoformat()
+        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        BackgroundStateSaver.schedule_periodic_save(session_id)
