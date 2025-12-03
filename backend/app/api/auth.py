@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 import os
 from backend.app.core.config import settings
-from backend.app.middleware.auth_middleware import get_current_user
+from backend.app.middleware.auth_middleware import get_current_user, _extract_usuario_executor
 from backend.app.services.project_state_service import ProjectStateService
 
 router = APIRouter()
@@ -35,21 +35,8 @@ def get_auth_config():
 
 @router.post("/login", response_model=AuthLoginResponse, tags=["Auth"])
 async def auth_login(current_user: dict = Depends(get_current_user)):
-    usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
+    usuario_executor = _extract_usuario_executor(current_user)
     if not usuario_executor:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
-    try:
-        projects = await ProjectStateService.list_user_projects(usuario_executor)
-        for p in projects:
-            if isinstance(p, dict):
-                p.pop("analysis_name", None)
-        # Adiciona project_id em cada projeto retornado
-        for idx, p in enumerate(projects):
-            if isinstance(p, dict):
-                if "project_id" not in p:
-                    p["project_id"] = p.get("project_id")
-        # Filtro para garantir que project_id esteja presente
-        projects = [p for p in projects if "project_id" in p]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar projetos do usuário: {str(e)}")
+    projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
     return AuthLoginResponse(user_info=current_user, projects=projects)
