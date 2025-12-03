@@ -27,6 +27,13 @@ class StartAnalysisResponse(BaseModel):
     session_id: str
     project_id: Optional[str] = None
 
+def _get_or_create_project_id(project_state: dict, provided_id: Optional[str]) -> str:
+    if project_state and project_state.get("project_id"):
+        return project_state.get("project_id")
+    if provided_id:
+        return provided_id
+    return str(uuid.uuid4())
+
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
     background_tasks: BackgroundTasks,
@@ -40,9 +47,10 @@ async def start_analysis(
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
+    project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
     session_id = None
     texto_extraido = None
-    project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
+    project_id_final = _get_or_create_project_id(project_state, project_id)
     if project_state:
         session_id = redis_service.restore_session_from_state(
             usuario_executor,
@@ -50,9 +58,7 @@ async def start_analysis(
             analysis_type,
             project_state
         )
-        project_id_final = project_state.get("project_id")
     else:
-        project_id_final = project_id or str(uuid.uuid4())
         session_id = redis_service.create_session(
             usuario_executor,
             projeto,
