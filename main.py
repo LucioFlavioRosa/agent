@@ -29,19 +29,26 @@ class FakeMCPStartPayload(BaseModel):
 
 # --- DADOS MOCKADOS (A "Inteligência" Falsa) ---
 MOCK_RESPONSES = {
-    "epicos_report": {
-        "report_type": "epicos_report",
+    "criacao_epicos_azure_devops": {
+        # O backend usa 'report_type' para saber o que fazer. 
+        # Enviamos o próprio analysis_type para garantir que ele carregue a config correta.
+        "report_type": "criacao_epicos_azure_devops", 
         "report_data": {
+            # CHAVE 1: 'epicos' (Para satisfazer o report_mapping: {"epicos": "epicos_report"})
             "epicos": [
-                {"id": 1, "titulo": "Autenticação e Segurança", "descricao": "Implementar login via Azure AD com suporte a MFA e roles."},
-                {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Criar pipeline de upload e extração de texto de DOCX."},
-                {"id": 3, "titulo": "Dashboard de Projetos", "descricao": "Visualização de status e relatórios gerados pela IA."}
+                {"id": 1, "titulo": "Autenticação Segura (Via Mapping)", "descricao": "Login via Azure AD."},
+                {"id": 2, "titulo": "Upload de Arquivos", "descricao": "Processamento de DOCX."}
+            ],
+            # CHAVE 2: 'epicos_report' (Backup caso o backend salve direto sem mapping)
+            "epicos_report": [
+                {"id": 1, "titulo": "Autenticação Segura (Direto)", "descricao": "Login via Azure AD."},
+                {"id": 2, "titulo": "Upload de Arquivos", "descricao": "Processamento de DOCX."}
             ]
         }
     },
     "default": {
-        "report_type": "generic_report",
-        "report_data": {"message": "Análise genérica concluída com sucesso pelo Mock Remoto."}
+        "report_type": "generic",
+        "report_data": {"message": "Análise genérica concluída."}
     }
 }
 
