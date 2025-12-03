@@ -21,7 +21,7 @@ from backend.app.api.session import router as session_router
 
 from backend.app.middleware.auth_middleware import get_current_user
 
-load_dotenv(override=True)
+load_dotenv(override=False)
 
 app = FastAPI(
     title="Peers CodeAI Backend", 
