@@ -14,28 +14,28 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 **Exemplo 1:**
 
-{
+```json{
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
-}
+}```
 
 **Exemplo 2:**
 
-{
+```json{
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião"
-}
+}```
 
 **Exemplo 3:**
 
-{
+```json{
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário sem arquivo."
-}
+}```
 
 ---
 
@@ -44,143 +44,143 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 #### /analysis/start
 **Resposta de Sucesso:**
 
-{
+```json{
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
-}
+}```
 
 **Resposta de Erro:**
 
-{
+```json{
   "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios."
-}
+}```
 
-#### /session/{session_id}/reports
+#### /session/```json{session_id}```/reports
 **Resposta de Sucesso:**
 
-{
-  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-  "features_report": {"features": [{"id": 1, "nome": "Login"}]},
-  "times_descricao_report": {},
-  "alocacao_times_report": {},
-  "premissas_riscos_report": {}
-}
+```json{
+  "epicos_report": ```json{"epicos": [```json{"id": 1, "titulo": "Como usuário..."}```]}```,
+  "features_report": ```json{"features": [```json{"id": 1, "nome": "Login"}```]}```,
+  "times_descricao_report": ```json{}```,
+  "alocacao_times_report": ```json{}```,
+  "premissas_riscos_report": ```json{}```
+}```
 
 **Resposta de Erro:**
 
-{
+```json{
   "detail": "Sessão não encontrada: ..."
-}
+}```
 
 #### /projects/check
 **Projeto encontrado:**
 
-{
+```json{
   "exists": true,
-  "state": {
+  "state": ```json{
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-    "features_report": {"features": [{"id": 1, "nome": "Login"}]},
-    "times_descricao_report": {},
-    "alocacao_times_report": {},
-    "premissas_riscos_report": {},
+    "epicos_report": ```json{"epicos": [```json{"id": 1, "titulo": "Como usuário..."}```]}```,
+    "features_report": ```json{"features": [```json{"id": 1, "nome": "Login"}```]}```,
+    "times_descricao_report": ```json{}```,
+    "alocacao_times_report": ```json{}```,
+    "premissas_riscos_report": ```json{}```,
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
     "project_id": "projeto-uuid-123"
-  }
-}
+  }```
+}```
 
 **Projeto não encontrado:**
 
-{
+```json{
   "exists": false
-}
+}```
 
 #### /auth/login
 **Resposta de Sucesso:**
 
-{
-  "user_info": {
+```json{
+  "user_info": ```json{
     "usuario_executor": "user@example.com",
     "sub": "uuid",
     "name": "Nome do Usuário",
     "email": "user@example.com",
     "roles": ["admin"]
-  },
+  }```,
   "projects": [
-    {
+    ```json{
       "projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
       "last_saved_to_blob": "2024-06-01T12:30:00Z",
       "project_id": "projeto-uuid-123"
-    }
+    }```
   ]
-}
+}```
 
 **Resposta de Erro:**
 
-{
+```json{
   "detail": "Usuário não autenticado."
-}
+}```
 
 #### /upload/docx
 **Resposta de Sucesso:**
 
-{
+```json{
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
-}
+}```
 
-#### /session/{session_id}/report (atualização de relatório)
+#### /session/```json{session_id}```/report (atualização de relatório)
 **Resposta de Sucesso:**
 
-{
+```json{
   "status": "ok"
-}
+}```
 
 **Resposta de Erro:**
 
-{
+```json{
   "detail": "Erro ao atualizar relatório: ..."
-}
+}```
 
-#### /session/{session_id}/save-state (salvamento de estado)
+#### /session/```json{session_id}```/save-state (salvamento de estado)
 **Resposta de Sucesso:**
 
-{
+```json{
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
-}
+}```
 
 **Resposta de Erro:**
 
-{
+```json{
   "detail": "Erro ao salvar estado: ..."
-}
+}```
 
-#### /session/{session_id}/docx-files
+#### /session/```json{session_id}```/docx-files
 **Resposta de Sucesso:**
 
-{
+```json{
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
-}
+}```
 
 **Resposta de Erro:**
 
-{
+```json{
   "detail": "Sessão não encontrada: ..."
-}
+}```
 
 ---
 
@@ -188,61 +188,61 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 ### 2.1 Resposta de Sucesso (job criado)
 
-{
+```json{
   "job_id": "123456"
-}
+}```
 
 - O campo "arquivo_docx" enviado para o MCP sempre contém o texto extraído do DOCX, nunca a URL do arquivo.
 
 ### 2.2 Notificação de Progresso (webhook MCP → Backend)
 
-{
+```json{
   "job_id": "123456",
   "status": "in_progress",
   "progress": 50,
   "report_type": "epicos",
-  "report_data": {
+  "report_data": ```json{
     "epicos": [
-      {"id": 1, "titulo": "Como usuário...", "descricao": "..."}
+      ```json{"id": 1, "titulo": "Como usuário...", "descricao": "..."}```
     ]
-  }
-}
+  }```
+}```
 
 ### 2.3 Resposta de Conclusão
 
-{
+```json{
   "job_id": "123456",
   "status": "done",
   "report_type": "epicos",
-  "report_data": {
+  "report_data": ```json{
     "epicos": [
-      {"id": 1, "titulo": "Como usuário...", "descricao": "..."},
-      {"id": 2, "titulo": "Como admin...", "descricao": "..."}
+      ```json{"id": 1, "titulo": "Como usuário...", "descricao": "..."}```,
+      ```json{"id": 2, "titulo": "Como admin...", "descricao": "..."}```
     ]
-  }
-}
+  }```
+}```
 
 ### 2.4 Resposta de Erro (MCP → Backend)
 
-{
+```json{
   "job_id": "123456",
   "status": "error",
   "error_type": "timeout",
   "error_message": "Tempo limite excedido ao processar análise."
-}
+}```
 
 ### 2.5 Exemplo para analysis_type diferente
 
-{
+```json{
   "job_id": "7891011",
   "status": "done",
   "report_type": "features",
-  "report_data": {
+  "report_data": ```json{
     "features": [
-      {"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
+      ```json{"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}```
     ]
-  }
-}
+  }```
+}```
 
 ---
 
@@ -251,143 +251,143 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 ### 3.1 /analysis/start
 **Sucesso:**
 
-{
+```json{
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
-}
+}```
 
 **Erro:**
 
-{
+```json{
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
-}
+}```
 
-### 3.2 /session/{session_id}/reports
+### 3.2 /session/```json{session_id}```/reports
 **Sucesso:**
 
-{
-  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-  "features_report": {"features": [{"id": 1, "nome": "Login"}]},
-  "times_descricao_report": {},
-  "alocacao_times_report": {},
-  "premissas_riscos_report": {}
-}
+```json{
+  "epicos_report": ```json{"epicos": [```json{"id": 1, "titulo": "Como usuário..."}```]}```,
+  "features_report": ```json{"features": [```json{"id": 1, "nome": "Login"}```]}```,
+  "times_descricao_report": ```json{}```,
+  "alocacao_times_report": ```json{}```,
+  "premissas_riscos_report": ```json{}```
+}```
 
 **Erro:**
 
-{
+```json{
   "detail": "Sessão não encontrada: ..."
-}
+}```
 
 ### 3.3 /projects/check
 **Projeto encontrado:**
 
-{
+```json{
   "exists": true,
-  "state": {
+  "state": ```json{
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-    "features_report": {"features": [{"id": 1, "nome": "Login"}]},
-    "times_descricao_report": {},
-    "alocacao_times_report": {},
-    "premissas_riscos_report": {},
+    "epicos_report": ```json{"epicos": [```json{"id": 1, "titulo": "Como usuário..."}```]}```,
+    "features_report": ```json{"features": [```json{"id": 1, "nome": "Login"}```]}```,
+    "times_descricao_report": ```json{}```,
+    "alocacao_times_report": ```json{}```,
+    "premissas_riscos_report": ```json{}```,
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
     "project_id": "projeto-uuid-123"
-  }
-}
+  }```
+}```
 
 **Projeto não encontrado:**
 
-{
+```json{
   "exists": false
-}
+}```
 
 ### 3.4 /auth/login
 **Sucesso:**
 
-{
-  "user_info": {
+```json{
+  "user_info": ```json{
     "usuario_executor": "user@example.com",
     "sub": "uuid",
     "name": "Nome do Usuário",
     "email": "user@example.com",
     "roles": ["admin"]
-  },
+  }```,
   "projects": [
-    {
+    ```json{
       "projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
       "last_saved_to_blob": "2024-06-01T12:30:00Z",
       "project_id": "projeto-uuid-123"
-    }
+    }```
   ]
-}
+}```
 
 **Erro:**
 
-{
+```json{
   "detail": "Usuário não autenticado."
-}
+}```
 
 ### 3.5 /upload/docx
 **Sucesso:**
 
-{
+```json{
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid"
-}
+}```
 
-### 3.6 /session/{session_id}/report (atualização de relatório)
+### 3.6 /session/```json{session_id}```/report (atualização de relatório)
 **Sucesso:**
 
-{
+```json{
   "status": "ok"
-}
+}```
 
 **Erro:**
 
-{
+```json{
   "detail": "Erro ao atualizar relatório: ..."
-}
+}```
 
-### 3.7 /session/{session_id}/save-state (salvamento de estado)
+### 3.7 /session/```json{session_id}```/save-state (salvamento de estado)
 **Sucesso:**
 
-{
+```json{
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
-}
+}```
 
 **Erro:**
 
-{
+```json{
   "detail": "Erro ao salvar estado: ..."
-}
+}```
 
-### 3.8 /session/{session_id}/docx-files
+### 3.8 /session/```json{session_id}```/docx-files
 **Sucesso:**
 
-{
+```json{
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
-}
+}```
 
 **Erro:**
 
-{
+```json{
   "detail": "Sessão não encontrada: ..."
-}
+}```
 
 ---
 
@@ -396,54 +396,54 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 **1. Frontend → Backend**
 - Payload enviado para `/analysis/start`:
 
-{
+```json{
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
-}
+}```
 
 **2. Backend → MCP**
 - Payload enviado do backend para o MCP:
 
-{
+```json{
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário.",
   "usuario_executor": "user@example.com",
   "session_id": "abcdef-uuid"
-}
+}```
 
 **3. MCP → Backend**
 - Resposta do MCP ao backend (job criado):
 
-{
+```json{
   "job_id": "123456"
-}
+}```
 
 - Resposta de progresso ou conclusão:
 
-{
+```json{
   "job_id": "123456",
   "status": "done",
   "report_type": "epicos",
-  "report_data": {
+  "report_data": ```json{
     "epicos": [
-      {"id": 1, "titulo": "Como usuário...", "descricao": "..."}
+      ```json{"id": 1, "titulo": "Como usuário...", "descricao": "..."}```
     ]
-  }
-}
+  }```
+}```
 
 **4. Backend → Frontend**
 - Resposta do backend para o frontend:
 
-{
+```json{
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
-}
+}```
 
 **Diagrama Textual do Fluxo:**
 1. Frontend envia requisição para Backend (`/analysis/start`)
@@ -457,30 +457,30 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 ### Para `criacao_epicos_azure_devops`
 
-{
+```json{
   "job_id": "123456",
   "status": "done",
   "report_type": "epicos",
-  "report_data": {
+  "report_data": ```json{
     "epicos": [
-      {"id": 1, "titulo": "Como usuário...", "descricao": "..."},
-      {"id": 2, "titulo": "Como admin...", "descricao": "..."}
+      ```json{"id": 1, "titulo": "Como usuário...", "descricao": "..."}```,
+      ```json{"id": 2, "titulo": "Como admin...", "descricao": "..."}```
     ]
-  }
-}
+  }```
+}```
 
 ### Para `features_generation` (exemplo futuro)
 
-{
+```json{
   "job_id": "7891011",
   "status": "done",
   "report_type": "features",
-  "report_data": {
+  "report_data": ```json{
     "features": [
-      {"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
+      ```json{"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}```
     ]
-  }
-}
+  }```
+}```
 
 ---
 
@@ -488,18 +488,18 @@ O backend aceita apenas um dos três formatos de payload abaixo (todos os campos
 
 ### MCP retorna erro (exemplo: timeout)
 
-{
+```json{
   "job_id": "123456",
   "status": "error",
   "error_type": "timeout",
   "error_message": "Tempo limite excedido ao processar análise."
-}
+}```
 
 ### Backend propaga erro para o frontend
 
-{
+```json{
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
-}
+}```
 
 ---
 
