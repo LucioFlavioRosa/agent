@@ -71,21 +71,8 @@ class StartupValidator:
                     'status': 'ok',
                     'detail': 'Conexão com Blob Storage bem-sucedida, mas nenhum projeto existente encontrado para teste.'
                 }
-            # Validação adicional: busca de metadados do projeto existente
             try:
-                metadata = None
-                # Chamada direta ao ProjectStateService.load_latest_state_from_blob (async para sync)
-                metadata = asyncio.run(ProjectStateService.load_latest_state_from_blob(test_usuario, test_projeto))
-                if metadata and metadata.get("analysis_type"):
-                    self.status_report['blob_storage_metadata'] = {
-                        'status': 'ok',
-                        'detail': 'Metadados e analysis_type recuperados com sucesso do estado mais recente do projeto.'
-                    }
-                else:
-                    self.status_report['blob_storage_metadata'] = {
-                        'status': 'fail',
-                        'detail': 'Metadados analysis_name e analysis_type não encontrados no estado mais recente do projeto.'
-                    }
+                self._validate_blob_metadata(container_client, test_usuario, test_projeto)
             except Exception as e:
                 self.status_report['blob_storage_metadata'] = {
                     'status': 'fail',
@@ -97,6 +84,42 @@ class StartupValidator:
                 'detail': f'Erro ao conectar ao Blob Storage: {e}'
             }
             self.logger.error(f"Blob Storage validation failed: {e}")
+
+    def _validate_blob_metadata(self, container_client, test_usuario: str, test_projeto: str):
+        import json
+        blob_folder = f"{test_usuario}/{test_projeto}/estados"
+        blobs = list(container_client.list_blobs(name_starts_with=blob_folder + "/"))
+        if not blobs:
+            self.status_report['blob_storage_metadata'] = {
+                'status': 'fail',
+                'detail': 'Nenhum arquivo de estado encontrado para o projeto de teste.'
+            }
+            return
+        blobs_sorted = sorted(
+            [b for b in blobs if b.name.endswith(".json")],
+            key=lambda b: b.name,
+            reverse=True
+        )
+        if not blobs_sorted:
+            self.status_report['blob_storage_metadata'] = {
+                'status': 'fail',
+                'detail': 'Nenhum arquivo .json de estado encontrado para o projeto de teste.'
+            }
+            return
+        latest_blob = blobs_sorted[0]
+        blob_client = container_client.get_blob_client(latest_blob.name)
+        state_bytes = blob_client.download_blob().readall()
+        state = json.loads(state_bytes.decode("utf-8"))
+        if state and state.get("analysis_type"):
+            self.status_report['blob_storage_metadata'] = {
+                'status': 'ok',
+                'detail': 'Metadados e analysis_type recuperados com sucesso do estado mais recente do projeto.'
+            }
+        else:
+            self.status_report['blob_storage_metadata'] = {
+                'status': 'fail',
+                'detail': 'Metadados analysis_name e analysis_type não encontrados no estado mais recente do projeto.'
+            }
 
     def validate_mcp_server(self):
         try:
