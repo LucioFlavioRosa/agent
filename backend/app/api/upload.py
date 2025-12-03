@@ -54,5 +54,6 @@ async def upload_docx(
         blob_url=blob_url,
         extracted_text=texto_extraido,
         message=mensagem,
-        session_id=session_id
+        session_id=session_id,
+        job_id=session_id
     )
