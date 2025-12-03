@@ -8,7 +8,12 @@ from backend.app.services.docx_parser_service import extract_text_from_docx
 
 logger = logging.getLogger(__name__)
 
+_blob_service_client_singleton = None
+_container_client_singleton = None
+
+
 def _get_blob_clients():
+    global _blob_service_client_singleton, _container_client_singleton
     connection_string = getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None)
     status_conn = 'SET' if connection_string else 'NOT SET'
     logger.info(f"Blob Storage Connection String carregado: {status_conn} (Origem: Key Vault)")
@@ -16,9 +21,10 @@ def _get_blob_clients():
         logger.critical("Tentativa de upload sem AZURE_STORAGE_CONNECTION_STRING configurada.")
         raise RuntimeError("AZURE_STORAGE_CONNECTION_STRING não está configurada. Verifique o Key Vault.")
     container_name = getattr(settings, "AZURE_STORAGE_CONTAINER_NAME", "arquivos")
-    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-    container_client = blob_service_client.get_container_client(container_name)
-    return blob_service_client, container_client
+    if _blob_service_client_singleton is None or _container_client_singleton is None:
+        _blob_service_client_singleton = BlobServiceClient.from_connection_string(connection_string)
+        _container_client_singleton = _blob_service_client_singleton.get_container_client(container_name)
+    return _blob_service_client_singleton, _container_client_singleton
 
 def _sync_upload(file_bytes: bytes, blob_folder: str, blob_filename: str):
     try:
