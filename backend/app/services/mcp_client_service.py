@@ -3,6 +3,7 @@ import httpx
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, validator
 from backend.app.core.config import settings
+from fastapi.encoders import jsonable_encoder
 
 class MCPStartAnalysisPayload(BaseModel):
     projeto: str = Field(...)
@@ -50,7 +51,7 @@ class MCPClientService:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
-                    json=jsonable_encoder(payload_dict), # Garante serialização correta de datas/enums
+                    json=jsonable_encoder(payload_dict), 
                     headers={"Content-Type": "application/json"}
                 )
                 
