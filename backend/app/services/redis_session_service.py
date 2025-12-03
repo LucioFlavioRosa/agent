@@ -28,6 +28,12 @@ class RedisSessionService:
         )
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
 
+    def _serialize_session(self, session_data: dict) -> str:
+        return json.dumps(session_data)
+
+    def _deserialize_session(self, session_json: str) -> dict:
+        return json.loads(session_json)
+
     def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None, project_id: Optional[str] = None) -> str:
         session_id = str(uuid.uuid4())
         created_at = datetime.utcnow().isoformat()
@@ -51,7 +57,7 @@ class RedisSessionService:
             "extracted_text": extracted_text,
             "project_id": project_id
         }
-        self.redis_client.setex(f"session:{session_id}", self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
         return session_id
 
     def add_step(self, session_id: str, action: str, status: str, metadata: Optional[Dict[str, Any]] = None):
@@ -59,7 +65,7 @@ class RedisSessionService:
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_data = json.loads(session_json)
+        session_data = self._deserialize_session(session_json)
         step_id = str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
         step = {
@@ -70,14 +76,14 @@ class RedisSessionService:
             "metadata": metadata or {}
         }
         session_data["steps"].append(step)
-        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def get_session(self, session_id: str) -> SessionData:
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_dict = json.loads(session_json)
+        session_dict = self._deserialize_session(session_json)
         steps = [SessionStep(**step) for step in session_dict.get("steps", [])]
         session_dict["steps"] = steps
         return SessionData(**session_dict)
@@ -87,9 +93,9 @@ class RedisSessionService:
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_data = json.loads(session_json)
+        session_data = self._deserialize_session(session_json)
         session_data["status"] = status
-        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def update_report(self, session_id: str, report_type: str, report_data: Any):
         if report_type not in REPORT_TYPES:
@@ -98,9 +104,9 @@ class RedisSessionService:
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_data = json.loads(session_json)
+        session_data = self._deserialize_session(session_json)
         session_data[REPORT_TYPES[report_type]] = report_data
-        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
@@ -111,7 +117,7 @@ class RedisSessionService:
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_data = json.loads(session_json)
+        session_data = self._deserialize_session(session_json)
         session_data["epicos_report"] = project_state.get("epicos_report")
         session_data["features_report"] = project_state.get("features_report")
         session_data["times_descricao_report"] = project_state.get("times_descricao_report")
@@ -122,7 +128,7 @@ class RedisSessionService:
         session_data["comentario_usuario"] = comentario_usuario
         session_data["extracted_text"] = extracted_text
         session_data["project_id"] = project_id
-        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return session_id
 
     def add_docx_file(self, session_id: str, blob_url: str):
@@ -130,29 +136,29 @@ class RedisSessionService:
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_data = json.loads(session_json)
+        session_data = self._deserialize_session(session_json)
         if "docx_files" not in session_data or not isinstance(session_data["docx_files"], list):
             session_data["docx_files"] = []
         if blob_url not in session_data["docx_files"]:
             session_data["docx_files"].append(blob_url)
-        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def update_session_extracted_text(self, session_id: str, extracted_text: str):
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_data = json.loads(session_json)
+        session_data = self._deserialize_session(session_json)
         session_data["extracted_text"] = extracted_text
-        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def update_session_on_state_change(self, session_id: str, updated_fields: Dict[str, Any]):
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
-        session_data = json.loads(session_json)
+        session_data = self._deserialize_session(session_json)
         session_data.update(updated_fields)
         session_data["last_modified"] = datetime.utcnow().isoformat()
-        self.redis_client.setex(key, self.session_ttl, json.dumps(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         BackgroundStateSaver.schedule_periodic_save(session_id)
