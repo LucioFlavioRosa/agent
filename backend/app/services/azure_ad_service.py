@@ -14,13 +14,10 @@ class AzureADTokenData(BaseModel):
     claims: Dict[str, Any]
 
 class JWKSCache:
-    """
-    Cache simples para JWKS (chaves públicas do Azure AD).
-    """
     _lock = threading.Lock()
     _jwks = None
     _last_fetch = 0
-    _cache_ttl = 60 * 60  # 1 hora
+    _cache_ttl = 60 * 60
 
     @classmethod
     def get_jwks(cls, jwks_uri: str):
@@ -47,38 +44,38 @@ class AzureADService:
         self.jwks_uri = settings.AZURE_AD_JWKS_URI
         self.issuer = settings.AZURE_AD_ISSUER
         self.audience = settings.AZURE_AD_AUDIENCE
-        # Busca o client_secret do atributo correto do settings (com underscores)
         self.client_secret = getattr(settings, 'AZURE_AD_CLIENT_SECRET', None)
         self._validate_config()
         self.logger.info("AzureADService configurado: JWKS_URI, ISSUER, AUDIENCE definidos.")
 
     def _validate_config(self):
-        # Validação dos campos sensíveis após carregamento dos segredos
         if not self.client_secret:
             self.logger.error("AZURE_AD_CLIENT_SECRET não está definido após carregamento dos segredos. Certifique-se que o segredo foi carregado corretamente do Key Vault (nome com hífens) e mapeado para a variável local (com underscores).")
         if not self.jwks_uri or not self.issuer or not self.audience:
             self.logger.error("Configuração Azure AD incompleta: JWKS_URI, ISSUER ou AUDIENCE ausentes.")
             raise RuntimeError("Configuração Azure AD incompleta. Verifique se JWKS_URI, ISSUER e AUDIENCE foram corretamente populados.")
-        # Log detalhado dos valores carregados
         self.logger.debug(f"AZURE_AD_CLIENT_SECRET: {'SET' if self.client_secret else 'NOT SET'}")
         self.logger.debug(f"AZURE_AD_JWKS_URI: {self.jwks_uri}")
         self.logger.debug(f"AZURE_AD_ISSUER: {self.issuer}")
         self.logger.debug(f"AZURE_AD_AUDIENCE: {self.audience}")
 
+    def _extract_usuario_executor_from_claims(self, claims: dict) -> Optional[str]:
+        return (
+            claims.get("preferred_username") or
+            claims.get("email") or
+            claims.get("upn")
+        )
+
     def validate_token(self, token: str) -> AzureADTokenData:
         try:
-            # 1. Decodifica header do JWT para obter o 'kid'
             headers = jwt.get_unverified_header(token)
             kid = headers.get('kid')
             if not kid:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token JWT sem 'kid' no header.")
-            # 2. Busca chave pública correta do JWKS (com cache)
             key = JWKSCache.get_key(kid, self.jwks_uri)
             if not key:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Chave pública não encontrada para o token JWT.")
-            # 3. Monta chave pública para python-jose
             public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
-            # 4. Decodifica e valida assinatura, expiração, issuer e audience
             claims = jwt.decode(
                 token,
                 public_key,
@@ -86,11 +83,7 @@ class AzureADService:
                 audience=self.audience,
                 issuer=self.issuer
             )
-            usuario_executor = (
-                claims.get("preferred_username") or
-                claims.get("email") or
-                claims.get("upn")
-            )
+            usuario_executor = self._extract_usuario_executor_from_claims(claims)
             if not usuario_executor:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="usuario_executor não encontrado no token Azure AD.")
             return AzureADTokenData(usuario_executor=usuario_executor, claims=claims)
