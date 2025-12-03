@@ -40,7 +40,6 @@ class SessionData(BaseModel):
     @classmethod
     def from_project_state(cls, state: Dict[str, Any]) -> "SessionData":
         reports = state.get("reports", {})
-        # Migração: se vier de estado antigo, converte campos antigos para o novo formato
         migrated_reports = dict(reports) if reports else {}
         legacy_fields = [
             "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
