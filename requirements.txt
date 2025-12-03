@@ -1,3 +1,5 @@
-fastapi==0.104.1
-uvicorn==0.24.0
 pydantic==2.5.2
+fastapi==0.116.1
+gunicorn==23.0.0
+uvicorn==0.38.0
+starlette==0.47.2
