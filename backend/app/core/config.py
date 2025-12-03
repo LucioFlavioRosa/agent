@@ -3,6 +3,8 @@ from typing import Dict, Optional
 from backend.app.services.azure_secret_manager import AzureSecretManager, VaultType
 import logging
 import os
+from backend.app.models.mcp_config_models import MCPConfigRegistry
+from backend.app.services.mcp_config_service import MCPConfigService
 
 logger = logging.getLogger("Settings")
 
@@ -24,17 +26,13 @@ class Settings(BaseSettings):
     AZURE_AD_AUDIENCE: Optional[str] = None
 
     # --- MCP CONFIGURATION (A Mágica acontece aqui) ---
-    # 1. URL Padrão (Fallback para quando não houver específica)
     MCP_SERVER_BASE_URL: str = "" 
-    
-    # 2. URLs Específicas (Lidas do Env/Azure)
-    # Você cria uma variável para cada "Especialista" futuro
     MCP_URL_EPICOS: Optional[str] = None
     MCP_URL_FEATURES: Optional[str] = None
     MCP_URL_TECH_DEBT: Optional[str] = None
 
-    # 3. O Mapa (Iniciado vazio, populado no __init__)
-    MCP_ENDPOINTS: Dict[str, str] = {}
+    # 3. O Mapa (removido o dicionário hardcoded)
+    # MCP_ENDPOINTS: Dict[str, str] = {}
 
     # --- Redis ---
     REDIS_HOST: Optional[str] = None
@@ -44,6 +42,9 @@ class Settings(BaseSettings):
     REDIS_SESSION_TTL: int = 86400
     REDIS_USE_SSL: Optional[bool] = None
     REDIS_SSL_CERT_REQS: Optional[str] = None
+
+    # --- MCP Config Registry dinâmico ---
+    mcp_config_registry: Optional[MCPConfigRegistry] = None
     
     class Config:
         env_file = ".env"
@@ -61,19 +62,12 @@ class Settings(BaseSettings):
         if not self.AZURE_AD_AUDIENCE and self.AZURE_AD_CLIENT_ID:
             self.AZURE_AD_AUDIENCE = self.AZURE_AD_CLIENT_ID
         
-        self.MCP_ENDPOINTS = {
-            "criacao_epicos_azure_devops": self.MCP_URL_PLANEJAMENTO,
-            "refinamento_epicos_azure_devops": self.MCP_URL_PLANEJAMENTO,
-            "criacao_features_azure_devops": self.MCP_URL_PLANEJAMENTO,
-            "refinamento_features_azure_devops": self.MCP_URL_PLANEJAMENTO,
-            "criacao_planejamento_azure_devops": self.MCP_URL_PLANEJAMENTO,
-            "refinamento_planejamento_azure_devops": self.MCP_URL_PLANEJAMENTO,
-        }
-        
+        # --- Carrega configuração dinâmica de agentes MCP ---
+        self.mcp_config_registry = MCPConfigService.load_config()
+
         self._log_missing_sensitive_fields()
     
     def _log_missing_sensitive_fields(self):
-
         logger = logging.getLogger("Settings")
         sensitive_fields = [
             "AZURE_STORAGE_CONNECTION_STRING",
