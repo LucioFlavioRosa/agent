@@ -60,30 +60,65 @@ class Settings(BaseSettings):
             self.AZURE_AD_ISSUER = f"https://login.microsoftonline.com/{self.AZURE_AD_TENANT_ID}/v2.0"
         if not self.AZURE_AD_AUDIENCE and self.AZURE_AD_CLIENT_ID:
             self.AZURE_AD_AUDIENCE = self.AZURE_AD_CLIENT_ID
-
-        # --- MONTAGEM DO MAPA DE MCPs ---
-        # A lógica é: Tenta pegar a URL específica. Se for None/Vazio, usa a BASE_URL.
         
         self.MCP_ENDPOINTS = {
-            # Mapeia o 'analysis_type' -> Variável Específica ou Fallback
-            "criacao_epicos_azure_devops": self.MCP_URL_EPICOS or self.MCP_SERVER_BASE_URL,
-            "features_generation": self.MCP_URL_FEATURES or self.MCP_SERVER_BASE_URL,
-            "tech_debt_analysis": self.MCP_URL_TECH_DEBT or self.MCP_SERVER_BASE_URL,
-            # Adicione novos tipos aqui conforme seu projeto cresce
+            "criacao_epicos_azure_devops": self.MCP_URL_PLANEJAMENTO,
+            "refinamento_epicos_azure_devops": self.MCP_URL_PLANEJAMENTO,
+            "criacao_features_azure_devops": self.MCP_URL_PLANEJAMENTO,
+            "refinamento_features_azure_devops": self.MCP_URL_PLANEJAMENTO,
+            "criacao_planejamento_azure_devops": self.MCP_URL_PLANEJAMENTO,
+            "refinamento_planejamento_azure_devops": self.MCP_URL_PLANEJAMENTO,
         }
         
         self._log_missing_sensitive_fields()
-
-    def _log_missing_sensitive_fields(self):
-        # ... seu código existente ...
-        pass
     
+    def _log_missing_sensitive_fields(self):
+
+        logger = logging.getLogger("Settings")
+        sensitive_fields = [
+            "AZURE_STORAGE_CONNECTION_STRING",
+            "AZURE_STORAGE_CONTAINER_NAME",
+            "AZURE_AD_CLIENT_SECRET",
+            "JWT_SECRET_KEY",
+            "MCP_SERVER_BASE_URL",
+            "REDIS_HOST",
+            "REDIS_PORT",
+            "REDIS_PASSWORD",
+            "REDIS_DB",
+            "REDIS_USE_SSL",
+            "REDIS_SSL_CERT_REQS"
+        ]
+
+        for field in sensitive_fields:
+            value = getattr(self, field, None)
+            if not value:
+                logger.warning(f"[Settings] Campo sensível '{field}' está vazio após inicialização. Ele será preenchido após o carregamento dos segredos.")
+            if '_' in field:
+                logger.warning(f"[Settings] Atenção: O nome do segredo '{field}' contém underscores. No Azure Key Vault, utilize hífens: '{field.lower().replace('_', '-')}'.")
+
     def validate_required_fields(self):
-        # ... seu código existente ...
-        pass
-        
+        required_fields = [
+            "AZURE_STORAGE_CONNECTION_STRING",
+            "AZURE_STORAGE_CONTAINER_NAME",
+            "AZURE_AD_CLIENT_SECRET",
+            "JWT_SECRET_KEY",
+            "MCP_SERVER_BASE_URL",
+            "REDIS_HOST",
+            "REDIS_PORT",
+            "REDIS_PASSWORD",
+            "REDIS_DB",
+            "REDIS_USE_SSL",
+            "REDIS_SSL_CERT_REQS"
+        ]
+        missing = [field for field in required_fields if getattr(self, field, None) in (None, "")]
+        if missing:
+            raise ValueError(f"Os seguintes campos obrigatórios estão vazios após o carregamento dos segredos: {', '.join(missing)}")
+            
     def get_secret_manager(self, vault_type: str) -> AzureSecretManager:
-        # ... seu código existente ...
-        return AzureSecretManager(vault_type=VaultType(vault_type))
+        try:
+            vt_enum = VaultType(vault_type)
+        except ValueError:
+            raise ValueError(f"Tipo de Key Vault inválido: {vault_type}. Esperado: 'azure', 'devops', 'github', 'llm'.")
+        return AzureSecretManager(vault_type=vt_enum)
 
 settings = Settings()
