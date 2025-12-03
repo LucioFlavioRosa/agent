@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
 from backend.app.core.config import settings
 
@@ -20,6 +19,7 @@ class BackgroundStateSaver:
 
     @classmethod
     async def _periodic_save(cls, session_id: str, interval_minutes: int):
+        from backend.app.services.redis_session_service import RedisSessionService
         redis_service = RedisSessionService()
         while True:
             try:
