@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama do Fluxo (Mermaid)
 
-mermaid
+```mermaid
 flowchart TD
     Z[Frontend] -->|0. Login| AA(API Layer)
     AA -->|1. Validação do Token| AB[Auth Middleware]
@@ -20,7 +20,7 @@ flowchart TD
     D -->|9. Resposta Estado| B
     B -->|10. Resposta para Frontend| Z
     Z -->|11. Iniciar Análise| B
-    B -->|12. Processamento DOCX (se enviado)"| E[Docx Parser Service]
+    B -->|12. "Processamento DOCX (se enviado)"| E[Docx Parser Service]
     E -->|13. Salvamento DOCX| F[Blob Storage Service]
     B -->|14. Salvamento Sessão| G[Redis Session Service]
     G -->|15. Salvamento caminho do DOCX| G
@@ -33,7 +33,7 @@ flowchart TD
     B -->|22. Resposta para Frontend| Z
     J -->|23. Resposta MCP → Backend| B
     B -->|24. Resposta Backend → Frontend| Z
-
+```
 
 > **Observação:** Os exemplos de payload de cada etapa (incluindo MCP → Backend e Backend → Frontend) estão documentados em detalhes em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 
