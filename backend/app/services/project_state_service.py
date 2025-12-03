@@ -82,10 +82,34 @@ class ProjectStateService:
                     "projeto": state.get("projeto", projeto),
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
-                    "last_saved_to_blob": state.get("last_saved_to_blob")
+                    "last_saved_to_blob": state.get("last_saved_to_blob"),
+                    "project_id": state.get("project_id")
                 }
                 result.append(item)
             return result
         except Exception as e:
             logger.error(f"Erro ao listar projetos do usuário {usuario_executor}: {e}")
+            return []
+
+    @staticmethod
+    def _sanitize_project_list(projects: list) -> list:
+        sanitized = []
+        for p in projects:
+            if isinstance(p, dict):
+                p = dict(p)
+                p.pop("analysis_name", None)
+                if "project_id" not in p or not p["project_id"]:
+                    continue
+                sanitized.append(p)
+        return sanitized
+
+    @staticmethod
+    async def _fetch_and_sanitize_projects(usuario_executor: str) -> list:
+        logger = logging.getLogger("ProjectStateService")
+        try:
+            projects = await ProjectStateService.list_user_projects(usuario_executor)
+            sanitized = ProjectStateService._sanitize_project_list(projects)
+            return sanitized
+        except Exception as e:
+            logger.error(f"Erro ao buscar projetos do usuário {usuario_executor}: {e}")
             return []
