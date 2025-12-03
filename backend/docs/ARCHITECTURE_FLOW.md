@@ -1,178 +1,252 @@
-# Resumo Executivo
+# Arquitetura e Fluxos do Backend Peers CodeAI
 
-Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebimento da requisição do frontend até o envio da resposta, incluindo integrações com Azure Key Vault, Blob Storage, Redis e MCP Server. Cada etapa está explicada, com referência ao arquivo de código responsável e um diagrama ilustrativo em Mermaid.
+Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebimento da requisição do frontend até o envio da resposta, incluindo integrações com Azure Key Vault (múltiplos cofres), Blob Storage, Redis, MCP Server e o mecanismo de configuração dinâmica de agentes. Cada etapa está explicada, com referência ao arquivo de código responsável e diagramas ilustrativos.
 
 ---
 
-## Diagrama do Fluxo (Mermaid)
+## Diagrama Geral do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
-    Z[Frontend] -->|0. Login| AA(API Layer)
-    AA -->|1. Validação do Token| AB[Auth Middleware]
-    AB -->|2. Busca Projetos do Usuário| AC[ProjectStateService]
-    AC -->|3. Busca Estado no Blob Storage| AD[Blob Storage]
-    AD -->|4. Lista de Projetos| AA
-    AA -->|5. Resposta para Frontend| Z
-    Z -->|6. Seleção de Projeto| B(API Layer)
-    B -->|7. Verificação de Projeto Existente| C[ProjectStateService]
-    C -->|8. Busca Estado no Blob Storage| D[Blob Storage]
-    D -->|9. Resposta Estado| B
-    B -->|10. Resposta para Frontend| Z
-    Z -->|11. Iniciar Análise| B
-    B -->|"12. Processamento DOCX (se enviado)"| E[Docx Parser Service]
-    E -->|13. Salvamento DOCX| F[Blob Storage Service]
-    B -->|14. Salvamento Sessão| G[Redis Session Service]
-    G -->|15. Salvamento caminho do DOCX| G
-    B -->|16. Leitura Variáveis Ambiente| H[Config Loader Service]
-    H -->|17. Carregamento Segredos| I[Azure Key Vault]
-    G -->|18. Salvamento Estado| F
-    B -->|19. Busca Metadados Projeto| F
-    B -->|20. Envio para MCP| J[MCP Server]
-    J -->|21. Resposta MCP| B
-    B -->|22. Resposta para Frontend| Z
-    J -->|23. Resposta MCP → Backend| B
-    B -->|24. Resposta Backend → Frontend| Z
-```
+    subgraph Frontend
+        Z[Usuário/Frontend]
+    end
+    subgraph API Layer
+        AA[FastAPI Routers]
+    end
+    subgraph Auth
+        AB[Auth Middleware & AzureADService]
+    end
+    subgraph Config
+        AC[ConfigLoaderService & AzureSecretManager]
+    end
+    subgraph State
+        AD[ProjectStateService & RedisSessionService]
+    end
+    subgraph Storage
+        AE[Blob Storage Service]
+    end
+    subgraph MCP
+        AF[MCPClientService]
+    end
+    subgraph Background
+        AG[BackgroundStateSaver]
+    end
+    Z -->|Login| AA
+    AA -->|Validação Token| AB
+    AB -->|Busca Segredos| AC
+    AA -->|Verifica Projeto| AD
+    AD -->|Busca Estado| AE
+    AA -->|Upload DOCX| AE
+    AE -->|Extrai Texto| AA
+    AA -->|Cria Sessão| AD
+    AA -->|Envia para MCP| AF
+    AF -->|Job ID| AA
+    AF -->|Webhooks Progresso/Conclusão| AA
+    AA -->|Atualiza Relatórios| AD
+    AD -->|Salva Estado| AE
+    AG -->|Salvamento Periódico| AE
+    AC -->|Carrega Segredos| AA
 
-> **Observação:** Os exemplos de payload de cada etapa (incluindo MCP → Backend e Backend → Frontend) estão documentados em detalhes em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
-
----
-
-## Etapa 0: Login e Listagem de Projetos
-- **Descrição:** Após o login no frontend, o backend recebe o token via header `Authorization`, valida via Azure AD e busca todos os projetos do usuário no Blob Storage. A resposta inclui as informações do usuário autenticado e a lista de projetos encontrados, cada um com seu `project_id` único.
-- **Código responsável:**
-  - `backend/app/api/auth.py` (endpoint `POST /auth/login`)
-  - `backend/app/middleware/auth_middleware.py` (função `get_current_user`)
-  - `backend/app/services/project_state_service.py` (função `list_user_projects`)
 
 ---
 
 ## Etapas do Fluxo e Código Responsável
 
-### 1. Seleção de Projeto e Verificação de Existência
-- **Descrição:** Antes de qualquer operação (upload, análise), o frontend deve chamar o endpoint `/projects/check` para verificar se o projeto existe para o usuário autenticado. Se existir, o backend retorna o último estado salvo do projeto, incluindo o `project_id`.
-- **Código responsável:**
-  - `backend/app/api/projects.py` (endpoint `/projects/check`)
-  - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
+### 1. Login e Autenticação via Azure AD
+- **Descrição:** O frontend envia o token JWT via header `Authorization`. O backend valida o token, extrai o `usuario_executor` e retorna a lista de projetos do usuário.
+- **Código:**
+  - `backend/app/api/auth.py` (`POST /auth/login`)
+  - `backend/app/middleware/auth_middleware.py` (`get_current_user`)
+  - `backend/app/services/azure_ad_service.py` (`validate_token`)
+  - `backend/app/services/project_state_service.py` (`list_user_projects`)
 
-### 2. Recebimento da Requisição do Frontend
-- **Descrição:** O frontend envia requisições para o backend via endpoints HTTP para iniciar análise. O campo opcional `comentario_usuario` pode ser enviado junto com o arquivo DOCX ou na solicitação de análise.
-- **Código responsável:**
-  - `backend/app/api/analysis.py` (função `start_analysis`)
+### 2. Verificação de Projeto Existente
+- **Descrição:** Antes de qualquer operação, o frontend chama `/projects/check` para saber se o projeto existe. Se existir, retorna o estado completo do projeto (incluindo `project_id`).
+- **Código:**
+  - `backend/app/api/projects.py` (`/projects/check`)
+  - `backend/app/services/project_state_service.py` (`load_latest_state_from_blob`)
 
-### 3. Processamento do DOCX (se enviado)
-- **Descrição:** Se o campo `arquivo_docx` for enviado, o arquivo DOCX é processado para extrair o texto. O upload e a extração de texto agora ocorrem em paralelo, retornando tanto a URL do arquivo quanto o texto extraído.
-- **Código responsável:**
-  - `backend/app/services/docx_parser_service.py` (função `extract_text_from_docx`)
-  - `backend/app/services/blob_storage_service.py` (função `upload_and_extract_docx`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py` e em `backend/app/api/upload.py`
+### 3. Upload de DOCX e Extração de Texto (Processamento Paralelo)
+- **Descrição:** O upload do arquivo DOCX e a extração do texto ocorrem em paralelo. O backend retorna tanto a URL do arquivo quanto o texto extraído.
+- **Código:**
+  - `backend/app/api/upload.py` (`/upload/docx`)
+  - `backend/app/services/blob_storage_service.py` (`upload_and_extract_docx`)
+  - `backend/app/services/docx_parser_service.py` (`extract_text_from_docx`)
 
-### 4. Salvamento do DOCX
-- **Descrição:** O arquivo DOCX é salvo no Azure Blob Storage na pasta do usuário/projeto.
-- **Código responsável:**
-  - `backend/app/services/blob_storage_service.py` (função `upload_docx_to_blob` e `upload_and_extract_docx`)
+### 4. Criação e Gerenciamento de Sessão no Redis
+- **Descrição:** Sessões são criadas e persistidas no Redis, incluindo campos como `comentario_usuario`, `extracted_text`, `project_id`, `docx_files` e `reports`.
+- **Código:**
+  - `backend/app/services/redis_session_service.py` (`create_session`, `add_docx_file`, `update_session_extracted_text`, `update_report`, `restore_session_from_state`)
+  - `backend/app/models/session_models.py` (`SessionData`)
 
-### 5. Salvamento dos Dados no Redis
-- **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado. O campo opcional `comentario_usuario` é armazenado na sessão Redis. O texto extraído do DOCX é armazenado no campo `extracted_text` da sessão Redis.
-- **Código responsável:**
-  - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`, `add_docx_file`, `update_session_extracted_text`, `update_session_on_state_change`)
-  - Campo `comentario_usuario` e `extracted_text` em `SessionData` (`backend/app/models/session_models.py`)
+### 5. Salvamento Automático e Periódico de Estado no Blob Storage
+- **Descrição:** Estados de sessão/projeto são salvos periodicamente no Blob Storage via `BackgroundStateSaver`. Mudanças em relatórios ou estado acionam o salvamento automático.
+- **Código:**
+  - `backend/app/services/background_state_saver.py` (`schedule_periodic_save`)
+  - `backend/app/services/project_state_service.py` (`save_state_to_blob`)
+  - `backend/app/services/redis_session_service.py` (`update_session_on_state_change`)
 
-### 6. Salvamento do caminho do DOCX no estado da sessão
-- **Descrição:** Todo arquivo DOCX enviado tem seu caminho salvo no campo `docx_files` do estado da sessão, garantindo histórico completo dos arquivos utilizados para geração e recuperação de todas as histórias.
-- **Código responsável:**
-  - `backend/app/services/redis_session_service.py` (função `add_docx_file`)
-  - `backend/app/models/session_models.py` (campo `docx_files` em `SessionData`)
-  - Chamado em `start_analysis` e durante restauração de sessão
+### 6. Carregamento de Segredos do Key Vault (Múltiplos Cofres)
+- **Descrição:** Segredos sensíveis são carregados de múltiplos Key Vaults (Azure, DevOps, GitHub, LLM) via Managed Identity. Existe fallback para variáveis de ambiente.
+- **Código:**
+  - `backend/app/services/config_loader_service.py` (`load_secrets_from_key_vault`)
+  - `backend/app/services/azure_secret_manager.py` (`AzureSecretManager`)
+  - `backend/app/core/config.py` (`Settings`)
 
-### 7. Validação de Tokens
-- **Descrição:** O token JWT do Azure AD é validado para autenticação e autorização do usuário.
-- **Código responsável:**
-  - `backend/app/middleware/auth_middleware.py` (função `get_current_user`)
-  - `backend/app/services/azure_ad_service.py` (função `validate_token`)
+### 7. Configuração Dinâmica de Agentes MCP
+- **Descrição:** O arquivo `backend/config/mcp_agents.json` define agentes MCP, URLs e mapeamentos de relatórios. O backend roteia requisições para o MCP correto baseado no `analysis_type`.
+- **Código:**
+  - `backend/app/services/mcp_config_service.py` (`MCPConfigService.load_config`)
+  - `backend/app/services/mcp_client_service.py` (`MCPClientService.get_mcp_endpoint`)
+  - `backend/app/services/redis_session_service.py` (`update_report`)
 
-### 8. Leitura das Variáveis de Ambiente
-- **Descrição:** Variáveis de ambiente são lidas para configuração inicial do backend.
-- **Código responsável:**
-  - `backend/app/core/config.py` (classe `Settings`)
-  - `startup.py` (função `validate_env_vars`)
-  - `backend/app/services/config_loader_service.py` (classe `ConfigLoaderService`)
+### 8. Comunicação Backend ↔ MCP (Incluindo Webhooks)
+- **Descrição:** O backend envia payloads para o MCP (sempre com texto extraído, nunca URL). MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam relatórios na sessão Redis.
+- **Código:**
+  - `backend/app/services/mcp_client_service.py` (`start_analysis`)
+  - Webhook handler (não mostrado, mas esperado)
 
-### 9. Key Vault
-- **Descrição:** Segredos sensíveis são carregados do Azure Key Vault usando Managed Identity.
-- **Código responsável:**
-  - `backend/app/services/azure_secret_manager.py` (classe `AzureSecretManager`)
-  - `backend/app/services/config_loader_service.py` (classe `ConfigLoaderService`, método `load_secrets_from_key_vault`)
+### 9. Atualização de Relatórios e Propagação de Estado
+- **Descrição:** Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage.
+- **Código:**
+  - `backend/app/api/session.py` (`PUT /session/{session_id}/report`)
+  - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`)
 
-### 10. Salvamento do Status no Blob Storage
-- **Descrição:** O estado da sessão/projeto é salvo periodicamente no Blob Storage. Sempre que houver mudanças em relatórios ou variáveis de estado, o salvamento é acionado automaticamente.
-- **Código responsável:**
-  - `backend/app/services/project_state_service.py` (função `save_state_to_blob`)
-  - `backend/app/services/background_state_saver.py` (classe `BackgroundStateSaver`, método `schedule_periodic_save`)
-  - `backend/app/services/redis_session_service.py` (função `update_session_on_state_change`)
-  - `backend/app/api/session.py` (endpoint PUT `/session/{session_id}/report`)
+### 10. Fluxo de Erro e Recuperação
+- **Descrição:** O sistema lida com falhas do MCP, Key Vault, Redis e Blob Storage, propagando erros padronizados para o frontend.
+- **Código:**
+  - Handlers de exceção em todos os endpoints
+  - `backend/app/services/startup_validator.py`
 
-### 11. Verificação de Projeto Existente no Blob Storage
-- **Descrição:** Antes de exigir o upload do DOCX, o backend verifica se já existe um estado do projeto para o usuário no Blob Storage. Se existir, o upload não é obrigatório. Se não existir, o upload do DOCX é obrigatório para criar o projeto.
-- **Código responsável:**
-  - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
+---
 
-### 12. Envio para o MCP Server
-- **Descrição:** O backend envia para o MCP um dos três formatos de payload, conforme o recebido do frontend:
-  - Com `arquivo_docx` e `comentario_usuario`
-  - Apenas com `arquivo_docx`
-  - Apenas com `comentario_usuario`
-  O campo `analysis_name` NÃO é enviado. O campo `arquivo_docx` sempre contém o texto extraído do DOCX, nunca a URL do arquivo.
-- **Código responsável:**
-  - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
+## Fluxos Críticos de Negócio
 
-### 13. Recebimento da Resposta do MCP Server (MCP → Backend)
-- **Descrição:** A resposta do MCP Server é processada e o job_id é extraído. Notificações de progresso, relatórios parciais e status de conclusão são recebidos e processados pelo backend.
-- **Código responsável:**
-  - `backend/app/services/mcp_client_service.py` (função `start_analysis` - retorno)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
-- **Exemplos de payload:** Veja `backend/docs/API_PAYLOAD_EXAMPLES.md`, seção "Exemplos de Respostas MCP → Backend".
+### 1. Fluxo de Novo Projeto
+mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant BE as Backend
+    participant KV as Key Vault
+    participant BS as Blob Storage
+    participant RS as Redis
+    participant MCP as MCP Server
+    FE->>BE: POST /auth/login (token)
+    BE->>KV: Carrega segredos
+    BE->>BS: Lista projetos
+    BE-->>FE: Lista de projetos
+    FE->>BE: POST /upload/docx (arquivo)
+    BE->>BS: Salva arquivo
+    BE->>BE: Extrai texto
+    BE->>RS: Cria sessão
+    BE-->>FE: blob_url, texto extraído, session_id
+    FE->>BE: POST /analysis/start (projeto, analysis_type, session_id)
+    BE->>MCP: Envia payload (texto extraído)
+    MCP-->>BE: job_id
+    BE->>RS: Atualiza sessão (job_id)
+    BE->>BS: Salva estado inicial
+    BE-->>FE: job_id, session_id, project_id
 
-### 14. Envio da Resposta para o Frontend (Backend → Frontend)
-- **Descrição:** A resposta final (incluindo URLs, job_id, mensagens, dados de sessão e `project_id`) é enviada para o frontend. O backend propaga erros do MCP para o frontend quando necessário.
-- **Código responsável:**
-  - `backend/app/api/analysis.py`, `backend/app/api/upload.py`, `backend/app/api/session.py`, `backend/app/api/auth.py` (retorno das funções FastAPI)
-- **Exemplos de payload:** Veja `backend/docs/API_PAYLOAD_EXAMPLES.md`, seção "Exemplos de Respostas Backend → Frontend".
 
-### 15. Recebimento do comentario_usuario do frontend
-- **Descrição:** O campo opcional `comentario_usuario` é recebido do frontend nos endpoints de análise.
-- **Código responsável:**
-  - `backend/app/api/analysis.py` (função `start_analysis`)
+### 2. Fluxo de Projeto Existente
+mermaid
+sequenceDiagram
+    FE->>BE: GET /projects/check
+    BE->>BS: Busca estado
+    BE-->>FE: exists: true, state
+    FE->>BE: POST /analysis/start (sem upload)
+    BE->>RS: Restaura sessão do estado
+    BE->>MCP: Envia payload (texto extraído do estado)
+    MCP-->>BE: job_id
+    BE->>RS: Atualiza sessão (job_id)
+    BE->>BS: Salva estado
+    BE-->>FE: job_id, session_id, project_id
 
-### 16. Armazenamento do comentario_usuario na sessão Redis
-- **Descrição:** O campo opcional `comentario_usuario` é persistido na sessão Redis para uso posterior.
-- **Código responsável:**
-  - `backend/app/services/redis_session_service.py` (função `create_session`, campo em SessionData)
 
-### 17. Armazenamento do texto extraído do DOCX na sessão Redis
-- **Descrição:** O texto extraído do DOCX é armazenado na sessão Redis durante o upload do arquivo. O upload e a extração de texto ocorrem em paralelo.
-- **Código responsável:**
-  - `backend/app/services/blob_storage_service.py` (função `upload_and_extract_docx`)
-  - `backend/app/services/redis_session_service.py` (função `update_session_extracted_text`)
-  - Chamado dentro de `backend/app/api/upload.py` após upload do DOCX
+### 3. Fluxo de Atualização de Relatório
+mermaid
+sequenceDiagram
+    MCP->>BE: Webhook (job_id, status, report_type, report_data)
+    BE->>RS: Atualiza relatório na sessão
+    BE->>BS: Salva estado
 
-### 18. Envio do texto extraído para MCP Server
-- **Descrição:** O campo `arquivo_docx` enviado para o MCP Server sempre contém o texto extraído do DOCX, nunca a URL do arquivo.
-- **Código responsável:**
-  - `backend/app/services/mcp_client_service.py` (função `start_analysis`)
-  - Chamado dentro de `backend/app/api/analysis.py`
+
+### 4. Fluxo de Erro e Recuperação
+mermaid
+sequenceDiagram
+    BE->>MCP: start_analysis
+    MCP-->>BE: status: error, error_message
+    BE-->>FE: 502 Bad Gateway, detail
+    BE->>KV: get_secret
+    KV-->>BE: erro
+    BE-->>FE: 503 Service Unavailable, detail
+    BE->>RS: get_session
+    RS-->>BE: erro
+    BE-->>FE: 503 Service Unavailable, detail
+
+
+---
+
+## Integração com Múltiplos Key Vaults
+
+- **Arquitetura:** O backend suporta múltiplos Key Vaults (Azure, DevOps, GitHub, LLM), roteando segredos conforme o tipo via `AzureSecretManager` e `VaultType`.
+- **Mapeamento:** O mapeamento de segredos está documentado em `backend/docs/KEY_VAULT_SECRETS_MAPPING.md`.
+- **Carregamento:** O carregamento ocorre na inicialização via `ConfigLoaderService.load_secrets_from_key_vault`, com cache thread-safe para evitar chamadas repetidas.
+- **Fallback:** Se um segredo não for encontrado no Key Vault, o backend tenta variável de ambiente.
+- **Validação:** Campos obrigatórios são validados por `settings.validate_required_fields`.
+
+mermaid
+flowchart LR
+    Start((Startup)) --> LoadSecrets[ConfigLoaderService.load_secrets_from_key_vault]
+    LoadSecrets -->|Por tipo| AzureSecretManager
+    AzureSecretManager -->|Busca segredo| KeyVaults[Azure/DevOps/GitHub/LLM]
+    AzureSecretManager -->|Cache| Cache
+    KeyVaults -->|Retorna segredo| AzureSecretManager
+    AzureSecretManager -->|Fallback| EnvVars[Variáveis de Ambiente]
+    AzureSecretManager -->|Seta no settings| Settings
+
+
+---
+
+## Configuração Dinâmica de Agentes MCP
+
+- **Arquivo:** `backend/config/mcp_agents.json` define agentes MCP, URLs, campos de relatório e mapeamentos.
+- **Carregamento:** `MCPConfigService.load_config` carrega o JSON na inicialização.
+- **Roteamento:** `MCPClientService.get_mcp_endpoint` seleciona a URL do MCP conforme `analysis_type`.
+- **Mapeamento de Relatórios:** `RedisSessionService.update_report` usa `report_mapping` para salvar relatórios no campo correto.
+- **Extensibilidade:** Novos agentes podem ser adicionados apenas editando o JSON.
+
+**Exemplo de configuração de agente:**
+
+{
+  "agents": {
+    "criacao_epicos_azure_devops": {
+      "agent_name": "Epicos Azure DevOps",
+      "mcp_url": "https://mcp-epicos.azurewebsites.net",
+      "report_fields": ["epicos_report"],
+      "report_mapping": {"epicos": "epicos_report"}
+    },
+    "features_generation": {
+      "agent_name": "Features Generator",
+      "mcp_url": "https://mcp-features.azurewebsites.net",
+      "report_fields": ["features_report"],
+      "report_mapping": {"features": "features_report"}
+    }
+  }
+}
+
 
 ---
 
 ## Observações
+
 - O campo `analysis_name` foi removido de todos os fluxos e payloads.
-- O backend aceita apenas três formatos de payload para iniciar análise, conforme descrito em `API_PAYLOAD_EXAMPLES.md`.
-- O backend sempre envia para o MCP um dos três formatos de payload, sem `analysis_name`.
-- Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
-- O texto extraído do DOCX é armazenado na sessão Redis e enviado ao MCP.
-- O upload de DOCX agora retorna tanto a URL do arquivo quanto o texto extraído, em paralelo.
-- O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras, e permite o envio de comentários adicionais pelo usuário.
-- Exemplos completos de payload de resposta do MCP para o backend e do backend para o frontend estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
+- Para iniciar análise, é obrigatório informar `analysis_type` e pelo menos um de `arquivo_docx` (texto extraído) ou `comentario_usuario`.
+- O upload de DOCX processa upload e extração de texto em paralelo, retornando ambos imediatamente.
+- O salvamento de estado no Blob Storage é automático e periódico, disparado por alterações de relatório ou estado.
+- O cache de segredos do Key Vault é thread-safe e evita múltiplas chamadas desnecessárias.
+- O Redis **deve** ser configurado via Key Vault (não via variáveis de ambiente do App Service).
+- Para ambientes com Redis em subrede privada, o App Service deve estar integrado à mesma VNET.
+- O sistema pode operar em modo de teste com autenticação mockada (`SKIP_AUTH_FOR_TESTING`), útil para desenvolvimento local.
+- Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
