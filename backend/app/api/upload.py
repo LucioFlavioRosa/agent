@@ -6,15 +6,10 @@ from typing import Optional
 from ..middleware.auth_middleware import get_current_user, _extract_usuario_executor
 from ..services.blob_storage_service import upload_and_extract_docx
 from ..services.redis_session_service import RedisSessionService
+from ..models.docx_models import UploadDocxResponse
 
 router = APIRouter()
 logger = logging.getLogger("upload_api")
-
-class UploadDocxResponse(BaseModel):
-    blob_url: str
-    extracted_text: str
-    message: str
-    session_id: Optional[str] = None
 
 @router.post("/docx", response_model=UploadDocxResponse, tags=["Upload"])
 async def upload_docx(
