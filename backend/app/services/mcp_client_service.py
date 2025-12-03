@@ -31,7 +31,9 @@ class MCPClientService:
         return endpoint_dict.get(analysis_type, self.base_url)
 
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
-        url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
+       # url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
+        base = self.get_mcp_endpoint(payload.analysis_type)
+        url = f"{base}/start"
         try:
             payload_dict = payload.dict()
             async with httpx.AsyncClient(timeout=30) as client:
