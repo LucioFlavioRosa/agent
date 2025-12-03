@@ -3,7 +3,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Background
 from pydantic import BaseModel
 from typing import Optional
 
-from ..middleware.auth_middleware import get_current_user
+from ..middleware.auth_middleware import get_current_user, _extract_usuario_executor
 from ..services.blob_storage_service import upload_and_extract_docx
 from ..services.redis_session_service import RedisSessionService
 
@@ -25,7 +25,7 @@ async def upload_docx(
     comentario_usuario: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
-    usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
+    usuario_executor = _extract_usuario_executor(current_user)
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
     try:
