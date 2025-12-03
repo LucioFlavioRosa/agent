@@ -31,21 +31,40 @@ class MCPClientService:
         return endpoint_dict.get(analysis_type, self.base_url)
 
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
-       # url = f"{self.get_mcp_endpoint(payload.analysis_type)}/start-analysis"
-        base = self.get_mcp_endpoint(payload.analysis_type)
+        # 1. Obtém a URL base e garante que não tenha barra no final para evitar "//start"
+        base = self.get_mcp_endpoint(payload.analysis_type).rstrip("/")
         url = f"{base}/start"
+        
+        logging.info(f"🔌 [MCP Client] Enviando requisição para: {url}")
+    
         try:
-            payload_dict = payload.dict()
-            async with httpx.AsyncClient(timeout=30) as client:
+            # 2. Compatibilidade Pydantic v1 (.dict) e v2 (.model_dump)
+            # Se sua versão do Pydantic for v2, .dict() está depreciado.
+            if hasattr(payload, "model_dump"):
+                payload_dict = payload.model_dump()
+            else:
+                payload_dict = payload.dict()
+    
+            # 3. Timeout aumentado (IA pode demorar, mesmo o fake no Azure pode ter cold start)
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
-                    json=payload_dict,
+                    json=jsonable_encoder(payload_dict), # Garante serialização correta de datas/enums
                     headers={"Content-Type": "application/json"}
                 )
+                
+                # Log de erro se não for 200
+                if response.status_code != 200:
+                    logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
+    
                 response.raise_for_status()
+                
                 data = response.json()
                 return MCPStartAnalysisResponse(**data)
+    
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
         except Exception as exc:
+            # Log da exceção completa ajuda muito no Azure Log Stream
+            logging.error(f"❌ [MCP Client] Exceção: {str(exc)}", exc_info=True)
             raise Exception(f"Erro inesperado ao comunicar com MCP Server: {str(exc)}")
