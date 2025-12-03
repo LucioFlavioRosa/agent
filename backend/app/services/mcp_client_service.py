@@ -24,51 +24,42 @@ class MCPStartAnalysisResponse(BaseModel):
 
 class MCPClientService:
     def __init__(self, base_url: str = None):
-        # Remove a barra final se houver
         self.base_url = base_url or settings.MCP_SERVER_BASE_URL.rstrip('/')
 
     def get_mcp_endpoint(self, analysis_type: str) -> str:
-        endpoint_dict = getattr(settings, 'MCP_ENDPOINTS', None)
-        if not endpoint_dict or not isinstance(endpoint_dict, dict) or not endpoint_dict:
-            # Se não houver endpoints específicos configurados, usa a base_url padrão
-            return self.base_url
-        return endpoint_dict.get(analysis_type, self.base_url)
+        if (
+            hasattr(settings, 'mcp_config_registry') and
+            settings.mcp_config_registry and
+            hasattr(settings.mcp_config_registry, 'agents') and
+            analysis_type in settings.mcp_config_registry.agents
+        ):
+            agent_cfg = settings.mcp_config_registry.agents[analysis_type]
+            if agent_cfg and agent_cfg.mcp_url:
+                return agent_cfg.mcp_url.rstrip('/')
+        return self.base_url
 
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
-        # 1. Pega a configuração bruta
         raw_base = self.get_mcp_endpoint(payload.analysis_type)
-        
-        # --- LOG DE DEBUG FORENSE ---
         logging.info(f"🕵️ [DEBUG URL] Bruta vinda da env: '[{raw_base}]'")
-        
         base = raw_base.strip().rstrip("/")
         url = f"{base}/start"
-        
         logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
-    
         try:
-            # 2. Compatibilidade Pydantic
             if hasattr(payload, "model_dump"):
                 payload_dict = payload.model_dump()
             else:
                 payload_dict = payload.dict()
-    
-            # 3. Requisição HTTP Real
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
                     json=jsonable_encoder(payload_dict), 
                     headers={"Content-Type": "application/json"}
                 )
-                
                 if response.status_code != 200:
                     logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
-    
                 response.raise_for_status()
-                
                 data = response.json()
                 return MCPStartAnalysisResponse(**data)
-    
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
         except Exception as exc:
