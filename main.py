@@ -31,30 +31,35 @@ app = FastAPI(
 
 SKIP_AUTH_FOR_TESTING = True
 
+def _create_mock_user(request: Request) -> dict:
+    test_user_header = request.headers.get("X-Test-User-Json")
+    if test_user_header:
+        try:
+            user_data = json.loads(test_user_header)
+            logging.info(f"🧪 [MOCK] Usando usuário dinâmico do Header: {user_data.get('email')}")
+            return user_data
+        except json.JSONDecodeError:
+            logging.error("Erro ao decodificar X-Test-User-Json")
+    return {
+        "sub": "user-teste-id-123",
+        "usuario_executor": "dev_tester_local",
+        "name": "Desenvolvedor Teste",
+        "email": "dev@peers.com.br",
+        "roles": ["admin"]
+    }
+
+def _extract_client_ip(request: Request) -> str:
+    client_ip = request.client.host
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    if ":" in client_ip and "." in client_ip:
+        client_ip = client_ip.split(":")[0]
+    return client_ip
+
 if SKIP_AUTH_FOR_TESTING:
-    # Adicione 'request: Request' para ler os headers
     async def mock_get_current_user(request: Request):
-        # Tenta pegar dados do usuário enviados pelo Colab no header
-        test_user_header = request.headers.get("X-Test-User-Json")
-        
-        if test_user_header:
-            try:
-                # Se o Colab mandou um usuário específico, usamos ele
-                user_data = json.loads(test_user_header)
-                logging.info(f"🧪 [MOCK] Usando usuário dinâmico do Header: {user_data.get('email')}")
-                return user_data
-            except json.JSONDecodeError:
-                logging.error("Erro ao decodificar X-Test-User-Json")
-        
-        # Fallback padrão se não mandar nada
-        return {
-            "sub": "user-teste-id-123",
-            "usuario_executor": "dev_tester_local",
-            "name": "Desenvolvedor Teste",
-            "email": "dev@peers.com.br",
-            "roles": ["admin"]
-        }
-    
+        return _create_mock_user(request)
     app.dependency_overrides[get_current_user] = mock_get_current_user
     logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação via Header habilitada.")
 
@@ -67,28 +72,17 @@ if env_ips_str:
 
 @app.middleware("http")
 async def ip_restriction_middleware(request: Request, call_next):
-    client_ip = request.client.host
-    forwarded = request.headers.get("X-Forwarded-For")
-    
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-
-    if ":" in client_ip and "." in client_ip:  
-        client_ip = client_ip.split(":")[0]
-    # -----------------------------------------------
-
+    client_ip = _extract_client_ip(request)
     if client_ip not in ALLOWED_IPS:
-        # Permite acesso à documentação mesmo bloqueado
         if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
             logging.warning(f"⛔ Acesso negado: IP {client_ip}")
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": f"Acesso negado. IP {client_ip} não autorizado."}
             )
-            
     response = await call_next(request)
     return response
-    
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -150,17 +144,9 @@ def on_startup():
 
 @app.post("/fake-mcp/api/v1/analysis/start")
 async def fake_mcp_start(request: Request):
-    """
-    Simula o endpoint do MCP.
-    Recebe o payload que o backend enviou e retorna um Job ID falso.
-    """
     body = await request.json()
-    
-    # Log para você ver no console que o payload chegou "do outro lado"
     logging.info(f"🧪 [FAKE MCP] Recebi uma solicitação de análise!")
     logging.info(f"📦 [FAKE MCP] Dados recebidos: {json.dumps(body, indent=2)}")
-    
-    # Retorna exatamente o que o seu Backend espera receber do MCP real
     return {
         "job_id": "job-teste-mock-12345",
         "status": "queued",
