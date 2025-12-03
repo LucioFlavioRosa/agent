@@ -7,3 +7,4 @@ class ProjectListItem(BaseModel):
     analysis_type: Optional[str] = Field(None)
     created_at: Optional[datetime] = Field(None)
     last_saved_to_blob: Optional[datetime] = Field(None)
+    project_id: Optional[str] = Field(default=None)
