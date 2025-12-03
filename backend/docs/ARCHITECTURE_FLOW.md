@@ -40,7 +40,7 @@ flowchart TD
 ---
 
 ## Etapa 0: Login e Listagem de Projetos
-- **Descrição:** Após o login no frontend, o backend recebe o token via header `Authorization`, valida via Azure AD e busca todos os projetos do usuário no Blob Storage. A resposta inclui as informações do usuário autenticado e a lista de projetos encontrados. Nenhum corpo de requisição é enviado, apenas o token.
+- **Descrição:** Após o login no frontend, o backend recebe o token via header `Authorization`, valida via Azure AD e busca todos os projetos do usuário no Blob Storage. A resposta inclui as informações do usuário autenticado e a lista de projetos encontrados, cada um com seu `project_id` único.
 - **Código responsável:**
   - `backend/app/api/auth.py` (endpoint `POST /auth/login`)
   - `backend/app/middleware/auth_middleware.py` (função `get_current_user`)
@@ -51,7 +51,7 @@ flowchart TD
 ## Etapas do Fluxo e Código Responsável
 
 ### 1. Seleção de Projeto e Verificação de Existência
-- **Descrição:** Antes de qualquer operação (upload, análise), o frontend deve chamar o endpoint `/projects/check` para verificar se o projeto existe para o usuário autenticado. Se existir, o backend retorna o último estado salvo do projeto.
+- **Descrição:** Antes de qualquer operação (upload, análise), o frontend deve chamar o endpoint `/projects/check` para verificar se o projeto existe para o usuário autenticado. Se existir, o backend retorna o último estado salvo do projeto, incluindo o `project_id`.
 - **Código responsável:**
   - `backend/app/api/projects.py` (endpoint `/projects/check`)
   - `backend/app/services/project_state_service.py` (função `load_latest_state_from_blob`)
@@ -62,21 +62,21 @@ flowchart TD
   - `backend/app/api/analysis.py` (função `start_analysis`)
 
 ### 3. Processamento do DOCX (se enviado)
-- **Descrição:** Se o campo `arquivo_docx` for enviado, o arquivo DOCX é processado para extrair o texto.
+- **Descrição:** Se o campo `arquivo_docx` for enviado, o arquivo DOCX é processado para extrair o texto. O upload e a extração de texto agora ocorrem em paralelo, retornando tanto a URL do arquivo quanto o texto extraído.
 - **Código responsável:**
   - `backend/app/services/docx_parser_service.py` (função `extract_text_from_docx`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
+  - `backend/app/services/blob_storage_service.py` (função `upload_and_extract_docx`)
+  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py` e em `backend/app/api/upload.py`
 
 ### 4. Salvamento do DOCX
 - **Descrição:** O arquivo DOCX é salvo no Azure Blob Storage na pasta do usuário/projeto.
 - **Código responsável:**
-  - `backend/app/services/blob_storage_service.py` (função `upload_docx_to_blob`)
-  - Chamado dentro de `start_analysis` em `backend/app/api/analysis.py`
+  - `backend/app/services/blob_storage_service.py` (função `upload_docx_to_blob` e `upload_and_extract_docx`)
 
 ### 5. Salvamento dos Dados no Redis
 - **Descrição:** Sessões e relatórios são persistidos no Redis para rastreamento do estado. O campo opcional `comentario_usuario` é armazenado na sessão Redis. O texto extraído do DOCX é armazenado no campo `extracted_text` da sessão Redis.
 - **Código responsável:**
-  - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`, `add_docx_file`, `update_session_extracted_text`)
+  - `backend/app/services/redis_session_service.py` (funções `create_session`, `update_report`, `add_step`, `restore_session_from_state`, `get_session`, `add_docx_file`, `update_session_extracted_text`, `update_session_on_state_change`)
   - Campo `comentario_usuario` e `extracted_text` em `SessionData` (`backend/app/models/session_models.py`)
 
 ### 6. Salvamento do caminho do DOCX no estado da sessão
@@ -106,10 +106,12 @@ flowchart TD
   - `backend/app/services/config_loader_service.py` (classe `ConfigLoaderService`, método `load_secrets_from_key_vault`)
 
 ### 10. Salvamento do Status no Blob Storage
-- **Descrição:** O estado da sessão/projeto é salvo periodicamente no Blob Storage.
+- **Descrição:** O estado da sessão/projeto é salvo periodicamente no Blob Storage. Sempre que houver mudanças em relatórios ou variáveis de estado, o salvamento é acionado automaticamente.
 - **Código responsável:**
   - `backend/app/services/project_state_service.py` (função `save_state_to_blob`)
   - `backend/app/services/background_state_saver.py` (classe `BackgroundStateSaver`, método `schedule_periodic_save`)
+  - `backend/app/services/redis_session_service.py` (função `update_session_on_state_change`)
+  - `backend/app/api/session.py` (endpoint PUT `/session/{session_id}/report`)
 
 ### 11. Verificação de Projeto Existente no Blob Storage
 - **Descrição:** Antes de exigir o upload do DOCX, o backend verifica se já existe um estado do projeto para o usuário no Blob Storage. Se existir, o upload não é obrigatório. Se não existir, o upload do DOCX é obrigatório para criar o projeto.
@@ -135,7 +137,7 @@ flowchart TD
 - **Exemplos de payload:** Veja `backend/docs/API_PAYLOAD_EXAMPLES.md`, seção "Exemplos de Respostas MCP → Backend".
 
 ### 14. Envio da Resposta para o Frontend (Backend → Frontend)
-- **Descrição:** A resposta final (incluindo URLs, job_id, mensagens e dados de sessão) é enviada para o frontend. O backend propaga erros do MCP para o frontend quando necessário.
+- **Descrição:** A resposta final (incluindo URLs, job_id, mensagens, dados de sessão e `project_id`) é enviada para o frontend. O backend propaga erros do MCP para o frontend quando necessário.
 - **Código responsável:**
   - `backend/app/api/analysis.py`, `backend/app/api/upload.py`, `backend/app/api/session.py`, `backend/app/api/auth.py` (retorno das funções FastAPI)
 - **Exemplos de payload:** Veja `backend/docs/API_PAYLOAD_EXAMPLES.md`, seção "Exemplos de Respostas Backend → Frontend".
@@ -151,8 +153,9 @@ flowchart TD
   - `backend/app/services/redis_session_service.py` (função `create_session`, campo em SessionData)
 
 ### 17. Armazenamento do texto extraído do DOCX na sessão Redis
-- **Descrição:** O texto extraído do DOCX é armazenado no campo `extracted_text` da sessão Redis durante o upload do arquivo.
+- **Descrição:** O texto extraído do DOCX é armazenado na sessão Redis durante o upload do arquivo. O upload e a extração de texto ocorrem em paralelo.
 - **Código responsável:**
+  - `backend/app/services/blob_storage_service.py` (função `upload_and_extract_docx`)
   - `backend/app/services/redis_session_service.py` (função `update_session_extracted_text`)
   - Chamado dentro de `backend/app/api/upload.py` após upload do DOCX
 
@@ -170,5 +173,6 @@ flowchart TD
 - O backend sempre envia para o MCP um dos três formatos de payload, sem `analysis_name`.
 - Todo arquivo DOCX enviado tem seu caminho salvo no estado da sessão, permitindo rastreabilidade e recuperação de todas as histórias geradas.
 - O texto extraído do DOCX é armazenado na sessão Redis e enviado ao MCP.
+- O upload de DOCX agora retorna tanto a URL do arquivo quanto o texto extraído, em paralelo.
 - O fluxo garante flexibilidade para o frontend iniciar análises em projetos já existentes sem exigir novo upload ou campos extras, e permite o envio de comentários adicionais pelo usuário.
 - Exemplos completos de payload de resposta do MCP para o backend e do backend para o frontend estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
