@@ -3,7 +3,6 @@ import logging
 import json
 from dotenv import load_dotenv
 
-from logging.handlers import RotatingFileHandler
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +20,7 @@ from backend.app.api.session import router as session_router
 
 from backend.app.middleware.auth_middleware import get_current_user
 
+# Mantemos override=False para respeitar as variáveis do Azure
 load_dotenv(override=False)
 
 app = FastAPI(
@@ -29,6 +29,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# --- MOCK DE AUTH (Isso fica, pois facilita o teste do Login) ---
 SKIP_AUTH_FOR_TESTING = True
 
 def _create_mock_user(request: Request) -> dict:
@@ -36,7 +37,7 @@ def _create_mock_user(request: Request) -> dict:
     if test_user_header:
         try:
             user_data = json.loads(test_user_header)
-            logging.info(f"🧪 [MOCK] Usando usuário dinâmico do Header: {user_data.get('email')}")
+            logging.info(f"🧪 [MOCK AUTH] Usando usuário dinâmico: {user_data.get('email')}")
             return user_data
         except json.JSONDecodeError:
             logging.error("Erro ao decodificar X-Test-User-Json")
@@ -48,6 +49,14 @@ def _create_mock_user(request: Request) -> dict:
         "roles": ["admin"]
     }
 
+if SKIP_AUTH_FOR_TESTING:
+    async def mock_get_current_user(request: Request):
+        return _create_mock_user(request)
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+    logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação via Header habilitada.")
+# -------------------------------------------------------------
+
+# --- RESTRIÇÃO DE IP ---
 def _extract_client_ip(request: Request) -> str:
     client_ip = request.client.host
     forwarded = request.headers.get("X-Forwarded-For")
@@ -57,24 +66,20 @@ def _extract_client_ip(request: Request) -> str:
         client_ip = client_ip.split(":")[0]
     return client_ip
 
-if SKIP_AUTH_FOR_TESTING:
-    async def mock_get_current_user(request: Request):
-        return _create_mock_user(request)
-    app.dependency_overrides[get_current_user] = mock_get_current_user
-    logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação via Header habilitada.")
-
 ALLOWED_IPS = ["127.0.0.1", "localhost", "::1"]
 env_ips_str = os.environ.get("ALLOWED_IPS", "")
 if env_ips_str:
     extra_ips = [ip.strip() for ip in env_ips_str.split(",") if ip.strip()]
     ALLOWED_IPS.extend(extra_ips)
-    logging.info(f"IPs adicionais permitidos via variável de ambiente: {extra_ips}")
+    logging.info(f"IPs adicionais permitidos: {extra_ips}")
 
 @app.middleware("http")
 async def ip_restriction_middleware(request: Request, call_next):
     client_ip = _extract_client_ip(request)
+    
+    # Removida a exceção para /fake-mcp, pois a rota não existe mais aqui
     if client_ip not in ALLOWED_IPS:
-        if request.url.path not in ["/docs", "/openapi.json", "/redoc"] and not request.url.path.startswith("/fake-mcp"):
+        if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
             logging.warning(f"⛔ Acesso negado: IP {client_ip}")
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -83,6 +88,7 @@ async def ip_restriction_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
+# --- MIDDLEWARES GERAIS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -91,12 +97,14 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# --- ROTAS REAIS ---
 app.include_router(auth_router, prefix="/auth")
 app.include_router(upload_router, prefix="/upload")
 app.include_router(analysis_router, prefix="/analysis")
 app.include_router(projects_router, prefix="/projects")
 app.include_router(session_router, prefix="/session")
 
+# --- HANDLERS DE ERRO ---
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
@@ -106,6 +114,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     logging.error(f"Erro não tratado: {exc}", exc_info=True)
     return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
 
+# --- CONFIGURAÇÃO DE LOGS ---
 def setup_logging():
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     logger = logging.getLogger()
@@ -124,6 +133,7 @@ def setup_logging():
     handler.setFormatter(JsonFormatter())
     logger.addHandler(handler)
 
+# --- STARTUP ---
 @app.on_event("startup")
 def on_startup():
     setup_logging()
@@ -135,20 +145,11 @@ def on_startup():
             logging.warning("⚠️ AZURE_STORAGE_CONNECTION_STRING não encontrado. O Upload vai falhar se tentado.")
         else:
             logging.info("✅ Segredos carregados com sucesso.")
+        
         validator = StartupValidator()
         validator.validate_redis_connection()
         if validator.status_report.get('redis', {}).get('status') != 'ok':
-            logging.critical(f"Erro crítico: Falha ao conectar ao Redis via endpoint privado: {validator.status_report['redis']['detail']}")
+            logging.critical(f"Erro crítico Redis: {validator.status_report['redis']['detail']}")
+            
     except Exception as e:
-        logging.error(f"⚠️ Aviso de Startup (não crítico para teste local): {str(e)}")
-
-@app.post("/fake-mcp/api/v1/analysis/start")
-async def fake_mcp_start(request: Request):
-    body = await request.json()
-    logging.info(f"🧪 [FAKE MCP] Recebi uma solicitação de análise!")
-    logging.info(f"📦 [FAKE MCP] Dados recebidos: {json.dumps(body, indent=2)}")
-    return {
-        "job_id": "job-teste-mock-12345",
-        "status": "queued",
-        "message": "Job aceito pelo MCP Falso"
-    }
+        logging.error(f"⚠️ Aviso de Startup: {str(e)}")
