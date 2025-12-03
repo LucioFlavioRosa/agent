@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, Up
 from pydantic import BaseModel, root_validator
 from typing import Optional
 
-from ..middleware.auth_middleware import get_current_user
+from ..middleware.auth_middleware import get_current_user, _extract_usuario_executor
 from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayload
 from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
@@ -37,7 +37,7 @@ async def start_analysis(
     project_id: Optional[str] = Body(None),
     current_user: dict = Depends(get_current_user)
 ):
-    usuario_executor = current_user.get("usuario_executor") or current_user.get("sub")
+    usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
     session_id = None
