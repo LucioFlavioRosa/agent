@@ -74,7 +74,7 @@ if env_ips_str:
 async def ip_restriction_middleware(request: Request, call_next):
     client_ip = _extract_client_ip(request)
     if client_ip not in ALLOWED_IPS:
-        if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
+        if request.url.path not in ["/docs", "/openapi.json", "/redoc"] and not request.url.path.startswith("/fake-mcp"):
             logging.warning(f"⛔ Acesso negado: IP {client_ip}")
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
