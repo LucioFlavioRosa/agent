@@ -87,7 +87,7 @@ class RedisSessionService:
         session_data["status"] = status
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
-    def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None):
+    async def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None):
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
@@ -106,6 +106,12 @@ class RedisSessionService:
             session_data["reports"] = {}
         session_data["reports"][report_field] = report_data
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        try:
+            from backend.app.services.project_state_service import ProjectStateService
+            session_obj = SessionData(**session_data)
+            await ProjectStateService.save_state_to_blob(session_obj)
+        except Exception as e:
+            self.logger.error(f"Erro ao salvar estado imediatamente após update_report: {e}")
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
