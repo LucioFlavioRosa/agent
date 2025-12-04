@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama Geral do Fluxo (Mermaid)
 
-mermaid
+```mermaid
 flowchart TD
     subgraph Frontend
         Z[Usuário/Frontend]
@@ -47,7 +47,7 @@ flowchart TD
     AD -->|Salva Estado| AE
     AG -->|Salvamento Periódico| AE
     AC -->|Carrega Segredos| AA
-
+```
 
 ---
 
@@ -128,7 +128,7 @@ flowchart TD
 ## Fluxos Críticos de Negócio
 
 ### 1. Fluxo de Novo Projeto
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -151,10 +151,10 @@ sequenceDiagram
     BE->>RS: Atualiza sessão (job_id) e persiste relação job_id -> session_id no Redis
     BE->>BS: Salva estado inicial
     BE-->>FE: job_id, session_id, project_id
-
+```
 
 ### 2. Fluxo de Projeto Existente
-mermaid
+```mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check
     BE->>BS: Busca estado
@@ -166,19 +166,19 @@ sequenceDiagram
     BE->>RS: Atualiza sessão (job_id) e persiste relação job_id -> session_id no Redis
     BE->>BS: Salva estado
     BE-->>FE: job_id, session_id, project_id
-
+```
 
 ### 3. Fluxo de Atualização de Relatório
-mermaid
+```mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, status, report_type, report_data)
     BE->>RS: Busca sessão por job_id (usando relação persistida job_id -> session_id)
     BE->>RS: Atualiza relatório na sessão
     BE->>BS: Salva estado
-
+```
 
 ### 4. Fluxo de Erro e Recuperação
-mermaid
+```mermaid
 sequenceDiagram
     BE->>MCP: start_analysis
     MCP-->>BE: status: error, error_message
@@ -189,7 +189,7 @@ sequenceDiagram
     BE->>RS: get_session
     RS-->>BE: erro
     BE-->>FE: 503 Service Unavailable, detail
-
+```
 
 ---
 
@@ -201,7 +201,7 @@ sequenceDiagram
 - **Fallback:** Se um segredo não for encontrado no Key Vault, o backend tenta variável de ambiente.
 - **Validação:** Campos obrigatórios são validados por `settings.validate_required_fields`.
 
-mermaid
+```mermaid
 flowchart LR
     Start((Startup)) --> LoadSecrets[ConfigLoaderService.load_secrets_from_key_vault]
     LoadSecrets -->|Por tipo| AzureSecretManager
@@ -210,7 +210,7 @@ flowchart LR
     KeyVaults -->|Retorna segredo| AzureSecretManager
     AzureSecretManager -->|Fallback| EnvVars[Variáveis de Ambiente]
     AzureSecretManager -->|Seta no settings| Settings
-
+```
 
 ---
 
@@ -223,7 +223,7 @@ flowchart LR
 - **Extensibilidade:** Novos agentes podem ser adicionados apenas editando o JSON.
 
 **Exemplo de configuração de agente:**
-
+```json
 {
   "agents": {
     "criacao_epicos_azure_devops": {
@@ -240,7 +240,7 @@ flowchart LR
     }
   }
 }
-
+```
 
 ---
 
