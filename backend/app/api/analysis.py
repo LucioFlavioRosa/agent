@@ -1,6 +1,6 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File
-from pydantic import BaseModel, root_validator
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form
+from pydantic import BaseModel
 from typing import Optional
 
 from ..middleware.auth_middleware import get_current_user, _extract_usuario_executor
@@ -8,18 +8,12 @@ from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayl
 from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
 from ..services.background_state_saver import BackgroundStateSaver
+from ..services.blob_storage_service import upload_and_extract_docx
 
 import uuid
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
-
-class StartAnalysisRequest(BaseModel):
-    projeto: str
-    analysis_type: str
-    comentario_usuario: Optional[str] = None
-    arquivo_docx: Optional[str] = None
-    project_id: Optional[str] = None
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -37,11 +31,11 @@ def _get_or_create_project_id(project_state: dict, provided_id: Optional[str]) -
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
     background_tasks: BackgroundTasks,
-    projeto: str = Body(...),
-    analysis_type: str = Body(...),
-    comentario_usuario: Optional[str] = Body(None),
-    arquivo_docx: Optional[str] = Body(None),
-    project_id: Optional[str] = Body(None),
+    projeto: str = Form(...),
+    analysis_type: str = Form(...),
+    comentario_usuario: Optional[str] = Form(None),
+    project_id: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
@@ -50,33 +44,52 @@ async def start_analysis(
     project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
     session_id = None
     texto_extraido = None
+    blob_url = None
     project_id_final = _get_or_create_project_id(project_state, project_id)
-    if project_state:
-        session_id = redis_service.restore_session_from_state(
-            usuario_executor,
-            projeto,
-            analysis_type,
-            project_state
-        )
-    else:
+    if file is not None:
+        try:
+            blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
+            blob_filename = f"{analysis_type}.docx"
+            blob_url, texto_extraido = await upload_and_extract_docx(file, blob_folder, blob_filename, background_tasks)
+        except ValueError as ve:
+            logger.error(f"Erro de configuração do Blob Storage: {ve}")
+            raise HTTPException(status_code=503, detail="Serviço de armazenamento temporariamente indisponível")
+        except Exception as e:
+            logger.error(f"Erro inesperado no Blob Storage ou extração: {e}")
+            raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo ou extrair texto: {str(e)}")
         session_id = redis_service.create_session(
             usuario_executor,
             projeto,
             analysis_type,
             comentario_usuario=comentario_usuario,
-            extracted_text=arquivo_docx,
+            extracted_text=texto_extraido,
             project_id=project_id_final
         )
-    BackgroundStateSaver.schedule_periodic_save(session_id)
-    if arquivo_docx is not None:
-        texto_extraido = arquivo_docx
-    else:
         try:
-            session = redis_service.get_session(session_id)
-            texto_extraido = getattr(session, "extracted_text", None)
+            redis_service.add_docx_file(session_id, blob_url)
         except Exception as e:
-            logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
-            texto_extraido = None
+            logger.error(f"Erro ao adicionar arquivo DOCX à sessão: {e}")
+        try:
+            redis_service.update_session_extracted_text(session_id, texto_extraido)
+        except Exception as e:
+            logger.error(f"Erro ao salvar texto extraído na sessão: {e}")
+    else:
+        if project_state:
+            session_id = redis_service.restore_session_from_state(
+                usuario_executor,
+                projeto,
+                analysis_type,
+                project_state
+            )
+            try:
+                session = redis_service.get_session(session_id)
+                texto_extraido = getattr(session, "extracted_text", None)
+            except Exception as e:
+                logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
+                texto_extraido = None
+        else:
+            raise HTTPException(status_code=400, detail="Para novo projeto, é obrigatório enviar um arquivo DOCX.")
+    BackgroundStateSaver.schedule_periodic_save(session_id)
     mcp_payload = MCPStartAnalysisPayload(
         projeto=projeto,
         analysis_type=analysis_type,
