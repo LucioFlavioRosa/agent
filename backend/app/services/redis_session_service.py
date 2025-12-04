@@ -42,7 +42,8 @@ class RedisSessionService:
             "comentario_usuario": comentario_usuario,
             "extracted_text": extracted_text,
             "project_id": project_id,
-            "reports": {}
+            "reports": {},
+            "last_mcp_job_id": None
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
         return session_id
@@ -108,6 +109,7 @@ class RedisSessionService:
         comentario_usuario = project_state.get("comentario_usuario")
         extracted_text = project_state.get("extracted_text")
         project_id = project_state.get("project_id")
+        last_mcp_job_id = project_state.get("last_mcp_job_id") if "last_mcp_job_id" in project_state else None
         session_id = self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id)
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
@@ -129,6 +131,7 @@ class RedisSessionService:
         session_data["comentario_usuario"] = comentario_usuario
         session_data["extracted_text"] = extracted_text
         session_data["project_id"] = project_id
+        session_data["last_mcp_job_id"] = last_mcp_job_id
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return session_id
 
@@ -165,19 +168,11 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         BackgroundStateSaver.schedule_periodic_save(session_id)
 
-    def get_session_by_job_id(self, job_id: str) -> Optional[SessionData]:
-        pattern = "session:*"
-        for key in self.redis_client.scan_iter(match=pattern):
-            session_json = self.redis_client.get(key)
-            if not session_json:
-                continue
-            try:
-                session_data = self._deserialize_session(session_json)
-                last_mcp_job_id = session_data.get("last_mcp_job_id")
-                if last_mcp_job_id == job_id:
-                    steps = [SessionStep(**step) for step in session_data.get("steps", [])]
-                    session_data["steps"] = steps
-                    return SessionData(**session_data)
-            except Exception:
-                continue
-        return None
+    def update_session_job_id(self, session_id: str, job_id: str):
+        key = f"session:{session_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+        session_data = self._deserialize_session(session_json)
+        session_data["last_mcp_job_id"] = job_id
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
