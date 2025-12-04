@@ -18,7 +18,7 @@ Content-Type: application/json
 
 
 **Resposta:**
-
+```json
 {
   "user_info": {
     "usuario_executor": "user@example.com",
@@ -37,7 +37,7 @@ Content-Type: application/json
     }
   ]
 }
-
+```
 
 ### 1.2 Verificação de Projeto (GET /projects/check)
 
@@ -48,7 +48,7 @@ Authorization: Bearer <token>
 
 
 **Resposta (projeto encontrado):**
-
+```json
 {
   "exists": true,
   "state": {
@@ -67,14 +67,14 @@ Authorization: Bearer <token>
     "project_id": "projeto-uuid-123"
   }
 }
-
+```
 
 **Resposta (projeto não encontrado):**
-
+```json
 {
   "exists": false
 }
-
+```
 
 ### 1.3 Upload de DOCX (POST /upload/docx)
 
@@ -91,7 +91,7 @@ comentario_usuario=Comentário opcional
 
 
 **Resposta:**
-
+```json
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
@@ -99,7 +99,7 @@ comentario_usuario=Comentário opcional
   "session_id": "ghijkl-uuid",
   "job_id": "ghijkl-uuid"
 }
-
+```
 
 ### 1.4 Início de Análise (POST /analysis/start)
 
@@ -108,38 +108,38 @@ comentario_usuario=Comentário opcional
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
-
+```json
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-
+```
 
 **Requisição (projeto existente, sem novo upload):**
 
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
-
+```json
 {
   "projeto": "ProjetoExistente",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário sem arquivo.",
   "project_id": "projeto-uuid-123"
 }
-
+```
 
 **Resposta:**
-
+```json
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
 }
-
+```
 
 ### 1.5 Atualização de Relatório (PUT /session/{session_id}/report)
 
