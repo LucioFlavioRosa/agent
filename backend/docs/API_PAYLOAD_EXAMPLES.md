@@ -33,8 +33,7 @@ Content-Type: application/json
       "project_id": "projeto-uuid-123"
     }
   ]
-}
-```
+}```
 
 ### 1.2 Verificação de Projeto (GET /projects/check)
 
