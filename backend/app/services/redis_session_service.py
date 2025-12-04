@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
+import logging
 
 class RedisSessionService:
     def __init__(self):
@@ -18,6 +19,7 @@ class RedisSessionService:
             ssl_cert_reqs=getattr(settings, 'REDIS_SSL_CERT_REQS', 'required')
         )
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
+        self.logger = logging.getLogger("RedisSessionService")
 
     def _serialize_session(self, session_data: dict) -> str:
         return json.dumps(session_data)
@@ -176,3 +178,34 @@ class RedisSessionService:
         session_data = self._deserialize_session(session_json)
         session_data["last_mcp_job_id"] = job_id
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        try:
+            self.redis_client.setex(f"jobid:{job_id}", self.session_ttl, session_id)
+            self.logger.info(f"Persistida relação job_id -> session_id: {job_id} -> {session_id}")
+        except Exception as e:
+            self.logger.error(f"Erro ao persistir job_id -> session_id no Redis: {e}")
+
+    def get_session_by_job_id(self, job_id: str) -> Optional[SessionData]:
+        self.logger.info(f"Buscando sessão por job_id: {job_id}")
+        session_id = None
+        try:
+            session_id = self.redis_client.get(f"jobid:{job_id}")
+            if session_id:
+                self.logger.info(f"Encontrado session_id '{session_id}' para job_id '{job_id}' via chave direta.")
+                return self.get_session(session_id)
+        except Exception as e:
+            self.logger.error(f"Erro ao buscar session_id por job_id no Redis: {e}")
+        self.logger.warning(f"Chave direta jobid:{job_id} não encontrada. Buscando por varredura em todas as sessões.")
+        try:
+            for key in self.redis_client.scan_iter(match="session:*"):
+                session_json = self.redis_client.get(key)
+                if not session_json:
+                    continue
+                session_data = self._deserialize_session(session_json)
+                if session_data.get("last_mcp_job_id") == job_id:
+                    session_id_found = session_data.get("session_id")
+                    self.logger.info(f"Encontrado session_id '{session_id_found}' para job_id '{job_id}' por varredura.")
+                    return SessionData(**session_data)
+        except Exception as e:
+            self.logger.error(f"Erro ao varrer sessões para job_id '{job_id}': {e}")
+        self.logger.error(f"Sessão não encontrada para job_id: {job_id}")
+        return None
