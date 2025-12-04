@@ -104,7 +104,11 @@ class RedisSessionService:
             report_field = f"{report_type}_report"
         if "reports" not in session_data or not isinstance(session_data["reports"], dict):
             session_data["reports"] = {}
+        if report_field in session_data["reports"]:
+            self.logger.debug(f"Sobrescrevendo relatório existente '{report_field}' na sessão '{session_id}'. Removendo valor anterior.")
+            del session_data["reports"][report_field]
         session_data["reports"][report_field] = report_data
+        self.logger.debug(f"Relatório '{report_field}' atualizado na sessão '{session_id}' com novo valor recebido do MCP.")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         try:
             from backend.app.services.project_state_service import ProjectStateService
