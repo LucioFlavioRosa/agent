@@ -19,7 +19,12 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(blob_path)
         if hasattr(session_data, "last_mcp_job_id"):
             state["last_mcp_job_id"] = getattr(session_data, "last_mcp_job_id")
+        logger = logging.getLogger("ProjectStateService")
+        logger.info(f"[save_state_to_blob] Iniciando persistência no Blob Storage: {blob_path}")
+        logger.info(f"[save_state_to_blob] Conteúdo completo do campo 'reports' que será salvo: {json.dumps(state.get('reports', {}), ensure_ascii=False)}")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
+        logger.info(f"[save_state_to_blob] Persistência concluída no Blob Storage: {blob_path}")
+        logger.info(f"[save_state_to_blob] Campo 'reports' salvo: {json.dumps(state.get('reports', {}), ensure_ascii=False)}")
         return blob_client.url
 
     @staticmethod
@@ -44,7 +49,6 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
-        # O campo 'reports' deve ser retornado exatamente como está no Blob Storage, sem modificações
         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
         return state
 
@@ -56,7 +60,6 @@ class ProjectStateService:
             redis_service = RedisSessionService()
             session = redis_service.get_session(session_id)
             if session:
-                # O campo 'reports' deve ser retornado integralmente do Redis
                 return session.to_project_state()
         except Exception as e:
             logger.error(f"Erro ao buscar estado do Redis para session_id={session_id}: {e}")
