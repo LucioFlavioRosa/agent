@@ -10,10 +10,12 @@ logger = logging.getLogger("webhooks_api")
 @router.post("/mcp", status_code=200, tags=["Webhooks"])
 async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
     redis_service = RedisSessionService()
+    logger.info(f"Recebido webhook MCP para job_id: {payload.job_id}, status: {payload.status}")
     try:
+        logger.info(f"Buscando sessão associada ao job_id: {payload.job_id}")
         session = redis_service.get_session_by_job_id(payload.job_id)
         if not session:
-            logger.error(f"Webhook recebido para job_id não encontrado: {payload.job_id}")
+            logger.error(f"Webhook recebido para job_id não encontrado: {payload.job_id}. Estado do Redis pode estar inconsistente.")
             raise HTTPException(status_code=404, detail=f"Sessão não encontrada para job_id: {payload.job_id}")
         analysis_type = getattr(session, "analysis_type", None)
         if payload.status in {"in_progress", "done"}:
