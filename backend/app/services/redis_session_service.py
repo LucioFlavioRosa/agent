@@ -124,15 +124,8 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        reports = {}
-        if "reports" in project_state and isinstance(project_state["reports"], dict):
-            reports.update(project_state["reports"])
-        legacy_fields = [
-            "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
-        ]
-        for field in legacy_fields:
-            if field in project_state and project_state[field] is not None:
-                reports[field] = project_state[field]
+        # Copia o campo 'reports' integralmente do estado, sem merge com campos legados
+        reports = project_state.get("reports", {})
         session_data["reports"] = reports
         session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
         session_data["docx_files"] = project_state.get("docx_files", [])
