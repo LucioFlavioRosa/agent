@@ -3,8 +3,10 @@ from pydantic import BaseModel
 from typing import Any, Dict
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
+import logging
 
 router = APIRouter()
+logger = logging.getLogger("session_api")
 
 class UpdateReportRequest(BaseModel):
     report_type: str
@@ -23,8 +25,12 @@ def get_session_reports(session_id: str):
 def update_session_report(session_id: str, req: UpdateReportRequest):
     redis_service = RedisSessionService()
     try:
-        redis_service.update_report(session_id, req.report_type, req.report_data)
+        logger.info(f"Atualizando relatório '{req.report_type}' na sessão {session_id} via substituição total da chave no dicionário reports.")
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(redis_service.update_report(session_id, req.report_type, req.report_data))
         redis_service.update_session_on_state_change(session_id, {})
+        logger.info(f"Relatório '{req.report_type}' atualizado para sessão {session_id}.")
         return {"status": "ok"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao atualizar relatório: {e}")
