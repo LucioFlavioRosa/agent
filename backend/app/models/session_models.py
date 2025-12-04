@@ -22,7 +22,6 @@ class SessionData(BaseModel):
     extracted_text: Optional[str] = Field(default=None)
     project_id: Optional[str] = Field(default=None)
     reports: Dict[str, Any] = Field(default_factory=dict)
-    last_mcp_job_id: Optional[str] = Field(default=None)
 
     def to_project_state(self) -> Dict[str, Any]:
         return {
@@ -36,7 +35,7 @@ class SessionData(BaseModel):
             "extracted_text": self.extracted_text,
             "project_id": self.project_id,
             "reports": self.reports,
-            "last_mcp_job_id": self.last_mcp_job_id
+            "session_id": self.session_id
         }
 
     @classmethod
@@ -53,6 +52,5 @@ class SessionData(BaseModel):
             comentario_usuario=state.get("comentario_usuario"),
             extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
-            reports=state.get("reports", {}),
-            last_mcp_job_id=state.get("last_mcp_job_id")
+            reports=state.get("reports", {})
         )
