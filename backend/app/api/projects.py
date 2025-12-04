@@ -16,10 +16,21 @@ async def check_project(
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Verificando existência do projeto '{projeto}' para usuario_executor='{usuario_executor}'")
     try:
+        from backend.app.services.redis_session_service import RedisSessionService
+        redis_service = RedisSessionService()
+        session = redis_service.get_session_by_project(usuario_executor, projeto)
+        if session:
+            session_id = session.session_id
+            state = await ProjectStateService.load_latest_state_from_redis(session_id)
+            if state:
+                state.pop("analysis_name", None)
+                logger.info(f"Projeto '{projeto}' encontrado no Redis para usuario_executor='{usuario_executor}'. Estado retornado.")
+                project_id = state.get("project_id")
+                return {"exists": True, "state": {**state, "project_id": project_id}}
         state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
         if state:
             state.pop("analysis_name", None)
-            logger.info(f"Projeto '{projeto}' encontrado para usuario_executor='{usuario_executor}'. Estado retornado.")
+            logger.info(f"Projeto '{projeto}' encontrado no Blob Storage para usuario_executor='{usuario_executor}'. Estado retornado.")
             project_id = state.get("project_id")
             return {"exists": True, "state": {**state, "project_id": project_id}}
         else:
