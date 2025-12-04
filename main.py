@@ -41,9 +41,9 @@ DATA_CRIACAO = {
 # Payload para: refinamento_epicos_azure_devops
 DATA_REFINAMENTO = {
     "epicos_report": [
-        {"id": 1, "titulo": "Autenticação Azure AD_eeeee", "descricao": "Implementar login seguro com OAuth2. NONO"},
-        {"id": 2, "titulo": "Processamento de Arquivos_eeeeee", "descricao": "Ler e extrair texto de DOCX. NONO"},
-        {"id": 3, "titulo": "Dashboard de Métricas_eeeeeee", "descricao": "Visualizar status dos projetos. NONO"}
+        {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
+        {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
+        {"id": 3, "titulo": "Dashboard de Métricas refinados", "descricao": "Visualizar status dos projetos. NONO"}
     ]
 }
 
