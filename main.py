@@ -34,7 +34,8 @@ class FakeMCPStartPayload(BaseModel):
 DATA_CRIACAO = {
     "epicos_report": {
         "epicos": [
-            {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2."},
+            {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2.", 
+             "tempo estimado": "2 sprint", "criterios de aceite": "eu preciso fazer esse login de qualquer maquina"},
             {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX."},
             {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos."}
         ]
