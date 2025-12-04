@@ -60,7 +60,8 @@ class MCPClientService:
                     logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
                 response.raise_for_status()
                 data = response.json()
-                # Espera-se que o MCP retorne status e session_id
+                if data.get('session_id') != payload.session_id:
+                    raise Exception(f"O MCP retornou um session_id diferente do enviado. Esperado: {payload.session_id}, Recebido: {data.get('session_id')}")
                 return MCPStartAnalysisResponse(**data)
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
