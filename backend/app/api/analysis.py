@@ -16,7 +16,6 @@ router = APIRouter()
 logger = logging.getLogger("analysis_api")
 
 class StartAnalysisResponse(BaseModel):
-    job_id: str
     message: str
     session_id: str
     project_id: Optional[str] = None
@@ -36,16 +35,19 @@ async def start_analysis(
     comentario_usuario: Optional[str] = Form(None),
     project_id: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    session_id: Optional[str] = Form(None)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
     project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
-    session_id = None
     texto_extraido = None
     blob_url = None
     project_id_final = _get_or_create_project_id(project_state, project_id)
+    # session_id deve ser recebido do frontend ou gerado no login
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id é obrigatório para iniciar análise.")
     if file is not None:
         try:
             blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
@@ -57,13 +59,14 @@ async def start_analysis(
         except Exception as e:
             logger.error(f"Erro inesperado no Blob Storage ou extração: {e}")
             raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo ou extrair texto: {str(e)}")
-        session_id = redis_service.create_session(
+        redis_service.create_session(
             usuario_executor,
             projeto,
             analysis_type,
             comentario_usuario=comentario_usuario,
             extracted_text=texto_extraido,
-            project_id=project_id_final
+            project_id=project_id_final,
+            session_id=session_id
         )
         try:
             redis_service.add_docx_file(session_id, blob_url)
@@ -75,11 +78,12 @@ async def start_analysis(
             logger.error(f"Erro ao salvar texto extraído na sessão: {e}")
     else:
         if project_state:
-            session_id = redis_service.restore_session_from_state(
+            redis_service.restore_session_from_state(
                 usuario_executor,
                 projeto,
                 analysis_type,
-                project_state
+                project_state,
+                session_id=session_id
             )
             try:
                 session = redis_service.get_session(session_id)
@@ -101,14 +105,10 @@ async def start_analysis(
     mcp_client = MCPClientService()
     try:
         mcp_response = await mcp_client.start_analysis(mcp_payload)
-        job_id = mcp_response.job_id
-        redis_service.update_session_on_state_change(session_id, {"last_mcp_job_id": job_id})
-        redis_service.update_session_job_id(session_id, job_id)
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
     return StartAnalysisResponse(
-        job_id=job_id,
         message="Análise solicitada com sucesso ao agente.",
         session_id=session_id,
         project_id=project_id_final
