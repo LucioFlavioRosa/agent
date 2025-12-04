@@ -62,10 +62,34 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (`list_user_projects`)
 
 ### 2. Verificação de Projeto Existente
-- O frontend chama `/projects/check` para saber se o projeto existe. Se existir, retorna o estado completo do projeto (incluindo `project_id`).
+- O frontend chama `/projects/check` para saber se o projeto existe. O backend busca o estado mais recente do projeto **primeiro no Redis** (sessão ativa), e só faz fallback para o Blob Storage se não encontrar no Redis.
 - Código:
   - `backend/app/api/projects.py` (`/projects/check`)
-  - `backend/app/services/project_state_service.py` (`load_latest_state_from_blob`)
+  - `backend/app/services/redis_session_service.py` (`get_session_by_project`)
+  - `backend/app/services/project_state_service.py` (`load_latest_state_from_redis`, `load_latest_state_from_blob`)
+
+#### Diagrama de Sequência: Consulta de Estado de Projeto
+
+mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant BE as Backend
+    participant RS as RedisSessionService
+    participant PS as ProjectStateService
+    participant BS as Blob Storage
+    FE->>BE: GET /projects/check?projeto=NomeProjeto
+    BE->>RS: get_session_by_project(usuario_executor, projeto)
+    alt Sessão encontrada no Redis
+        RS-->>BE: SessionData
+        BE->>PS: load_latest_state_from_redis(session_id)
+        PS-->>BE: Estado mais recente (do Redis)
+        BE-->>FE: exists: true, state (do Redis)
+    else Sessão não encontrada no Redis
+        BE->>PS: load_latest_state_from_blob(usuario_executor, projeto)
+        PS-->>BE: Estado (do Blob Storage)
+        BE-->>FE: exists: true, state (do Blob Storage)
+    end
+    Note over BE: O campo 'reports' sempre reflete o estado mais recente disponível
 
 ### 3. Início de Análise e Upload de DOCX (Processamento Paralelo)
 - O upload do arquivo DOCX e a extração do texto ocorrem dentro do endpoint `/analysis/start` via multipart/form-data. O backend retorna tanto a URL do arquivo quanto o texto extraído.
@@ -77,7 +101,7 @@ flowchart TD
 ### 4. Criação e Gerenciamento de Sessão no Redis
 - Sessões são criadas e persistidas no Redis, incluindo campos como `comentario_usuario`, `extracted_text`, `project_id`, `docx_files` e `reports`.
 - Código:
-  - `backend/app/services/redis_session_service.py` (`create_session`, `add_docx_file`, `update_session_extracted_text`, `update_report`, `restore_session_from_state`)
+  - `backend/app/services/redis_session_service.py` (`create_session`, `add_docx_file`, `update_session_extracted_text`, `update_report`, `restore_session_from_state`, `get_session_by_project`)
   - `backend/app/models/session_models.py` (`SessionData`)
 
 ### 5. Salvamento Automático e Periódico de Estado no Blob Storage
@@ -112,27 +136,36 @@ flowchart TD
   - `backend/app/api/webhooks.py` (busca sessão por `job_id` no webhook)
 
 ### 9. Atualização de Relatórios e Propagação de Estado
-- Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage.
-- Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage, garantindo consistência e minimizando perda de dados em caso de falha.
+- Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage **e também mantém o estado mais recente no Redis**.
+- Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
+- O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
 - Código:
   - `backend/app/api/session.py` (`PUT /session/{session_id}/report`)
-  - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`)
-  - `backend/app/api/webhooks.py` (salvamento imediato após webhook)
+  - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`, `get_session_by_project`)
+  - `backend/app/api/projects.py` (consulta primeiro no Redis, depois no Blob Storage)
+  - `backend/app/services/project_state_service.py` (`load_latest_state_from_redis`, `load_latest_state_from_blob`)
 
-#### Diagrama do Fluxo de Atualização Imediata de Relatório
+#### Diagrama do Fluxo de Consulta de Estado Mais Recente
 
 mermaid
 sequenceDiagram
-    participant MCP as MCP Server
+    participant FE as Frontend
     participant BE as Backend
     participant RS as RedisSessionService
     participant PS as ProjectStateService
     participant BS as Blob Storage
-    MCP->>BE: Webhook (job_id, status, report_type, report_data)
-    BE->>RS: update_report (salva relatório no Redis)
-    RS->>PS: save_state_to_blob (salva estado imediatamente)
-    PS->>BS: Persistência no Blob Storage
-    BE->>BS: (opcional) Salvamento redundante imediato após webhook
+    FE->>BE: GET /projects/check?projeto=NomeProjeto
+    BE->>RS: get_session_by_project(usuario_executor, projeto)
+    alt Sessão encontrada no Redis
+        RS-->>BE: SessionData
+        BE->>PS: load_latest_state_from_redis(session_id)
+        PS-->>BE: Estado mais recente (do Redis)
+        BE-->>FE: exists: true, state (do Redis)
+    else Sessão não encontrada no Redis
+        BE->>PS: load_latest_state_from_blob(usuario_executor, projeto)
+        PS-->>BE: Estado (do Blob Storage)
+        BE-->>FE: exists: true, state (do Blob Storage)
+    end
 
 ---
 
@@ -166,8 +199,17 @@ sequenceDiagram
 mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check
-    BE->>BS: Busca estado
-    BE-->>FE: exists: true, state
+    BE->>RS: get_session_by_project(usuario_executor, projeto)
+    alt Sessão encontrada no Redis
+        RS-->>BE: SessionData
+        BE->>PS: load_latest_state_from_redis(session_id)
+        PS-->>BE: Estado mais recente (do Redis)
+        BE-->>FE: exists: true, state (do Redis)
+    else Sessão não encontrada no Redis
+        BE->>PS: load_latest_state_from_blob(usuario_executor, projeto)
+        PS-->>BE: Estado (do Blob Storage)
+        BE-->>FE: exists: true, state (do Blob Storage)
+    end
     FE->>BE: POST /analysis/start (sem upload)
     BE->>RS: Restaura sessão do estado
     BE->>MCP: Envia payload (texto extraído do estado)
@@ -266,4 +308,5 @@ flowchart LR
 - O sistema pode operar em modo de teste com autenticação mockada (`SKIP_AUTH_FOR_TESTING`), útil para desenvolvimento local.
 - Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 - Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
-- Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage, garantindo consistência e minimizando perda de dados em caso de falha.
+- Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
+- O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
