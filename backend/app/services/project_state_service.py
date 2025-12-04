@@ -42,7 +42,6 @@ class ProjectStateService:
             reverse=True
         )
         if session_id:
-            # Filtra blobs pelo session_id
             blobs_sorted = [b for b in blobs_sorted if f"_{session_id}_" in b.name]
         if not blobs_sorted:
             logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}, session_id={session_id}")
