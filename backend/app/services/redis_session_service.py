@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
 import logging
+from backend.app.services.project_state_service import ProjectStateService
 
 class RedisSessionService:
     def __init__(self):
@@ -104,12 +105,15 @@ class RedisSessionService:
             report_field = f"{report_type}_report"
         if "reports" not in session_data or not isinstance(session_data["reports"], dict):
             session_data["reports"] = {}
+        self.logger.info(f"[update_report] Antes da atualização: session_id={session_id}, reports={json.dumps(session_data['reports'], ensure_ascii=False)}")
         session_data["reports"][report_field] = report_data
+        self.logger.info(f"[update_report] Após atualização: session_id={session_id}, reports={json.dumps(session_data['reports'], ensure_ascii=False)}")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         try:
-            from backend.app.services.project_state_service import ProjectStateService
             session_obj = SessionData(**session_data)
+            self.logger.info(f"[update_report] Salvando estado no Blob Storage imediatamente após atualização do relatório. session_id={session_id}, reports={json.dumps(session_data['reports'], ensure_ascii=False)}")
             await ProjectStateService.save_state_to_blob(session_obj)
+            self.logger.info(f"[update_report] Estado salvo no Blob Storage para session_id={session_id}")
         except Exception as e:
             self.logger.error(f"Erro ao salvar estado imediatamente após update_report: {e}")
 
@@ -124,7 +128,6 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        # Copia o campo 'reports' integralmente do estado, sem merge com campos legados
         reports = project_state.get("reports", {})
         session_data["reports"] = reports
         session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
