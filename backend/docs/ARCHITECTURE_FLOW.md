@@ -40,9 +40,9 @@ flowchart TD
     AA -->|Início de Análise (inclui upload DOCX)| AE
     AE -->|Extrai Texto| AA
     AA -->|Cria Sessão| AD
-    AA -->|Envia para MCP| AF
-    AF -->|Job ID| AA
-    AF -->|Webhooks Progresso/Conclusão| AA
+    AA -->|Envia para MCP (sempre com session_id)| AF
+    AF -->|session_id| AA
+    AF -->|Webhooks Progresso/Conclusão (session_id)| AA
     AA -->|Atualiza Relatórios| AD
     AD -->|Salva Estado| AE
     AG -->|Salvamento Periódico| AE
@@ -55,6 +55,7 @@ flowchart TD
 
 ### 1. Login e Autenticação via Azure AD
 - O frontend envia o token JWT via header `Authorization`. O backend valida o token, extrai o `usuario_executor` e retorna a lista de projetos do usuário.
+- O backend gera um novo `session_id` a cada login e retorna ao frontend.
 - Código:
   - `backend/app/api/auth.py` (`POST /auth/login`)
   - `backend/app/middleware/auth_middleware.py` (`get_current_user`)
@@ -93,6 +94,7 @@ sequenceDiagram
 
 ### 3. Início de Análise e Upload de DOCX (Processamento Paralelo)
 - O upload do arquivo DOCX e a extração do texto ocorrem dentro do endpoint `/analysis/start` via multipart/form-data. O backend retorna tanto a URL do arquivo quanto o texto extraído.
+- O backend sempre envia o `session_id` para o MCP e espera que o MCP retorne o mesmo `session_id` em todas as respostas e webhooks.
 - Código:
   - `backend/app/api/analysis.py` (`/analysis/start`)
   - `backend/app/services/blob_storage_service.py` (`upload_and_extract_docx`)
@@ -100,12 +102,14 @@ sequenceDiagram
 
 ### 4. Criação e Gerenciamento de Sessão no Redis
 - Sessões são criadas e persistidas no Redis, incluindo campos como `comentario_usuario`, `extracted_text`, `project_id`, `docx_files` e `reports`.
+- O único identificador de sessão é o `session_id`, gerado no login.
 - Código:
   - `backend/app/services/redis_session_service.py` (`create_session`, `add_docx_file`, `update_session_extracted_text`, `update_report`, `restore_session_from_state`, `get_session_by_project`)
   - `backend/app/models/session_models.py` (`SessionData`)
 
 ### 5. Salvamento Automático e Periódico de Estado no Blob Storage
 - Estados de sessão/projeto são salvos periodicamente no Blob Storage via `BackgroundStateSaver`. Mudanças em relatórios ou estado acionam o salvamento automático.
+- Cada novo estado é salvo como um novo arquivo, nunca sobrescrevendo o anterior.
 - Código:
   - `backend/app/services/background_state_saver.py` (`schedule_periodic_save`)
   - `backend/app/services/project_state_service.py` (`save_state_to_blob`)
@@ -126,14 +130,14 @@ sequenceDiagram
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 ### 8. Comunicação Backend ↔ MCP (Incluindo Webhooks)
-- O backend envia payloads para o MCP (sempre com texto extraído, nunca URL). MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam relatórios na sessão Redis.
-- Persistência do job_id: Após receber o `job_id` do MCP no endpoint `/analysis/start`, o backend persiste imediatamente a relação `job_id -> session_id` no Redis, garantindo que, quando o webhook do MCP chegar, a sessão possa ser encontrada rapidamente usando o `job_id`.
-- Busca do job_id no webhook: O endpoint `/webhooks/mcp` recebe o webhook do MCP, busca a sessão correspondente usando o `job_id` persistido no Redis, e atualiza os relatórios da sessão. Se o `job_id` não for encontrado, retorna 404 e loga o erro detalhadamente.
+- O backend envia payloads para o MCP (sempre com texto extraído, nunca URL). O campo `session_id` é sempre enviado e deve ser retornado pelo MCP em todas as respostas e webhooks.
+- O backend nunca espera que o MCP gere um identificador próprio.
+- Persistência do session_id: O session_id é gerado no login e usado em todas as etapas.
+- Busca do estado: Sempre que for buscar o estado mais atual de uma sessão, utiliza-se o session_id e pega-se o arquivo mais recente (por timestamp) no Blob Storage.
 - Código:
   - `backend/app/services/mcp_client_service.py` (`start_analysis`)
-  - `backend/app/services/redis_session_service.py` (`update_session_job_id`, `get_session_by_job_id`)
-  - `backend/app/api/analysis.py` (chama `update_session_job_id` após início da análise)
-  - `backend/app/api/webhooks.py` (busca sessão por `job_id` no webhook)
+  - `backend/app/api/analysis.py` (envio do session_id ao MCP)
+  - `backend/app/api/webhooks.py` (busca sessão por session_id no webhook)
 
 ### 9. Atualização de Relatórios e Propagação de Estado
 - Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage **e também mantém o estado mais recente no Redis**.
@@ -183,16 +187,15 @@ sequenceDiagram
     FE->>BE: POST /auth/login (token)
     BE->>KV: Carrega segredos
     BE->>BS: Lista projetos
-    BE-->>FE: Lista de projetos
+    BE-->>FE: Lista de projetos + session_id
     FE->>BE: POST /analysis/start (arquivo, projeto, analysis_type, ...)
     BE->>BS: Salva arquivo (em paralelo)
     BE->>BE: Extrai texto (em paralelo)
-    BE->>RS: Cria sessão
-    BE->>MCP: Envia payload (texto extraído)
-    MCP-->>BE: job_id
-    BE->>RS: Atualiza sessão (job_id) e persiste relação job_id -> session_id no Redis
-    BE->>BS: Salva estado inicial
-    BE-->>FE: job_id, session_id, project_id
+    BE->>RS: Cria sessão (usa session_id do login)
+    BE->>MCP: Envia payload (texto extraído, inclui session_id)
+    MCP-->>BE: status, session_id (deve ser o mesmo recebido)
+    BE->>BS: Salva estado inicial (session_id)
+    BE-->>FE: status, session_id
 
 
 ### 2. Fluxo de Projeto Existente
@@ -211,29 +214,28 @@ sequenceDiagram
         BE-->>FE: exists: true, state (do Blob Storage)
     end
     FE->>BE: POST /analysis/start (sem upload)
-    BE->>RS: Restaura sessão do estado
-    BE->>MCP: Envia payload (texto extraído do estado)
-    MCP-->>BE: job_id
-    BE->>RS: Atualiza sessão (job_id) e persiste relação job_id -> session_id no Redis
-    BE->>BS: Salva estado
-    BE-->>FE: job_id, session_id, project_id
+    BE->>RS: Restaura sessão do estado (usa session_id)
+    BE->>MCP: Envia payload (texto extraído do estado, inclui session_id)
+    MCP-->>BE: status, session_id (deve ser o mesmo recebido)
+    BE->>BS: Salva estado (session_id)
+    BE-->>FE: status, session_id
 
 
 ### 3. Fluxo de Atualização de Relatório
 mermaid
 sequenceDiagram
-    MCP->>BE: Webhook (job_id, status, report_type, report_data)
+    MCP->>BE: Webhook (session_id, status, report_type, report_data)
     BE->>RS: update_report (salva relatório no Redis)
     RS->>PS: save_state_to_blob (salva estado imediatamente)
-    PS->>BS: Persistência no Blob Storage
+    PS->>BS: Persistência no Blob Storage (novo arquivo, nunca sobrescreve)
     BE->>BS: (opcional) Salvamento redundante imediato após webhook
 
 
 ### 4. Fluxo de Erro e Recuperação
 mermaid
 sequenceDiagram
-    BE->>MCP: start_analysis
-    MCP-->>BE: status: error, error_message
+    BE->>MCP: start_analysis (envia session_id)
+    MCP-->>BE: status: error, error_message, session_id
     BE-->>FE: 502 Bad Gateway, detail
     BE->>KV: get_secret
     KV-->>BE: erro
@@ -307,6 +309,9 @@ flowchart LR
 - Para ambientes com Redis em subrede privada, o App Service deve estar integrado à mesma VNET.
 - O sistema pode operar em modo de teste com autenticação mockada (`SKIP_AUTH_FOR_TESTING`), útil para desenvolvimento local.
 - Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
-- Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
+- O único identificador usado em toda a comunicação é o `session_id`, gerado no login e persistido em todas as etapas do fluxo.
+- O MCP nunca gera nenhum identificador próprio: sempre recebe e retorna o `session_id` enviado pelo backend.
+- Quando for buscar o estado mais atual de uma sessão, deve-se usar o `session_id` e pegar o estado mais recente (por timestamp, se houver múltiplos arquivos no Blob).
+- O backend nunca atualiza um registro de sessão já salvo: sempre cria um novo estado com os dados atualizados da sessão.
 - Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
 - O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
