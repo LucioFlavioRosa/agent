@@ -1,56 +1,17 @@
 {
+  "_doc": "Configuração dinâmica dos agentes MCP.\n\nIMPORTANTE: O único identificador utilizado em toda a comunicação Backend ↔ MCP é o session_id. O MCP NUNCA deve gerar nenhum id próprio. O Backend sempre envia o session_id para o MCP (no payload de start_analysis) e espera que o MCP retorne exatamente o mesmo session_id em todas as respostas e webhooks.\n\nO campo job_id foi removido de todos os fluxos. O session_id é gerado apenas no momento do login e deve ser persistido e utilizado em todas as etapas (start_analysis, webhooks, etc).\n\nQuando o Backend for buscar o estado mais atual de uma sessão, deve usar o session_id e pegar o arquivo mais recente (por timestamp, se houver múltiplos arquivos no Blob). Nunca atualizamos um registro de sessão já salvo: sempre criamos um novo estado com os dados atualizados da sessão.\n\nExemplo de payload para MCP:\n{\n  \"session_id\": \"session-uuid-123\",\n  ...\n}\n\nExemplo de webhook do MCP para o Backend:\n{\n  \"session_id\": \"session-uuid-123\",\n  ...\n}\n\nO campo session_id deve ser sempre retornado pelo MCP exatamente igual ao recebido.\n",
   "agents": {
     "criacao_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
+      "agent_name": "Epicos Azure DevOps",
+      "mcp_url": "https://mcp-epicos.azurewebsites.net",
       "report_fields": ["epicos_report"],
-      "report_mapping": {
-        "epicos": "epicos_report"
-      }
+      "report_mapping": {"epicos": "epicos_report"}
     },
-    "refinamento_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["epicos_report"],
-      "report_mapping": {
-        "epicos": "epicos_report"
-      }
-    },
-    "criacao_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
+    "features_generation": {
+      "agent_name": "Features Generator",
+      "mcp_url": "https://mcp-features.azurewebsites.net",
       "report_fields": ["features_report"],
-      "report_mapping": {
-        "features": "features_report"
-      }
-    },
-    "refinamento_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["features_report"],
-      "report_mapping": {
-        "features": "features_report"
-      }
-    },
-    "criacao_planejamento_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["times_descricao_report", "alocacao_times_report", "premissas_riscos_report"],
-      "report_mapping": {
-        "times": "times_descricao_report",
-        "alocacao": "alocacao_times_report",
-        "premissas": "premissas_riscos_report"
-      }
-    },
-    "refinamento_planejamento_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["times_descricao_report", "alocacao_times_report", "premissas_riscos_report"],
-      "report_mapping": {
-        "times": "times_descricao_report",
-        "alocacao": "alocacao_times_report",
-        "premissas": "premissas_riscos_report"
-      }
+      "report_mapping": {"features": "features_report"}
     }
   }
 }
