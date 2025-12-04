@@ -90,10 +90,8 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        # Determina analysis_type
         analysis_type_in_session = session_data.get("analysis_type")
         analysis_type = analysis_type or analysis_type_in_session
-        # Busca o campo de relatório correto via mcp_config_registry
         report_field = None
         if hasattr(settings, "mcp_config_registry") and settings.mcp_config_registry and hasattr(settings.mcp_config_registry, "agents") and analysis_type in settings.mcp_config_registry.agents:
             agent_cfg = settings.mcp_config_registry.agents[analysis_type]
@@ -116,12 +114,9 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        # Migração dos campos antigos para o novo campo 'reports'
         reports = {}
-        # Se já existir 'reports' no project_state, utiliza
         if "reports" in project_state and isinstance(project_state["reports"], dict):
             reports.update(project_state["reports"])
-        # Migra campos legados se existirem
         legacy_fields = [
             "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
         ]
@@ -169,3 +164,20 @@ class RedisSessionService:
         session_data["last_modified"] = datetime.utcnow().isoformat()
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         BackgroundStateSaver.schedule_periodic_save(session_id)
+
+    def get_session_by_job_id(self, job_id: str) -> Optional[SessionData]:
+        pattern = "session:*"
+        for key in self.redis_client.scan_iter(match=pattern):
+            session_json = self.redis_client.get(key)
+            if not session_json:
+                continue
+            try:
+                session_data = self._deserialize_session(session_json)
+                last_mcp_job_id = session_data.get("last_mcp_job_id")
+                if last_mcp_job_id == job_id:
+                    steps = [SessionStep(**step) for step in session_data.get("steps", [])]
+                    session_data["steps"] = steps
+                    return SessionData(**session_data)
+            except Exception:
+                continue
+        return None
