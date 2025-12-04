@@ -16,7 +16,8 @@ Content-Type: application/json
 
 **Resposta:**
 
-```json{ 
+```json
+{ 
   "user_info": ```json{ 
     "usuario_executor": "user@example.com",
     "sub": "uuid",
@@ -33,7 +34,8 @@ Content-Type: application/json
       "project_id": "projeto-uuid-123"
     }
   ]
-}```
+}
+```
 
 ### 1.2 Verificação de Projeto (GET /projects/check)
 
