@@ -25,12 +25,19 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             if not validate_report_data_structure(payload.report_type, payload.report_data, analysis_type):
                 logger.error(f"Estrutura de report_data inválida para report_type '{payload.report_type}', analysis_type '{analysis_type}' e job_id '{payload.job_id}'")
                 raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida para report_type '{payload.report_type}' e analysis_type '{analysis_type}'")
-            redis_service.update_report(
+            await redis_service.update_report(
                 session.session_id,
                 payload.report_type,
                 payload.report_data,
                 analysis_type=analysis_type
             )
+            try:
+                session_atualizada = redis_service.get_session(session.session_id)
+                from backend.app.services.project_state_service import ProjectStateService
+                await ProjectStateService.save_state_to_blob(session_atualizada)
+                logger.info(f"Estado salvo imediatamente após atualização de relatório para sessão {session.session_id} (job_id={payload.job_id})")
+            except Exception as e:
+                logger.error(f"Erro ao salvar estado imediato no Blob após webhook MCP: {e}")
             logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (job_id={payload.job_id})")
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
