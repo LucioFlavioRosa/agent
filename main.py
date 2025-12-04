@@ -17,10 +17,10 @@ from backend.app.api.upload import router as upload_router
 from backend.app.api.analysis import router as analysis_router
 from backend.app.api.projects import router as projects_router
 from backend.app.api.session import router as session_router
+from backend.app.api.webhooks import router as webhooks_router
 
 from backend.app.middleware.auth_middleware import get_current_user
 
-# Mantemos override=False para respeitar as variáveis do Azure
 load_dotenv(override=False)
 
 app = FastAPI(
@@ -29,7 +29,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- MOCK DE AUTH (Isso fica, pois facilita o teste do Login) ---
 SKIP_AUTH_FOR_TESTING = True
 
 def _create_mock_user(request: Request) -> dict:
@@ -54,9 +53,7 @@ if SKIP_AUTH_FOR_TESTING:
         return _create_mock_user(request)
     app.dependency_overrides[get_current_user] = mock_get_current_user
     logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação via Header habilitada.")
-# -------------------------------------------------------------
 
-# --- RESTRIÇÃO DE IP ---
 def _extract_client_ip(request: Request) -> str:
     client_ip = request.client.host
     forwarded = request.headers.get("X-Forwarded-For")
@@ -76,8 +73,6 @@ if env_ips_str:
 @app.middleware("http")
 async def ip_restriction_middleware(request: Request, call_next):
     client_ip = _extract_client_ip(request)
-    
-    # Removida a exceção para /fake-mcp, pois a rota não existe mais aqui
     if "*" not in ALLOWED_IPS and client_ip not in ALLOWED_IPS:
         if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
             logging.warning(f"⛔ Acesso negado: IP {client_ip}")
@@ -88,7 +83,6 @@ async def ip_restriction_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-# --- MIDDLEWARES GERAIS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -97,14 +91,13 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# --- ROTAS REAIS ---
 app.include_router(auth_router, prefix="/auth")
 app.include_router(upload_router, prefix="/upload")
 app.include_router(analysis_router, prefix="/analysis")
 app.include_router(projects_router, prefix="/projects")
 app.include_router(session_router, prefix="/session")
+app.include_router(webhooks_router, prefix="/webhooks")
 
-# --- HANDLERS DE ERRO ---
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
@@ -114,7 +107,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     logging.error(f"Erro não tratado: {exc}", exc_info=True)
     return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
 
-# --- CONFIGURAÇÃO DE LOGS ---
 def setup_logging():
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
     logger = logging.getLogger()
@@ -133,7 +125,6 @@ def setup_logging():
     handler.setFormatter(JsonFormatter())
     logger.addHandler(handler)
 
-# --- STARTUP ---
 @app.on_event("startup")
 def on_startup():
     setup_logging()
@@ -145,11 +136,9 @@ def on_startup():
             logging.warning("⚠️ AZURE_STORAGE_CONNECTION_STRING não encontrado. O Upload vai falhar se tentado.")
         else:
             logging.info("✅ Segredos carregados com sucesso.")
-        
         validator = StartupValidator()
         validator.validate_redis_connection()
         if validator.status_report.get('redis', {}).get('status') != 'ok':
             logging.critical(f"Erro crítico Redis: {validator.status_report['redis']['detail']}")
-            
     except Exception as e:
         logging.error(f"⚠️ Aviso de Startup: {str(e)}")
