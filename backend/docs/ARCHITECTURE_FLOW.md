@@ -113,15 +113,26 @@ flowchart TD
 
 ### 9. Atualização de Relatórios e Propagação de Estado
 - Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage.
+- Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage, garantindo consistência e minimizando perda de dados em caso de falha.
 - Código:
   - `backend/app/api/session.py` (`PUT /session/{session_id}/report`)
   - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`)
+  - `backend/app/api/webhooks.py` (salvamento imediato após webhook)
 
-### 10. Fluxo de Erro e Recuperação
-- O sistema lida com falhas do MCP, Key Vault, Redis e Blob Storage, propagando erros padronizados para o frontend.
-- Código:
-  - Handlers de exceção em todos os endpoints
-  - `backend/app/services/startup_validator.py`
+#### Diagrama do Fluxo de Atualização Imediata de Relatório
+
+mermaid
+sequenceDiagram
+    participant MCP as MCP Server
+    participant BE as Backend
+    participant RS as RedisSessionService
+    participant PS as ProjectStateService
+    participant BS as Blob Storage
+    MCP->>BE: Webhook (job_id, status, report_type, report_data)
+    BE->>RS: update_report (salva relatório no Redis)
+    RS->>PS: save_state_to_blob (salva estado imediatamente)
+    PS->>BS: Persistência no Blob Storage
+    BE->>BS: (opcional) Salvamento redundante imediato após webhook
 
 ---
 
@@ -170,9 +181,10 @@ sequenceDiagram
 mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, status, report_type, report_data)
-    BE->>RS: Busca sessão por job_id (usando relação persistida job_id -> session_id)
-    BE->>RS: Atualiza relatório na sessão
-    BE->>BS: Salva estado
+    BE->>RS: update_report (salva relatório no Redis)
+    RS->>PS: save_state_to_blob (salva estado imediatamente)
+    PS->>BS: Persistência no Blob Storage
+    BE->>BS: (opcional) Salvamento redundante imediato após webhook
 
 
 ### 4. Fluxo de Erro e Recuperação
@@ -254,3 +266,4 @@ flowchart LR
 - O sistema pode operar em modo de teste com autenticação mockada (`SKIP_AUTH_FOR_TESTING`), útil para desenvolvimento local.
 - Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 - Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
+- Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage, garantindo consistência e minimizando perda de dados em caso de falha.
