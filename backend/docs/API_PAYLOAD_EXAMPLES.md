@@ -346,8 +346,8 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 
 | analysis_type                  | report_type  | Campo principal em report_data |
 |-------------------------------|--------------|-------------------------------|
-| criacao_epicos_azure_devops    | epicos       | epicos                        |
-| criacao_epicos_azure_devops    | epicos       | epicos                        |
+| criacao_epicos_azure_devops    | epicos       | epicos_report                |
+| refinamento_epicos_azure_devops| epicos       | epicos_report                        |
 
 
 O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeamento acima.
