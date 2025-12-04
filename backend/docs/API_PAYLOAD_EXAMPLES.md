@@ -16,8 +16,8 @@ Content-Type: application/json
 
 **Resposta:**
 
-{
-  "user_info": {
+```json{ 
+  "user_info": ```json{ 
     "usuario_executor": "user@example.com",
     "sub": "uuid",
     "name": "Nome do Usuário",
@@ -25,7 +25,7 @@ Content-Type: application/json
     "roles": ["admin"]
   },
   "projects": [
-    {
+    ```json{ 
       "projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
@@ -34,7 +34,7 @@ Content-Type: application/json
     }
   ]
 }
-
+```
 
 ### 1.2 Verificação de Projeto (GET /projects/check)
 
@@ -46,17 +46,17 @@ Authorization: Bearer <token>
 
 **Resposta (projeto encontrado):**
 
-{
+```json{ 
   "exists": true,
-  "state": {
+  "state": ```json{ 
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": {
-      "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-      "features_report": {"features": [{"id": 1, "nome": "Login"}]}
+    "reports": ```json{ 
+      "epicos_report": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}´´´]}´´´,
+      "features_report": ```json{ "features": [```json{ "id": 1, "nome": "Login"}´´´]}´´´
     },
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
@@ -65,14 +65,14 @@ Authorization: Bearer <token>
     "last_mcp_job_id": "123456"
   }
 }
-
+```
 
 **Resposta (projeto não encontrado):**
 
-{
+```json{ 
   "exists": false
 }
-
+```
 
 ### 1.3 Upload de DOCX (POST /upload/docx)
 
@@ -90,14 +90,14 @@ comentario_usuario=Comentário opcional
 
 **Resposta:**
 
-{
+```json{ 
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid",
   "job_id": "ghijkl-uuid"
 }
-
+```
 
 ### 1.4 Início de Análise (POST /analysis/start)
 
@@ -107,13 +107,13 @@ POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{
+```json{ 
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-
+```
 
 **Requisição (projeto existente, sem novo upload):**
 
@@ -121,27 +121,27 @@ POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{
+```json{ 
   "projeto": "ProjetoExistente",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário sem arquivo.",
   "project_id": "projeto-uuid-123"
 }
-
+```
 
 **Resposta:**
 
-{
+```json{ 
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
 }
-
+```
 
 > **Nota:** Após o início da análise, o backend persiste imediatamente a relação job_id -> session_id no Redis. Isso garante que, quando o webhook do MCP chegar, a sessão possa ser encontrada rapidamente usando o job_id.
 
-### 1.5 Atualização de Relatório (PUT /session/{session_id}/report)
+### 1.5 Atualização de Relatório (PUT /session/```json{ session_id}/report)
 
 **Requisição:**
 
@@ -149,20 +149,20 @@ PUT /session/abcdef-uuid/report HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{
+```json{ 
   "report_type": "epicos",
-  "report_data": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}
+  "report_data": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}]}
 }
-
+```
 
 **Resposta:**
 
-{
+```json{ 
   "status": "ok"
 }
+```
 
-
-### 1.6 Consulta de Relatórios (GET /session/{session_id}/reports)
+### 1.6 Consulta de Relatórios (GET /session/```json{ session_id}/reports)
 
 **Requisição:**
 
@@ -172,11 +172,11 @@ Authorization: Bearer <token>
 
 **Resposta:**
 
-{
-  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-  "features_report": {"features": [{"id": 1, "nome": "Login"}]}
+```json{ 
+  "epicos_report": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}]},
+  "features_report": ```json{ "features": [```json{ "id": 1, "nome": "Login"}]}
 }
-
+```
 
 ---
 
@@ -187,7 +187,7 @@ Authorization: Bearer <token>
 O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o seguinte formato JSON:
 
 
-{
+```json{ 
   "job_id": "<string>",
   "status": "in_progress" | "done" | "error",
   "progress": <opcional, int>,
@@ -196,7 +196,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "error_type": <string, obrigatório quando status="error">,
   "error_message": <string, obrigatório quando status="error">
 }
-
+```
 
 **Campos obrigatórios:**
 - `job_id`: string. Identificador do job retornado pelo backend ao MCP.
@@ -214,105 +214,105 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 #### 2.2.1 Webhook de Progresso (`status: in_progress`)
 
 
-{
+```json{ 
   "job_id": "123456",
   "status": "in_progress",
   "progress": 40,
   "report_type": "epicos",
-  "report_data": {
+  "report_data": ```json{ 
     "epicos": [
-      {"id": 1, "titulo": "Como usuário..."}
+      ```json{ "id": 1, "titulo": "Como usuário..."}
     ]
   }
 }
-
+```
 
 #### 2.2.2 Webhook de Conclusão (`status: done`)
 
 
-{
+```json{ 
   "job_id": "123456",
   "status": "done",
   "report_type": "epicos",
-  "report_data": {
+  "report_data": ```json{ 
     "epicos": [
-      {"id": 1, "titulo": "Como usuário...", "descricao": "..."},
-      {"id": 2, "titulo": "Como admin...", "descricao": "..."}
+      ```json{ "id": 1, "titulo": "Como usuário...", "descricao": "..."},
+      ```json{ "id": 2, "titulo": "Como admin...", "descricao": "..."}
     ]
   }
 }
-
+```
 
 #### 2.2.3 Webhook de Erro (`status: error`)
 
 
-{
+```json{ 
   "job_id": "123456",
   "status": "error",
   "error_type": "timeout",
   "error_message": "Tempo limite excedido ao processar análise."
 }
-
+```
 
 #### 2.2.4 Webhook para Features (`status: done`)
 
 
-{
+```json{ 
   "job_id": "7891011",
   "status": "done",
   "report_type": "features",
-  "report_data": {
+  "report_data": ```json{ 
     "features": [
-      {"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
+      ```json{ "id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
     ]
   }
 }
-
+```
 
 #### 2.2.5 Webhook para Tech Debt (`status: done`)
 
 
-{
+```json{ 
   "job_id": "555777",
   "status": "done",
   "report_type": "tech_debt",
-  "report_data": {
+  "report_data": ```json{ 
     "tech_debt": [
-      {"id": 1, "descricao": "Código duplicado"}
+      ```json{ "id": 1, "descricao": "Código duplicado"}
     ]
   }
 }
-
+```
 
 ### 2.3 Estrutura de report_data Esperada por Tipo
 
 - Para `report_type: "epicos"`:
   - `report_data` deve conter a chave `epicos` com uma lista de épicos:
     
-    {
+    ```json{ 
       "epicos": [
-        {"id": 1, "titulo": "Como usuário...", "descricao": "..."}
+        ```json{ "id": 1, "titulo": "Como usuário...", "descricao": "..."}
       ]
     }
-    
+    ```
 - Para `report_type: "features"`:
   - `report_data` deve conter a chave `features` com uma lista de features:
     
-    {
+    ```json{ 
       "features": [
-        {"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
+        ```json{ "id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
       ]
     }
-    
+    ```
 - Para `report_type: "tech_debt"`:
   - `report_data` deve conter a chave `tech_debt` com uma lista de itens de débito técnico:
     
-    {
+    ```json{ 
       "tech_debt": [
-        {"id": 1, "descricao": "Código duplicado"}
+        ```json{ "id": 1, "descricao": "Código duplicado"}
       ]
     }
-    
+    ```
 
 ### 2.4 Regras Importantes para o MCP
 
@@ -327,17 +327,17 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 ### 2.5 Exemplo de Webhook Inválido (Será Rejeitado)
 
 
-{
+```json{ 
   "job_id": "123456",
   "status": "done",
   "report_type": "epicos",
-  "report_data": {
+  "report_data": ```json{ 
     "errado": [
-      {"id": 1, "titulo": "Como usuário..."}
+      ```json{ "id": 1, "titulo": "Como usuário..."}
     ]
   }
 }
-
+```
 
 **Motivo:** O campo esperado em `report_data` para `report_type: "epicos"` é `epicos`, não `errado`.
 
@@ -346,8 +346,8 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 | analysis_type                  | report_type  | Campo principal em report_data |
 |-------------------------------|--------------|-------------------------------|
 | criacao_epicos_azure_devops    | epicos       | epicos                        |
-| features_generation            | features     | features                      |
-| tech_debt_analysis             | tech_debt    | tech_debt                     |
+| criacao_epicos_azure_devops    | epicos       | epicos                        |
+
 
 O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeamento acima.
 
@@ -358,47 +358,47 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
 ### 3.1 /analysis/start
 **Sucesso:**
 
-{
+```json{ 
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
 }
-
+```
 **Erro:**
 
-{
+```json{ 
   "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
 }
+```
 
-
-### 3.2 /session/{session_id}/reports
+### 3.2 /session/```json{ session_id}/reports
 **Sucesso:**
 
-{
-  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]},
-  "features_report": {"features": [{"id": 1, "nome": "Login"}]}
+```json{ 
+  "epicos_report": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}]},
+  "features_report": ```json{ "features": [```json{ "id": 1, "nome": "Login"}]}
 }
-
+```
 **Erro:**
 
-{
+```json{ 
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 
 ### 3.3 /projects/check
 **Projeto encontrado:**
 
-{
+```json{ 
   "exists": true,
-  "state": {
+  "state": ```json{ 
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": {"epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}},
+    "reports": ```json{ "epicos_report": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}]}},
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
@@ -406,19 +406,19 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
     "last_mcp_job_id": "123456"
   }
 }
-
+```
 **Projeto não encontrado:**
 
-{
+```json{ 
   "exists": false
 }
-
+```
 
 ### 3.4 /auth/login
 **Sucesso:**
 
-{
-  "user_info": {
+```json{ 
+  "user_info": ```json{ 
     "usuario_executor": "user@example.com",
     "sub": "uuid",
     "name": "Nome do Usuário",
@@ -426,7 +426,7 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
     "roles": ["admin"]
   },
   "projects": [
-    {
+    ```json{ 
       "projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
@@ -435,84 +435,84 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
     }
   ]
 }
-
+```
 **Erro:**
 
-{
+```json{ 
   "detail": "Usuário não autenticado."
 }
-
+```
 
 ### 3.5 /upload/docx
 **Sucesso:**
 
-{
+```json{ 
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid",
   "job_id": "ghijkl-uuid"
 }
+```
 
-
-### 3.6 /session/{session_id}/report (atualização de relatório)
+### 3.6 /session/```json{ session_id}/report (atualização de relatório)
 **Sucesso:**
 
-{
+```json{ 
   "status": "ok"
 }
-
+```
 **Erro:**
 
-{
+```json{ 
   "detail": "Erro ao atualizar relatório: ..."
 }
+```
 
-
-### 3.7 /session/{session_id}/save-state
+### 3.7 /session/```json{ session_id}/save-state
 **Sucesso:**
 
-{
+```json{ 
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
 }
-
+```
 **Erro:**
 
-{
+```json{ 
   "detail": "Erro ao salvar estado: ..."
 }
+```
 
-
-### 3.8 /session/{session_id}/docx-files
+### 3.8 /session/```json{ session_id}/docx-files
 **Sucesso:**
 
-{
+```json{ 
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
   ]
 }
-
+```
 **Erro:**
 
-{
+```json{ 
   "detail": "Sessão não encontrada: ..."
 }
-
+```
 ---
 
 ## 4. Exemplos de Respostas de Erro (Backend → Frontend)
 
 | Código | Cenário | Exemplo |
 |--------|---------|---------|
-| 401 | Autenticação inválida | `{ "detail": "Cabeçalho Authorization ausente." }` |
-| 403 | IP não autorizado | `{ "detail": "Acesso negado. IP 200.100.50.25 não autorizado." }` |
-| 400 | Payload inválido | `{ "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios." }` |
-| 502 | Falha comunicação MCP | `{ "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): ..." }` |
-| 504 | Timeout MCP | `{ "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise." }` |
-| 503 | Key Vault indisponível | `{ "detail": "Erro ao carregar segredos do Key Vault na inicialização: ..." }` |
-| 503 | Redis indisponível | `{ "detail": "Erro ao conectar ao Redis (endpoint privado): ..." }` |
-| 503 | Blob Storage indisponível | `{ "detail": "Erro ao conectar ao Blob Storage: ..." }` |
-| 500 | Erro interno | `{ "detail": "Erro interno do servidor." }` |
+| 401 | Autenticação inválida | ````json{  "detail": "Cabeçalho Authorization ausente." }` |
+| 403 | IP não autorizado | ````json{  "detail": "Acesso negado. IP 200.100.50.25 não autorizado." }` |
+| 400 | Payload inválido | ````json{  "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios." }` |
+| 502 | Falha comunicação MCP | ````json{  "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): ..." }` |
+| 504 | Timeout MCP | ````json{  "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise." }` |
+| 503 | Key Vault indisponível | ````json{  "detail": "Erro ao carregar segredos do Key Vault na inicialização: ..." }` |
+| 503 | Redis indisponível | ````json{  "detail": "Erro ao conectar ao Redis (endpoint privado): ..." }` |
+| 503 | Blob Storage indisponível | ````json{  "detail": "Erro ao conectar ao Blob Storage: ..." }` |
+| 500 | Erro interno | ````json{  "detail": "Erro interno do servidor." }` |
 
 ---
 
@@ -522,15 +522,15 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
 
 POST /auth/login
 Authorization: Bearer <token>
-{}
+```json{ }
 
 Resposta:
 
-{
-  "user_info": {"usuario_executor": "user@example.com", "sub": "uuid", "name": "Nome do Usuário", "email": "user@example.com", "roles": ["admin"]},
-  "projects": [{"projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}]
+```json{ 
+  "user_info": ```json{ "usuario_executor": "user@example.com", "sub": "uuid", "name": "Nome do Usuário", "email": "user@example.com", "roles": ["admin"]},
+  "projects": [```json{ "projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}]
 }
-
+```
 
 ### 2. Verificação de Projeto
 
@@ -539,15 +539,15 @@ Authorization: Bearer <token>
 
 Resposta:
 
-{
+```json{ 
   "exists": true,
-  "state": {
+  "state": ```json{ 
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": {"epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}},
+    "reports": ```json{ "epicos_report": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}]}},
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
@@ -555,7 +555,7 @@ Resposta:
     "last_mcp_job_id": "123456"
   }
 }
-
+```
 
 ### 3. Upload de DOCX
 
@@ -565,58 +565,58 @@ file=<arquivo.docx>&projeto=ProjetoNovo&analysis_type=criacao_epicos_azure_devop
 
 Resposta:
 
-{
+```json{ 
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid",
   "job_id": "ghijkl-uuid"
 }
-
+```
 
 ### 4. Início de Análise
 
 POST /analysis/start
 Authorization: Bearer <token>
-{
+```json{ 
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-
+```
 Resposta:
 
-{
+```json{ 
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
 }
-
+```
 > **Nota:** O backend persiste imediatamente a relação job_id -> session_id no Redis após o início da análise.
 
 
 ### 5. Webhook de Progresso (MCP → Backend)
 
-{
+```json{ 
   "job_id": "123456",
   "status": "in_progress",
   "progress": 50,
   "report_type": "epicos",
-  "report_data": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}
+  "report_data": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}]}
 }
-
+```
 
 ### 6. Webhook de Conclusão (MCP → Backend)
 
-{
+```json{ 
   "job_id": "123456",
   "status": "done",
   "report_type": "epicos",
-  "report_data": {"epicos": [{"id": 1, "titulo": "Como usuário...", "descricao": "..."}]}
+  "report_data": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário...", "descricao": "..."}]}
 }
-
+```
 
 ### 7. Consulta de Relatórios
 
@@ -625,10 +625,10 @@ Authorization: Bearer <token>
 
 Resposta:
 
-{
-  "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}
+```json{ 
+  "epicos_report": ```json{ "epicos": [```json{ "id": 1, "titulo": "Como usuário..."}]}
 }
-
+```
 
 ### 8. Salvamento Manual de Estado
 
@@ -637,10 +637,10 @@ Authorization: Bearer <token>
 
 Resposta:
 
-{
+```json{ 
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
 }
-
+```
 
 ---
 
