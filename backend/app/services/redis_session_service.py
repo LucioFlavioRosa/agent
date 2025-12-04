@@ -28,8 +28,9 @@ class RedisSessionService:
     def _deserialize_session(self, session_json: str) -> dict:
         return json.loads(session_json)
 
-    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None, project_id: Optional[str] = None) -> str:
-        session_id = str(uuid.uuid4())
+    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None, project_id: Optional[str] = None, session_id: Optional[str] = None) -> str:
+        if not session_id:
+            raise ValueError("session_id é obrigatório para criar uma sessão.")
         created_at = datetime.utcnow().isoformat()
         if not project_id:
             project_id = str(uuid.uuid4())
@@ -121,11 +122,11 @@ class RedisSessionService:
         except Exception as e:
             self.logger.error(f"Erro ao salvar estado imediatamente após update_report: {e}")
 
-    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
+    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any], session_id: str) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
         extracted_text = project_state.get("extracted_text")
         project_id = project_state.get("project_id")
-        session_id = self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id)
+        self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id, session_id=session_id)
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
