@@ -11,14 +11,13 @@ class ProjectStateService:
         state = session_data.to_project_state()
         usuario_executor = state.get("usuario_executor")
         projeto = state.get("projeto")
+        session_id = state.get("session_id")
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         blob_folder = f"{usuario_executor}/{projeto}/estados"
-        blob_filename = f"estado_{timestamp}.json"
+        blob_filename = f"estado_{session_id}_{timestamp}.json"
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
-        if hasattr(session_data, "last_mcp_job_id"):
-            state["last_mcp_job_id"] = getattr(session_data, "last_mcp_job_id")
         logger = logging.getLogger("ProjectStateService")
         logger.info(f"[save_state_to_blob] Iniciando persistência no Blob Storage: {blob_path}")
         logger.info(f"[save_state_to_blob] Conteúdo completo do campo 'reports' que será salvo: {json.dumps(state.get('reports', {}), ensure_ascii=False)}")
@@ -28,9 +27,9 @@ class ProjectStateService:
         return blob_client.url
 
     @staticmethod
-    async def load_latest_state_from_blob(usuario_executor: str, projeto: str) -> Optional[Dict[str, Any]]:
+    async def load_latest_state_from_blob(usuario_executor: str, projeto: str, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
-        logger.info(f"Buscando estado para usuario_executor={usuario_executor}, projeto={projeto}")
+        logger.info(f"Buscando estado para usuario_executor={usuario_executor}, projeto={projeto}, session_id={session_id}")
         blob_folder = f"{usuario_executor}/{projeto}/estados"
         _, container_client = _get_blob_clients()
         blobs = list(container_client.list_blobs(name_starts_with=blob_folder+"/"))
@@ -42,14 +41,17 @@ class ProjectStateService:
             key=lambda b: b.name,
             reverse=True
         )
+        if session_id:
+            # Filtra blobs pelo session_id
+            blobs_sorted = [b for b in blobs_sorted if f"_{session_id}_" in b.name]
         if not blobs_sorted:
-            logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}")
+            logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}, session_id={session_id}")
             return None
         latest_blob = blobs_sorted[0]
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
-        logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
+        logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}, session_id={session_id}")
         return state
 
     @staticmethod
@@ -66,8 +68,8 @@ class ProjectStateService:
         return None
 
     @staticmethod
-    async def get_latest_analysis_metadata(usuario_executor: str, projeto: str) -> Dict[str, str]:
-        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
+    async def get_latest_analysis_metadata(usuario_executor: str, projeto: str, session_id: Optional[str] = None) -> Dict[str, str]:
+        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto, session_id=session_id)
         if not state:
             return {}
         analysis_type = state.get("analysis_type")
@@ -102,7 +104,8 @@ class ProjectStateService:
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
-                    "project_id": state.get("project_id")
+                    "project_id": state.get("project_id"),
+                    "session_id": state.get("session_id")
                 }
                 result.append(item)
             return result
