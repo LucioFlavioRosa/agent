@@ -36,7 +36,7 @@ async def start_analysis(
     project_id: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
-    session_id: Optional[str] = Form(None)
+    session_id: str = Form(...)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
@@ -45,7 +45,6 @@ async def start_analysis(
     texto_extraido = None
     blob_url = None
     project_id_final = _get_or_create_project_id(project_state, project_id)
-    # session_id deve ser recebido do frontend ou gerado no login
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id é obrigatório para iniciar análise.")
     if file is not None:
