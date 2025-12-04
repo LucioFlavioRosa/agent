@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, Any, Literal
 
 class MCPWebhookPayload(BaseModel):
-    job_id: str = Field(...)
+    session_id: str = Field(..., description="Identificador único da sessão. Deve ser o mesmo enviado pelo backend ao MCP.")
     status: Literal['in_progress', 'done', 'error'] = Field(...)
     progress: Optional[int] = Field(None)
     report_type: Optional[str] = Field(None)
