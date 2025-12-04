@@ -44,8 +44,7 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
-        if "last_mcp_job_id" in state:
-            state["last_mcp_job_id"] = state["last_mcp_job_id"]
+        # O campo 'reports' deve ser retornado exatamente como está no Blob Storage, sem modificações
         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
         return state
 
@@ -57,6 +56,7 @@ class ProjectStateService:
             redis_service = RedisSessionService()
             session = redis_service.get_session(session_id)
             if session:
+                # O campo 'reports' deve ser retornado integralmente do Redis
                 return session.to_project_state()
         except Exception as e:
             logger.error(f"Erro ao buscar estado do Redis para session_id={session_id}: {e}")
