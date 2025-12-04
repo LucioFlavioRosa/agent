@@ -31,7 +31,7 @@ class FakeMCPStartPayload(BaseModel):
 
 # Payload para: criacao_epicos_azure_devops
 DATA_CRIACAO = {
-    "epicos_report": {"epicos"[
+    "epicos_report": {"epicos":[
         {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2."},
         {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX."},
         {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos."}
@@ -41,7 +41,7 @@ DATA_CRIACAO = {
 
 # Payload para: refinamento_epicos_azure_devops
 DATA_REFINAMENTO = {
-    "epicos_report": {"epicos": {[
+    "epicos_report": {"epicos": [
         {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
         {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
         {"id": 3, "titulo": "Dashboard de Métricas refinados", "descricao": "Visualizar status dos projetos. NONO"}
