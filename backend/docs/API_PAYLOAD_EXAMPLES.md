@@ -30,7 +30,8 @@ Content-Type: application/json
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
       "last_saved_to_blob": "2024-06-01T12:30:00Z",
-      "project_id": "projeto-uuid-123"
+      "project_id": "projeto-uuid-123",
+      "session_id": "session-uuid-123"
     }
   ],
   "session_id": "session-uuid-123"
@@ -69,6 +70,7 @@ Authorization: Bearer <token>
 - O campo `state` sempre reflete o estado mais recente disponível para o projeto, buscando **primeiro no Redis** (sessão ativa) e, se não encontrado, faz fallback para o Blob Storage.
 - O campo `reports` sempre está atualizado conforme o último relatório recebido (via webhook MCP ou atualização manual).
 - Se houver diferença entre o estado do Blob Storage e o Redis, o valor do Redis é priorizado.
+- O identificador único de toda a sessão é sempre o `session_id`, gerado no login e propagado para todas as interações.
 
 **Resposta (projeto não encontrado):**
 
@@ -129,7 +131,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   }
 }
 
-**Nota:** O campo `state` sempre reflete o estado mais recente disponível, buscando primeiro no Redis (sessão ativa), depois no Blob Storage. O campo `reports` está sempre atualizado com o último relatório recebido.
+**Nota:** O campo `state` sempre reflete o estado mais recente disponível, buscando primeiro no Redis (sessão ativa), depois no Blob Storage. O campo `reports` está sempre atualizado com o último relatório recebido. O único identificador usado é o `session_id`.
 
 **Projeto não encontrado:**
 
@@ -147,7 +149,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 - O frontend pode confiar que a consulta ao endpoint `/projects/check` sempre retorna o estado mais atualizado possível.
 - O único identificador usado em toda a comunicação é o `session_id`, gerado no login e persistido em todas as etapas do fluxo.
 - O MCP nunca gera nenhum identificador próprio: sempre recebe e retorna o `session_id` enviado pelo backend.
-- Quando for buscar o estado mais atual de uma sessão, deve-se usar o `session_id` e pegar o estado mais recente (por timestamp, se houver múltiplos arquivos no Blob).
+- Quando for buscar o estado mais atual de uma sessão, deve-se usar o `session_id` e pegar a mais recente (por timestamp, se houver múltiplos arquivos no Blob).
 - O backend nunca atualiza um registro de sessão já salvo: sempre cria um novo estado com os dados atualizados da sessão.
 
 ---
@@ -163,7 +165,7 @@ Resposta:
 
 {
   "user_info": { "usuario_executor": "user@example.com", "sub": "uuid", "name": "Nome do Usuário", "email": "user@example.com", "roles": ["admin"]},
-  "projects": [{ "projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}],
+  "projects": [{ "projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123", "session_id": "session-uuid-123"}],
   "session_id": "session-uuid-123"
 }
 
