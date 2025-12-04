@@ -26,12 +26,14 @@ async def check_project(
                 state.pop("analysis_name", None)
                 logger.info(f"Projeto '{projeto}' encontrado no Redis para usuario_executor='{usuario_executor}'. Estado retornado.")
                 project_id = state.get("project_id")
+                # O campo 'reports' é retornado integralmente, sem modificações
                 return {"exists": True, "state": {**state, "project_id": project_id}}
         state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
         if state:
             state.pop("analysis_name", None)
             logger.info(f"Projeto '{projeto}' encontrado no Blob Storage para usuario_executor='{usuario_executor}'. Estado retornado.")
             project_id = state.get("project_id")
+            # O campo 'reports' é retornado integralmente, sem modificações
             return {"exists": True, "state": {**state, "project_id": project_id}}
         else:
             logger.info(f"Projeto '{projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
