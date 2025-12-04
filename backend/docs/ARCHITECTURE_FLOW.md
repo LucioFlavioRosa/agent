@@ -107,19 +107,22 @@ flowchart TD
 - Busca do job_id no webhook: O endpoint `/webhooks/mcp` recebe o webhook do MCP, busca a sessão correspondente usando o `job_id` persistido no Redis, e atualiza os relatórios da sessão. Se o `job_id` não for encontrado, retorna 404 e loga o erro detalhadamente.
 - Código:
   - `backend/app/services/mcp_client_service.py` (`start_analysis`)
-  - `backend/app/services/redis_session_service.py` (`update_session_job_id`, `get_session_by_job_id`)
+  - `backend/app/services/redis_session_service.py` (`update_session_job_id`, `get_session_by_job_id`, `update_report`)
   - `backend/app/api/analysis.py` (chama `update_session_job_id` após início da análise)
-  - `backend/app/api/webhooks.py` (busca sessão por `job_id` no webhook)
+  - `backend/app/api/webhooks.py` (busca sessão por `job_id` no webhook, valida sobrescrição total do relatório)
 
 ### 9. Atualização de Relatórios e Propagação de Estado
 - Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage.
 - Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage, garantindo consistência e minimizando perda de dados em caso de falha.
+- **Importante:** Sempre que o MCP envia um novo relatório via webhook, o backend sobrescreve completamente o relatório anterior no Redis e no Blob Storage. Nunca ocorre mescla ou manutenção de dados antigos. O campo correspondente em `reports` é removido antes de ser atualizado com o novo valor.
+- Após a atualização, o backend valida explicitamente que o relatório armazenado é idêntico ao recebido do MCP. Se houver divergência, um erro crítico é logado e a operação é abortada.
 - Código:
   - `backend/app/api/session.py` (`PUT /session/{session_id}/report`)
   - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`)
-  - `backend/app/api/webhooks.py` (salvamento imediato após webhook)
+  - `backend/app/api/webhooks.py` (validação pós-update_report)
+  - `backend/app/services/project_state_service.py` (validação antes de salvar no Blob)
 
-#### Diagrama do Fluxo de Atualização Imediata de Relatório
+#### Diagrama do Fluxo de Substituição Completa de Relatório
 
 mermaid
 sequenceDiagram
@@ -129,8 +132,9 @@ sequenceDiagram
     participant PS as ProjectStateService
     participant BS as Blob Storage
     MCP->>BE: Webhook (job_id, status, report_type, report_data)
-    BE->>RS: update_report (salva relatório no Redis)
-    RS->>PS: save_state_to_blob (salva estado imediatamente)
+    BE->>RS: update_report (remove relatório anterior, salva novo)
+    RS->>BE: Validação pós-update_report (busca sessão, compara relatório)
+    RS->>PS: save_state_to_blob (valida consistência, salva estado)
     PS->>BS: Persistência no Blob Storage
     BE->>BS: (opcional) Salvamento redundante imediato após webhook
 
@@ -181,8 +185,9 @@ sequenceDiagram
 mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, status, report_type, report_data)
-    BE->>RS: update_report (salva relatório no Redis)
-    RS->>PS: save_state_to_blob (salva estado imediatamente)
+    BE->>RS: update_report (remove relatório anterior, salva novo)
+    RS->>BE: Validação pós-update_report (busca sessão, compara relatório)
+    RS->>PS: save_state_to_blob (valida consistência, salva estado)
     PS->>BS: Persistência no Blob Storage
     BE->>BS: (opcional) Salvamento redundante imediato após webhook
 
@@ -267,3 +272,4 @@ flowchart LR
 - Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 - Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
 - Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage, garantindo consistência e minimizando perda de dados em caso de falha.
+- **Sempre que o MCP envia um novo relatório, o backend remove o relatório anterior e salva o novo, nunca mesclando ou mantendo dados antigos.**
