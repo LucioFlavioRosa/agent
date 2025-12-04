@@ -33,11 +33,26 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             )
             try:
                 session_atualizada = redis_service.get_session(session.session_id)
-                from backend.app.services.project_state_service import ProjectStateService
-                await ProjectStateService.save_state_to_blob(session_atualizada)
-                logger.info(f"Estado salvo imediatamente após atualização de relatório para sessão {session.session_id} (job_id={payload.job_id})")
+                analysis_type_atualizada = getattr(session_atualizada, "analysis_type", None)
+                report_field = None
+                if hasattr(redis_service, "logger"):
+                    redis_service.logger.debug(f"Validação pós-update_report: session_id={session.session_id}, analysis_type={analysis_type_atualizada}")
+                if hasattr(redis_service, "get_session") and hasattr(session_atualizada, "reports"):
+                    if hasattr(settings, "mcp_config_registry") and settings.mcp_config_registry and hasattr(settings.mcp_config_registry, "agents") and analysis_type_atualizada in settings.mcp_config_registry.agents:
+                        agent_cfg = settings.mcp_config_registry.agents[analysis_type_atualizada]
+                        if hasattr(agent_cfg, "report_mapping") and payload.report_type in agent_cfg.report_mapping:
+                            report_field = agent_cfg.report_mapping[payload.report_type]
+                        else:
+                            report_field = f"{payload.report_type}_report"
+                    else:
+                        report_field = f"{payload.report_type}_report"
+                    valor_armazenado = session_atualizada.reports.get(report_field)
+                    if valor_armazenado != payload.report_data:
+                        logger.critical(f"Falha crítica: O relatório armazenado ('{report_field}') não corresponde ao report_data recebido do MCP para session_id={session.session_id}. Valor armazenado: {valor_armazenado} | Valor recebido: {payload.report_data}")
+                        raise HTTPException(status_code=500, detail="Falha ao atualizar relatório: valor armazenado difere do valor recebido.")
             except Exception as e:
-                logger.error(f"Erro ao salvar estado imediato no Blob após webhook MCP: {e}")
+                logger.error(f"Erro na validação pós-update_report: {e}")
+                raise HTTPException(status_code=500, detail=f"Erro interno ao validar atualização do relatório: {e}")
             logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (job_id={payload.job_id})")
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
