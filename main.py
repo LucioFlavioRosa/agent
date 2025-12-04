@@ -30,11 +30,17 @@ class FakeMCPStartPayload(BaseModel):
 # --- DADOS MOCKADOS (AQUI ESTAVA O SEGREDO) ---
 MOCK_DATA_CONTENT = {
     "epicos": {
-        # ✅ CORREÇÃO: Usando 'epicos_report' conforme validado no teste
         "epicos_report": [
             {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2."},
             {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX."},
             {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos."}
+        ]
+    },
+    "refinamento_epicos": {
+        "epicos_report": [
+            {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2. NONO"},
+            {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX. NONO"},
+            {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos. NONO"}
         ]
     },
     "features": {
@@ -52,6 +58,7 @@ MOCK_DATA_CONTENT = {
 
 ANALYSIS_MAPPING = {
     "criacao_epicos_azure_devops": "epicos",
+    "refinamento_epicos_azure_devops": "refinamento_epicos",
     "features_generation": "features",
     "tech_debt_analysis": "tech_debt"
 }
