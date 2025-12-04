@@ -32,7 +32,8 @@ Content-Type: application/json
       "last_saved_to_blob": "2024-06-01T12:30:00Z",
       "project_id": "projeto-uuid-123"
     }
-  ]
+  ],
+  "session_id": "session-uuid-123"
 }
 
 ### 1.2 Verificação de Projeto (GET /projects/check)
@@ -60,7 +61,7 @@ Authorization: Bearer <token>
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
     "project_id": "projeto-uuid-123",
-    "last_mcp_job_id": "123456"
+    "session_id": "session-uuid-123"
   }
 }
 
@@ -84,7 +85,7 @@ Authorization: Bearer <token>
 O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o seguinte formato JSON:
 
 {
-  "job_id": "<string>",
+  "session_id": "session-uuid-123",
   "status": "in_progress" | "done" | "error",
   "progress": <opcional, int>,
   "report_type": <string, obrigatório quando status="in_progress" ou "done">,
@@ -94,7 +95,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 }
 
 **Campos obrigatórios:**
-- `job_id`: string. Identificador do job retornado pelo backend ao MCP.
+- `session_id`: string. Identificador único da sessão gerado pelo backend no login e enviado ao MCP em todas as comunicações. O MCP deve sempre retornar o mesmo `session_id` recebido.
 - `status`: string. Um dos valores: `in_progress`, `done`, `error`.
 - `progress`: inteiro opcional (0-100), só para status `in_progress`.
 - `report_type`: string. Obrigatório para status `in_progress` ou `done`. Exemplo: `epicos`, `features`, `tech_debt`.
@@ -102,7 +103,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 - `error_type`: string. Obrigatório para status `error`.
 - `error_message`: string. Obrigatório para status `error`.
 
-> **Nota:** O backend busca a sessão correspondente usando o job_id persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
+> **Nota:** O backend busca a sessão correspondente usando o `session_id` persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
 
 ---
 
@@ -124,11 +125,11 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
     "project_id": "projeto-uuid-123",
-    "last_mcp_job_id": "123456"
+    "session_id": "session-uuid-123"
   }
 }
 
-**Nota:** O campo `state` sempre reflete o estado mais recente disponível, buscando primeiro no Redis (sessão ativa) e, se não encontrado, faz fallback para o Blob Storage. O campo `reports` está sempre atualizado com o último relatório recebido.
+**Nota:** O campo `state` sempre reflete o estado mais recente disponível, buscando primeiro no Redis (sessão ativa), depois no Blob Storage. O campo `reports` está sempre atualizado com o último relatório recebido.
 
 **Projeto não encontrado:**
 
@@ -144,6 +145,10 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 - Se a sessão estiver ativa no Redis, o estado retornado é o do Redis (incluindo relatórios mais recentes). Se não houver sessão ativa, o backend retorna o último estado salvo no Blob Storage.
 - O campo `state` nunca mistura dados de fontes diferentes: sempre é 100% do Redis ou 100% do Blob Storage.
 - O frontend pode confiar que a consulta ao endpoint `/projects/check` sempre retorna o estado mais atualizado possível.
+- O único identificador usado em toda a comunicação é o `session_id`, gerado no login e persistido em todas as etapas do fluxo.
+- O MCP nunca gera nenhum identificador próprio: sempre recebe e retorna o `session_id` enviado pelo backend.
+- Quando for buscar o estado mais atual de uma sessão, deve-se usar o `session_id` e pegar o estado mais recente (por timestamp, se houver múltiplos arquivos no Blob).
+- O backend nunca atualiza um registro de sessão já salvo: sempre cria um novo estado com os dados atualizados da sessão.
 
 ---
 
@@ -158,7 +163,8 @@ Resposta:
 
 {
   "user_info": { "usuario_executor": "user@example.com", "sub": "uuid", "name": "Nome do Usuário", "email": "user@example.com", "roles": ["admin"]},
-  "projects": [{ "projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}]
+  "projects": [{ "projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}],
+  "session_id": "session-uuid-123"
 }
 
 ### 2. Verificação de Projeto
@@ -181,7 +187,7 @@ Resposta:
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
     "project_id": "projeto-uuid-123",
-    "last_mcp_job_id": "123456"
+    "session_id": "session-uuid-123"
   }
 }
 
@@ -194,6 +200,6 @@ Resposta:
 - Todos os relatórios estão sob o campo unificado `reports`. Campos legados como `epicos_report` ainda podem aparecer para retrocompatibilidade, mas o padrão é usar o objeto `reports`.
 - O upload de DOCX ocorre dentro do endpoint `/analysis/start` via multipart/form-data.
 - Para erros, o backend sempre retorna o campo `detail` no corpo JSON.
-- Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
+- Após o início da análise, a relação de identificação é sempre feita via `session_id` (não existe mais job_id).
 - Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
 - O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
