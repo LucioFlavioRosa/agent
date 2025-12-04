@@ -15,7 +15,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 **Resposta:**
-```json
+
 {
   "user_info": {
     "usuario_executor": "user@example.com",
@@ -34,7 +34,7 @@ Content-Type: application/json
     }
   ]
 }
-```
+
 
 ### 1.2 Verificação de Projeto (GET /projects/check)
 
@@ -45,7 +45,7 @@ Authorization: Bearer <token>
 
 
 **Resposta (projeto encontrado):**
-```json
+
 {
   "exists": true,
   "state": {
@@ -61,17 +61,18 @@ Authorization: Bearer <token>
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
-    "project_id": "projeto-uuid-123"
+    "project_id": "projeto-uuid-123",
+    "last_mcp_job_id": "123456"
   }
 }
-```
+
 
 **Resposta (projeto não encontrado):**
-```json
+
 {
   "exists": false
 }
-```
+
 
 ### 1.3 Upload de DOCX (POST /upload/docx)
 
@@ -88,7 +89,7 @@ comentario_usuario=Comentário opcional
 
 
 **Resposta:**
-```json
+
 {
   "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx",
   "extracted_text": "Texto extraído do DOCX da reunião",
@@ -96,7 +97,7 @@ comentario_usuario=Comentário opcional
   "session_id": "ghijkl-uuid",
   "job_id": "ghijkl-uuid"
 }
-```
+
 
 ### 1.4 Início de Análise (POST /analysis/start)
 
@@ -105,38 +106,40 @@ comentario_usuario=Comentário opcional
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
-```json
+
 {
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
   "comentario_usuario": "Este é um comentário adicional do usuário."
 }
-```
+
 
 **Requisição (projeto existente, sem novo upload):**
 
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
-```json
+
 {
   "projeto": "ProjetoExistente",
   "analysis_type": "criacao_epicos_azure_devops",
   "comentario_usuario": "Comentário sem arquivo.",
   "project_id": "projeto-uuid-123"
 }
-```
+
 
 **Resposta:**
-```json
+
 {
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
 }
-```
+
+
+> **Nota:** Após o início da análise, o backend persiste imediatamente a relação job_id -> session_id no Redis. Isso garante que, quando o webhook do MCP chegar, a sessão possa ser encontrada rapidamente usando o job_id.
 
 ### 1.5 Atualização de Relatório (PUT /session/{session_id}/report)
 
@@ -203,6 +206,8 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 - `report_data`: objeto/dict. Obrigatório para status `in_progress` ou `done`. Estrutura depende do tipo de relatório.
 - `error_type`: string. Obrigatório para status `error`.
 - `error_message`: string. Obrigatório para status `error`.
+
+> **Nota:** O backend busca a sessão correspondente usando o job_id persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
 
 ### 2.2 Exemplos de Webhook para Cada Tipo de Relatório
 
@@ -317,6 +322,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 - Para status `error`, não envie `report_type` nem `report_data`.
 - Para status `in_progress` e `done`, ambos `report_type` e `report_data` são obrigatórios.
 - O backend rejeitará webhooks com estrutura inválida ou campos ausentes.
+- O backend busca a sessão pelo job_id persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
 
 ### 2.5 Exemplo de Webhook Inválido (Será Rejeitado)
 
@@ -396,7 +402,8 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
-    "project_id": "projeto-uuid-123"
+    "project_id": "projeto-uuid-123",
+    "last_mcp_job_id": "123456"
   }
 }
 
@@ -544,7 +551,8 @@ Resposta:
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
-    "project_id": "projeto-uuid-123"
+    "project_id": "projeto-uuid-123",
+    "last_mcp_job_id": "123456"
   }
 }
 
@@ -585,6 +593,8 @@ Resposta:
   "session_id": "abcdef-uuid",
   "project_id": "projeto-uuid-123"
 }
+
+> **Nota:** O backend persiste imediatamente a relação job_id -> session_id no Redis após o início da análise.
 
 
 ### 5. Webhook de Progresso (MCP → Backend)
@@ -641,3 +651,4 @@ Resposta:
 - Todos os relatórios estão sob o campo unificado `reports`. Campos legados como `epicos_report` ainda podem aparecer para retrocompatibilidade, mas o padrão é usar o objeto `reports`.
 - O upload de DOCX retorna tanto a URL do arquivo quanto o texto extraído, em paralelo.
 - Para erros, o backend sempre retorna o campo `detail` no corpo JSON.
+- Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
