@@ -5,13 +5,13 @@ import asyncio
 import httpx
 from fastapi import FastAPI, APIRouter, BackgroundTasks
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional
 
 # --- CONFIGURAÇÃO ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="1.0.2")
+app = FastAPI(title="MCP Mock Service", version="1.0.6 - Final Fix")
 router = APIRouter()
 
 # URL do Backend Principal
@@ -27,114 +27,124 @@ class FakeMCPStartPayload(BaseModel):
     session_id: Optional[str] = None
     job_id: Optional[str] = None 
 
-# --- DADOS MOCKADOS (Exatamente como na Spec 2.2.2) ---
+# --- DADOS MOCKADOS (AQUI ESTAVA O SEGREDO) ---
 MOCK_DATA_CONTENT = {
-    # Caso: report_type = "epicos"
     "epicos": {
-        "epicos": [
-            {"id": 1, "titulo": "Como usuário...", "descricao": "Quero realizar login no sistema para acessar meus projetos."},
-            {"id": 2, "titulo": "Como admin...", "descricao": "Quero visualizar relatórios de uso da plataforma."}
+        # ✅ CORREÇÃO: Usando 'epicos_report' conforme validado no teste
+        "epicos_report": [
+            {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2."},
+            {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX."},
+            {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos."}
         ]
     },
-    # Caso: report_type = "features"
     "features": {
-        "features": [
-            {"id": 1, "nome": "Login SSO", "descricao": "Integração com Azure AD"}
+        # Provavelmente segue o mesmo padrão 'features_report'
+        "features_report": [
+            {"id": 1, "nome": "Login Social", "descricao": "Permitir Google e Microsoft."}
         ]
     },
-    # Caso: report_type = "tech_debt"
     "tech_debt": {
-        "tech_debt": [
-            {"id": 1, "descricao": "Refatoração de logs", "prioridade": "média"}
+        "tech_debt_report": [
+            {"id": 1, "descricao": "Refatorar validação de payload", "prioridade": "Alta"}
         ]
     }
 }
 
-# --- MAPEAMENTO (Analysis Type -> Report Type) ---
-# Converte o tipo de análise do backend para o tipo de relatório esperado no webhook
 ANALYSIS_MAPPING = {
     "criacao_epicos_azure_devops": "epicos",
     "features_generation": "features",
     "tech_debt_analysis": "tech_debt"
 }
 
-# --- LÓGICA DE CALLBACK (WEBHOOK) ---
-async def simulate_webhook_callback(job_id: str, analysis_type: str):
-    """
-    Simula o processamento e envia o Webhook POST para /webhooks/mcp
-    """
-    logger.info(f"⏳ [MOCK] Processando Job {job_id}... (Aguardando 3s)")
-    await asyncio.sleep(3)
+# --- LÓGICA DE ENVIO (COM DUPLA SEGURANÇA) ---
+async def send_result_to_backend(job_id: str, session_id: Optional[str], analysis_type: str):
+    logger.info(f"⏳ [MOCK] Processando Job {job_id}...")
+    await asyncio.sleep(3) # Simula o tempo de 'pensar' da IA
     
-    # 1. Determina o report_type correto (Seção 2.6)
-    report_type = ANALYSIS_MAPPING.get(analysis_type, "epicos") # Default para epicos se não achar
+    # 1. Seleciona o tipo correto de relatório
+    report_type = ANALYSIS_MAPPING.get(analysis_type, "epicos")
     
-    # 2. Seleciona os dados (Seção 2.3)
-    # report_data conterá: { "epicos": [ ... ] }
-    report_data = MOCK_DATA_CONTENT.get(report_type)
-    if not report_data:
-        # Fallback de segurança
-        report_data = {"epicos": [{"id": 99, "titulo": "Fallback", "descricao": "Erro no mock"}]}
+    # 2. Pega os dados com a estrutura correta (epicos_report)
+    report_data = MOCK_DATA_CONTENT.get(report_type) 
 
-    # 3. Monta o Payload do Webhook (Seção 2.1 e 2.2.2)
-    # status: done -> progress removido, error removido.
-    webhook_payload = {
-        "job_id": job_id,
-        "status": "done", 
-        "report_type": report_type,
-        "report_data": report_data
-    }
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        headers = {"Content-Type": "application/json"}
+        base_url = BACKEND_BASE_URL.rstrip('/')
 
-    # 4. Define o Endpoint
-    webhook_url = f"{BACKEND_BASE_URL.rstrip('/')}/webhooks/mcp"
-    
-    logger.info(f"📤 [MOCK] Enviando para: {webhook_url}")
-    logger.info(f"📦 Payload JSON: {webhook_payload}")
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Headers padrão
-            headers = {"Content-Type": "application/json"}
-            
-            # ENVIO POST
-            resp = await client.post(webhook_url, json=webhook_payload, headers=headers)
+        # =========================================================
+        # TENTATIVA 1: Via Webhook Oficial (O Jeito Certo)
+        # =========================================================
+        webhook_payload = {
+            "job_id": job_id,
+            "status": "done",
+            "report_type": report_type,
+            "report_data": report_data
+        }
+        
+        logger.info(f"📤 [TENTATIVA 1] Enviando Webhook para {base_url}/webhooks/mcp")
+        try:
+            resp = await client.post(f"{base_url}/webhooks/mcp", json=webhook_payload, headers=headers)
             
             if resp.status_code == 200:
-                logger.info(f"✅ [MOCK] Sucesso! Backend respondeu 200 OK.")
-            else:
-                logger.error(f"❌ [MOCK] Falha: {resp.status_code} - {resp.text}")
-                
-    except Exception as e:
-        logger.error(f"❌ [MOCK] Erro de conexão: {e}")
+                logger.info("✅ [SUCESSO] Webhook aceito pelo Backend com chave 'epicos_report'!")
+                return # Missão cumprida, encerra aqui.
+            
+            logger.warning(f"⚠️ [ALERTA] Webhook falhou: {resp.status_code} - {resp.text}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro de conexão no Webhook: {e}")
 
-# --- ENDPOINTS DO MOCK ---
+        # =========================================================
+        # TENTATIVA 2: Fallback via Sessão (O Plano B)
+        # Se o Webhook falhar (ex: 404 Job não encontrado), salvamos direto na sessão.
+        # =========================================================
+        if session_id:
+            logger.info("🔄 [TENTATIVA 2] Tentando salvar direto na Sessão...")
+            
+            # O endpoint de sessão geralmente espera { "report_type": ..., "report_data": ... }
+            direct_payload = {
+                "report_type": report_type,
+                "report_data": report_data
+            }
+            
+            try:
+                resp = await client.put(f"{base_url}/session/{session_id}/report", json=direct_payload, headers=headers)
+                if resp.status_code == 200:
+                    logger.info("✅ [SALVO] Dados salvos via Fallback de Sessão.")
+                else:
+                    logger.error(f"❌ [FALHA TOTAL] Nem o fallback funcionou: {resp.status_code}")
+            except Exception as e:
+                logger.error(f"❌ Erro conexão Fallback: {e}")
+        else:
+            logger.error("🚫 Sem session_id para tentar o Fallback.")
+
+# --- ENDPOINTS ---
 
 @router.get("/")
 def home():
-    return {"status": "Mock MCP Online v1.0.2", "target": BACKEND_BASE_URL}
+    return {"status": "Mock MCP Online v1.0.6", "target": BACKEND_BASE_URL}
 
 @router.post("/start")
 async def start_analysis_mock(payload: FakeMCPStartPayload, background_tasks: BackgroundTasks):
-    # Usa o job_id vindo do backend, ou gera um se for teste manual direto no mock
-    job_id = payload.job_id if payload.job_id else f"job-mock-{uuid.uuid4().hex[:8]}"
+    # Usa o Job ID do backend ou cria um
+    current_job_id = payload.job_id or f"job-mock-{uuid.uuid4().hex[:8]}"
     
-    logger.info(f"⚡ [MOCK] Requisição Recebida | Job ID: {job_id}")
+    logger.info(f"⚡ [MOCK] Start recebido. Job: {current_job_id} | Sessão: {payload.session_id}")
 
-    # Agenda a tarefa assíncrona para simular o tempo de processamento
+    # Agenda o envio
     background_tasks.add_task(
-        simulate_webhook_callback, 
-        job_id, 
+        send_result_to_backend, 
+        current_job_id, 
+        payload.session_id, 
         payload.analysis_type
     )
 
-    # Retorna confirmação imediata
     return {
-        "job_id": job_id,
+        "job_id": current_job_id,
         "status": "queued",
-        "message": "Job aceito. Webhook será enviado em breve."
+        "message": "Análise iniciada. Mock responderá em ~3 segundos."
     }
 
-# Registra a rota
 app.include_router(router, prefix="/fake-mcp/api/v1/analysis")
 
 if __name__ == "__main__":
