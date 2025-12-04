@@ -17,9 +17,21 @@ class ProjectStateService:
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
-        # Garante que last_mcp_job_id está presente no estado salvo
         if hasattr(session_data, "last_mcp_job_id"):
             state["last_mcp_job_id"] = getattr(session_data, "last_mcp_job_id")
+        try:
+            from backend.app.services.redis_session_service import RedisSessionService
+            redis_service = RedisSessionService()
+            session_id = getattr(session_data, "session_id", None)
+            if session_id:
+                session_redis = redis_service.get_session(session_id)
+                reports_redis = getattr(session_redis, "reports", None)
+                if reports_redis != state.get("reports"):
+                    logging.error(f"Validação de consistência falhou: reports do estado não correspondem ao Redis para session_id={session_id}. Reports Redis: {reports_redis} | Reports estado: {state.get('reports')}")
+                    raise Exception("O campo 'reports' do estado não corresponde ao valor atual no Redis. Abortando persistência.")
+        except Exception as e:
+            logging.error(f"Erro na validação de consistência antes de salvar estado no Blob: {e}")
+            raise
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
         return blob_client.url
 
@@ -45,7 +57,6 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
-        # Garante que last_mcp_job_id é carregado se existir
         if "last_mcp_job_id" in state:
             state["last_mcp_job_id"] = state["last_mcp_job_id"]
         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
