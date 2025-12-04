@@ -41,14 +41,6 @@ class SessionData(BaseModel):
 
     @classmethod
     def from_project_state(cls, state: Dict[str, Any]) -> "SessionData":
-        reports = state.get("reports", {})
-        migrated_reports = dict(reports) if reports else {}
-        legacy_fields = [
-            "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
-        ]
-        for field in legacy_fields:
-            if field in state and state[field] is not None:
-                migrated_reports[field] = state[field]
         return cls(
             session_id=state.get("session_id", ""),
             usuario_executor=state.get("usuario_executor", ""),
@@ -61,6 +53,6 @@ class SessionData(BaseModel):
             comentario_usuario=state.get("comentario_usuario"),
             extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
-            reports=migrated_reports,
+            reports=state.get("reports", {}),
             last_mcp_job_id=state.get("last_mcp_job_id")
         )
