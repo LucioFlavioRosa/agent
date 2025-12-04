@@ -180,40 +180,69 @@ Authorization: Bearer <token>
 
 ---
 
-## 2. Exemplos de Respostas MCP → Backend
+## 2. Exemplos de Webhooks MCP → Backend
 
-### 2.1 Criação de Job
+### 2.1 Formato Geral do Webhook
+
+O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o seguinte formato JSON:
+
 
 {
-  "job_id": "123456"
+  "job_id": "<string>",
+  "status": "in_progress" | "done" | "error",
+  "progress": <opcional, int>,
+  "report_type": <string, obrigatório quando status="in_progress" ou "done">,
+  "report_data": <dict, obrigatório quando status="in_progress" ou "done">,
+  "error_type": <string, obrigatório quando status="error">,
+  "error_message": <string, obrigatório quando status="error">
 }
 
 
-### 2.2 Webhook de Progresso
+**Campos obrigatórios:**
+- `job_id`: string. Identificador do job retornado pelo backend ao MCP.
+- `status`: string. Um dos valores: `in_progress`, `done`, `error`.
+- `progress`: inteiro opcional (0-100), só para status `in_progress`.
+- `report_type`: string. Obrigatório para status `in_progress` ou `done`. Exemplo: `epicos`, `features`, `tech_debt`.
+- `report_data`: objeto/dict. Obrigatório para status `in_progress` ou `done`. Estrutura depende do tipo de relatório.
+- `error_type`: string. Obrigatório para status `error`.
+- `error_message`: string. Obrigatório para status `error`.
+
+### 2.2 Exemplos de Webhook para Cada Tipo de Relatório
+
+#### 2.2.1 Webhook de Progresso (`status: in_progress`)
+
 
 {
   "job_id": "123456",
   "status": "in_progress",
-  "progress": 50,
+  "progress": 40,
   "report_type": "epicos",
-  "report_data": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}
+  "report_data": {
+    "epicos": [
+      {"id": 1, "titulo": "Como usuário..."}
+    ]
+  }
 }
 
 
-### 2.3 Webhook de Conclusão
+#### 2.2.2 Webhook de Conclusão (`status: done`)
+
 
 {
   "job_id": "123456",
   "status": "done",
   "report_type": "epicos",
-  "report_data": {"epicos": [
-    {"id": 1, "titulo": "Como usuário...", "descricao": "..."},
-    {"id": 2, "titulo": "Como admin...", "descricao": "..."}
-  ]}
+  "report_data": {
+    "epicos": [
+      {"id": 1, "titulo": "Como usuário...", "descricao": "..."},
+      {"id": 2, "titulo": "Como admin...", "descricao": "..."}
+    ]
+  }
 }
 
 
-### 2.4 Webhook de Erro
+#### 2.2.3 Webhook de Erro (`status: error`)
+
 
 {
   "job_id": "123456",
@@ -223,31 +252,101 @@ Authorization: Bearer <token>
 }
 
 
-### 2.5 Exemplos para Diferentes analysis_type
+#### 2.2.4 Webhook para Features (`status: done`)
 
-**Para `features_generation`:**
 
 {
   "job_id": "7891011",
   "status": "done",
   "report_type": "features",
-  "report_data": {"features": [
-    {"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
-  ]}
+  "report_data": {
+    "features": [
+      {"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
+    ]
+  }
 }
 
 
-**Para `tech_debt_analysis`:**
+#### 2.2.5 Webhook para Tech Debt (`status: done`)
+
 
 {
   "job_id": "555777",
   "status": "done",
   "report_type": "tech_debt",
-  "report_data": {"tech_debt": [
-    {"id": 1, "descricao": "Código duplicado"}
-  ]}
+  "report_data": {
+    "tech_debt": [
+      {"id": 1, "descricao": "Código duplicado"}
+    ]
+  }
 }
 
+
+### 2.3 Estrutura de report_data Esperada por Tipo
+
+- Para `report_type: "epicos"`:
+  - `report_data` deve conter a chave `epicos` com uma lista de épicos:
+    
+    {
+      "epicos": [
+        {"id": 1, "titulo": "Como usuário...", "descricao": "..."}
+      ]
+    }
+    
+- Para `report_type: "features"`:
+  - `report_data` deve conter a chave `features` com uma lista de features:
+    
+    {
+      "features": [
+        {"id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
+      ]
+    }
+    
+- Para `report_type: "tech_debt"`:
+  - `report_data` deve conter a chave `tech_debt` com uma lista de itens de débito técnico:
+    
+    {
+      "tech_debt": [
+        {"id": 1, "descricao": "Código duplicado"}
+      ]
+    }
+    
+
+### 2.4 Regras Importantes para o MCP
+
+- O campo `job_id` deve ser exatamente o mesmo recebido do backend na chamada de início de análise.
+- O campo `report_type` DEVE ser igual ao tipo de relatório definido no mapeamento do backend para o `analysis_type` correspondente.
+- O campo principal de `report_data` (ex: `epicos`, `features`, `tech_debt`) deve estar presente e conter a lista de resultados.
+- Para status `error`, não envie `report_type` nem `report_data`.
+- Para status `in_progress` e `done`, ambos `report_type` e `report_data` são obrigatórios.
+- O backend rejeitará webhooks com estrutura inválida ou campos ausentes.
+
+### 2.5 Exemplo de Webhook Inválido (Será Rejeitado)
+
+
+{
+  "job_id": "123456",
+  "status": "done",
+  "report_type": "epicos",
+  "report_data": {
+    "errado": [
+      {"id": 1, "titulo": "Como usuário..."}
+    ]
+  }
+}
+
+
+**Motivo:** O campo esperado em `report_data` para `report_type: "epicos"` é `epicos`, não `errado`.
+
+### 2.6 Resumo do Mapeamento report_type → report_data
+
+| analysis_type                  | report_type  | Campo principal em report_data |
+|-------------------------------|--------------|-------------------------------|
+| criacao_epicos_azure_devops    | epicos       | epicos                        |
+| features_generation            | features     | features                      |
+| tech_debt_analysis             | tech_debt    | tech_debt                     |
+
+O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeamento acima.
 
 ---
 
@@ -296,9 +395,7 @@ Authorization: Bearer <token>
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": {
-      "epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}
-    },
+    "reports": {"epicos_report": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}},
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
@@ -396,7 +493,6 @@ Authorization: Bearer <token>
 {
   "detail": "Sessão não encontrada: ..."
 }
-
 
 ---
 
