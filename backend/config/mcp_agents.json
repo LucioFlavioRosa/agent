@@ -13,7 +13,7 @@
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
       "report_fields": ["epicos_report"],
       "report_mapping": {
-        "refinamento_epicos_report": "epicos_report"
+        "epicos": "epicos_report"
       }
     },
     "criacao_features_azure_devops": {
