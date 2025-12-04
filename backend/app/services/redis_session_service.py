@@ -215,3 +215,21 @@ class RedisSessionService:
             self.logger.error(f"Erro ao varrer sessões para job_id '{job_id}': {e}")
         self.logger.error(f"Sessão não encontrada para job_id: {job_id}")
         return None
+
+    def get_session_by_project(self, usuario_executor: str, projeto: str) -> Optional[SessionData]:
+        self.logger.info(f"Buscando sessão por usuario_executor='{usuario_executor}', projeto='{projeto}'")
+        try:
+            for key in self.redis_client.scan_iter(match="session:*"):
+                session_json = self.redis_client.get(key)
+                if not session_json:
+                    continue
+                session_data = self._deserialize_session(session_json)
+                if (
+                    session_data.get("usuario_executor") == usuario_executor and
+                    session_data.get("projeto") == projeto
+                ):
+                    self.logger.info(f"Encontrada sessão ativa para usuario_executor='{usuario_executor}', projeto='{projeto}', session_id='{session_data.get('session_id')}'")
+                    return SessionData(**session_data)
+        except Exception as e:
+            self.logger.error(f"Erro ao buscar sessão por usuario_executor e projeto: {e}")
+        return None
