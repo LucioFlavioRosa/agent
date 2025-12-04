@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 _blob_service_client_singleton = None
 _container_client_singleton = None
 
-
 def _get_blob_clients():
     global _blob_service_client_singleton, _container_client_singleton
     connection_string = getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None)
