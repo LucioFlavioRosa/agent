@@ -38,9 +38,9 @@ MOCK_DATA_CONTENT = {
     },
     "refinamento_epicos": {
         "epicos_report": [
-            {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2. NONO"},
-            {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX. NONO"},
-            {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos. NONO"}
+            {"id": 1, "titulo": "Autenticação Azure AD_eeeee", "descricao": "Implementar login seguro com OAuth2. NONO"},
+            {"id": 2, "titulo": "Processamento de Arquivos_eeeeee", "descricao": "Ler e extrair texto de DOCX. NONO"},
+            {"id": 3, "titulo": "Dashboard de Métricas_eeeeeee", "descricao": "Visualizar status dos projetos. NONO"}
         ]
     }
 }
