@@ -20,7 +20,8 @@ class MCPStartAnalysisPayload(BaseModel):
         return v
 
 class MCPStartAnalysisResponse(BaseModel):
-    job_id: str
+    status: str
+    session_id: str
 
 class MCPClientService:
     def __init__(self, base_url: str = None):
@@ -39,17 +40,6 @@ class MCPClientService:
         return self.base_url
 
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
-        # O MCP deve responder à chamada POST /start e, após processar, enviar webhooks para o endpoint /webhooks/mcp do backend.
-        # O formato do webhook deve seguir a documentação em backend/docs/MCP_WEBHOOK_RESPONSE_FORMAT.md.
-        # O webhook deve conter os campos: job_id (str), status ("in_progress", "done", "error"),
-        # report_type (str), report_data (dict), progress (opcional), error_type (opcional), error_message (opcional).
-        # Exemplo de payload de webhook:
-        # {
-        #   "job_id": "123456",
-        #   "status": "done",
-        #   "report_type": "epicos",
-        #   "report_data": {"epicos": [{"id": 1, "titulo": "Como usuário..."}]}
-        # }
         raw_base = self.get_mcp_endpoint(payload.analysis_type)
         logging.info(f"🕵️ [DEBUG URL] Bruta vinda da env: '[{raw_base}]'")
         base = raw_base.strip().rstrip("/")
@@ -70,6 +60,7 @@ class MCPClientService:
                     logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
                 response.raise_for_status()
                 data = response.json()
+                # Espera-se que o MCP retorne status e session_id
                 return MCPStartAnalysisResponse(**data)
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
