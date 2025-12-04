@@ -11,10 +11,11 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="1.0.7 - Strict Logic")
+app = FastAPI(title="MCP Mock Service", version="1.0.8 - Session Fix")
 router = APIRouter()
 
-# URL do Backend Principal (Ajuste se necessário)
+# URL do Backend Principal
+# Tenta pegar da variável de ambiente, senão usa o default (Ajuste se necessário)
 BACKEND_BASE_URL = os.environ.get("TARGET_BACKEND_URL", "https://app-codeai-backend-dev-usc-fngga4fkbkewewdz.centralus-01.azurewebsites.net")
 
 # --- MODELOS ---
@@ -27,25 +28,28 @@ class FakeMCPStartPayload(BaseModel):
     session_id: Optional[str] = None
     job_id: Optional[str] = None 
 
-# --- DADOS MOCKADOS (EXATAMENTE COMO SOLICITADO) ---
+# --- DADOS MOCKADOS (COM SINTAXE CORRIGIDA) ---
 
 # Payload para: criacao_epicos_azure_devops
 DATA_CRIACAO = {
-    "epicos_report": {"epicos":[
-        {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2."},
-        {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX."},
-        {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos."}
-    ]
-  }
+    "epicos_report": {
+        "epicos": [
+            {"id": 1, "titulo": "Autenticação Azure AD", "descricao": "Implementar login seguro com OAuth2."},
+            {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX."},
+            {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos."}
+        ]
+    }
 }
 
 # Payload para: refinamento_epicos_azure_devops
 DATA_REFINAMENTO = {
-    "epicos_report": {"epicos": [
-        {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
-        {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
-        {"id": 3, "titulo": "Dashboard de Métricas refinados", "descricao": "Visualizar status dos projetos. NONO"}
-    ]}
+    "epicos_report": {
+        "epicos": [
+            {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
+            {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
+            {"id": 3, "titulo": "Dashboard de Métricas refinados", "descricao": "Visualizar status dos projetos. NONO"}
+        ]
+    }
 }
 
 # --- LÓGICA DE ENVIO ---
@@ -53,15 +57,12 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
     logger.info(f"⏳ [MOCK] Processando Job {job_id} para tipo: {analysis_type}...")
     await asyncio.sleep(3) # Simula o tempo de processamento
     
-    # 1. SELEÇÃO DE DADOS (Lógica Estrita)
+    # 1. SELEÇÃO DE DADOS
     if analysis_type == "refinamento_epicos_azure_devops":
         logger.info("👉 Selecionando dados de REFINAMENTO")
         report_data = DATA_REFINAMENTO
-        # O backend espera "epicos" ou "refinamento_epicos" no report_type? 
-        # Geralmente se o JSON é "epicos_report", o type é "epicos", mas mantive mapeado:
         report_type = "epicos" 
     else:
-        # Default para criacao ou qualquer outro caso
         logger.info("👉 Selecionando dados de CRIAÇÃO")
         report_data = DATA_CRIACAO
         report_type = "epicos"
@@ -73,7 +74,9 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
         # =========================================================
         # TENTATIVA 1: Via Webhook Oficial
         # =========================================================
+        # O Backend espera session_id também no webhook? Geralmente sim.
         webhook_payload = {
+            "session_id": session_id, # IMPORTANTE: Enviar session_id no webhook também
             "job_id": job_id,
             "status": "done",
             "report_type": report_type,
@@ -81,8 +84,7 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
         }
         
         logger.info(f"📤 [WEBHOOK] Enviando para {base_url}/webhooks/mcp")
-        logger.info(f"📦 Payload parcial: {str(report_data)[:100]}...")
-
+        
         try:
             resp = await client.post(f"{base_url}/webhooks/mcp", json=webhook_payload, headers=headers)
             
@@ -121,13 +123,13 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
 
 @router.get("/")
 def home():
-    return {"status": "Mock MCP Online v1.0.7", "target": BACKEND_BASE_URL}
+    return {"status": "Mock MCP Online v1.0.8", "target": BACKEND_BASE_URL}
 
 @router.post("/start")
 async def start_analysis_mock(payload: FakeMCPStartPayload, background_tasks: BackgroundTasks):
-    current_job_id = payload.job_id or f"job-mock-{uuid.uuid4().hex[:8]}"
+    current_job_id = payload.session_id or f"job-mock-{uuid.uuid4().hex[:8]}"
     
-    logger.info(f"⚡ [MOCK] Start recebido. Tipo: {payload.analysis_type} | Job: {current_job_id}")
+    logger.info(f"⚡ [MOCK] Start recebido. Sessão: {payload.session_id} | Tipo: {payload.analysis_type}")
 
     # Agenda o envio
     background_tasks.add_task(
@@ -137,8 +139,11 @@ async def start_analysis_mock(payload: FakeMCPStartPayload, background_tasks: Ba
         payload.analysis_type
     )
 
+    # --- CORREÇÃO AQUI ---
+    # Retornamos o session_id recebido para satisfazer a validação do Backend
     return {
         "job_id": current_job_id,
+        "session_id": payload.session_id, # <--- OBRIGATÓRIO
         "status": "queued",
         "message": "Análise iniciada. Mock responderá em ~3 segundos."
     }
@@ -147,5 +152,6 @@ app.include_router(router, prefix="/fake-mcp/api/v1/analysis")
 
 if __name__ == "__main__":
     import uvicorn
+    # Ajuste para rodar no Azure corretamente
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
