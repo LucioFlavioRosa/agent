@@ -18,7 +18,7 @@ Content-Type: application/json
 
 ```json
 { 
-  "user_info": ```json{ 
+  "user_info": { 
     "usuario_executor": "user@example.com",
     "sub": "uuid",
     "name": "Nome do Usuário",
@@ -26,7 +26,7 @@ Content-Type: application/json
     "roles": ["admin"]
   },
   "projects": [
-    ```json{ 
+    { 
       "projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
