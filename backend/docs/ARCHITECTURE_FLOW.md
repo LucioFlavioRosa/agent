@@ -90,6 +90,7 @@ sequenceDiagram
         BE-->>FE: exists: true, state (do Blob Storage)
     end
     Note over BE: O campo 'reports' sempre reflete o estado mais recente disponível
+    Note over BE: O campo 'reports' é retornado integralmente, sem qualquer modificação ou merge, exatamente como está no Redis ou Blob Storage.
 
 ### 3. Início de Análise e Upload de DOCX (Processamento Paralelo)
 - O upload do arquivo DOCX e a extração do texto ocorrem dentro do endpoint `/analysis/start` via multipart/form-data. O backend retorna tanto a URL do arquivo quanto o texto extraído.
@@ -125,6 +126,36 @@ sequenceDiagram
 - Mapeamento de Relatórios: `RedisSessionService.update_report` usa `report_mapping` para salvar relatórios no campo correto.
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
+**Garantia de Integridade do Campo `reports`**
+
+- O campo `reports` é sempre retornado **integralmente** e **sem qualquer modificação** tanto do Redis quanto do Blob Storage.
+- Não há merge, transformação, ou sanitização do campo `reports` em nenhuma etapa do fluxo de consulta ou atualização de estado.
+- O endpoint `/projects/check` retorna o campo `reports` exatamente como está persistido na fonte consultada (Redis ou Blob Storage).
+- Isso garante que o frontend sempre receba o estado mais fiel e atualizado do projeto, incluindo todos os relatórios completos.
+
+#### Diagrama de Sequência: Garantia de Integridade do Campo `reports`
+
+mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant BE as Backend
+    participant RS as RedisSessionService
+    participant PS as ProjectStateService
+    participant BS as Blob Storage
+    FE->>BE: GET /projects/check?projeto=NomeProjeto
+    BE->>RS: get_session_by_project(usuario_executor, projeto)
+    alt Sessão encontrada no Redis
+        RS-->>BE: SessionData
+        BE->>PS: load_latest_state_from_redis(session_id)
+        PS-->>BE: Estado mais recente (do Redis, incluindo 'reports' completo)
+        BE-->>FE: exists: true, state (do Redis, 'reports' inalterado)
+    else Sessão não encontrada no Redis
+        BE->>PS: load_latest_state_from_blob(usuario_executor, projeto)
+        PS-->>BE: Estado (do Blob Storage, incluindo 'reports' completo)
+        BE-->>FE: exists: true, state (do Blob Storage, 'reports' inalterado)
+    end
+    Note over BE: O campo 'reports' é sempre retornado integralmente, sem qualquer modificação.
+
 ### 8. Comunicação Backend ↔ MCP (Incluindo Webhooks)
 - O backend envia payloads para o MCP (sempre com texto extraído, nunca URL). MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam relatórios na sessão Redis.
 - Persistência do job_id: Após receber o `job_id` do MCP no endpoint `/analysis/start`, o backend persiste imediatamente a relação `job_id -> session_id` no Redis, garantindo que, quando o webhook do MCP chegar, a sessão possa ser encontrada rapidamente usando o `job_id`.
@@ -139,13 +170,14 @@ sequenceDiagram
 - Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage **e também mantém o estado mais recente no Redis**.
 - Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
 - O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
+- O campo `reports` é sempre retornado **integralmente** e **sem qualquer modificação** do Redis ou Blob Storage.
 - Código:
   - `backend/app/api/session.py` (`PUT /session/{session_id}/report`)
   - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`, `get_session_by_project`)
   - `backend/app/api/projects.py` (consulta primeiro no Redis, depois no Blob Storage)
   - `backend/app/services/project_state_service.py` (`load_latest_state_from_redis`, `load_latest_state_from_blob`)
 
-#### Diagrama do Fluxo de Consulta de Estado Mais Recente
+#### Diagrama do Fluxo de Consulta de Estado Mais Recente e Integridade do Campo `reports`
 
 mermaid
 sequenceDiagram
@@ -159,13 +191,14 @@ sequenceDiagram
     alt Sessão encontrada no Redis
         RS-->>BE: SessionData
         BE->>PS: load_latest_state_from_redis(session_id)
-        PS-->>BE: Estado mais recente (do Redis)
-        BE-->>FE: exists: true, state (do Redis)
+        PS-->>BE: Estado mais recente (do Redis, 'reports' completo)
+        BE-->>FE: exists: true, state (do Redis, 'reports' inalterado)
     else Sessão não encontrada no Redis
         BE->>PS: load_latest_state_from_blob(usuario_executor, projeto)
-        PS-->>BE: Estado (do Blob Storage)
-        BE-->>FE: exists: true, state (do Blob Storage)
+        PS-->>BE: Estado (do Blob Storage, 'reports' completo)
+        BE-->>FE: exists: true, state (do Blob Storage, 'reports' inalterado)
     end
+    Note over BE: O campo 'reports' é sempre retornado integralmente, sem qualquer modificação.
 
 ---
 
@@ -310,3 +343,4 @@ flowchart LR
 - Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
 - Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
 - O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
+- O campo `reports` é sempre retornado integralmente e sem qualquer modificação do Redis ou Blob Storage.
