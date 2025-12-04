@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status, Request, Depends
 from backend.app.models.mcp_webhook_models import MCPWebhookPayload
 from backend.app.services.redis_session_service import RedisSessionService
+from backend.app.utils.webhook_validator import validate_report_data_structure
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
@@ -19,6 +20,9 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             if not payload.report_type:
                 logger.error(f"Webhook sem report_type para job_id {payload.job_id}")
                 raise HTTPException(status_code=400, detail="report_type é obrigatório quando status é 'in_progress' ou 'done'")
+            if not validate_report_data_structure(payload.report_type, payload.report_data, analysis_type):
+                logger.error(f"Estrutura de report_data inválida para report_type '{payload.report_type}', analysis_type '{analysis_type}' e job_id '{payload.job_id}'")
+                raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida para report_type '{payload.report_type}' e analysis_type '{analysis_type}'")
             redis_service.update_report(
                 session.session_id,
                 payload.report_type,
