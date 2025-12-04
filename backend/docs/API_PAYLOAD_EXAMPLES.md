@@ -14,9 +14,6 @@ POST /auth/login HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
 
-{}
-
-
 **Resposta:**
 ```json
 {
