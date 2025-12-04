@@ -42,25 +42,12 @@ MOCK_DATA_CONTENT = {
             {"id": 2, "titulo": "Processamento de Arquivos", "descricao": "Ler e extrair texto de DOCX. NONO"},
             {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos. NONO"}
         ]
-    },
-    "features": {
-        # Provavelmente segue o mesmo padrão 'features_report'
-        "features_report": [
-            {"id": 1, "nome": "Login Social", "descricao": "Permitir Google e Microsoft."}
-        ]
-    },
-    "tech_debt": {
-        "tech_debt_report": [
-            {"id": 1, "descricao": "Refatorar validação de payload", "prioridade": "Alta"}
-        ]
     }
 }
 
 ANALYSIS_MAPPING = {
     "criacao_epicos_azure_devops": "epicos",
-    "refinamento_epicos_azure_devops": "refinamento_epicos",
-    "features_generation": "features",
-    "tech_debt_analysis": "tech_debt"
+    "refinamento_epicos_azure_devops": "refinamento_epicos"
 }
 
 # --- LÓGICA DE ENVIO (COM DUPLA SEGURANÇA) ---
