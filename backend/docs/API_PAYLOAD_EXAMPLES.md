@@ -16,9 +16,8 @@ Content-Type: application/json
 
 **Resposta:**
 
-
-{ 
-  "user_info": { 
+{
+  "user_info": {
     "usuario_executor": "user@example.com",
     "sub": "uuid",
     "name": "Nome do Usuário",
@@ -26,7 +25,7 @@ Content-Type: application/json
     "roles": ["admin"]
   },
   "projects": [
-    { 
+    {
       "projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
@@ -35,7 +34,6 @@ Content-Type: application/json
     }
   ]
 }
-
 
 ### 1.2 Verificação de Projeto (GET /projects/check)
 
@@ -46,16 +44,15 @@ Authorization: Bearer <token>
 
 **Resposta (projeto encontrado):**
 
-
-{ 
+{
   "exists": true,
-  "state": { 
+  "state": {
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": { 
+    "reports": {
       "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
       "features_report": { "features": [{ "id": 1, "nome": "Login"}]}
     },
@@ -67,114 +64,16 @@ Authorization: Bearer <token>
   }
 }
 
+**Nota importante:**
+- O campo `state` sempre reflete o estado mais recente disponível para o projeto, buscando **primeiro no Redis** (sessão ativa) e, se não encontrado, faz fallback para o Blob Storage.
+- O campo `reports` sempre está atualizado conforme o último relatório recebido (via webhook MCP ou atualização manual).
+- Se houver diferença entre o estado do Blob Storage e o Redis, o valor do Redis é priorizado.
 
 **Resposta (projeto não encontrado):**
 
-
-{ 
+{
   "exists": false
 }
-
-
-### 1.3 Início de Análise (POST /analysis/start)
-
-**Requisição (novo projeto, com arquivo DOCX):**
-
-POST /analysis/start HTTP/1.1
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-
-Campos do formulário:
-- projeto: ProjetoNovo
-- analysis_type: criacao_epicos_azure_devops
-- comentario_usuario: Este é um comentário adicional do usuário. (opcional)
-- file: <arquivo.docx>
-
-Exemplo usando curl:
-
-bash
-curl -X POST "http://localhost:8000/analysis/start" \
-  -H "Authorization: Bearer <token>" \
-  -F "projeto=ProjetoNovo" \
-  -F "analysis_type=criacao_epicos_azure_devops" \
-  -F "comentario_usuario=Este é um comentário adicional do usuário." \
-  -F "file=@/caminho/para/arquivo.docx"
-
-
-**Requisição (projeto existente, sem novo arquivo):**
-
-POST /analysis/start HTTP/1.1
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-
-Campos do formulário:
-- projeto: ProjetoExistente
-- analysis_type: criacao_epicos_azure_devops
-- comentario_usuario: Comentário sem arquivo. (opcional)
-- project_id: projeto-uuid-123
-
-Exemplo usando curl:
-
-bash
-curl -X POST "http://localhost:8000/analysis/start" \
-  -H "Authorization: Bearer <token>" \
-  -F "projeto=ProjetoExistente" \
-  -F "analysis_type=criacao_epicos_azure_devops" \
-  -F "comentario_usuario=Comentário sem arquivo." \
-  -F "project_id=projeto-uuid-123"
-
-
-**Resposta:**
-
-
-{ 
-  "job_id": "123456",
-  "message": "Análise solicitada com sucesso ao agente.",
-  "session_id": "abcdef-uuid",
-  "project_id": "projeto-uuid-123"
-}
-
-
-> **Nota:** Após o início da análise, o backend persiste imediatamente a relação job_id -> session_id no Redis. Isso garante que, quando o webhook do MCP chegar, a sessão possa ser encontrada rapidamente usando o job_id.
-
-### 1.4 Atualização de Relatório (PUT /session/{session_id}/report)
-
-**Requisição:**
-
-PUT /session/abcdef-uuid/report HTTP/1.1
-Authorization: Bearer <token>
-Content-Type: application/json
-
-
-{ 
-  "report_type": "epicos",
-  "report_data": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]}
-}
-
-
-**Resposta:**
-
-
-{ 
-  "status": "ok"
-}
-
-
-### 1.5 Consulta de Relatórios (GET /session/{session_id}/reports)
-
-**Requisição:**
-
-GET /session/abcdef-uuid/reports HTTP/1.1
-Authorization: Bearer <token>
-
-**Resposta:**
-
-
-{ 
-  "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
-  "features_report": { "features": [{ "id": 1, "nome": "Login"}]}
-}
-
 
 ---
 
@@ -184,8 +83,7 @@ Authorization: Bearer <token>
 
 O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o seguinte formato JSON:
 
-
-{ 
+{
   "job_id": "<string>",
   "status": "in_progress" | "done" | "error",
   "progress": <opcional, int>,
@@ -194,7 +92,6 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "error_type": <string, obrigatório quando status="error">,
   "error_message": <string, obrigatório quando status="error">
 }
-
 
 **Campos obrigatórios:**
 - `job_id`: string. Identificador do job retornado pelo backend ao MCP.
@@ -207,185 +104,16 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 
 > **Nota:** O backend busca a sessão correspondente usando o job_id persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
 
-### 2.2 Exemplos de Webhook para Cada Tipo de Relatório
-
-#### 2.2.1 Webhook de Progresso (`status: in_progress`)
-
-
-{ 
-  "job_id": "123456",
-  "status": "in_progress",
-  "progress": 40,
-  "report_type": "epicos",
-  "report_data": { 
-    "epicos": [
-      { "id": 1, "titulo": "Como usuário..."}
-    ]
-  }
-}
-
-
-#### 2.2.2 Webhook de Conclusão (`status: done`)
-
-
-{ 
-  "job_id": "123456",
-  "status": "done",
-  "report_type": "epicos",
-  "report_data": { 
-    "epicos": [
-      { "id": 1, "titulo": "Como usuário...", "descricao": "..."},
-      { "id": 2, "titulo": "Como admin...", "descricao": "..."}
-    ]
-  }
-}
-
-
-#### 2.2.3 Webhook de Erro (`status: error`)
-
-
-{ 
-  "job_id": "123456",
-  "status": "error",
-  "error_type": "timeout",
-  "error_message": "Tempo limite excedido ao processar análise."
-}
-
-
-#### 2.2.4 Webhook para Features (`status: done`)
-
-
-{ 
-  "job_id": "7891011",
-  "status": "done",
-  "report_type": "features",
-  "report_data": { 
-    "features": [
-      { "id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"}
-    ]
-  }
-}
-
-
-#### 2.2.5 Webhook para Tech Debt (`status: done`)
-
-
-{ 
-  "job_id": "555777",
-  "status": "done",
-  "report_type": "tech_debt",
-  "report_data": { 
-    "tech_debt": [
-      { "id": 1, "descricao": "Código duplicado"}
-    ]
-  }
-}
-
-
-### 2.3 Estrutura de report_data Esperada por Tipo
-
-- Para `report_type: "epicos"`:
-  - `report_data` deve conter a chave `epicos` com uma lista de épicos:
-    
-    
-    { "epicos": [ { "id": 1, "titulo": "Como usuário...", "descricao": "..."} ] }
-    
-- Para `report_type: "features"`:
-  - `report_data` deve conter a chave `features` com uma lista de features:
-    
-    
-    { "features": [ { "id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD"} ] }
-    
-- Para `report_type: "tech_debt"`:
-  - `report_data` deve conter a chave `tech_debt` com uma lista de itens de débito técnico:
-    
-    
-    { "tech_debt": [ { "id": 1, "descricao": "Código duplicado"} ] }
-    
-
-### 2.4 Regras Importantes para o MCP
-
-- O campo `job_id` deve ser exatamente o mesmo recebido do backend na chamada de início de análise.
-- O campo `report_type` DEVE ser igual ao tipo de relatório definido no mapeamento do backend para o `analysis_type` correspondente.
-- O campo principal de `report_data` (ex: `epicos`, `features`, `tech_debt`) deve estar presente e conter a lista de resultados.
-- Para status `error`, não envie `report_type` nem `report_data`.
-- Para status `in_progress` e `done`, ambos `report_type` e `report_data` são obrigatórios.
-- O backend rejeitará webhooks com estrutura inválida ou campos ausentes.
-- O backend busca a sessão pelo job_id persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
-
-### 2.5 Exemplo de Webhook Inválido (Será Rejeitado)
-
-
-{ 
-  "job_id": "123456",
-  "status": "done",
-  "report_type": "epicos",
-  "report_data": { 
-    "errado": [
-      { "id": 1, "titulo": "Como usuário..."}
-    ]
-  }
-}
-
-
-**Motivo:** O campo esperado em `report_data` para `report_type: "epicos"` é `epicos`, não `errado`.
-
-### 2.6 Resumo do Mapeamento report_type → report_data
-
-| analysis_type                  | report_type  | Campo principal em report_data |
-|-------------------------------|--------------|-------------------------------|
-| criacao_epicos_azure_devops    | epicos       | epicos_report                |
-| refinamento_epicos_azure_devops| epicos       | epicos_report                        |
-
-O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeamento acima.
-
 ---
 
 ## 3. Exemplos de Respostas Backend → Frontend (Principais Endpoints)
 
-### 3.1 /analysis/start
+### 3.1 /projects/check
 **Sucesso:**
 
-
-{ 
-  "job_id": "123456",
-  "message": "Análise solicitada com sucesso ao agente.",
-  "session_id": "abcdef-uuid",
-  "project_id": "projeto-uuid-123"
-}
-
-**Erro:**
-
-
-{ 
-  "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise."
-}
-
-
-### 3.2 /session/{session_id}/reports
-**Sucesso:**
-
-
-{ 
-  "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
-  "features_report": { "features": [{ "id": 1, "nome": "Login"}]}
-}
-
-**Erro:**
-
-
-{ 
-  "detail": "Sessão não encontrada: ..."
-}
-
-
-### 3.3 /projects/check
-**Projeto encontrado:**
-
-
-{ 
+{
   "exists": true,
-  "state": { 
+  "state": {
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
@@ -400,109 +128,22 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
   }
 }
 
+**Nota:** O campo `state` sempre reflete o estado mais recente disponível, buscando primeiro no Redis (sessão ativa) e, se não encontrado, faz fallback para o Blob Storage. O campo `reports` está sempre atualizado com o último relatório recebido.
+
 **Projeto não encontrado:**
 
-
-{ 
+{
   "exists": false
-}
-
-
-### 3.4 /auth/login
-**Sucesso:**
-
-
-{ 
-  "user_info": { 
-    "usuario_executor": "user@example.com",
-    "sub": "uuid",
-    "name": "Nome do Usuário",
-    "email": "user@example.com",
-    "roles": ["admin"]
-  },
-  "projects": [
-    { 
-      "projeto": "ProjetoNovo",
-      "analysis_type": "criacao_epicos_azure_devops",
-      "created_at": "2024-06-01T12:00:00Z",
-      "last_saved_to_blob": "2024-06-01T12:30:00Z",
-      "project_id": "projeto-uuid-123"
-    }
-  ]
-}
-
-**Erro:**
-
-
-{ 
-  "detail": "Usuário não autenticado."
-}
-
-
-### 3.5 /session/{session_id}/report (atualização de relatório)
-**Sucesso:**
-
-
-{ 
-  "status": "ok"
-}
-
-**Erro:**
-
-
-{ 
-  "detail": "Erro ao atualizar relatório: ..."
-}
-
-
-### 3.6 /session/{session_id}/save-state
-**Sucesso:**
-
-
-{ 
-  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
-}
-
-**Erro:**
-
-
-{ 
-  "detail": "Erro ao salvar estado: ..."
-}
-
-
-### 3.7 /session/{session_id}/docx-files
-**Sucesso:**
-
-
-{ 
-  "docx_files": [
-    "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
-  ]
-}
-
-**Erro:**
-
-
-{ 
-  "detail": "Sessão não encontrada: ..."
 }
 
 ---
 
-## 4. Exemplos de Respostas de Erro (Backend → Frontend)
-
-| Código | Cenário | Exemplo |
-|--------|---------|---------|
-| 401 | Autenticação inválida | `{  "detail": "Cabeçalho Authorization ausente." }` |
-| 403 | IP não autorizado | `{  "detail": "Acesso negado. IP 200.100.50.25 não autorizado." }` |
-| 400 | Payload inválido | `{  "detail": "Os campos 'analysis_type' e pelo menos um de 'arquivo_docx' ou 'comentario_usuario' são obrigatórios." }` |
-| 502 | Falha comunicação MCP | `{  "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): ..." }` |
-| 504 | Timeout MCP | `{  "detail": "Erro ao comunicar com o servidor de Inteligência (MCP): Tempo limite excedido ao processar análise." }` |
-| 503 | Key Vault indisponível | `{  "detail": "Erro ao carregar segredos do Key Vault na inicialização: ..." }` |
-| 503 | Redis indisponível | `{  "detail": "Erro ao conectar ao Redis (endpoint privado): ..." }` |
-| 503 | Blob Storage indisponível | `{  "detail": "Erro ao conectar ao Blob Storage: ..." }` |
-| 500 | Erro interno | `{  "detail": "Erro interno do servidor." }` |
+## 4. Observações Importantes
+- O endpoint `/projects/check` sempre retorna o estado mais recente disponível para o projeto, priorizando o Redis.
+- O campo `reports` reflete imediatamente qualquer atualização feita via webhook do MCP ou via endpoint manual.
+- Se a sessão estiver ativa no Redis, o estado retornado é o do Redis (incluindo relatórios mais recentes). Se não houver sessão ativa, o backend retorna o último estado salvo no Blob Storage.
+- O campo `state` nunca mistura dados de fontes diferentes: sempre é 100% do Redis ou 100% do Blob Storage.
+- O frontend pode confiar que a consulta ao endpoint `/projects/check` sempre retorna o estado mais atualizado possível.
 
 ---
 
@@ -515,12 +156,10 @@ Authorization: Bearer <token>
 
 Resposta:
 
-
-{ 
+{
   "user_info": { "usuario_executor": "user@example.com", "sub": "uuid", "name": "Nome do Usuário", "email": "user@example.com", "roles": ["admin"]},
   "projects": [{ "projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}]
 }
-
 
 ### 2. Verificação de Projeto
 
@@ -529,10 +168,9 @@ Authorization: Bearer <token>
 
 Resposta:
 
-
-{ 
+{
   "exists": true,
-  "state": { 
+  "state": {
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
@@ -547,87 +185,6 @@ Resposta:
   }
 }
 
-
-### 3. Início de Análise (com ou sem arquivo)
-
-POST /analysis/start
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-
-Com arquivo (novo projeto):
-- projeto=ProjetoNovo
-- analysis_type=criacao_epicos_azure_devops
-- comentario_usuario=Comentário opcional
-- file=@/caminho/para/arquivo.docx
-
-Sem arquivo (projeto existente):
-- projeto=ProjetoExistente
-- analysis_type=criacao_epicos_azure_devops
-- comentario_usuario=Comentário sem arquivo
-- project_id=projeto-uuid-123
-
-Resposta:
-
-
-{ 
-  "job_id": "123456",
-  "message": "Análise solicitada com sucesso ao agente.",
-  "session_id": "abcdef-uuid",
-  "project_id": "projeto-uuid-123"
-}
-
-
-> **Nota:** O backend persiste imediatamente a relação job_id -> session_id no Redis após o início da análise.
-
-### 4. Webhook de Progresso (MCP → Backend)
-
-
-{ 
-  "job_id": "123456",
-  "status": "in_progress",
-  "progress": 50,
-  "report_type": "epicos",
-  "report_data": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]}
-}
-
-
-### 5. Webhook de Conclusão (MCP → Backend)
-
-
-{ 
-  "job_id": "123456",
-  "status": "done",
-  "report_type": "epicos",
-  "report_data": { "epicos": [{ "id": 1, "titulo": "Como usuário...", "descricao": "..."}]}
-}
-
-
-### 6. Consulta de Relatórios
-
-GET /session/abcdef-uuid/reports
-Authorization: Bearer <token>
-
-Resposta:
-
-
-{ 
-  "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]}
-}
-
-
-### 7. Salvamento Manual de Estado
-
-POST /session/abcdef-uuid/save-state
-Authorization: Bearer <token>
-
-Resposta:
-
-
-{ 
-  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
-}
-
-
 ---
 
 ## Notas
@@ -638,3 +195,5 @@ Resposta:
 - O upload de DOCX ocorre dentro do endpoint `/analysis/start` via multipart/form-data.
 - Para erros, o backend sempre retorna o campo `detail` no corpo JSON.
 - Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
+- Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
+- O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
