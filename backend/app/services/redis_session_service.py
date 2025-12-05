@@ -126,34 +126,50 @@ class RedisSessionService:
         current_reports = {k: session_data.get(k) for k in REPORT_FIELDS}
         self.logger.info(f"[update_report] Estado dos campos de relatório ANTES da atualização: {json.dumps(current_reports, ensure_ascii=False)}")
 
-        updated = False
+        updated_fields = []
         # Atualização granular campo a campo
-        for k in range (0, len(REPORT_FIELDS)):
-            dados = report_data[REPORT_TYPE[k]][REPORT_FIELDS[k]]
-            if dados is not None:
-                session_data[REPORT_FIELDS[k]] = dados
-                
-        self._preserve_existing_reports(session_data, current_reports, report_type)
-
-        for k in REPORT_FIELDS:
-            if k != f"{report_type}_report" and current_reports[k] is not None and session_data.get(k) is None:
-                self.logger.critical(f"[update_report] Campo de relatório '{k}' foi perdido durante a atualização do relatório '{report_type}' para session_id={session_id}. Estado antes: {json.dumps(current_reports, ensure_ascii=False)}; Estado depois: {json.dumps({kk: session_data.get(kk) for kk in REPORT_FIELDS}, ensure_ascii=False)}")
-                raise HTTPException(status_code=500, detail=f"Campo de relatório '{k}' foi perdido durante a atualização.")
+        if isinstance(report_data, dict):
+            for report_key, report_value in report_data.items():
+                # Exemplo: report_key = 'epicos', report_value = {'epicos_report': [...]}
+                if isinstance(report_value, dict):
+                    for field_key, field_value in report_value.items():
+                        # Exemplo: field_key = 'epicos_report', field_value = [...]
+                        if field_key in REPORT_FIELDS:
+                            if field_value is not None:
+                                session_data[field_key] = field_value
+                                updated_fields.append(field_key)
+                            else:
+                                self.logger.info(f"[update_report] Valor para '{field_key}' é None, mantendo valor anterior.")
+                elif report_key in REPORT_FIELDS:
+                    if report_value is not None:
+                        session_data[report_key] = report_value
+                        updated_fields.append(report_key)
+                    else:
+                        self.logger.info(f"[update_report] Valor para '{report_key}' é None, mantendo valor anterior.")
+        # Preserva todos os campos não atualizados
+        self._preserve_existing_reports(session_data, current_reports, updated_fields)
 
         self.logger.info(f"[update_report] Estado dos campos de relatório DEPOIS da atualização: {json.dumps({k: session_data.get(k) for k in REPORT_FIELDS}, ensure_ascii=False)}")
 
-        if updated:
-            self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-            try:
-                session_obj = SessionData(**session_data)
-                await ProjectStateService.save_state_to_blob(session_obj)
-                self.logger.info(f"[update_report] Estado salvo no Blob Storage para session_id={session_id}")
-            except Exception as e:
-                self.logger.error(f"Erro ao salvar estado imediatamente após update_report: {e}")
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        try:
+            session_obj = SessionData(**session_data)
+            await ProjectStateService.save_state_to_blob(session_obj)
+            self.logger.info(f"[update_report] Estado salvo no Blob Storage para session_id={session_id}")
+        except Exception as e:
+            self.logger.error(f"Erro ao salvar estado imediatamente após update_report: {e}")
 
-    def _preserve_existing_reports(self, session_data: dict, current_reports: dict, updated_report_type: str):
+        # Validação pós-atualização
+        session_json_after = self.redis_client.get(key)
+        session_data_after = self._deserialize_session(session_json_after)
         for k in REPORT_FIELDS:
-            if k != f"{updated_report_type}_report":
+            if k not in updated_fields and current_reports[k] is not None and session_data_after.get(k) is None:
+                self.logger.critical(f"[update_report] Campo de relatório '{k}' foi perdido durante a atualização do relatório '{report_type}' para session_id={session_id}. Estado antes: {json.dumps(current_reports, ensure_ascii=False)}; Estado depois: {json.dumps({kk: session_data_after.get(kk) for kk in REPORT_FIELDS}, ensure_ascii=False)}")
+                raise HTTPException(status_code=500, detail=f"Campo de relatório '{k}' foi perdido durante a atualização.")
+
+    def _preserve_existing_reports(self, session_data: dict, current_reports: dict, updated_fields):
+        for k in REPORT_FIELDS:
+            if k not in updated_fields:
                 session_data[k] = current_reports[k]
 
     async def _ensure_session_exists(self, session_id: str, usuario_executor: Optional[str] = None, projeto: Optional[str] = None) -> SessionData:
