@@ -119,29 +119,28 @@ class RedisSessionService:
         self.logger.info(f"[update_report] Estado dos campos de relatório ANTES da atualização: {json.dumps(current_reports, ensure_ascii=False)}")
 
         updated = False
-        if report_type == "epicos":
-            session_data["epicos_report"] = report_data
-            updated = True
-            self.logger.info(f"[update_report] Atualizado apenas epicos_report para session_id={session_id}")
-        elif report_type == "features":
-            session_data["features_report"] = report_data
-            updated = True
-            self.logger.info(f"[update_report] Atualizado apenas features_report para session_id={session_id}")
-        elif report_type == "times_descricao":
-            session_data["times_descricao_report"] = report_data
-            updated = True
-            self.logger.info(f"[update_report] Atualizado apenas times_descricao_report para session_id={session_id}")
-        elif report_type == "alocacao_times":
-            session_data["alocacao_times_report"] = report_data
-            updated = True
-            self.logger.info(f"[update_report] Atualizado apenas alocacao_times_report para session_id={session_id}")
-        elif report_type == "premissas_riscos":
-            session_data["premissas_riscos_report"] = report_data
-            updated = True
-            self.logger.info(f"[update_report] Atualizado apenas premissas_riscos_report para session_id={session_id}")
-        else:
-            self.logger.error(f"[update_report] report_type '{report_type}' não reconhecido para session_id={session_id}")
-            raise HTTPException(status_code=400, detail=f"Tipo de relatório '{report_type}' não reconhecido.")
+        # Atualização granular campo a campo
+        for k in REPORT_FIELDS:
+            if report_type == "epicos" and k == "epicos_report":
+                session_data[k] = report_data
+                updated = True
+                self.logger.info(f"[update_report] Atualizado apenas epicos_report para session_id={session_id}")
+            elif report_type == "features" and k == "features_report":
+                session_data[k] = report_data
+                updated = True
+                self.logger.info(f"[update_report] Atualizado apenas features_report para session_id={session_id}")
+            elif report_type == "times_descricao" and k == "times_descricao_report":
+                session_data[k] = report_data
+                updated = True
+                self.logger.info(f"[update_report] Atualizado apenas times_descricao_report para session_id={session_id}")
+            elif report_type == "alocacao_times" and k == "alocacao_times_report":
+                session_data[k] = report_data
+                updated = True
+                self.logger.info(f"[update_report] Atualizado apenas alocacao_times_report para session_id={session_id}")
+            elif report_type == "premissas_riscos" and k == "premissas_riscos_report":
+                session_data[k] = report_data
+                updated = True
+                self.logger.info(f"[update_report] Atualizado apenas premissas_riscos_report para session_id={session_id}")
 
         self._preserve_existing_reports(session_data, current_reports, report_type)
 
