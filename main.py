@@ -25,7 +25,6 @@ class FakeMCPStartPayload(BaseModel):
     comentario_usuario: Optional[str] = None
     usuario_executor: Optional[str] = None
     session_id: Optional[str] = None
-    job_id: Optional[str] = None 
 
 # --- DADOS MOCKADOS ---
 DATA_CRIACAO = {
@@ -133,21 +132,19 @@ def home():
 @router.post("/start")
 async def start_analysis_mock(payload: FakeMCPStartPayload, background_tasks: BackgroundTasks):
     # CORREÇÃO: Usamos o job_id enviado ou criamos um novo. Não usamos o session_id como job_id para evitar confusão.
-    current_job_id = payload.job_id or f"job-mock-{uuid.uuid4().hex[:8]}"
+    current_job_id = payload.session_id
     
     logger.info(f"⚡ [MOCK] Start recebido. Sessão: {payload.session_id} | Job: {current_job_id}")
 
     # Agenda o envio em background (Isso evita timeout na resposta do /start)
     background_tasks.add_task(
         send_result_to_backend, 
-        current_job_id, 
         payload.session_id, 
         payload.analysis_type
     )
 
     return {
-        "job_id": current_job_id,
-        "session_id": payload.session_id, # Campo obrigatório para o seu teste
+        "session_id": payload.session_id,
         "status": "queued",
         "message": "Análise iniciada. Mock responderá em breve."
     }
