@@ -11,7 +11,7 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="1.0.9 - Timeout Fix")
+app = FastAPI(title="MCP Mock Service", version="1.1.0 - Logic Fix")
 router = APIRouter()
 
 # URL do Backend Principal
@@ -66,17 +66,19 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
     logger.info(f"⏳ [MOCK] Aguardando 3s antes de enviar resultado para Job {job_id}...")
     await asyncio.sleep(3) 
     
-    # 1. SELEÇÃO DE DADOS
+    # 1. SELEÇÃO DE DADOS (CORRIGIDA COM ELIF)
     if analysis_type == "refinamento_epicos_azure_devops":
         logger.info("👉 Selecionando dados de REFINAMENTO")
         report_data = DATA_REFINAMENTO
         report_type = "epicos" 
-    if analysis_type == "criacao_features_azure_devops":
+    
+    elif analysis_type == "criacao_features_azure_devops": # <--- MUDANÇA AQUI: Era 'if', agora é 'elif'
         logger.info("👉 Selecionando dados de FEATURES")
         report_data = FEATURE_CRIACAO
         report_type = "features" 
+        
     else:
-        logger.info("👉 Selecionando dados de CRIAÇÃO")
+        logger.info("👉 Selecionando dados de CRIAÇÃO (Default)")
         report_data = DATA_CRIACAO
         report_type = "epicos"
 
@@ -126,7 +128,7 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
 
 @router.get("/")
 def home():
-    return {"status": "Mock MCP Online v1.0.9", "target": BACKEND_BASE_URL}
+    return {"status": "Mock MCP Online v1.1.0", "target": BACKEND_BASE_URL}
 
 @router.post("/start")
 async def start_analysis_mock(payload: FakeMCPStartPayload, background_tasks: BackgroundTasks):
