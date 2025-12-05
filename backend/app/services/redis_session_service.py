@@ -9,6 +9,14 @@ import logging
 from backend.app.services.project_state_service import ProjectStateService
 from fastapi import HTTPException
 
+REPORT_FIELDS = [
+    "epicos_report",
+    "features_report",
+    "times_descricao_report",
+    "alocacao_times_report",
+    "premissas_riscos_report"
+]
+
 class RedisSessionService:
     def __init__(self):
         self.redis_client = redis.Redis(
@@ -125,6 +133,10 @@ class RedisSessionService:
         else:
             self.logger.error(f"[update_report] report_type '{report_type}' não reconhecido para session_id={session_id}")
             raise HTTPException(status_code=400, detail=f"Tipo de relatório '{report_type}' não reconhecido.")
+        # Garante que todos os campos de relatório estão presentes e preservados
+        for k in REPORT_FIELDS:
+            if k not in session_data:
+                session_data[k] = None
         if updated:
             self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
             try:
@@ -163,6 +175,10 @@ class RedisSessionService:
             usuario_executor_restore = state.get("usuario_executor")
             projeto_restore = state.get("projeto")
             analysis_type_restore = state.get("analysis_type")
+            # Garante que todos os campos de relatório estão presentes
+            for k in REPORT_FIELDS:
+                if k not in state:
+                    state[k] = None
             self.logger.info(f"[_ensure_session_exists] Restaurando sessão no Redis para session_id={session_id}, usuario_executor={usuario_executor_restore}, projeto={projeto_restore}, analysis_type={analysis_type_restore}")
             self.restore_session_from_state(
                 usuario_executor_restore,
@@ -185,6 +201,11 @@ class RedisSessionService:
         if state_session_id and session_id != state_session_id:
             self.logger.warning(f"[restore_session_from_state] Aviso: session_id fornecido ({session_id}) é diferente do session_id no estado ({state_session_id}). Usando o session_id do estado: {state_session_id}")
             session_id = state_session_id
+        # Garante que todos os campos de relatório estão presentes
+        for k in REPORT_FIELDS:
+            if k not in project_state:
+                project_state[k] = None
+        self.logger.info(f"[restore_session_from_state] Campos de relatório restaurados: {', '.join([k for k in REPORT_FIELDS if project_state[k] is not None])}")
         session_data = {
             "session_id": session_id,
             "usuario_executor": usuario_executor,
