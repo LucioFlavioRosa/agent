@@ -150,6 +150,66 @@ sequenceDiagram
   }
 }
 
+---
+
+## 8. Webhook MCP: Recuperação Automática de Sessão e Atualização de Relatório
+
+A partir da versão X.X.X, o backend garante que **toda vez que um webhook do MCP é recebido, o relatório é atualizado corretamente**, mesmo que a sessão não esteja mais presente no Redis (por exemplo, após expiração, reinício ou falha do Redis). O fluxo é o seguinte:
+
+### Diagrama de Sequência: Webhook MCP → Recuperação de Sessão → Atualização de Relatório
+
+mermaid
+sequenceDiagram
+    participant MCP as MCP Server
+    participant BE as Backend
+    participant RS as RedisSessionService
+    participant PS as ProjectStateService
+    participant BS as Blob Storage
+    MCP->>BE: POST /webhooks/mcp (session_id, status, report_type, ...)
+    BE->>RS: get_session(session_id)
+    alt Sessão encontrada no Redis
+        RS-->>BE: SessionData
+        BE->>RS: update_report(session_id, ...)
+        RS-->>BE: OK
+    else Sessão NÃO encontrada no Redis
+        BE->>PS: load_latest_state_from_blob(usuario_executor, projeto, session_id)
+        alt Encontrou estado no Blob
+            PS-->>BE: project_state
+            BE->>RS: restore_session_from_state(usuario_executor, projeto, analysis_type, project_state, session_id)
+            RS-->>BE: session_id
+            BE->>RS: update_report(session_id, ...)
+            RS-->>BE: OK
+        else Não encontrou estado no Blob
+            BE->>PS: load_latest_state_by_session_id(session_id)
+            alt Encontrou estado pelo session_id
+                PS-->>BE: project_state
+                BE->>RS: restore_session_from_state(usuario_executor, projeto, analysis_type, project_state, session_id)
+                RS-->>BE: session_id
+                BE->>RS: update_report(session_id, ...)
+                RS-->>BE: OK
+            else Não encontrou estado em lugar nenhum
+                BE-->>MCP: 404 Sessão não encontrada
+            end
+        end
+    end
+    Note over BE: O relatório é sempre atualizado, não importa se a sessão foi criada em outra sessão ou restaurada do Blob
+
+### Código Responsável
+- `backend/app/api/webhooks.py` (endpoint `/webhooks/mcp`):
+  - Tenta buscar a sessão no Redis. Se não encontrar, busca no Blob Storage usando `usuario_executor` e `projeto` (se disponíveis) ou apenas `session_id`.
+  - Se encontrar o estado, restaura a sessão no Redis e executa a atualização do relatório.
+  - Se não encontrar em nenhum lugar, retorna 404.
+  - Logs detalhados em cada etapa.
+- `backend/app/services/redis_session_service.py`:
+  - Função `_ensure_session_exists` implementa toda a lógica de busca e restauração automática.
+  - Função `update_report` sempre chama `_ensure_session_exists` antes de atualizar o relatório.
+- `backend/app/services/project_state_service.py`:
+  - Função `load_latest_state_by_session_id` permite buscar o estado no Blob Storage apenas pelo `session_id`.
+
+### Garantias do Novo Fluxo
+- O relatório é atualizado sempre que um webhook do MCP é recebido, independentemente do estado do Redis.
+- O frontend pode confiar que, ao consultar `/projects/check`, o estado refletirá o relatório mais recente, mesmo após falhas temporárias do Redis.
+- Logs detalhados permitem rastrear todo o fluxo de recuperação e atualização.
 
 ---
 
