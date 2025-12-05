@@ -24,7 +24,7 @@ class FakeMCPStartPayload(BaseModel):
     arquivo_docx: Optional[str] = None
     comentario_usuario: Optional[str] = None
     usuario_executor: Optional[str] = None
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None 
 
 # --- DADOS MOCKADOS ---
 DATA_CRIACAO = {
@@ -65,13 +65,13 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
     logger.info(f"⏳ [MOCK] Aguardando 3s antes de enviar resultado para Job {job_id}...")
     await asyncio.sleep(3) 
     
-    # 1. SELEÇÃO DE DADOS (CORRIGIDA COM ELIF)
+    # 1. SELEÇÃO DE DADOS
     if analysis_type == "refinamento_epicos_azure_devops":
         logger.info("👉 Selecionando dados de REFINAMENTO")
         report_data = DATA_REFINAMENTO
         report_type = "epicos" 
     
-    elif analysis_type == "criacao_features_azure_devops": # <--- MUDANÇA AQUI: Era 'if', agora é 'elif'
+    elif analysis_type == "criacao_features_azure_devops":
         logger.info("👉 Selecionando dados de FEATURES")
         report_data = FEATURE_CRIACAO
         report_type = "features" 
@@ -81,11 +81,11 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
         report_data = DATA_CRIACAO
         report_type = "epicos"
 
-    # Aumentei o timeout para 30s para evitar erro se o backend estiver lento ("Cold Start" do backend)
     async with httpx.AsyncClient(timeout=30.0) as client:
         headers = {"Content-Type": "application/json"}
         base_url = BACKEND_BASE_URL.rstrip('/')
 
+        # AQUI O SESSION_ID É O QUE VEIO DO PAYLOAD ORIGINAL
         webhook_payload = {
             "session_id": session_id,
             "job_id": job_id,
@@ -94,7 +94,7 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
             "report_data": report_data
         }
         
-        logger.info(f"📤 [WEBHOOK] Tentando enviar para {base_url}/webhooks/mcp")
+        logger.info(f"📤 [WEBHOOK] Tentando enviar para {base_url}/webhooks/mcp | Session: {session_id}")
         
         try:
             resp = await client.post(f"{base_url}/webhooks/mcp", json=webhook_payload, headers=headers)
@@ -110,7 +110,7 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
         except Exception as e:
             logger.error(f"❌ [ERRO CONEXÃO] {e}")
 
-        # TENTATIVA 2: Fallback
+        # TENTATIVA 2: Fallback (Usa o mesmo session_id)
         if session_id:
             logger.info("🔄 [FALLBACK] Tentando salvar direto na Sessão...")
             direct_payload = {"report_type": report_type, "report_data": report_data}
@@ -131,20 +131,33 @@ def home():
 
 @router.post("/start")
 async def start_analysis_mock(payload: FakeMCPStartPayload, background_tasks: BackgroundTasks):
-    # CORREÇÃO: Usamos o job_id enviado ou criamos um novo. Não usamos o session_id como job_id para evitar confusão.
-    current_job_id = payload.session_id
+    """
+    Garante que o session_id de entrada é EXATAMENTE o de saída e uso interno.
+    """
     
-    logger.info(f"⚡ [MOCK] Start recebido. Sessão: {payload.session_id} | Job: {current_job_id}")
+    # Se o payload não trouxer session_id, usamos 'None' ou uma string vazia, 
+    # mas NÃO geramos um novo para respeitar a regra de "exclusivamente entrada".
+    input_session_id = payload.session_id
 
-    # Agenda o envio em background (Isso evita timeout na resposta do /start)
+    # Usamos o próprio session_id como job_id para rastreio no log, 
+    # ou 'unknown' se vier nulo, apenas para não quebrar o print.
+    job_id_ref = input_session_id if input_session_id else "no-id-provided"
+    
+    logger.info(f"⚡ [MOCK] Start recebido. Sessão INPUT: {input_session_id}")
+
+    # CORREÇÃO CRÍTICA AQUI:
+    # Passamos os argumentos nomeados para garantir que cada valor vá para o lugar certo.
+    # Antes, 'payload.analysis_type' estava caindo no lugar do 'session_id' na função async.
     background_tasks.add_task(
         send_result_to_backend, 
-        payload.session_id, 
-        payload.analysis_type
+        job_id=job_id_ref,           # 1º argumento da função
+        session_id=input_session_id, # 2º argumento (GARANTIDO SER O INPUT)
+        analysis_type=payload.analysis_type # 3º argumento
     )
 
+    # Retorno imediato
     return {
-        "session_id": payload.session_id,
+        "session_id": input_session_id, # Retorna estritamente o que entrou
         "status": "queued",
         "message": "Análise iniciada. Mock responderá em breve."
     }
@@ -154,5 +167,4 @@ app.include_router(router, prefix="/fake-mcp/api/v1/analysis")
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
-    # Workers = 1 é suficiente para mock, mas garante que não cria processos zumbis
     uvicorn.run(app, host="0.0.0.0", port=port)
