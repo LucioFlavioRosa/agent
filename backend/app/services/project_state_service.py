@@ -5,6 +5,14 @@ from backend.app.core.config import settings
 from backend.app.services.blob_storage_service import _get_blob_clients
 import logging
 
+REPORT_FIELDS = [
+    "epicos_report",
+    "features_report",
+    "times_descricao_report",
+    "alocacao_times_report",
+    "premissas_riscos_report"
+]
+
 class ProjectStateService:
     @staticmethod
     async def save_state_to_blob(session_data) -> str:
@@ -19,6 +27,11 @@ class ProjectStateService:
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
         logger = logging.getLogger("ProjectStateService")
+        # Garante que todos os campos de relatório estão presentes
+        for k in REPORT_FIELDS:
+            if k not in state:
+                logger.warning(f"[save_state_to_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
+                state[k] = None
         logger.info(f"[save_state_to_blob] Iniciando persistência no Blob Storage: {blob_path}")
         logger.info(f"[save_state_to_blob] epicos_report: {json.dumps(state.get('epicos_report', {}), ensure_ascii=False)}")
         logger.info(f"[save_state_to_blob] features_report: {json.dumps(state.get('features_report', {}), ensure_ascii=False)}")
@@ -54,7 +67,6 @@ class ProjectStateService:
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}, session_id={session_id}")
-        # Retrocompatibilidade: se o estado antigo tiver apenas 'reports', migrar para os campos individuais
         reports_dict = state.get('reports')
         if reports_dict and (
             'epicos_report' not in state and
@@ -69,9 +81,9 @@ class ProjectStateService:
             state['alocacao_times_report'] = reports_dict.get('alocacao_times_report') or reports_dict.get('alocacao_times')
             state['premissas_riscos_report'] = reports_dict.get('premissas_riscos_report') or reports_dict.get('premissas_riscos')
             logger.info(f"[load_latest_state_from_blob] Migrado campo 'reports' para campos individuais de relatório.")
-        # Garante que todos os campos existem, mesmo que None
-        for k in ['epicos_report', 'features_report', 'times_descricao_report', 'alocacao_times_report', 'premissas_riscos_report']:
+        for k in REPORT_FIELDS:
             if k not in state:
+                logger.warning(f"[load_latest_state_from_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
                 state[k] = None
         return state
 
@@ -173,6 +185,10 @@ class ProjectStateService:
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
         logger.info(f"[load_latest_state_by_session_id] Estado carregado com sucesso para session_id={session_id}")
+        for k in REPORT_FIELDS:
+            if k not in state:
+                logger.warning(f"[load_latest_state_by_session_id] Campo de relatório '{k}' ausente, preenchendo com None.")
+                state[k] = None
         return state
 
     @staticmethod
