@@ -152,3 +152,22 @@ class ProjectStateService:
         state = json.loads(state_bytes.decode("utf-8"))
         logger.info(f"[load_latest_state_by_session_id] Estado carregado com sucesso para session_id={session_id}")
         return state
+
+    @staticmethod
+    async def get_session_id_from_latest_state(usuario_executor: str, projeto: str) -> Optional[str]:
+        from backend.app.services.redis_session_service import RedisSessionService
+        logger = logging.getLogger("ProjectStateService")
+        try:
+            redis_service = RedisSessionService()
+            session = redis_service.get_session_by_project(usuario_executor, projeto)
+            if session:
+                return session.session_id
+        except Exception as e:
+            logger.warning(f"get_session_id_from_latest_state: Sessão não encontrada no Redis para usuario_executor={usuario_executor}, projeto={projeto}: {e}")
+        try:
+            state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
+            if state and state.get("session_id"):
+                return state.get("session_id")
+        except Exception as e:
+            logger.warning(f"get_session_id_from_latest_state: Estado não encontrado no Blob para usuario_executor={usuario_executor}, projeto={projeto}: {e}")
+        return None
