@@ -9,6 +9,8 @@ class MCPWebhookPayload(BaseModel):
     report_data: Optional[Any] = Field(None)
     error_type: Optional[str] = Field(None)
     error_message: Optional[str] = Field(None)
+    usuario_executor: Optional[str] = Field(None, description="Usuário executor da sessão. Opcional, mas recomendado para facilitar a recuperação de sessão caso não esteja no Redis.")
+    projeto: Optional[str] = Field(None, description="Nome do projeto relacionado à sessão. Opcional, mas recomendado para facilitar a recuperação de sessão caso não esteja no Redis.")
 
     @validator('status')
     def status_must_be_valid(cls, v):
