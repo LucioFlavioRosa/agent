@@ -176,6 +176,10 @@ class RedisSessionService:
         comentario_usuario = project_state.get("comentario_usuario")
         extracted_text = project_state.get("extracted_text")
         project_id = project_state.get("project_id")
+        state_session_id = project_state.get("session_id")
+        if state_session_id and session_id != state_session_id:
+            self.logger.warning(f"[restore_session_from_state] Aviso: session_id fornecido ({session_id}) é diferente do session_id no estado ({state_session_id}). Usando o session_id do estado: {state_session_id}")
+            session_id = state_session_id
         self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id, session_id=session_id)
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
