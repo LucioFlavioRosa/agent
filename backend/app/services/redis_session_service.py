@@ -114,10 +114,12 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis após tentativa de restauração.")
         session_data = self._deserialize_session(session_json)
-        # Preserva todos os campos de relatório existentes
-        for k in REPORT_FIELDS:
-            if k not in session_data:
-                session_data[k] = None
+
+        # Passo 1: Captura o estado atual de todos os campos de relatório
+        current_reports = {k: session_data.get(k) for k in REPORT_FIELDS}
+        self.logger.info(f"[update_report] Estado dos campos de relatório ANTES da atualização: {json.dumps(current_reports, ensure_ascii=False)}")
+
+        # Passo 2: Atualiza apenas o campo solicitado
         updated = False
         if report_type == "epicos":
             session_data["epicos_report"] = report_data
@@ -142,12 +144,21 @@ class RedisSessionService:
         else:
             self.logger.error(f"[update_report] report_type '{report_type}' não reconhecido para session_id={session_id}")
             raise HTTPException(status_code=400, detail=f"Tipo de relatório '{report_type}' não reconhecido.")
-        # Garante que todos os campos de relatório estão presentes e preservados
+
+        # Passo 3: Restaura todos os outros campos de relatório para garantir isolamento
         for k in REPORT_FIELDS:
-            if k not in session_data:
-                session_data[k] = None
+            if k != f"{report_type}_report":
+                session_data[k] = current_reports[k]
+
+        # Passo 4: Validação - nenhum campo foi perdido
+        for k in REPORT_FIELDS:
+            if k != f"{report_type}_report" and current_reports[k] is not None and session_data.get(k) is None:
+                self.logger.critical(f"[update_report] Campo de relatório '{k}' foi perdido durante a atualização do relatório '{report_type}' para session_id={session_id}. Estado antes: {json.dumps(current_reports, ensure_ascii=False)}; Estado depois: {json.dumps({kk: session_data.get(kk) for kk in REPORT_FIELDS}, ensure_ascii=False)}")
+                raise HTTPException(status_code=500, detail=f"Campo de relatório '{k}' foi perdido durante a atualização.")
+
+        self.logger.info(f"[update_report] Estado dos campos de relatório DEPOIS da atualização: {json.dumps({k: session_data.get(k) for k in REPORT_FIELDS}, ensure_ascii=False)}")
+
         if updated:
-            self.logger.info(f"[update_report] Estado dos campos de relatório antes de salvar: " + ", ".join([f"{k}: {'PRESENTE' if session_data[k] is not None else 'None'}" for k in REPORT_FIELDS]))
             self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
             try:
                 session_obj = SessionData(**session_data)
