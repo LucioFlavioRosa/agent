@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama Geral do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     subgraph Frontend
         Z[Usuário/Frontend]
@@ -47,7 +47,7 @@ flowchart TD
     AD -->|Salva Estado| AE
     AG -->|Salvamento Periódico| AE
     AC -->|Carrega Segredos| AA
-```
+
 
 ---
 
@@ -55,25 +55,26 @@ flowchart TD
 
 ### 1. Login e Autenticação via Azure AD
 - O frontend envia o token JWT via header `Authorization`. O backend valida o token, extrai o `usuario_executor` e retorna a lista de projetos do usuário.
-- O backend gera um novo `session_id` a cada login e retorna ao frontend.
+- O backend gera um novo `session_id` apenas se não houver nenhum projeto existente para o usuário. Caso contrário, o `session_id` retornado é sempre o mesmo do estado mais recente do projeto selecionado (extraído do Redis ou Blob Storage, nunca gerado novamente para projetos existentes).
 - O `session_id` é o único identificador propagado em todas as interações da sessão.
 - Código:
   - `backend/app/api/auth.py` (`POST /auth/login`)
   - `backend/app/middleware/auth_middleware.py` (`get_current_user`)
   - `backend/app/services/azure_ad_service.py` (`validate_token`)
-  - `backend/app/services/project_state_service.py` (`list_user_projects`)
+  - `backend/app/services/project_state_service.py` (`list_user_projects`, `get_session_id_from_latest_state`)
 
 ### 2. Verificação de Projeto Existente
 - O frontend chama `/projects/check` para saber se o projeto existe. O backend busca o estado mais recente do projeto **primeiro no Redis** (sessão ativa), e só faz fallback para o Blob Storage se não encontrar no Redis.
-- O estado retornado sempre inclui o `session_id` da sessão.
+- O estado retornado sempre inclui o `session_id` da sessão mais recente (do Redis ou Blob).
+- Se a sessão não estiver no Redis, o backend restaura a sessão usando o `session_id` do Blob antes de retornar o estado.
 - Código:
   - `backend/app/api/projects.py` (`/projects/check`)
-  - `backend/app/services/redis_session_service.py` (`get_session_by_project`)
-  - `backend/app/services/project_state_service.py` (`load_latest_state_from_redis`, `load_latest_state_from_blob`)
+  - `backend/app/services/redis_session_service.py` (`get_session_by_project`, `restore_session_from_state`)
+  - `backend/app/services/project_state_service.py` (`load_latest_state_from_redis`, `load_latest_state_from_blob`, `get_session_id_from_latest_state`)
 
 #### Diagrama de Sequência: Consulta de Estado de Projeto
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -90,14 +91,17 @@ sequenceDiagram
     else Sessão não encontrada no Redis
         BE->>PS: load_latest_state_from_blob(usuario_executor, projeto)
         PS-->>BE: Estado (do Blob Storage)
+        BE->>RS: restore_session_from_state(usuario_executor, projeto, analysis_type, state, session_id)
+        RS-->>BE: session_id
         BE-->>FE: exists: true, state (do Blob Storage)
     end
     Note over BE: O campo 'reports' sempre reflete o estado mais recente disponível
-```
+
 
 ### 3. Início de Análise e Upload de DOCX (Processamento Paralelo)
 - O upload do arquivo DOCX e a extração do texto ocorrem dentro do endpoint `/analysis/start` via multipart/form-data. O backend retorna tanto a URL do arquivo quanto o texto extraído.
 - O backend sempre envia o `session_id` para o MCP e espera que o MCP retorne o mesmo `session_id` em todas as respostas e webhooks.
+- Para projetos existentes, o `session_id` é sempre reutilizado do estado mais recente.
 - Código:
   - `backend/app/api/analysis.py` (`/analysis/start`)
   - `backend/app/services/blob_storage_service.py` (`upload_and_extract_docx`)
@@ -105,7 +109,8 @@ sequenceDiagram
 
 ### 4. Criação e Gerenciamento de Sessão no Redis
 - Sessões são criadas e persistidas no Redis, incluindo campos como `comentario_usuario`, `extracted_text`, `project_id`, `docx_files` e `reports`.
-- O único identificador de sessão é o `session_id`, gerado no login.
+- O único identificador de sessão é o `session_id`, gerado no login (apenas para projetos novos) ou sempre reutilizado para projetos existentes.
+- Na restauração de sessão a partir do estado do Blob, o `session_id` passado sempre deve ser igual ao do estado carregado. Se forem diferentes, um aviso é logado e o `session_id` do estado é utilizado.
 - Código:
   - `backend/app/services/redis_session_service.py` (`create_session`, `add_docx_file`, `update_session_extracted_text`, `update_report`, `restore_session_from_state`, `get_session_by_project`)
   - `backend/app/models/session_models.py` (`SessionData`)
@@ -133,7 +138,7 @@ sequenceDiagram
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 **Exemplo de configuração de agente:**
-```json
+
 {
   "agents": {
     "criacao_epicos_azure_devops": {
@@ -150,7 +155,7 @@ sequenceDiagram
     }
   }
 }
-```
+
 ---
 
 ## 8. Webhook MCP: Recuperação Automática de Sessão e Atualização de Relatório
@@ -159,7 +164,7 @@ A partir da versão X.X.X, o backend garante que **toda vez que um webhook do MC
 
 ### Diagrama de Sequência: Webhook MCP → Recuperação de Sessão → Atualização de Relatório
 
-```mermaid
+mermaid
 sequenceDiagram
     participant MCP as MCP Server
     participant BE as Backend
@@ -194,7 +199,7 @@ sequenceDiagram
         end
     end
     Note over BE: O relatório é sempre atualizado, não importa se a sessão foi criada em outra sessão ou restaurada do Blob
-```
+
 ### Código Responsável
 - `backend/app/api/webhooks.py` (endpoint `/webhooks/mcp`):
   - Tenta buscar a sessão no Redis. Se não encontrar, busca no Blob Storage usando `usuario_executor` e `projeto` (se disponíveis) ou apenas `session_id`.
@@ -204,6 +209,7 @@ sequenceDiagram
 - `backend/app/services/redis_session_service.py`:
   - Função `_ensure_session_exists` implementa toda a lógica de busca e restauração automática.
   - Função `update_report` sempre chama `_ensure_session_exists` antes de atualizar o relatório.
+  - Função `restore_session_from_state` garante que o session_id passado seja igual ao do estado carregado, logando um aviso se forem diferentes.
 - `backend/app/services/project_state_service.py`:
   - Função `load_latest_state_by_session_id` permite buscar o estado no Blob Storage apenas pelo `session_id`.
 
