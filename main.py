@@ -52,6 +52,15 @@ DATA_REFINAMENTO = {
     }
 }
 
+FEATURE_CRIACAO = {
+    "features_report": {
+        "features": [
+            {"feature id": 1, "epico id ": "1", "titulo": "setup infra na nuvem", "prazo": "2 dias"},
+            {"feature id": 2, "epico id ": "2", "titulo": "testes de segurança", "prazo": "1 dia"}
+        ]
+    }
+}
+
 # --- LÓGICA DE ENVIO ---
 async def send_result_to_backend(job_id: str, session_id: Optional[str], analysis_type: str):
     logger.info(f"⏳ [MOCK] Aguardando 3s antes de enviar resultado para Job {job_id}...")
@@ -62,6 +71,10 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
         logger.info("👉 Selecionando dados de REFINAMENTO")
         report_data = DATA_REFINAMENTO
         report_type = "epicos" 
+    if analysis_type == "criacao_features_azure_devops":
+        logger.info("👉 Selecionando dados de FEATURES")
+        report_data = FEATURE_CRIACAO
+        report_type = "features" 
     else:
         logger.info("👉 Selecionando dados de CRIAÇÃO")
         report_data = DATA_CRIACAO
