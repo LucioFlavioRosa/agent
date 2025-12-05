@@ -42,17 +42,21 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
     if not usuario_executor:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
-    # Gera um novo session_id a cada login
-    session_id = str(uuid.uuid4())
-    redis_service = RedisSessionService()
-    # Cria uma sessão inicial vazia para o usuário
-    redis_service.create_session(
-        usuario_executor=usuario_executor,
-        projeto="__login__",
-        analysis_type="__login__",
-        comentario_usuario=None,
-        extracted_text=None,
-        project_id=None,
-        session_id=session_id
-    )
+    session_id = None
+    if projects:
+        projeto_mais_recente = projects[0]
+        projeto_nome = projeto_mais_recente.get("projeto")
+        session_id = await ProjectStateService.get_session_id_from_latest_state(usuario_executor, projeto_nome)
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        redis_service = RedisSessionService()
+        redis_service.create_session(
+            usuario_executor=usuario_executor,
+            projeto="__login__",
+            analysis_type="__login__",
+            comentario_usuario=None,
+            extracted_text=None,
+            project_id=None,
+            session_id=session_id
+        )
     return AuthLoginResponse(user_info=current_user, projects=projects, session_id=session_id)
