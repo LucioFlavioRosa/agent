@@ -27,39 +27,46 @@ class FakeMCPStartPayload(BaseModel):
     session_id: Optional[str] = None 
 
 # --- DADOS MOCKADOS ---
+# --- DADOS MOCKADOS (CORRIGIDOS) ---
 DATA_CRIACAO = {
-    "epicos": {
-        "epicos_report": [
-            {"id": 1, "titulo": "Autenticação Azure AD", 
-             "descricao": "Implementar login seguro com OAuth2. Vou testar Algumas coisas", 
-             "tempo estimado": "2 sprint", "criterios de aceite": 
-             "eu preciso fazer esse login de qualquer maquina"},
-            {"id": 2, "titulo": "Processamento de Arquivos", 
-             "descricao": "Ler e extrair texto de DOCX."},
-            {"id": 3, "titulo": "Dashboard de Métricas", "descricao": "Visualizar status dos projetos."}
-        ]
-    }
+    # Removida a chave externa "epicos". Agora "epicos_report" é a raiz.
+    "epicos_report": [
+        {
+            "id": 1, 
+            "titulo": "Autenticação Azure AD", 
+            "descricao": "Implementar login seguro com OAuth2. Vou testar Algumas coisas", 
+            "tempo estimado": "2 sprint", 
+            "criterios de aceite": "eu preciso fazer esse login de qualquer maquina"
+        },
+        {
+            "id": 2, 
+            "titulo": "Processamento de Arquivos", 
+            "descricao": "Ler e extrair texto de DOCX."
+        },
+        {
+            "id": 3, 
+            "titulo": "Dashboard de Métricas", 
+            "descricao": "Visualizar status dos projetos."
+        }
+    ]
 }
 
 DATA_REFINAMENTO = {
-    "epicos": {
-        "epicos_report": [
-            {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
-            {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
-            {"id": 3, "titulo": "Dashboard de Métricas refinados", "descricao": "Visualizar status dos projetos. NONO"}
-        ]
-    }
+    # Removida a chave externa "epicos"
+    "epicos_report": [
+        {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
+        {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
+        {"id": 3, "titulo": "Dashboard de Métricas refinados", "descricao": "Visualizar status dos projetos. NONO"}
+    ]
 }
 
 FEATURE_CRIACAO = {
-    "features": {
-        "features_report": [
-            {"feature id": 1, "epico id ": "1", "titulo": "setup infra na nuvem", "prazo": "2 dias"},
-            {"feature id": 2, "epico id ": "2", "titulo": "testes de segurança", "prazo": "1 dia"}
-        ]
-    }
+    # Removida a chave externa "features". Agora "features_report" é a raiz.
+    "features_report": [
+        {"feature id": 1, "epico id ": "1", "titulo": "setup infra na nuvem", "prazo": "2 dias"},
+        {"feature id": 2, "epico id ": "2", "titulo": "testes de segurança", "prazo": "1 dia"}
+    ]
 }
-
 # --- LÓGICA DE ENVIO ---
 async def send_result_to_backend(job_id: str, session_id: Optional[str], analysis_type: str):
     logger.info(f"⏳ [MOCK] Aguardando 3s antes de enviar resultado para Job {job_id}...")
