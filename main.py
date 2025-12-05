@@ -42,7 +42,7 @@ DATA_CRIACAO = {
 }
 
 DATA_REFINAMENTO = {
-    "epicos_report": {
+    "epicos": {
         "epicos": [
             {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
             {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
