@@ -74,6 +74,8 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 logger.error(f"Estrutura de report_data inválida para report_type '{payload.report_type}', analysis_type '{analysis_type}' e session_id '{payload.session_id}'")
                 raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida para report_type '{payload.report_type}' e analysis_type '{analysis_type}'")
             logger.info(f"Atualizando relatório '{payload.report_type}' na sessão {session.session_id} via substituição total da chave no dicionário reports.")
+            # LOG DETALHADO: Estado antes da atualização
+            logger.info(f"[webhook] Estado dos campos de relatório ANTES (audit): { {k: getattr(session, k, None) for k in REPORT_FIELDS} }")
             await redis_service.update_report(
                 session.session_id,
                 payload.report_type,
