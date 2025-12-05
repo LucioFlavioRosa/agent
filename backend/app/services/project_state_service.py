@@ -27,17 +27,14 @@ class ProjectStateService:
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
         logger = logging.getLogger("ProjectStateService")
-        # Garante que todos os campos de relatório estão presentes
+        # Garante que todos os campos de relatório estão presentes e loga o conteúdo de cada um
         for k in REPORT_FIELDS:
             if k not in state:
-                logger.warning(f"[save_state_to_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
+                logger.critical(f"[save_state_to_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
                 state[k] = None
-        logger.info(f"[save_state_to_blob] Iniciando persistência no Blob Storage: {blob_path}")
-        logger.info(f"[save_state_to_blob] epicos_report: {json.dumps(state.get('epicos_report', {}), ensure_ascii=False)}")
-        logger.info(f"[save_state_to_blob] features_report: {json.dumps(state.get('features_report', {}), ensure_ascii=False)}")
-        logger.info(f"[save_state_to_blob] times_descricao_report: {json.dumps(state.get('times_descricao_report', {}), ensure_ascii=False)}")
-        logger.info(f"[save_state_to_blob] alocacao_times_report: {json.dumps(state.get('alocacao_times_report', {}), ensure_ascii=False)}")
-        logger.info(f"[save_state_to_blob] premissas_riscos_report: {json.dumps(state.get('premissas_riscos_report', {}), ensure_ascii=False)}")
+        logger.info(f"[save_state_to_blob] Conteúdo dos campos de relatório antes de salvar:")
+        for k in REPORT_FIELDS:
+            logger.info(f"[save_state_to_blob] {k}: {json.dumps(state.get(k, None), ensure_ascii=False)}")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
         logger.info(f"[save_state_to_blob] Persistência concluída no Blob Storage: {blob_path}")
         return blob_client.url
@@ -85,6 +82,9 @@ class ProjectStateService:
             if k not in state:
                 logger.warning(f"[load_latest_state_from_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
                 state[k] = None
+        logger.info(f"[load_latest_state_from_blob] Conteúdo dos campos de relatório após carregar do Blob:")
+        for k in REPORT_FIELDS:
+            logger.info(f"[load_latest_state_from_blob] {k}: {json.dumps(state.get(k, None), ensure_ascii=False)}")
         return state
 
     @staticmethod
