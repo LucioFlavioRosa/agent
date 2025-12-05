@@ -15,7 +15,13 @@ def get_session_reports(session_id: str):
     redis_service = RedisSessionService()
     try:
         session = redis_service.get_session(session_id)
-        return session.reports
+        return {
+            "epicos_report": session.epicos_report,
+            "features_report": session.features_report,
+            "times_descricao_report": session.times_descricao_report,
+            "alocacao_times_report": session.alocacao_times_report,
+            "premissas_riscos_report": session.premissas_riscos_report
+        }
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Sessão não encontrada: {e}")
 
