@@ -11,7 +11,7 @@ from typing import Optional
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="1.1.0 - Logic Fix")
+app = FastAPI(title="MCP Mock Service", version="1.2.0 - JSON Structure Fix")
 router = APIRouter()
 
 # URL do Backend Principal
@@ -26,10 +26,10 @@ class FakeMCPStartPayload(BaseModel):
     usuario_executor: Optional[str] = None
     session_id: Optional[str] = None 
 
-# --- DADOS MOCKADOS ---
 # --- DADOS MOCKADOS (CORRIGIDOS) ---
+
+# CORREÇÃO PRINCIPAL AQUI: Removemos a chave "epicos" que envolvia tudo.
 DATA_CRIACAO = {
-    "epicos":{
     "epicos_report": [
         {
             "id": 1, 
@@ -50,10 +50,8 @@ DATA_CRIACAO = {
         }
     ]
 }
-}
 
 DATA_REFINAMENTO = {
-    # Removida a chave externa "epicos"
     "epicos_report": [
         {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
         {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
@@ -62,12 +60,12 @@ DATA_REFINAMENTO = {
 }
 
 FEATURE_CRIACAO = {
-    # Removida a chave externa "features". Agora "features_report" é a raiz.
     "features_report": [
         {"feature id": 1, "epico id ": "1", "titulo": "setup infra na nuvem", "prazo": "2 dias"},
         {"feature id": 2, "epico id ": "2", "titulo": "testes de segurança", "prazo": "1 dia"}
     ]
 }
+
 # --- LÓGICA DE ENVIO ---
 async def send_result_to_backend(job_id: str, session_id: Optional[str], analysis_type: str):
     logger.info(f"⏳ [MOCK] Aguardando 3s antes de enviar resultado para Job {job_id}...")
@@ -91,9 +89,9 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         headers = {"Content-Type": "application/json"}
+        # Garante que não tenha barra dupla na URL
         base_url = BACKEND_BASE_URL.rstrip('/')
 
-        # AQUI O SESSION_ID É O QUE VEIO DO PAYLOAD ORIGINAL
         webhook_payload = {
             "session_id": session_id,
             "job_id": job_id,
@@ -118,16 +116,18 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
         except Exception as e:
             logger.error(f"❌ [ERRO CONEXÃO] {e}")
 
-        # TENTATIVA 2: Fallback (Usa o mesmo session_id)
+        # TENTATIVA 2: Fallback (Salvar direto na sessão se o Webhook falhar)
         if session_id:
             logger.info("🔄 [FALLBACK] Tentando salvar direto na Sessão...")
+            # O payload direto para a sessão é apenas o report_data, dependendo da sua API
+            # Mas geralmente a rota /report espera { "report_type": ..., "report_data": ... }
             direct_payload = {"report_type": report_type, "report_data": report_data}
             try:
                 resp = await client.put(f"{base_url}/session/{session_id}/report", json=direct_payload, headers=headers)
                 if resp.status_code == 200:
                     logger.info("✅ [SALVO VIA SESSION] Fallback funcionou.")
                 else:
-                    logger.error(f"❌ [FALHA FALLBACK] Status: {resp.status_code}")
+                    logger.error(f"❌ [FALHA FALLBACK] Status: {resp.status_code} - {resp.text}")
             except Exception as e:
                 logger.error(f"❌ [ERRO FALLBACK] {e}")
 
@@ -135,37 +135,28 @@ async def send_result_to_backend(job_id: str, session_id: Optional[str], analysi
 
 @router.get("/")
 def home():
-    return {"status": "Mock MCP Online v1.1.0", "target": BACKEND_BASE_URL}
+    return {"status": "Mock MCP Online v1.2.0", "target": BACKEND_BASE_URL}
 
 @router.post("/start")
 async def start_analysis_mock(payload: FakeMCPStartPayload, background_tasks: BackgroundTasks):
     """
-    Garante que o session_id de entrada é EXATAMENTE o de saída e uso interno.
+    Inicia o processamento mockado em background.
     """
     
-    # Se o payload não trouxer session_id, usamos 'None' ou uma string vazia, 
-    # mas NÃO geramos um novo para respeitar a regra de "exclusivamente entrada".
     input_session_id = payload.session_id
-
-    # Usamos o próprio session_id como job_id para rastreio no log, 
-    # ou 'unknown' se vier nulo, apenas para não quebrar o print.
     job_id_ref = input_session_id if input_session_id else "no-id-provided"
     
     logger.info(f"⚡ [MOCK] Start recebido. Sessão INPUT: {input_session_id}")
 
-    # CORREÇÃO CRÍTICA AQUI:
-    # Passamos os argumentos nomeados para garantir que cada valor vá para o lugar certo.
-    # Antes, 'payload.analysis_type' estava caindo no lugar do 'session_id' na função async.
     background_tasks.add_task(
         send_result_to_backend, 
-        job_id=job_id_ref,           # 1º argumento da função
-        session_id=input_session_id, # 2º argumento (GARANTIDO SER O INPUT)
-        analysis_type=payload.analysis_type # 3º argumento
+        job_id=job_id_ref,            
+        session_id=input_session_id, 
+        analysis_type=payload.analysis_type
     )
 
-    # Retorno imediato
     return {
-        "session_id": input_session_id, # Retorna estritamente o que entrou
+        "session_id": input_session_id,
         "status": "queued",
         "message": "Análise iniciada. Mock responderá em breve."
     }
