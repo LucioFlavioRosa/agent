@@ -44,8 +44,12 @@ class RedisSessionService:
             "comentario_usuario": comentario_usuario,
             "extracted_text": extracted_text,
             "project_id": project_id,
-            "reports": {},
-            "last_mcp_job_id": None
+            "last_mcp_job_id": None,
+            "epicos_report": None,
+            "features_report": None,
+            "times_descricao_report": None,
+            "alocacao_times_report": None,
+            "premissas_riscos_report": None
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
         return session_id
@@ -93,8 +97,6 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        analysis_type_in_session = session_data.get("analysis_type")
-        analysis_type = analysis_type or analysis_type_in_session
         report_field = None
         if hasattr(settings, "mcp_config_registry") and settings.mcp_config_registry and hasattr(settings.mcp_config_registry, "agents") and analysis_type in settings.mcp_config_registry.agents:
             agent_cfg = settings.mcp_config_registry.agents[analysis_type]
@@ -102,9 +104,7 @@ class RedisSessionService:
                 report_field = agent_cfg.report_mapping[report_type]
         if not report_field:
             report_field = f"{report_type}_report"
-        if "reports" not in session_data or not isinstance(session_data["reports"], dict):
-            session_data["reports"] = {}
-        session_data["reports"][report_field] = report_data
+        session_data[report_field] = report_data
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
@@ -118,16 +118,18 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-        reports = {}
-        if "reports" in project_state and isinstance(project_state["reports"], dict):
-            reports.update(project_state["reports"])
-        legacy_fields = [
-            "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
-        ]
-        for field in legacy_fields:
+        legacy_reports = project_state.get("reports", {})
+        def get_report_field(field):
             if field in project_state and project_state[field] is not None:
-                reports[field] = project_state[field]
-        session_data["reports"] = reports
+                return project_state[field]
+            if legacy_reports and field in legacy_reports and legacy_reports[field] is not None:
+                return legacy_reports[field]
+            return None
+        session_data["epicos_report"] = get_report_field("epicos_report")
+        session_data["features_report"] = get_report_field("features_report")
+        session_data["times_descricao_report"] = get_report_field("times_descricao_report")
+        session_data["alocacao_times_report"] = get_report_field("alocacao_times_report")
+        session_data["premissas_riscos_report"] = get_report_field("premissas_riscos_report")
         session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["comentario_usuario"] = comentario_usuario
