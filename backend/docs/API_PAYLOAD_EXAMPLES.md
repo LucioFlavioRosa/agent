@@ -15,7 +15,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 **Resposta:**
-
+```json
 {
   "user_info": {
     "usuario_executor": "user@example.com",
@@ -36,7 +36,7 @@ Content-Type: application/json
   ],
   "session_id": "session-uuid-123"
 }
-
+```
 **Notas importantes:**
 - O campo `session_id` retornado no login é sempre o mesmo do estado mais recente do projeto selecionado (extraído do Redis ou Blob Storage). Nunca é gerado novamente para projetos existentes. Apenas para novos projetos (sem estado), um novo `session_id` é criado.
 - O identificador único de toda a sessão é sempre o `session_id`, gerado no login e propagado para todas as interações.
@@ -50,7 +50,7 @@ GET /projects/check?projeto=ProjetoNovo HTTP/1.1
 Authorization: Bearer <token>
 
 **Resposta (projeto encontrado, sessão ativa no Redis):**
-
+```json
 {
   "exists": true,
   "state": {
@@ -70,9 +70,9 @@ Authorization: Bearer <token>
     "session_id": "session-uuid-123"
   }
 }
-
+```
 **Resposta (projeto encontrado, sessão restaurada do Blob Storage):**
-
+```json
 {
   "exists": true,
   "state": {
@@ -92,13 +92,13 @@ Authorization: Bearer <token>
     "session_id": "session-uuid-123"
   }
 }
-
+```
 **Resposta (projeto não encontrado):**
-
+```json
 {
   "exists": false
 }
-
+```
 **Notas importantes:**
 - O campo `state` sempre reflete o estado mais recente disponível para o projeto, buscando primeiro no Redis (sessão ativa) e, se não encontrado, faz fallback para o Blob Storage.
 - O campo `session_id` retornado é sempre o mesmo do estado mais recente (Redis ou Blob). Se a sessão não estiver no Redis, o backend restaura a sessão usando o session_id do Blob antes de retornar o estado.
@@ -123,13 +123,13 @@ Campos:
 - session_id: string (opcional, reutilizado para projetos existentes)
 
 **Resposta:**
-
+```json
 {
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "session-uuid-123",
   "project_id": "projeto-uuid-123"
 }
-
+```
 **Notas importantes:**
 - O campo `session_id` é sempre reutilizado para projetos existentes (extraído do Redis ou Blob Storage). Apenas para novos projetos, um novo `session_id` é gerado.
 - O upload de DOCX e a extração de texto ocorrem de forma paralela dentro do mesmo endpoint. O texto extraído é enviado ao MCP, nunca a URL do arquivo.
@@ -138,7 +138,7 @@ Campos:
 ### 1.4 Webhooks MCP → Backend
 
 O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o seguinte formato JSON:
-
+```json
 {
   "session_id": "session-uuid-123",
   "status": "in_progress" | "done" | "error",
@@ -150,7 +150,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "usuario_executor": "user@example.com" (opcional),
   "projeto": "ProjetoNovo" (opcional)
 }
-
+```
 **Notas importantes:**
 - O backend busca a sessão correspondente usando o `session_id` persistido no Redis. Se não encontrar, busca automaticamente no Blob Storage usando `usuario_executor` e `projeto` (se disponíveis) ou apenas `session_id`.
 - Se encontrar o estado no Blob, restaura a sessão no Redis antes de atualizar o relatório.
@@ -172,7 +172,7 @@ Todos os exemplos de payloads abaixo garantem que o campo `session_id` está pre
 #### Exemplo de atualização de relatório via webhook MCP
 
 POST /webhooks/mcp
-
+```json
 {
   "session_id": "session-uuid-123",
   "status": "done",
@@ -181,12 +181,12 @@ POST /webhooks/mcp
   "usuario_executor": "user@example.com",
   "projeto": "ProjetoNovo"
 }
-
+```
 #### Exemplo de consulta ao estado do projeto
 
 GET /projects/check?projeto=ProjetoNovo
 Authorization: Bearer <token>
-
+```json
 {
   "exists": true,
   "state": {
@@ -206,7 +206,7 @@ Authorization: Bearer <token>
     "session_id": "session-uuid-123"
   }
 }
-
+```
 ### 1.7 Observações Importantes
 
 - O campo `session_id` é o único identificador usado em toda a comunicação entre frontend, backend e MCP. Nunca é gerado novamente para projetos existentes.
