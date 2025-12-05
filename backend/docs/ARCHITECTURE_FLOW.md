@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama Geral do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     subgraph Frontend
         Z[Usuário/Frontend]
@@ -52,7 +52,7 @@ flowchart TD
     AE -->|Restaura Sessão no Redis| AD
     %% Salvamento imediato após atualização de relatório
     AA -->|Salva Estado Imediatamente após Webhook MCP| AE
-```
+
 
 ---
 
@@ -79,7 +79,7 @@ flowchart TD
 
 #### Diagrama de Sequência: Consulta de Estado de Projeto
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -101,7 +101,7 @@ sequenceDiagram
         BE-->>FE: exists: true, state (do Blob Storage)
     end
     Note over BE: O campo 'reports' sempre reflete o estado mais recente disponível
-```
+
 
 ### 3. Início de Análise e Upload de DOCX (Processamento Paralelo)
 - O upload do arquivo DOCX e a extração do texto ocorrem dentro do endpoint `/analysis/start` via multipart/form-data. O backend retorna tanto a URL do arquivo quanto o texto extraído.
@@ -143,7 +143,7 @@ sequenceDiagram
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 **Exemplo de configuração de agente:**
-```json
+
 {
   "agents": {
     "criacao_epicos_azure_devops": {
@@ -160,7 +160,7 @@ sequenceDiagram
     }
   }
 }
-```
+
 ---
 
 ## 8. Webhook MCP: Recuperação Automática de Sessão e Atualização de Relatório
@@ -169,7 +169,7 @@ A partir da versão X.X.X, o backend garante que **toda vez que um webhook do MC
 
 ### Diagrama de Sequência: Webhook MCP → Recuperação de Sessão → Atualização de Relatório
 
-```mermaid
+mermaid
 sequenceDiagram
     participant MCP as MCP Server
     participant BE as Backend
@@ -204,7 +204,7 @@ sequenceDiagram
         end
     end
     Note over BE: O relatório é sempre atualizado, não importa se a sessão foi criada em outra sessão ou restaurada do Blob
-```
+
 
 ### Código Responsável
 - `backend/app/api/webhooks.py` (endpoint `/webhooks/mcp`):
@@ -236,6 +236,44 @@ Após cada atualização de relatório via webhook MCP (ou via endpoint manual),
 - Código:
   - `backend/app/services/project_state_service.py` (`save_state_to_blob`)
   - `backend/app/services/redis_session_service.py` (`update_report`)
+
+---
+
+## 10. Isolamento dos Relatórios: Atualização Independente dos Campos de Relatório
+
+O backend Peers CodeAI garante que a atualização de qualquer campo de relatório (`epicos_report`, `features_report`, `times_descricao_report`, `alocacao_times_report`, `premissas_riscos_report`) é totalmente independente dos demais. Isso significa que ao atualizar, por exemplo, o `features_report`, todos os outros campos de relatório presentes no estado do projeto (Redis e Blob Storage) são preservados sem alteração.
+
+### Como funciona o isolamento dos relatórios
+- Cada campo de relatório é armazenado separadamente no estado do projeto e na sessão do Redis.
+- A função `update_report` sempre carrega o estado completo da sessão antes de atualizar o campo solicitado, preservando todos os demais campos de relatório.
+- Após a atualização de qualquer relatório, o backend salva o estado completo (com todos os campos) no Redis e no Blob Storage.
+- Se algum campo de relatório estiver ausente após a atualização, o backend preenche com `None` e loga um aviso crítico.
+- Isso garante que múltiplas atualizações de relatórios (em qualquer ordem) nunca sobrescrevem ou apagam relatórios anteriores.
+
+### Diagrama de Sequência: Atualização Isolada de Relatórios
+
+mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant BE as Backend
+    participant RS as RedisSessionService
+    participant PS as ProjectStateService
+    FE->>BE: POST /webhooks/mcp (session_id, report_type="features", report_data={...})
+    BE->>RS: get_session(session_id)
+    RS-->>BE: SessionData (contendo epicos_report, features_report, ...)
+    BE->>RS: update_report(session_id, report_type="features", report_data={...})
+    Note right of RS: Apenas features_report é atualizado<br/>Todos os outros campos são preservados
+    RS-->>BE: OK
+    BE->>PS: save_state_to_blob(SessionData)
+    PS-->>BE: Blob salvo com todos os campos de relatório
+    BE-->>FE: status: ok
+
+
+### Garantias de Isolamento
+- Atualizar `features_report` não afeta `epicos_report` ou qualquer outro campo.
+- Atualizar `alocacao_times_report` não afeta `features_report` ou os demais.
+- Todos os campos de relatório são sempre retornados no estado do projeto, mesmo que alguns estejam `null`.
+- O frontend pode confiar que o backend nunca sobrescreve ou apaga relatórios existentes ao atualizar outro campo.
 
 ---
 
