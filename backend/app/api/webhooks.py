@@ -8,6 +8,14 @@ from backend.app.services.project_state_service import ProjectStateService
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
 
+REPORT_FIELDS = [
+    "epicos_report",
+    "features_report",
+    "times_descricao_report",
+    "alocacao_times_report",
+    "premissas_riscos_report"
+]
+
 @router.post("/mcp", status_code=200, tags=["Webhooks"])
 async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
     redis_service = RedisSessionService()
@@ -72,30 +80,29 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             )
             try:
                 session_atualizada = redis_service.get_session(session.session_id)
-                reports_dict = getattr(session_atualizada, 'reports', {})
-                if not isinstance(reports_dict, dict):
-                    logger.critical(f"Após update_report, reports não é um dicionário para session_id={session.session_id}")
-                    raise HTTPException(status_code=500, detail="Campo 'reports' corrompido após atualização.")
-                if payload.report_type not in reports_dict and not any(payload.report_type in k for k in reports_dict.keys()):
-                    logger.critical(f"Após update_report, chave '{payload.report_type}' não encontrada em reports para session_id={session.session_id}. Chaves atuais: {list(reports_dict.keys())}")
-                    raise HTTPException(status_code=500, detail=f"Chave '{payload.report_type}' não encontrada em reports após atualização.")
-                logger.info(f"Validação pós-update_report: reports contém as chaves: {list(reports_dict.keys())}")
-                # Validação de integridade: garantir que todas as chaves anteriores foram preservadas
-                # Busca o estado anterior do Blob para comparar as chaves
+                # Busca o estado anterior do Blob para comparar as chaves dos campos de relatório
                 try:
                     state_anterior = await ProjectStateService.load_latest_state_from_blob(session.usuario_executor, session.projeto, session_id=session.session_id)
-                    if state_anterior and 'reports' in state_anterior:
-                        chaves_anteriores = set(state_anterior['reports'].keys())
-                        chaves_atuais = set(reports_dict.keys())
-                        chaves_perdidas = chaves_anteriores - chaves_atuais
-                        if chaves_perdidas:
-                            logger.critical(f"Após update_report, as chaves {chaves_perdidas} não foram preservadas em reports para session_id={session.session_id}. Chaves atuais: {list(reports_dict.keys())}")
-                            raise HTTPException(status_code=500, detail=f"Chaves {chaves_perdidas} não encontradas em reports após atualização.")
                 except Exception as e:
-                    logger.error(f"Erro ao validar integridade das chaves de reports após update_report: {e}")
+                    logger.error(f"Erro ao buscar estado anterior do Blob: {e}")
+                    state_anterior = None
+                chaves_anteriores = set()
+                if state_anterior:
+                    for k in REPORT_FIELDS:
+                        if state_anterior.get(k) is not None:
+                            chaves_anteriores.add(k)
+                chaves_atuais = set()
+                for k in REPORT_FIELDS:
+                    if getattr(session_atualizada, k, None) is not None:
+                        chaves_atuais.add(k)
+                chaves_perdidas = chaves_anteriores - chaves_atuais
+                if chaves_perdidas:
+                    logger.critical(f"Após update_report, as chaves {chaves_perdidas} não foram preservadas em reports para session_id={session.session_id}. Chaves atuais: {list(chaves_atuais)}")
+                    raise HTTPException(status_code=500, detail=f"Chaves {chaves_perdidas} não encontradas em reports após atualização.")
+                logger.info(f"Validação pós-update_report: todos os campos de relatório preservados. Chaves atuais: {list(chaves_atuais)}")
             except Exception as e:
-                logger.critical(f"Erro crítico ao validar integridade de reports após update_report: {e}")
-                raise HTTPException(status_code=500, detail=f"Erro ao validar integridade de reports: {e}")
+                logger.critical(f"Erro crítico ao validar integridade dos campos de relatório após update_report: {e}")
+                raise HTTPException(status_code=500, detail=f"Erro ao validar integridade dos campos de relatório: {e}")
             try:
                 await ProjectStateService.save_state_to_blob(session_atualizada)
                 logger.info(f"Estado salvo imediatamente após atualização de relatório para sessão {session.session_id} (session_id={payload.session_id})")
