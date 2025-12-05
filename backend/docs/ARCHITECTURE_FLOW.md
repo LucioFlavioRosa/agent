@@ -40,9 +40,9 @@ flowchart TD
     AA -->|"Início de Análise (inclui upload DOCX)"| AE
     AE -->|Extrai Texto| AA
     AA -->|Cria Sessão| AD
-    AA -->|Envia para MCP (sempre com session_id)| AF
+    AA -->|"Envia para MCP (sempre com session_id)"| AF
     AF -->|session_id| AA
-    AF -->|Webhooks Progresso/Conclusão (session_id)| AA
+    AF -->|"Webhooks Progresso/Conclusão (session_id)"| AA
     AA -->|Atualiza Relatórios| AD
     AD -->|Salva Estado| AE
     AG -->|Salvamento Periódico| AE
