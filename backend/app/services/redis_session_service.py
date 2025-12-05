@@ -115,9 +115,11 @@ class RedisSessionService:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis após tentativa de restauração.")
         session_data = self._deserialize_session(session_json)
 
+        # Passo 1: Carregar o estado atual dos campos de relatório
         current_reports = {k: session_data.get(k) for k in REPORT_FIELDS}
         self.logger.info(f"[update_report] Estado dos campos de relatório ANTES da atualização: {json.dumps(current_reports, ensure_ascii=False)}")
 
+        # Passo 2: Atualizar apenas o campo de relatório solicitado
         updated = False
         if report_type == "epicos":
             session_data["epicos_report"] = report_data
@@ -143,10 +145,12 @@ class RedisSessionService:
             self.logger.error(f"[update_report] report_type '{report_type}' não reconhecido para session_id={session_id}")
             raise HTTPException(status_code=400, detail=f"Tipo de relatório '{report_type}' não reconhecido.")
 
+        # Passo 3: Restaurar todos os demais campos de relatório do estado anterior
         for k in REPORT_FIELDS:
             if k != f"{report_type}_report":
                 session_data[k] = current_reports[k]
 
+        # Passo 4: Validação crítica - garantir que nenhum campo de relatório foi perdido
         for k in REPORT_FIELDS:
             if k != f"{report_type}_report" and current_reports[k] is not None and session_data.get(k) is None:
                 self.logger.critical(f"[update_report] Campo de relatório '{k}' foi perdido durante a atualização do relatório '{report_type}' para session_id={session_id}. Estado antes: {json.dumps(current_reports, ensure_ascii=False)}; Estado depois: {json.dumps({kk: session_data.get(kk) for kk in REPORT_FIELDS}, ensure_ascii=False)}")
