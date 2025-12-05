@@ -25,6 +25,10 @@ async def check_project(
             if state:
                 state.pop("analysis_name", None)
                 logger.info(f"Projeto '{projeto}' encontrado no Redis para usuario_executor='{usuario_executor}'. Estado retornado.")
+                # Garante que os cinco campos de relatório estão presentes
+                for k in ["epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"]:
+                    if k not in state:
+                        state[k] = None
                 return {"exists": True, "state": state}
         state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
         if state:
@@ -43,6 +47,9 @@ async def check_project(
                 except Exception as e:
                     logger.warning(f"Falha ao restaurar sessão do Blob: {e}")
             logger.info(f"Projeto '{projeto}' encontrado no Blob Storage para usuario_executor='{usuario_executor}'. Estado retornado.")
+            for k in ["epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"]:
+                if k not in state:
+                    state[k] = None
             return {"exists": True, "state": state}
         else:
             logger.info(f"Projeto '{projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
