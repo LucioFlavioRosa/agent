@@ -29,7 +29,7 @@ class FakeMCPStartPayload(BaseModel):
 # --- DADOS MOCKADOS ---
 # --- DADOS MOCKADOS (CORRIGIDOS) ---
 DATA_CRIACAO = {
-    # Removida a chave externa "epicos". Agora "epicos_report" é a raiz.
+    "epicos":{
     "epicos_report": [
         {
             "id": 1, 
@@ -49,6 +49,7 @@ DATA_CRIACAO = {
             "descricao": "Visualizar status dos projetos."
         }
     ]
+}
 }
 
 DATA_REFINAMENTO = {
