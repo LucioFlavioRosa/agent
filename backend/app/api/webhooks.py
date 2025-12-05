@@ -90,33 +90,32 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                             logger.critical(f"Após update_report, o campo '{k}' foi perdido (estava presente antes). Estado atual: {[(kk, getattr(session_atualizada, kk, None)) for kk in REPORT_FIELDS]}")
                             raise HTTPException(status_code=500, detail=f"Campo de relatório '{k}' não foi preservado após atualização.")
                 try:
-                    state_anterior = await ProjectStateService.load_latest_state_from_blob(session.usuario_executor, session.projeto, session_id=session.session_id)
+                    state_anterior = state_before
+                    state_atual_blob = await ProjectStateService.load_latest_state_from_blob(session.usuario_executor, session.projeto, session_id=session.session_id)
+                    chaves_anteriores = set()
+                    if state_anterior:
+                        for k in REPORT_FIELDS:
+                            if state_anterior.get(k) is not None:
+                                chaves_anteriores.add(k)
+                    chaves_atuais = set()
+                    if state_atual_blob:
+                        for k in REPORT_FIELDS:
+                            if state_atual_blob.get(k) is not None:
+                                chaves_atuais.add(k)
+                    chaves_perdidas = chaves_anteriores - chaves_atuais
+                    if chaves_perdidas:
+                        logger.critical(f"Após update_report, as chaves {chaves_perdidas} não foram preservadas em reports para session_id={session.session_id}. Chaves atuais: {list(chaves_atuais)}")
+                        raise HTTPException(status_code=500, detail=f"Chaves {chaves_perdidas} não encontradas em reports após atualização.")
+                    logger.info(f"Validação pós-update_report: todos os campos de relatório preservados. Chaves atuais: {list(chaves_atuais)}")
                 except Exception as e:
-                    logger.error(f"Erro ao buscar estado anterior do Blob: {e}")
-                    state_anterior = None
-                chaves_anteriores = set()
-                if state_anterior:
-                    for k in REPORT_FIELDS:
-                        if state_anterior.get(k) is not None:
-                            chaves_anteriores.add(k)
-                chaves_atuais = set()
-                for k in REPORT_FIELDS:
-                    if getattr(session_atualizada, k, None) is not None:
-                        chaves_atuais.add(k)
-                chaves_perdidas = chaves_anteriores - chaves_atuais
-                if chaves_perdidas:
-                    logger.critical(f"Após update_report, as chaves {chaves_perdidas} não foram preservadas em reports para session_id={session.session_id}. Chaves atuais: {list(chaves_atuais)}")
-                    raise HTTPException(status_code=500, detail=f"Chaves {chaves_perdidas} não encontradas em reports após atualização.")
-                logger.info(f"Validação pós-update_report: todos os campos de relatório preservados. Chaves atuais: {list(chaves_atuais)}")
-            except Exception as e:
-                logger.critical(f"Erro crítico ao validar integridade dos campos de relatório após update_report: {e}")
-                raise HTTPException(status_code=500, detail=f"Erro ao validar integridade dos campos de relatório: {e}")
-            try:
-                await ProjectStateService.save_state_to_blob(session_atualizada)
-                logger.info(f"Estado salvo imediatamente após atualização de relatório para sessão {session.session_id} (session_id={payload.session_id})")
-            except Exception as e:
-                logger.error(f"Erro ao salvar estado imediato no Blob após webhook MCP: {e}")
-            logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (session_id={payload.session_id})")
+                    logger.critical(f"Erro crítico ao validar integridade dos campos de relatório após update_report: {e}")
+                    raise HTTPException(status_code=500, detail=f"Erro ao validar integridade dos campos de relatório: {e}")
+                try:
+                    await ProjectStateService.save_state_to_blob(session_atualizada)
+                    logger.info(f"Estado salvo imediatamente após atualização de relatório para sessão {session.session_id} (session_id={payload.session_id})")
+                except Exception as e:
+                    logger.error(f"Erro ao salvar estado imediato no Blob após webhook MCP: {e}")
+                logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (session_id={payload.session_id})")
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: session_id={payload.session_id}, error_type={payload.error_type}, error_message={payload.error_message}")
         return {"status": "ok"}
