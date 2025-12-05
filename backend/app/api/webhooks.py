@@ -64,7 +64,6 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 logger.error(f"Webhook recebido para session_id não encontrado: {payload.session_id}. Estado do Redis e Blob Storage podem estar inconsistentes.")
                 raise HTTPException(status_code=404, detail=f"Sessão não encontrada para session_id: {payload.session_id}")
         analysis_type = getattr(session, "analysis_type", None)
-        # Salva o estado dos campos de relatório antes da atualização
         state_before = {k: getattr(session, k, None) for k in REPORT_FIELDS}
         logger.info(f"[webhook] Estado dos campos de relatório ANTES da atualização: {state_before}")
         if payload.status in {"in_progress", "done"}:
@@ -83,7 +82,6 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             )
             try:
                 session_atualizada = redis_service.get_session(session.session_id)
-                # Busca o estado anterior do Blob para comparar as chaves dos campos de relatório
                 try:
                     state_anterior = await ProjectStateService.load_latest_state_from_blob(session.usuario_executor, session.projeto, session_id=session.session_id)
                 except Exception as e:
@@ -99,7 +97,6 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                     if getattr(session_atualizada, k, None) is not None:
                         chaves_atuais.add(k)
                 chaves_perdidas = chaves_anteriores - chaves_atuais
-                # Validação extra: todos os campos de relatório devem ser preservados
                 for k in REPORT_FIELDS:
                     if k in state_before and state_before[k] is not None:
                         if getattr(session_atualizada, k, None) is None and k != f"{payload.report_type}_report":
