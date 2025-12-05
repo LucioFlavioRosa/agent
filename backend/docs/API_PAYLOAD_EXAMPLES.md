@@ -15,7 +15,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 **Resposta:**
-```json
+
 {
   "user_info": {
     "usuario_executor": "user@example.com",
@@ -36,7 +36,7 @@ Content-Type: application/json
   ],
   "session_id": "session-uuid-123"
 }
-```
+
 **Notas importantes:**
 - O campo `session_id` retornado no login é sempre o mesmo do estado mais recente do projeto selecionado (extraído do Redis ou Blob Storage). Nunca é gerado novamente para projetos existentes. Apenas para novos projetos (sem estado), um novo `session_id` é criado.
 - O identificador único de toda a sessão é sempre o `session_id`, gerado no login e propagado para todas as interações.
@@ -50,7 +50,7 @@ GET /projects/check?projeto=ProjetoNovo HTTP/1.1
 Authorization: Bearer <token>
 
 **Resposta (projeto encontrado, sessão ativa no Redis):**
-```json
+
 {
   "exists": true,
   "state": {
@@ -59,10 +59,11 @@ Authorization: Bearer <token>
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": {
-      "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
-      "features_report": { "features": [{ "id": 1, "nome": "Login"}]}
-    },
+    "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
+    "features_report": { "features": [{ "id": 1, "nome": "Login"}]},
+    "times_descricao_report": null,
+    "alocacao_times_report": null,
+    "premissas_riscos_report": null,
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
@@ -70,9 +71,9 @@ Authorization: Bearer <token>
     "session_id": "session-uuid-123"
   }
 }
-```
+
 **Resposta (projeto encontrado, sessão restaurada do Blob Storage):**
-```json
+
 {
   "exists": true,
   "state": {
@@ -81,10 +82,11 @@ Authorization: Bearer <token>
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": {
-      "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
-      "features_report": { "features": [{ "id": 1, "nome": "Login"}]}
-    },
+    "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
+    "features_report": { "features": [{ "id": 1, "nome": "Login"}]},
+    "times_descricao_report": null,
+    "alocacao_times_report": null,
+    "premissas_riscos_report": null,
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
@@ -92,17 +94,17 @@ Authorization: Bearer <token>
     "session_id": "session-uuid-123"
   }
 }
-```
+
 **Resposta (projeto não encontrado):**
-```json
+
 {
   "exists": false
 }
-```
+
 **Notas importantes:**
 - O campo `state` sempre reflete o estado mais recente disponível para o projeto, buscando primeiro no Redis (sessão ativa) e, se não encontrado, faz fallback para o Blob Storage.
 - O campo `session_id` retornado é sempre o mesmo do estado mais recente (Redis ou Blob). Se a sessão não estiver no Redis, o backend restaura a sessão usando o session_id do Blob antes de retornar o estado.
-- O campo `reports` sempre está atualizado conforme o último relatório recebido (via webhook MCP ou atualização manual).
+- Os campos de relatório (`epicos_report`, `features_report`, `times_descricao_report`, `alocacao_times_report`, `premissas_riscos_report`) são sempre retornados, mesmo que estejam `null`.
 - Se houver diferença entre o estado do Blob Storage e o Redis, o valor do Redis é priorizado.
 - O identificador único de toda a sessão é sempre o `session_id`, gerado no login e propagado para todas as interações.
 
@@ -123,13 +125,13 @@ Campos:
 - session_id: string (opcional, reutilizado para projetos existentes)
 
 **Resposta:**
-```json
+
 {
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "session-uuid-123",
   "project_id": "projeto-uuid-123"
 }
-```
+
 **Notas importantes:**
 - O campo `session_id` é sempre reutilizado para projetos existentes (extraído do Redis ou Blob Storage). Apenas para novos projetos, um novo `session_id` é gerado.
 - O upload de DOCX e a extração de texto ocorrem de forma paralela dentro do mesmo endpoint. O texto extraído é enviado ao MCP, nunca a URL do arquivo.
@@ -138,7 +140,7 @@ Campos:
 ### 1.4 Webhooks MCP → Backend
 
 O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o seguinte formato JSON:
-```json
+
 {
   "session_id": "session-uuid-123",
   "status": "in_progress" | "done" | "error",
@@ -150,7 +152,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "usuario_executor": "user@example.com" (opcional),
   "projeto": "ProjetoNovo" (opcional)
 }
-```
+
 **Notas importantes:**
 - O backend busca a sessão correspondente usando o `session_id` persistido no Redis. Se não encontrar, busca automaticamente no Blob Storage usando `usuario_executor` e `projeto` (se disponíveis) ou apenas `session_id`.
 - Se encontrar o estado no Blob, restaura a sessão no Redis antes de atualizar o relatório.
@@ -165,14 +167,14 @@ Após cada atualização de relatório via webhook MCP (ou via endpoint manual),
 - Webhook MCP recebido → relatório atualizado na sessão → estado salvo imediatamente no Blob Storage (novo arquivo, nunca sobrescreve anterior)
 - O campo `session_id` é sempre incluído no nome do arquivo salvo.
 
-### 1.6 Exemplos de Payloads Revisados
+### 1.6 Exemplos de Atualização Isolada de Relatórios (Isolamento dos Reports)
 
-Todos os exemplos de payloads abaixo garantem que o campo `session_id` está presente e consistente em todas as requisições e respostas. Não há mais referências a `job_id` ou `analysis_name`.
+O backend garante que a atualização de qualquer relatório (`epicos_report`, `features_report`, `times_descricao_report`, `alocacao_times_report`, `premissas_riscos_report`) não afeta os demais campos. Veja exemplos:
 
-#### Exemplo de atualização de relatório via webhook MCP
+#### Exemplo 1: Atualizando apenas o epicos_report
 
 POST /webhooks/mcp
-```json
+
 {
   "session_id": "session-uuid-123",
   "status": "done",
@@ -181,12 +183,74 @@ POST /webhooks/mcp
   "usuario_executor": "user@example.com",
   "projeto": "ProjetoNovo"
 }
-```
-#### Exemplo de consulta ao estado do projeto
+
+**Estado após atualização:**
+
+{
+  "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}] },
+  "features_report": null,
+  "times_descricao_report": null,
+  "alocacao_times_report": null,
+  "premissas_riscos_report": null,
+  ...
+}
+
+
+#### Exemplo 2: Atualizando apenas o features_report (epicos_report permanece)
+
+POST /webhooks/mcp
+
+{
+  "session_id": "session-uuid-123",
+  "status": "done",
+  "report_type": "features",
+  "report_data": { "features": [{ "id": 1, "nome": "Login"}] },
+  "usuario_executor": "user@example.com",
+  "projeto": "ProjetoNovo"
+}
+
+**Estado após atualização:**
+
+{
+  "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}] },
+  "features_report": { "features": [{ "id": 1, "nome": "Login"}] },
+  "times_descricao_report": null,
+  "alocacao_times_report": null,
+  "premissas_riscos_report": null,
+  ...
+}
+
+
+#### Exemplo 3: Atualizando apenas alocacao_times_report (os demais relatórios são preservados)
+
+POST /webhooks/mcp
+
+{
+  "session_id": "session-uuid-123",
+  "status": "done",
+  "report_type": "alocacao_times",
+  "report_data": { "alocacao_times": [{ "squad": "Time A", "horas": 40 }] },
+  "usuario_executor": "user@example.com",
+  "projeto": "ProjetoNovo"
+}
+
+**Estado após atualização:**
+
+{
+  "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}] },
+  "features_report": { "features": [{ "id": 1, "nome": "Login"}] },
+  "times_descricao_report": null,
+  "alocacao_times_report": { "alocacao_times": [{ "squad": "Time A", "horas": 40 }] },
+  "premissas_riscos_report": null,
+  ...
+}
+
+
+#### Exemplo 4: Consulta ao estado do projeto após múltiplas atualizações
 
 GET /projects/check?projeto=ProjetoNovo
 Authorization: Bearer <token>
-```json
+
 {
   "exists": true,
   "state": {
@@ -195,10 +259,11 @@ Authorization: Bearer <token>
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
-    "reports": {
-      "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}]},
-      "features_report": { "features": [{ "id": 1, "nome": "Login"}]}
-    },
+    "epicos_report": { "epicos": [{ "id": 1, "titulo": "Como usuário..."}] },
+    "features_report": { "features": [{ "id": 1, "nome": "Login"}] },
+    "times_descricao_report": null,
+    "alocacao_times_report": { "alocacao_times": [{ "squad": "Time A", "horas": 40 }] },
+    "premissas_riscos_report": null,
     "docx_files": ["https://.../arquivo1.docx"],
     "comentario_usuario": "Comentário salvo",
     "extracted_text": "Texto extraído do arquivo DOCX da reunião",
@@ -206,12 +271,18 @@ Authorization: Bearer <token>
     "session_id": "session-uuid-123"
   }
 }
-```
+
+
+**Notas importantes sobre isolamento dos relatórios:**
+- A atualização de qualquer campo de relatório nunca apaga ou sobrescreve os demais campos.
+- O frontend pode confiar que todos os campos de relatório estarão presentes no estado do projeto, mesmo que apenas um deles tenha sido atualizado.
+- O backend sempre garante a preservação dos relatórios existentes ao atualizar qualquer outro relatório.
+
 ### 1.7 Observações Importantes
 
 - O campo `session_id` é o único identificador usado em toda a comunicação entre frontend, backend e MCP. Nunca é gerado novamente para projetos existentes.
 - O backend sempre prioriza o estado do Redis (sessão ativa). Se não encontrar, faz fallback para o Blob Storage e restaura a sessão antes de retornar o estado.
-- O campo `reports` reflete imediatamente qualquer atualização feita via webhook do MCP ou via endpoint manual.
+- Os campos de relatório são sempre retornados, mesmo que estejam `null`.
 - Após cada atualização de relatório, o estado é salvo imediatamente no Blob Storage, criando um novo arquivo (nunca sobrescreve o anterior).
 - O upload de DOCX ocorre dentro do endpoint `/analysis/start` via multipart/form-data, e o texto extraído é enviado ao MCP.
 - Não há mais referências a `job_id` ou `analysis_name` em nenhum fluxo ou payload.
