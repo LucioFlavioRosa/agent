@@ -28,7 +28,7 @@ class FakeMCPStartPayload(BaseModel):
 
 # --- DADOS MOCKADOS ---
 DATA_CRIACAO = {
-    "epicos_report": {
+    "epicos": {
         "epicos": [
             {"id": 1, "titulo": "Autenticação Azure AD", 
              "descricao": "Implementar login seguro com OAuth2. Vou testar Algumas coisas", 
