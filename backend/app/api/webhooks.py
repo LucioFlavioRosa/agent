@@ -4,6 +4,7 @@ from backend.app.models.mcp_webhook_models import MCPWebhookPayload
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.utils.webhook_validator import validate_report_data_structure
 from backend.app.services.project_state_service import ProjectStateService
+import json
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
@@ -65,7 +66,7 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 raise HTTPException(status_code=404, detail=f"Sessão não encontrada para session_id: {payload.session_id}")
         analysis_type = getattr(session, "analysis_type", None)
         state_before = {k: getattr(session, k, None) for k in REPORT_FIELDS}
-        logger.info(f"[webhook] Estado dos campos de relatório ANTES da atualização: {state_before}")
+        logger.info(f"[webhook] Estado dos campos de relatório ANTES da atualização: {json.dumps(state_before, ensure_ascii=False)}")
         if payload.status in {"in_progress", "done"}:
             if not payload.report_type:
                 logger.error(f"Webhook sem report_type para session_id {payload.session_id}")
@@ -83,7 +84,7 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             try:
                 session_atualizada = redis_service.get_session(session.session_id)
                 state_after = {k: getattr(session_atualizada, k, None) for k in REPORT_FIELDS}
-                logger.info(f"[webhook] Estado dos campos de relatório DEPOIS da atualização: {state_after}")
+                logger.info(f"[webhook] Estado dos campos de relatório DEPOIS da atualização: {json.dumps(state_after, ensure_ascii=False)}")
                 for k in REPORT_FIELDS:
                     if k in state_before and state_before[k] is not None:
                         if getattr(session_atualizada, k, None) is None and k != f"{payload.report_type}_report":
