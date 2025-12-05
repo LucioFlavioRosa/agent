@@ -27,16 +27,20 @@ class ProjectStateService:
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
         logger = logging.getLogger("ProjectStateService")
-        # Garante que todos os campos de relatório estão presentes e loga o conteúdo de cada um
+        # Passo 4: Garante que todos os campos de relatório estão presentes e loga o conteúdo de cada um
+        missing_fields = []
         for k in REPORT_FIELDS:
             if k not in state:
                 logger.critical(f"[save_state_to_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
                 state[k] = None
+                missing_fields.append(k)
         logger.info(f"[save_state_to_blob] Conteúdo dos campos de relatório antes de salvar:")
         for k in REPORT_FIELDS:
             logger.info(f"[save_state_to_blob] {k}: {json.dumps(state.get(k, None), ensure_ascii=False)}")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
         logger.info(f"[save_state_to_blob] Persistência concluída no Blob Storage: {blob_path}")
+        if missing_fields:
+            logger.critical(f"[save_state_to_blob] Os seguintes campos de relatório estavam ausentes e foram preenchidos com None: {missing_fields}")
         return blob_client.url
 
     @staticmethod
@@ -78,13 +82,18 @@ class ProjectStateService:
             state['alocacao_times_report'] = reports_dict.get('alocacao_times_report') or reports_dict.get('alocacao_times')
             state['premissas_riscos_report'] = reports_dict.get('premissas_riscos_report') or reports_dict.get('premissas_riscos')
             logger.info(f"[load_latest_state_from_blob] Migrado campo 'reports' para campos individuais de relatório.")
+        # Passo 5: Garante que todos os campos de relatório estão presentes e loga o conteúdo de cada um
+        missing_fields = []
         for k in REPORT_FIELDS:
             if k not in state:
                 logger.warning(f"[load_latest_state_from_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
                 state[k] = None
+                missing_fields.append(k)
         logger.info(f"[load_latest_state_from_blob] Conteúdo dos campos de relatório após carregar do Blob:")
         for k in REPORT_FIELDS:
             logger.info(f"[load_latest_state_from_blob] {k}: {json.dumps(state.get(k, None), ensure_ascii=False)}")
+        if missing_fields:
+            logger.warning(f"[load_latest_state_from_blob] Os seguintes campos de relatório estavam ausentes e foram preenchidos com None: {missing_fields}")
         return state
 
     @staticmethod
@@ -185,10 +194,17 @@ class ProjectStateService:
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
         logger.info(f"[load_latest_state_by_session_id] Estado carregado com sucesso para session_id={session_id}")
+        # Passo 5: Garante que todos os campos de relatório estão presentes e loga o conteúdo de cada um
+        missing_fields = []
         for k in REPORT_FIELDS:
             if k not in state:
                 logger.warning(f"[load_latest_state_by_session_id] Campo de relatório '{k}' ausente, preenchendo com None.")
                 state[k] = None
+                missing_fields.append(k)
+        for k in REPORT_FIELDS:
+            logger.info(f"[load_latest_state_by_session_id] {k}: {json.dumps(state.get(k, None), ensure_ascii=False)}")
+        if missing_fields:
+            logger.warning(f"[load_latest_state_by_session_id] Os seguintes campos de relatório estavam ausentes e foram preenchidos com None: {missing_fields}")
         return state
 
     @staticmethod
