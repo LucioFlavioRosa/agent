@@ -20,10 +20,11 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(blob_path)
         logger = logging.getLogger("ProjectStateService")
         logger.info(f"[save_state_to_blob] Iniciando persistência no Blob Storage: {blob_path}")
-        logger.info(f"[save_state_to_blob] Conteúdo completo do campo 'reports' que será salvo: {json.dumps(state.get('reports', {}), ensure_ascii=False)}")
+        reports_content = state.get('reports', {})
+        logger.info(f"[save_state_to_blob] Conteúdo completo do campo 'reports' que será salvo (todas as chaves): {json.dumps(reports_content, ensure_ascii=False)}")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
         logger.info(f"[save_state_to_blob] Persistência concluída no Blob Storage: {blob_path}")
-        logger.info(f"[save_state_to_blob] Campo 'reports' salvo: {json.dumps(state.get('reports', {}), ensure_ascii=False)}")
+        logger.info(f"[save_state_to_blob] Campo 'reports' salvo (todas as chaves): {json.dumps(reports_content, ensure_ascii=False)}")
         return blob_client.url
 
     @staticmethod
