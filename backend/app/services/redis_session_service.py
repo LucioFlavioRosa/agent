@@ -112,14 +112,12 @@ class RedisSessionService:
             report_field = f"{report_type}_report"
         if "reports" not in session_data or not isinstance(session_data["reports"], dict):
             session_data["reports"] = {}
-        existed = report_field in session_data["reports"]
-        self.logger.info(f"[update_report] Antes da atualização: session_id={session_id}, reports={json.dumps(session_data['reports'], ensure_ascii=False)}")
+        reports_before = dict(session_data["reports"])
+        self.logger.info(f"[update_report] Antes da atualização: session_id={session_id}, reports={json.dumps(reports_before, ensure_ascii=False)}")
         session_data["reports"][report_field] = report_data
-        if existed:
-            self.logger.info(f"[update_report] Substituição total da chave '{report_field}' no dicionário reports para session_id={session_id}.")
-        else:
-            self.logger.info(f"[update_report] Criação da nova chave '{report_field}' no dicionário reports para session_id={session_id}.")
-        self.logger.info(f"[update_report] Após atualização: session_id={session_id}, reports={json.dumps(session_data['reports'], ensure_ascii=False)}")
+        self.logger.info(f"[update_report] Chave modificada: '{report_field}' para session_id={session_id}")
+        reports_after = dict(session_data["reports"])
+        self.logger.info(f"[update_report] Após atualização: session_id={session_id}, reports={json.dumps(reports_after, ensure_ascii=False)}")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         try:
             session_obj = SessionData(**session_data)
