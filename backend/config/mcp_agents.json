@@ -3,7 +3,7 @@
     "criacao_epicos_azure_devops": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["epicos_report"],
+      "report_fields": ["epicos_report"]
     },
     "refinamento_epicos_azure_devops": {
       "agent_name": "Planejamento",
