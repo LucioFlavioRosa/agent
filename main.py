@@ -52,7 +52,7 @@ DATA_REFINAMENTO = {
 }
 
 FEATURE_CRIACAO = {
-    "features_report": {
+    "features": {
         "features": [
             {"feature id": 1, "epico id ": "1", "titulo": "setup infra na nuvem", "prazo": "2 dias"},
             {"feature id": 2, "epico id ": "2", "titulo": "testes de segurança", "prazo": "1 dia"}
