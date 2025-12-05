@@ -70,7 +70,6 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 payload.report_data,
                 analysis_type=analysis_type
             )
-            # Validação explícita: garantir que todas as chaves de reports anteriores foram preservadas
             try:
                 session_atualizada = redis_service.get_session(session.session_id)
                 reports_dict = getattr(session_atualizada, 'reports', {})
@@ -81,6 +80,19 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                     logger.critical(f"Após update_report, chave '{payload.report_type}' não encontrada em reports para session_id={session.session_id}. Chaves atuais: {list(reports_dict.keys())}")
                     raise HTTPException(status_code=500, detail=f"Chave '{payload.report_type}' não encontrada em reports após atualização.")
                 logger.info(f"Validação pós-update_report: reports contém as chaves: {list(reports_dict.keys())}")
+                # Validação de integridade: garantir que todas as chaves anteriores foram preservadas
+                # Busca o estado anterior do Blob para comparar as chaves
+                try:
+                    state_anterior = await ProjectStateService.load_latest_state_from_blob(session.usuario_executor, session.projeto, session_id=session.session_id)
+                    if state_anterior and 'reports' in state_anterior:
+                        chaves_anteriores = set(state_anterior['reports'].keys())
+                        chaves_atuais = set(reports_dict.keys())
+                        chaves_perdidas = chaves_anteriores - chaves_atuais
+                        if chaves_perdidas:
+                            logger.critical(f"Após update_report, as chaves {chaves_perdidas} não foram preservadas em reports para session_id={session.session_id}. Chaves atuais: {list(reports_dict.keys())}")
+                            raise HTTPException(status_code=500, detail=f"Chaves {chaves_perdidas} não encontradas em reports após atualização.")
+                except Exception as e:
+                    logger.error(f"Erro ao validar integridade das chaves de reports após update_report: {e}")
             except Exception as e:
                 logger.critical(f"Erro crítico ao validar integridade de reports após update_report: {e}")
                 raise HTTPException(status_code=500, detail=f"Erro ao validar integridade de reports: {e}")
