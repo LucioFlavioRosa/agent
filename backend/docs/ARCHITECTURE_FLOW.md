@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama Geral do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     subgraph Frontend
         Z[Usuário/Frontend]
@@ -47,7 +47,7 @@ flowchart TD
     AD -->|Salva Estado| AE
     AG -->|Salvamento Periódico| AE
     AC -->|Carrega Segredos| AA
-```
+
 
 ---
 
@@ -62,7 +62,7 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (`list_user_projects`)
 
 ### 2. Verificação de Projeto Existente
-- **Descrição:** Antes de qualquer operação, o frontend chama `/projects/check` para saber se o projeto existe. Se existir, retorna o estado completo do projeto (incluindo `project_id`).
+- **Descrição:** Antes de qualquer operação, o frontend chama `/projects/check` para saber se o projeto existe. Se existir, retorna o estado completo do projeto (incluindo `project_id` e os campos individuais de relatório: `epicos_report`, `features_report`, etc).
 - **Código:**
   - `backend/app/api/projects.py` (`/projects/check`)
   - `backend/app/services/project_state_service.py` (`load_latest_state_from_blob`)
@@ -75,7 +75,7 @@ flowchart TD
   - `backend/app/services/docx_parser_service.py` (`extract_text_from_docx`)
 
 ### 4. Criação e Gerenciamento de Sessão no Redis
-- **Descrição:** Sessões são criadas e persistidas no Redis, incluindo campos como `comentario_usuario`, `extracted_text`, `project_id`, `docx_files` e `reports`.
+- **Descrição:** Sessões são criadas e persistidas no Redis, incluindo campos como `comentario_usuario`, `extracted_text`, `project_id`, `docx_files` e os campos de relatório individuais (`epicos_report`, `features_report`, etc).
 - **Código:**
   - `backend/app/services/redis_session_service.py` (`create_session`, `add_docx_file`, `update_session_extracted_text`, `update_report`, `restore_session_from_state`)
   - `backend/app/models/session_models.py` (`SessionData`)
@@ -104,7 +104,7 @@ flowchart TD
 ### 8. Comunicação Backend ↔ MCP (Incluindo Webhooks)
 - **Descrição:** O backend envia payloads para o MCP (sempre com texto extraído, nunca URL). MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam relatórios na sessão Redis.
 - **Persistência do job_id:** Após receber o `job_id` do MCP no endpoint `/analysis/start`, o backend persiste imediatamente a relação `job_id -> session_id` no Redis, garantindo que, quando o webhook do MCP chegar, a sessão possa ser encontrada rapidamente usando o `job_id`.
-- **Busca do job_id no webhook:** O endpoint `/webhooks/mcp` recebe o webhook do MCP, busca a sessão correspondente usando o `job_id` persistido no Redis, e atualiza os relatórios da sessão. Se o `job_id` não for encontrado, retorna 404 e loga o erro detalhadamente.
+- **Busca do job_id no webhook:** O endpoint `/webhooks/mcp` recebe o webhook do MCP, busca a sessão correspondente usando o `job_id` persistido no Redis, e atualiza o relatório individual correspondente na sessão. Se o `job_id` não for encontrado, retorna 404 e loga o erro detalhadamente.
 - **Código:**
   - `backend/app/services/mcp_client_service.py` (`start_analysis`)
   - `backend/app/services/redis_session_service.py` (`update_session_job_id`, `get_session_by_job_id`)
@@ -112,7 +112,7 @@ flowchart TD
   - `backend/app/api/webhooks.py` (busca sessão por `job_id` no webhook)
 
 ### 9. Atualização de Relatórios e Propagação de Estado
-- **Descrição:** Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage.
+- **Descrição:** Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage. Cada relatório é salvo em seu campo individual (`epicos_report`, `features_report`, etc).
 - **Código:**
   - `backend/app/api/session.py` (`PUT /session/{session_id}/report`)
   - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`)
@@ -128,7 +128,7 @@ flowchart TD
 ## Fluxos Críticos de Negócio
 
 ### 1. Fluxo de Novo Projeto
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -143,7 +143,7 @@ sequenceDiagram
     FE->>BE: POST /upload/docx (arquivo)
     BE->>BS: Salva arquivo
     BE->>BE: Extrai texto
-    BE->>RS: Cria sessão
+    BE->>RS: Cria sessão (com campos de relatório individuais)
     BE-->>FE: blob_url, texto extraído, session_id
     FE->>BE: POST /analysis/start (projeto, analysis_type, session_id)
     BE->>MCP: Envia payload (texto extraído)
@@ -151,14 +151,14 @@ sequenceDiagram
     BE->>RS: Atualiza sessão (job_id) e persiste relação job_id -> session_id no Redis
     BE->>BS: Salva estado inicial
     BE-->>FE: job_id, session_id, project_id
-```
+
 
 ### 2. Fluxo de Projeto Existente
-```mermaid
+mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check
     BE->>BS: Busca estado
-    BE-->>FE: exists: true, state
+    BE-->>FE: exists: true, state (com campos de relatório individuais)
     FE->>BE: POST /analysis/start (sem upload)
     BE->>RS: Restaura sessão do estado
     BE->>MCP: Envia payload (texto extraído do estado)
@@ -166,19 +166,19 @@ sequenceDiagram
     BE->>RS: Atualiza sessão (job_id) e persiste relação job_id -> session_id no Redis
     BE->>BS: Salva estado
     BE-->>FE: job_id, session_id, project_id
-```
+
 
 ### 3. Fluxo de Atualização de Relatório
-```mermaid
+mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, status, report_type, report_data)
     BE->>RS: Busca sessão por job_id (usando relação persistida job_id -> session_id)
-    BE->>RS: Atualiza relatório na sessão
+    BE->>RS: Atualiza relatório individual na sessão (ex: epicos_report)
     BE->>BS: Salva estado
-```
+
 
 ### 4. Fluxo de Erro e Recuperação
-```mermaid
+mermaid
 sequenceDiagram
     BE->>MCP: start_analysis
     MCP-->>BE: status: error, error_message
@@ -189,7 +189,7 @@ sequenceDiagram
     BE->>RS: get_session
     RS-->>BE: erro
     BE-->>FE: 503 Service Unavailable, detail
-```
+
 
 ---
 
@@ -201,7 +201,7 @@ sequenceDiagram
 - **Fallback:** Se um segredo não for encontrado no Key Vault, o backend tenta variável de ambiente.
 - **Validação:** Campos obrigatórios são validados por `settings.validate_required_fields`.
 
-```mermaid
+mermaid
 flowchart LR
     Start((Startup)) --> LoadSecrets[ConfigLoaderService.load_secrets_from_key_vault]
     LoadSecrets -->|Por tipo| AzureSecretManager
@@ -210,7 +210,7 @@ flowchart LR
     KeyVaults -->|Retorna segredo| AzureSecretManager
     AzureSecretManager -->|Fallback| EnvVars[Variáveis de Ambiente]
     AzureSecretManager -->|Seta no settings| Settings
-```
+
 
 ---
 
@@ -219,11 +219,11 @@ flowchart LR
 - **Arquivo:** `backend/config/mcp_agents.json` define agentes MCP, URLs, campos de relatório e mapeamentos.
 - **Carregamento:** `MCPConfigService.load_config` carrega o JSON na inicialização.
 - **Roteamento:** `MCPClientService.get_mcp_endpoint` seleciona a URL do MCP conforme `analysis_type`.
-- **Mapeamento de Relatórios:** `RedisSessionService.update_report` usa `report_mapping` para salvar relatórios no campo correto.
+- **Mapeamento de Relatórios:** `RedisSessionService.update_report` usa `report_mapping` para salvar relatórios no campo correto (campo individual).
 - **Extensibilidade:** Novos agentes podem ser adicionados apenas editando o JSON.
 
 **Exemplo de configuração de agente:**
-```json
+
 {
   "agents": {
     "criacao_epicos_azure_devops": {
@@ -240,7 +240,7 @@ flowchart LR
     }
   }
 }
-```
+
 
 ---
 
@@ -256,3 +256,4 @@ flowchart LR
 - O sistema pode operar em modo de teste com autenticação mockada (`SKIP_AUTH_FOR_TESTING`), útil para desenvolvimento local.
 - Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 - Após o início da análise, a relação job_id -> session_id é persistida no Redis para garantir que o webhook do MCP encontre a sessão correta.
+- Todos os relatórios são salvos em campos individuais (`epicos_report`, `features_report`, etc). Não existe mais a chave `reports` no estado do projeto ou sessão.
