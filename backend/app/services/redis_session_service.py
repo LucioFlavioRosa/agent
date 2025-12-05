@@ -114,29 +114,40 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Sessão {session_id} não encontrada no Redis após tentativa de restauração.")
         session_data = self._deserialize_session(session_json)
+        # Preserva todos os campos de relatório existentes
+        for k in REPORT_FIELDS:
+            if k not in session_data:
+                session_data[k] = None
         updated = False
         if report_type == "epicos":
             session_data["epicos_report"] = report_data
             updated = True
+            self.logger.info(f"[update_report] Atualizado apenas epicos_report para session_id={session_id}")
         elif report_type == "features":
             session_data["features_report"] = report_data
             updated = True
+            self.logger.info(f"[update_report] Atualizado apenas features_report para session_id={session_id}")
         elif report_type == "times_descricao":
             session_data["times_descricao_report"] = report_data
             updated = True
+            self.logger.info(f"[update_report] Atualizado apenas times_descricao_report para session_id={session_id}")
         elif report_type == "alocacao_times":
             session_data["alocacao_times_report"] = report_data
             updated = True
+            self.logger.info(f"[update_report] Atualizado apenas alocacao_times_report para session_id={session_id}")
         elif report_type == "premissas_riscos":
             session_data["premissas_riscos_report"] = report_data
             updated = True
+            self.logger.info(f"[update_report] Atualizado apenas premissas_riscos_report para session_id={session_id}")
         else:
             self.logger.error(f"[update_report] report_type '{report_type}' não reconhecido para session_id={session_id}")
             raise HTTPException(status_code=400, detail=f"Tipo de relatório '{report_type}' não reconhecido.")
+        # Garante que todos os campos de relatório estão presentes e preservados
         for k in REPORT_FIELDS:
             if k not in session_data:
                 session_data[k] = None
         if updated:
+            self.logger.info(f"[update_report] Estado dos campos de relatório antes de salvar: " + ", ".join([f"{k}: {'PRESENTE' if session_data[k] is not None else 'None'}" for k in REPORT_FIELDS]))
             self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
             try:
                 session_obj = SessionData(**session_data)
@@ -200,7 +211,6 @@ class RedisSessionService:
         if state_session_id and session_id != state_session_id:
             self.logger.warning(f"[restore_session_from_state] Aviso: session_id fornecido ({session_id}) é diferente do session_id no estado ({state_session_id}). Usando o session_id do estado: {state_session_id}")
             session_id = state_session_id
-        # Garantir que todos os campos de relatório estejam presentes
         missing_fields = []
         for k in REPORT_FIELDS:
             if k not in project_state:
@@ -229,6 +239,7 @@ class RedisSessionService:
             "alocacao_times_report": project_state.get("alocacao_times_report"),
             "premissas_riscos_report": project_state.get("premissas_riscos_report")
         }
+        self.logger.info(f"[restore_session_from_state] Estado dos campos de relatório ao restaurar: " + ", ".join([f"{k}: {'PRESENTE' if session_data[k] is not None else 'None'}" for k in REPORT_FIELDS]))
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
         return session_id
 
