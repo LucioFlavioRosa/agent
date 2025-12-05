@@ -7,6 +7,7 @@ from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
 import logging
 from backend.app.services.project_state_service import ProjectStateService
+from fastapi import HTTPException
 
 class RedisSessionService:
     def __init__(self):
@@ -119,6 +120,24 @@ class RedisSessionService:
         reports_after = dict(session_data["reports"])
         self.logger.info(f"[update_report] Após atualização: session_id={session_id}, reports={json.dumps(reports_after, ensure_ascii=False)}")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        # Validação explícita: garantir que todas as chaves anteriores foram preservadas
+        session_json_valid = self.redis_client.get(key)
+        if not session_json_valid:
+            self.logger.critical(f"[update_report] Sessão {session_id} não encontrada no Redis após atualização.")
+            raise HTTPException(status_code=500, detail=f"Sessão {session_id} não encontrada no Redis após atualização.")
+        session_data_valid = self._deserialize_session(session_json_valid)
+        reports_dict = session_data_valid.get("reports", {})
+        if not isinstance(reports_dict, dict):
+            self.logger.critical(f"[update_report] Após update_report, reports não é um dicionário para session_id={session_id}")
+            raise HTTPException(status_code=500, detail="Campo 'reports' corrompido após atualização.")
+        missing_keys = [k for k in reports_before.keys() if k not in reports_dict]
+        if missing_keys:
+            self.logger.critical(f"[update_report] Após update_report, as chaves {missing_keys} não foram preservadas em reports para session_id={session_id}. Chaves atuais: {list(reports_dict.keys())}")
+            raise HTTPException(status_code=500, detail=f"Chaves {missing_keys} não encontradas em reports após atualização.")
+        if report_field not in reports_dict:
+            self.logger.critical(f"[update_report] Após update_report, chave '{report_field}' não encontrada em reports para session_id={session_id}. Chaves atuais: {list(reports_dict.keys())}")
+            raise HTTPException(status_code=500, detail=f"Chave '{report_field}' não encontrada em reports após atualização.")
+        self.logger.info(f"[update_report] Validação pós-update_report: reports contém as chaves: {list(reports_dict.keys())}")
         try:
             session_obj = SessionData(**session_data)
             self.logger.info(f"[update_report] Salvando estado no Blob Storage imediatamente após atualização do relatório. session_id={session_id}, reports={json.dumps(session_data['reports'], ensure_ascii=False)}")
