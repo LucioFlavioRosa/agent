@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama Geral do Fluxo (Mermaid)
 
-mermaid
+```mermaid
 flowchart TD
     subgraph Frontend
         Z[Usuário/Frontend]
@@ -47,7 +47,7 @@ flowchart TD
     AD -->|Salva Estado| AE
     AG -->|Salvamento Periódico| AE
     AC -->|Carrega Segredos| AA
-
+```
 
 ---
 
