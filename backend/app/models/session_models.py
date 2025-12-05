@@ -21,7 +21,11 @@ class SessionData(BaseModel):
     comentario_usuario: Optional[str] = Field(default=None)
     extracted_text: Optional[str] = Field(default=None)
     project_id: Optional[str] = Field(default=None)
-    reports: Dict[str, Any] = Field(default_factory=dict)
+    epicos_report: Optional[Dict[str, Any]] = Field(default=None)
+    features_report: Optional[Dict[str, Any]] = Field(default=None)
+    times_descricao_report: Optional[Dict[str, Any]] = Field(default=None)
+    alocacao_times_report: Optional[Dict[str, Any]] = Field(default=None)
+    premissas_riscos_report: Optional[Dict[str, Any]] = Field(default=None)
 
     def to_project_state(self) -> Dict[str, Any]:
         return {
@@ -34,7 +38,11 @@ class SessionData(BaseModel):
             "comentario_usuario": self.comentario_usuario,
             "extracted_text": self.extracted_text,
             "project_id": self.project_id,
-            "reports": self.reports,
+            "epicos_report": self.epicos_report,
+            "features_report": self.features_report,
+            "times_descricao_report": self.times_descricao_report,
+            "alocacao_times_report": self.alocacao_times_report,
+            "premissas_riscos_report": self.premissas_riscos_report,
             "session_id": self.session_id
         }
 
@@ -52,5 +60,9 @@ class SessionData(BaseModel):
             comentario_usuario=state.get("comentario_usuario"),
             extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
-            reports=state.get("reports", {})
+            epicos_report=state.get("epicos_report"),
+            features_report=state.get("features_report"),
+            times_descricao_report=state.get("times_descricao_report"),
+            alocacao_times_report=state.get("alocacao_times_report"),
+            premissas_riscos_report=state.get("premissas_riscos_report")
         )
