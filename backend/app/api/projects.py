@@ -21,7 +21,8 @@ async def check_project(
             state.pop("analysis_name", None)
             logger.info(f"Projeto '{projeto}' encontrado para usuario_executor='{usuario_executor}'. Estado retornado.")
             project_id = state.get("project_id")
-            return {"exists": True, "state": {**state, "project_id": project_id}}
+            response = {"exists": True, "state": {**state, "project_id": project_id}}
+            return response
         else:
             logger.info(f"Projeto '{projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
             return {"exists": False}
