@@ -42,7 +42,6 @@ class ProjectStateService:
             reverse=True
         )
         if session_id:
-            # Filtra blobs pelo session_id
             blobs_sorted = [b for b in blobs_sorted if f"_{session_id}_" in b.name]
         if not blobs_sorted:
             logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}, session_id={session_id}")
@@ -135,3 +134,21 @@ class ProjectStateService:
         except Exception as e:
             logger.error(f"Erro ao buscar projetos do usuário {usuario_executor}: {e}")
             return []
+
+    @staticmethod
+    async def load_latest_state_by_session_id(session_id: str) -> Optional[Dict[str, Any]]:
+        logger = logging.getLogger("ProjectStateService")
+        logger.info(f"[load_latest_state_by_session_id] Buscando estado mais recente no Blob Storage para session_id={session_id}")
+        _, container_client = _get_blob_clients()
+        blobs = list(container_client.list_blobs())
+        matching_blobs = [b for b in blobs if b.name.endswith('.json') and f"_{session_id}_" in b.name]
+        if not matching_blobs:
+            logger.info(f"[load_latest_state_by_session_id] Nenhum arquivo de estado encontrado para session_id={session_id}")
+            return None
+        matching_blobs_sorted = sorted(matching_blobs, key=lambda b: b.name, reverse=True)
+        latest_blob = matching_blobs_sorted[0]
+        blob_client = container_client.get_blob_client(latest_blob.name)
+        state_bytes = blob_client.download_blob().readall()
+        state = json.loads(state_bytes.decode("utf-8"))
+        logger.info(f"[load_latest_state_by_session_id] Estado carregado com sucesso para session_id={session_id}")
+        return state
