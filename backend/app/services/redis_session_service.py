@@ -200,10 +200,16 @@ class RedisSessionService:
         if state_session_id and session_id != state_session_id:
             self.logger.warning(f"[restore_session_from_state] Aviso: session_id fornecido ({session_id}) é diferente do session_id no estado ({state_session_id}). Usando o session_id do estado: {state_session_id}")
             session_id = state_session_id
+        # Garantir que todos os campos de relatório estejam presentes
+        missing_fields = []
         for k in REPORT_FIELDS:
             if k not in project_state:
                 project_state[k] = None
-                self.logger.warning(f"[restore_session_from_state] Campo de relatório '{k}' ausente ao restaurar do Blob, preenchendo com None.")
+                missing_fields.append(k)
+        if missing_fields:
+            self.logger.warning(f"[restore_session_from_state] Os seguintes campos de relatório estavam ausentes ao restaurar do Blob e foram preenchidos com None: {missing_fields}")
+        else:
+            self.logger.info(f"[restore_session_from_state] Todos os campos de relatório presentes ao restaurar do Blob.")
         self.logger.info(f"[restore_session_from_state] Campos de relatório restaurados: {', '.join([k for k in REPORT_FIELDS if project_state[k] is not None])}")
         session_data = {
             "session_id": session_id,
