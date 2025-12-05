@@ -70,8 +70,21 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 payload.report_data,
                 analysis_type=analysis_type
             )
+            # Validação explícita: garantir que todas as chaves de reports anteriores foram preservadas
             try:
                 session_atualizada = redis_service.get_session(session.session_id)
+                reports_dict = getattr(session_atualizada, 'reports', {})
+                if not isinstance(reports_dict, dict):
+                    logger.critical(f"Após update_report, reports não é um dicionário para session_id={session.session_id}")
+                    raise HTTPException(status_code=500, detail="Campo 'reports' corrompido após atualização.")
+                if payload.report_type not in reports_dict and not any(payload.report_type in k for k in reports_dict.keys()):
+                    logger.critical(f"Após update_report, chave '{payload.report_type}' não encontrada em reports para session_id={session.session_id}. Chaves atuais: {list(reports_dict.keys())}")
+                    raise HTTPException(status_code=500, detail=f"Chave '{payload.report_type}' não encontrada em reports após atualização.")
+                logger.info(f"Validação pós-update_report: reports contém as chaves: {list(reports_dict.keys())}")
+            except Exception as e:
+                logger.critical(f"Erro crítico ao validar integridade de reports após update_report: {e}")
+                raise HTTPException(status_code=500, detail=f"Erro ao validar integridade de reports: {e}")
+            try:
                 await ProjectStateService.save_state_to_blob(session_atualizada)
                 logger.info(f"Estado salvo imediatamente após atualização de relatório para sessão {session.session_id} (session_id={payload.session_id})")
             except Exception as e:
