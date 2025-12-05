@@ -36,7 +36,7 @@ async def start_analysis(
     project_id: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user),
-    session_id: str = Form(...)
+    session_id: Optional[str] = Form(None)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
@@ -45,8 +45,24 @@ async def start_analysis(
     texto_extraido = None
     blob_url = None
     project_id_final = _get_or_create_project_id(project_state, project_id)
-    if not session_id:
+
+    # Passo 5: reutilizar session_id existente se o projeto já existe
+    existing_session = redis_service.get_session_by_project(usuario_executor, projeto)
+    if existing_session:
+        session_id_final = existing_session.session_id
+        logger.info(f"Reutilizando session_id existente do Redis para projeto '{projeto}': {session_id_final}")
+    else:
+        session_id_from_blob = await ProjectStateService.get_session_id_from_latest_state(usuario_executor, projeto)
+        if session_id_from_blob:
+            session_id_final = session_id_from_blob
+            logger.info(f"Reutilizando session_id do estado mais recente do Blob para projeto '{projeto}': {session_id_final}")
+        else:
+            session_id_final = session_id or str(uuid.uuid4())
+            logger.info(f"Criando novo session_id para projeto '{projeto}': {session_id_final}")
+
+    if not session_id_final:
         raise HTTPException(status_code=400, detail="session_id é obrigatório para iniciar análise.")
+
     if file is not None:
         try:
             blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
@@ -65,14 +81,14 @@ async def start_analysis(
             comentario_usuario=comentario_usuario,
             extracted_text=texto_extraido,
             project_id=project_id_final,
-            session_id=session_id
+            session_id=session_id_final
         )
         try:
-            redis_service.add_docx_file(session_id, blob_url)
+            redis_service.add_docx_file(session_id_final, blob_url)
         except Exception as e:
             logger.error(f"Erro ao adicionar arquivo DOCX à sessão: {e}")
         try:
-            redis_service.update_session_extracted_text(session_id, texto_extraido)
+            redis_service.update_session_extracted_text(session_id_final, texto_extraido)
         except Exception as e:
             logger.error(f"Erro ao salvar texto extraído na sessão: {e}")
     else:
@@ -82,24 +98,24 @@ async def start_analysis(
                 projeto,
                 analysis_type,
                 project_state,
-                session_id=session_id
+                session_id=session_id_final
             )
             try:
-                session = redis_service.get_session(session_id)
+                session = redis_service.get_session(session_id_final)
                 texto_extraido = getattr(session, "extracted_text", None)
             except Exception as e:
                 logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
                 texto_extraido = None
         else:
             raise HTTPException(status_code=400, detail="Para novo projeto, é obrigatório enviar um arquivo DOCX.")
-    BackgroundStateSaver.schedule_periodic_save(session_id)
+    BackgroundStateSaver.schedule_periodic_save(session_id_final)
     mcp_payload = MCPStartAnalysisPayload(
         projeto=projeto,
         analysis_type=analysis_type,
         arquivo_docx=texto_extraido,
         comentario_usuario=comentario_usuario,
         usuario_executor=usuario_executor,
-        session_id=session_id
+        session_id=session_id_final
     )
     mcp_client = MCPClientService()
     try:
@@ -109,6 +125,6 @@ async def start_analysis(
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
     return StartAnalysisResponse(
         message="Análise solicitada com sucesso ao agente.",
-        session_id=session_id,
+        session_id=session_id_final,
         project_id=project_id_final
     )
