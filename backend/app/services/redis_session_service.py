@@ -89,10 +89,18 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     async def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None):
+        self.logger.info(f"[update_report] Iniciando atualização de relatório para session_id={session_id}, report_type={report_type}")
+        # Passo 1, 2, 3: garantir sessão no Redis (restaura do Blob se necessário)
+        try:
+            session_obj = await self._ensure_session_exists(session_id=session_id)
+            self.logger.info(f"[update_report] Sessão garantida no Redis para session_id={session_id}")
+        except Exception as e:
+            self.logger.error(f"[update_report] Falha ao garantir sessão no Redis para session_id={session_id}: {e}")
+            raise
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
-            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis após tentativa de restauração.")
         session_data = self._deserialize_session(session_json)
         analysis_type_in_session = session_data.get("analysis_type")
         analysis_type = analysis_type or analysis_type_in_session
@@ -121,6 +129,49 @@ class RedisSessionService:
             self.logger.info(f"[update_report] Estado salvo no Blob Storage para session_id={session_id}")
         except Exception as e:
             self.logger.error(f"Erro ao salvar estado imediatamente após update_report: {e}")
+
+    async def _ensure_session_exists(self, session_id: str, usuario_executor: Optional[str] = None, projeto: Optional[str] = None) -> SessionData:
+        self.logger.info(f"[_ensure_session_exists] Verificando existência da sessão no Redis para session_id={session_id}")
+        try:
+            session = self.get_session(session_id)
+            self.logger.info(f"[_ensure_session_exists] Sessão encontrada no Redis para session_id={session_id}")
+            return session
+        except Exception as e:
+            self.logger.warning(f"[_ensure_session_exists] Sessão não encontrada no Redis para session_id={session_id}: {e}")
+        state = None
+        if usuario_executor and projeto:
+            self.logger.info(f"[_ensure_session_exists] Tentando carregar estado do Blob via usuario_executor={usuario_executor}, projeto={projeto}")
+            try:
+                state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto, session_id=session_id)
+                if state:
+                    self.logger.info(f"[_ensure_session_exists] Estado encontrado no Blob via usuario_executor/projeto para session_id={session_id}")
+            except Exception as e:
+                self.logger.warning(f"[_ensure_session_exists] Falha ao buscar estado no Blob via usuario_executor/projeto: {e}")
+        if not state:
+            self.logger.info(f"[_ensure_session_exists] Tentando carregar estado do Blob via session_id={session_id}")
+            try:
+                state = await ProjectStateService.load_latest_state_by_session_id(session_id)
+                if state:
+                    self.logger.info(f"[_ensure_session_exists] Estado encontrado no Blob via session_id={session_id}")
+            except Exception as e:
+                self.logger.warning(f"[_ensure_session_exists] Falha ao buscar estado no Blob via session_id: {e}")
+        if state:
+            usuario_executor_restore = state.get("usuario_executor")
+            projeto_restore = state.get("projeto")
+            analysis_type_restore = state.get("analysis_type")
+            self.logger.info(f"[_ensure_session_exists] Restaurando sessão no Redis para session_id={session_id}, usuario_executor={usuario_executor_restore}, projeto={projeto_restore}, analysis_type={analysis_type_restore}")
+            self.restore_session_from_state(
+                usuario_executor_restore,
+                projeto_restore,
+                analysis_type_restore,
+                state,
+                session_id=session_id
+            )
+            session = self.get_session(session_id)
+            self.logger.info(f"[_ensure_session_exists] Sessão restaurada no Redis para session_id={session_id}")
+            return session
+        self.logger.error(f"[_ensure_session_exists] Sessão não encontrada no Redis nem no Blob para session_id={session_id}")
+        raise ValueError(f"Sessão {session_id} não encontrada no Redis nem no Blob Storage.")
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any], session_id: str) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
