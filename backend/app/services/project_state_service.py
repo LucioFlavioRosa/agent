@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 from backend.app.core.config import settings
 from backend.app.services.blob_storage_service import _get_blob_clients
 import logging
+from backend.app.models.session_models import SessionData
 
 class ProjectStateService:
     @staticmethod
@@ -17,9 +18,6 @@ class ProjectStateService:
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
-        # Garante que last_mcp_job_id está presente no estado salvo
-        if hasattr(session_data, "last_mcp_job_id"):
-            state["last_mcp_job_id"] = getattr(session_data, "last_mcp_job_id")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
         return blob_client.url
 
@@ -45,10 +43,6 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
-        # Garante que last_mcp_job_id é carregado se existir
-        if "last_mcp_job_id" in state:
-            state["last_mcp_job_id"] = state["last_mcp_job_id"]
-        logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
         return state
 
     @staticmethod
@@ -88,7 +82,8 @@ class ProjectStateService:
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
-                    "project_id": state.get("project_id")
+                    "project_id": state.get("project_id"),
+                    "session_id": state.get("session_id")
                 }
                 result.append(item)
             return result
