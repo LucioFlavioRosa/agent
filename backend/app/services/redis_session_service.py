@@ -88,11 +88,10 @@ class RedisSessionService:
         session_data["status"] = status
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
-    async def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None):
+    async def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None, usuario_executor: Optional[str] = None, projeto: Optional[str] = None):
         self.logger.info(f"[update_report] Iniciando atualização de relatório para session_id={session_id}, report_type={report_type}")
-        # Passo 1, 2, 3: garantir sessão no Redis (restaura do Blob se necessário)
         try:
-            session_obj = await self._ensure_session_exists(session_id=session_id)
+            session_obj = await self._ensure_session_exists(session_id=session_id, usuario_executor=usuario_executor, projeto=projeto)
             self.logger.info(f"[update_report] Sessão garantida no Redis para session_id={session_id}")
         except Exception as e:
             self.logger.error(f"[update_report] Falha ao garantir sessão no Redis para session_id={session_id}: {e}")
