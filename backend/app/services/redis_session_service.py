@@ -122,25 +122,30 @@ class RedisSessionService:
         # Atualização granular campo a campo
         for k in REPORT_FIELDS:
             if report_type == "epicos" and k == "epicos_report":
-                session_data[k] = report_data
-                updated = True
-                self.logger.info(f"[update_report] Atualizado apenas epicos_report para session_id={session_id}")
+                if report_data is not None:
+                    session_data[k] = report_data
+                    updated = True
+                    self.logger.info(f"[update_report] Atualizado apenas epicos_report para session_id={session_id}")
             elif report_type == "features" and k == "features_report":
-                session_data[k] = report_data
-                updated = True
-                self.logger.info(f"[update_report] Atualizado apenas features_report para session_id={session_id}")
+                if report_data is not None:
+                    session_data[k] = report_data
+                    updated = True
+                    self.logger.info(f"[update_report] Atualizado apenas features_report para session_id={session_id}")
             elif report_type == "times_descricao" and k == "times_descricao_report":
-                session_data[k] = report_data
-                updated = True
-                self.logger.info(f"[update_report] Atualizado apenas times_descricao_report para session_id={session_id}")
+                if report_data is not None:
+                    session_data[k] = report_data
+                    updated = True
+                    self.logger.info(f"[update_report] Atualizado apenas times_descricao_report para session_id={session_id}")
             elif report_type == "alocacao_times" and k == "alocacao_times_report":
-                session_data[k] = report_data
-                updated = True
-                self.logger.info(f"[update_report] Atualizado apenas alocacao_times_report para session_id={session_id}")
+                if report_data is not None:
+                    session_data[k] = report_data
+                    updated = True
+                    self.logger.info(f"[update_report] Atualizado apenas alocacao_times_report para session_id={session_id}")
             elif report_type == "premissas_riscos" and k == "premissas_riscos_report":
-                session_data[k] = report_data
-                updated = True
-                self.logger.info(f"[update_report] Atualizado apenas premissas_riscos_report para session_id={session_id}")
+                if report_data is not None:
+                    session_data[k] = report_data
+                    updated = True
+                    self.logger.info(f"[update_report] Atualizado apenas premissas_riscos_report para session_id={session_id}")
 
         self._preserve_existing_reports(session_data, current_reports, report_type)
 
