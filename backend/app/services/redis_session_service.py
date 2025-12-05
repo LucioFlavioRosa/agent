@@ -17,6 +17,14 @@ REPORT_FIELDS = [
     "premissas_riscos_report"
 ]
 
+REPORT_TYPE = [
+    "epicos",
+    "features",
+    "times_descricao",
+    "alocacao_times",
+    "premissas_riscos"
+]
+
 class RedisSessionService:
     def __init__(self):
         self.redis_client = redis.Redis(
@@ -120,33 +128,11 @@ class RedisSessionService:
 
         updated = False
         # Atualização granular campo a campo
-        for k in REPORT_FIELDS:
-            if report_type == "epicos" and k == "epicos_report":
-                if report_data is not None:
-                    session_data[k] = report_data
-                    updated = True
-                    self.logger.info(f"[update_report] Atualizado apenas epicos_report para session_id={session_id}")
-            elif report_type == "features" and k == "features_report":
-                if report_data is not None:
-                    session_data[k] = report_data
-                    updated = True
-                    self.logger.info(f"[update_report] Atualizado apenas features_report para session_id={session_id}")
-            elif report_type == "times_descricao" and k == "times_descricao_report":
-                if report_data is not None:
-                    session_data[k] = report_data
-                    updated = True
-                    self.logger.info(f"[update_report] Atualizado apenas times_descricao_report para session_id={session_id}")
-            elif report_type == "alocacao_times" and k == "alocacao_times_report":
-                if report_data is not None:
-                    session_data[k] = report_data
-                    updated = True
-                    self.logger.info(f"[update_report] Atualizado apenas alocacao_times_report para session_id={session_id}")
-            elif report_type == "premissas_riscos" and k == "premissas_riscos_report":
-                if report_data is not None:
-                    session_data[k] = report_data
-                    updated = True
-                    self.logger.info(f"[update_report] Atualizado apenas premissas_riscos_report para session_id={session_id}")
-
+        for k in range (0, len(REPORT_FIELDS)):
+            dados = report_data[REPORT_TYPE[k]][REPORT_FIELDS[k]]
+            if dados is not None:
+                session_data[REPORT_FIELDS[k]] = dados
+                
         self._preserve_existing_reports(session_data, current_reports, report_type)
 
         for k in REPORT_FIELDS:
