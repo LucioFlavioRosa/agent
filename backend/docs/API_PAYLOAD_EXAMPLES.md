@@ -37,6 +37,10 @@ Content-Type: application/json
   "session_id": "session-uuid-123"
 }
 
+**Nota importante:**
+- O campo `session_id` retornado no login é sempre o mesmo do estado mais recente do projeto selecionado (extraído do Redis ou Blob Storage). Nunca é gerado novamente para projetos existentes. Apenas para novos projetos (sem estado), um novo `session_id` é criado.
+- O identificador único de toda a sessão é sempre o `session_id`, gerado no login e propagado para todas as interações.
+
 ### 1.2 Verificação de Projeto (GET /projects/check)
 
 **Requisição:**
@@ -68,6 +72,7 @@ Authorization: Bearer <token>
 
 **Nota importante:**
 - O campo `state` sempre reflete o estado mais recente disponível para o projeto, buscando **primeiro no Redis** (sessão ativa) e, se não encontrado, faz fallback para o Blob Storage.
+- O campo `session_id` retornado é sempre o mesmo do estado mais recente (Redis ou Blob). Se a sessão não estiver no Redis, o backend restaura a sessão usando o session_id do Blob antes de retornar o estado.
 - O campo `reports` sempre está atualizado conforme o último relatório recebido (via webhook MCP ou atualização manual).
 - Se houver diferença entre o estado do Blob Storage e o Redis, o valor do Redis é priorizado.
 - O identificador único de toda a sessão é sempre o `session_id`, gerado no login e propagado para todas as interações.
@@ -105,7 +110,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 - `error_type`: string. Obrigatório para status `error`.
 - `error_message`: string. Obrigatório para status `error`.
 
-> **Nota:** O backend busca a sessão correspondente usando o `session_id` persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
+> **Nota:** O backend busca a sessão correspondente usando o `session_id` persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente. Se a sessão não estiver no Redis, o backend restaura a sessão usando o session_id do Blob antes de atualizar o relatório.
 
 ---
 
@@ -143,6 +148,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 
 ## 4. Observações Importantes
 - O endpoint `/projects/check` sempre retorna o estado mais recente disponível para o projeto, priorizando o Redis.
+- O campo `session_id` retornado é sempre o mesmo do estado mais recente (Redis ou Blob). Se a sessão não estiver no Redis, o backend restaura a sessão usando o session_id do Blob antes de retornar o estado.
 - O campo `reports` reflete imediatamente qualquer atualização feita via webhook do MCP ou via endpoint manual.
 - Se a sessão estiver ativa no Redis, o estado retornado é o do Redis (incluindo relatórios mais recentes). Se não houver sessão ativa, o backend retorna o último estado salvo no Blob Storage.
 - O campo `state` nunca mistura dados de fontes diferentes: sempre é 100% do Redis ou 100% do Blob Storage.
@@ -205,3 +211,4 @@ Resposta:
 - Após o início da análise, a relação de identificação é sempre feita via `session_id` (não existe mais job_id).
 - Após cada atualização de relatório via webhook do MCP, o estado é salvo imediatamente no Blob Storage e o Redis é atualizado, garantindo consistência e minimizando perda de dados em caso de falha.
 - O endpoint `/projects/check` sempre retorna o estado mais recente disponível, priorizando o Redis.
+- O campo `session_id` retornado é sempre o mesmo do estado mais recente (Redis ou Blob). Se a sessão não estiver no Redis, o backend restaura a sessão usando o session_id do Blob antes de retornar o estado.
