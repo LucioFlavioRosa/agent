@@ -29,7 +29,7 @@ class FakeMCPStartPayload(BaseModel):
 # --- DADOS MOCKADOS ---
 DATA_CRIACAO = {
     "epicos": {
-        "epicos_report": [
+        "epicos": [
             {"id": 1, "titulo": "Autenticação Azure AD", 
              "descricao": "Implementar login seguro com OAuth2. Vou testar Algumas coisas", 
              "tempo estimado": "2 sprint", "criterios de aceite": 
@@ -43,7 +43,7 @@ DATA_CRIACAO = {
 
 DATA_REFINAMENTO = {
     "epicos": {
-        "epicos_report": [
+        "epicos": [
             {"id": 1, "titulo": "Autenticação Azure AD com maior atençao", "descricao": "Implementar login seguro com OAuth2. NONO"},
             {"id": 2, "titulo": "Processamento de Arquivos refinados", "descricao": "Ler e extrair texto de DOCX. NONO"},
             {"id": 3, "titulo": "Dashboard de Métricas refinados", "descricao": "Visualizar status dos projetos. NONO"}
@@ -53,7 +53,7 @@ DATA_REFINAMENTO = {
 
 FEATURE_CRIACAO = {
     "features": {
-        "features_report": [
+        "features": [
             {"feature id": 1, "epico id ": "1", "titulo": "setup infra na nuvem", "prazo": "2 dias"},
             {"feature id": 2, "epico id ": "2", "titulo": "testes de segurança", "prazo": "1 dia"}
         ]
