@@ -17,7 +17,6 @@ class ProjectStateService:
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
-        # Garante que last_mcp_job_id está presente no estado salvo
         if hasattr(session_data, "last_mcp_job_id"):
             state["last_mcp_job_id"] = getattr(session_data, "last_mcp_job_id")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
@@ -45,9 +44,21 @@ class ProjectStateService:
         blob_client = container_client.get_blob_client(latest_blob.name)
         state_bytes = blob_client.download_blob().readall()
         state = json.loads(state_bytes.decode("utf-8"))
-        # Garante que last_mcp_job_id é carregado se existir
         if "last_mcp_job_id" in state:
             state["last_mcp_job_id"] = state["last_mcp_job_id"]
+        legacy_reports = state.get("reports", {})
+        def get_report_field(field):
+            if field in state and state[field] is not None:
+                return state[field]
+            if legacy_reports and field in legacy_reports and legacy_reports[field] is not None:
+                return legacy_reports[field]
+            return None
+        state["epicos_report"] = get_report_field("epicos_report")
+        state["features_report"] = get_report_field("features_report")
+        state["times_descricao_report"] = get_report_field("times_descricao_report")
+        state["alocacao_times_report"] = get_report_field("alocacao_times_report")
+        state["premissas_riscos_report"] = get_report_field("premissas_riscos_report")
+        state.pop("reports", None)
         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
         return state
 
@@ -83,12 +94,24 @@ class ProjectStateService:
                 blob_client = container_client.get_blob_client(latest_blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
+                legacy_reports = state.get("reports", {})
+                def get_report_field(field):
+                    if field in state and state[field] is not None:
+                        return state[field]
+                    if legacy_reports and field in legacy_reports and legacy_reports[field] is not None:
+                        return legacy_reports[field]
+                    return None
                 item = {
                     "projeto": state.get("projeto", projeto),
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
-                    "project_id": state.get("project_id")
+                    "project_id": state.get("project_id"),
+                    "epicos_report": get_report_field("epicos_report"),
+                    "features_report": get_report_field("features_report"),
+                    "times_descricao_report": get_report_field("times_descricao_report"),
+                    "alocacao_times_report": get_report_field("alocacao_times_report"),
+                    "premissas_riscos_report": get_report_field("premissas_riscos_report")
                 }
                 result.append(item)
             return result
