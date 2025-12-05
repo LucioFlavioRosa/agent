@@ -21,8 +21,12 @@ class SessionData(BaseModel):
     comentario_usuario: Optional[str] = Field(default=None)
     extracted_text: Optional[str] = Field(default=None)
     project_id: Optional[str] = Field(default=None)
-    reports: Dict[str, Any] = Field(default_factory=dict)
     last_mcp_job_id: Optional[str] = Field(default=None)
+    epicos_report: Optional[Any] = Field(default=None)
+    features_report: Optional[Any] = Field(default=None)
+    times_descricao_report: Optional[Any] = Field(default=None)
+    alocacao_times_report: Optional[Any] = Field(default=None)
+    premissas_riscos_report: Optional[Any] = Field(default=None)
 
     def to_project_state(self) -> Dict[str, Any]:
         return {
@@ -35,20 +39,23 @@ class SessionData(BaseModel):
             "comentario_usuario": self.comentario_usuario,
             "extracted_text": self.extracted_text,
             "project_id": self.project_id,
-            "reports": self.reports,
-            "last_mcp_job_id": self.last_mcp_job_id
+            "last_mcp_job_id": self.last_mcp_job_id,
+            "epicos_report": self.epicos_report,
+            "features_report": self.features_report,
+            "times_descricao_report": self.times_descricao_report,
+            "alocacao_times_report": self.alocacao_times_report,
+            "premissas_riscos_report": self.premissas_riscos_report
         }
 
     @classmethod
     def from_project_state(cls, state: Dict[str, Any]) -> "SessionData":
-        reports = state.get("reports", {})
-        migrated_reports = dict(reports) if reports else {}
-        legacy_fields = [
-            "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
-        ]
-        for field in legacy_fields:
+        legacy_reports = state.get("reports", {})
+        def get_report_field(field):
             if field in state and state[field] is not None:
-                migrated_reports[field] = state[field]
+                return state[field]
+            if legacy_reports and field in legacy_reports and legacy_reports[field] is not None:
+                return legacy_reports[field]
+            return None
         return cls(
             session_id=state.get("session_id", ""),
             usuario_executor=state.get("usuario_executor", ""),
@@ -61,6 +68,10 @@ class SessionData(BaseModel):
             comentario_usuario=state.get("comentario_usuario"),
             extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
-            reports=migrated_reports,
-            last_mcp_job_id=state.get("last_mcp_job_id")
+            last_mcp_job_id=state.get("last_mcp_job_id"),
+            epicos_report=get_report_field("epicos_report"),
+            features_report=get_report_field("features_report"),
+            times_descricao_report=get_report_field("times_descricao_report"),
+            alocacao_times_report=get_report_field("alocacao_times_report"),
+            premissas_riscos_report=get_report_field("premissas_riscos_report")
         )
