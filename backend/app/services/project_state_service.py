@@ -27,7 +27,6 @@ class ProjectStateService:
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
         logger = logging.getLogger("ProjectStateService")
-        # Garante que todos os campos de relatório estão presentes e loga o conteúdo de cada um
         for k in REPORT_FIELDS:
             if k not in state:
                 logger.critical(f"[save_state_to_blob] Campo de relatório '{k}' ausente, preenchendo com None.")
