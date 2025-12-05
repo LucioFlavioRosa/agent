@@ -37,7 +37,7 @@ flowchart TD
     AB -->|Busca Segredos| AC
     AA -->|Verifica Projeto| AD
     AD -->|Busca Estado| AE
-    AA -->|Início de Análise (inclui upload DOCX)| AE
+    AA -->|"Início de Análise (inclui upload DOCX)"| AE
     AE -->|Extrai Texto| AA
     AA -->|Cria Sessão| AD
     AA -->|Envia para MCP (sempre com session_id)| AF
