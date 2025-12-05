@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama Geral do Fluxo (Mermaid)
 
-mermaid
+```mermaid
 flowchart TD
     subgraph Frontend
         Z[Usuário/Frontend]
@@ -52,7 +52,7 @@ flowchart TD
     AE -->|Restaura Sessão no Redis| AD
     %% Salvamento imediato após atualização de relatório
     AA -->|Salva Estado Imediatamente após Webhook MCP| AE
-
+```
 
 ---
 
@@ -79,7 +79,7 @@ flowchart TD
 
 #### Diagrama de Sequência: Consulta de Estado de Projeto
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -101,7 +101,7 @@ sequenceDiagram
         BE-->>FE: exists: true, state (do Blob Storage)
     end
     Note over BE: O campo 'reports' sempre reflete o estado mais recente disponível
-
+```
 
 ### 3. Início de Análise e Upload de DOCX (Processamento Paralelo)
 - O upload do arquivo DOCX e a extração do texto ocorrem dentro do endpoint `/analysis/start` via multipart/form-data. O backend retorna tanto a URL do arquivo quanto o texto extraído.
@@ -143,7 +143,7 @@ sequenceDiagram
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 **Exemplo de configuração de agente:**
-
+```json
 {
   "agents": {
     "criacao_epicos_azure_devops": {
@@ -160,7 +160,7 @@ sequenceDiagram
     }
   }
 }
-
+```
 ---
 
 ## 8. Webhook MCP: Recuperação Automática de Sessão e Atualização de Relatório
@@ -169,7 +169,7 @@ A partir da versão X.X.X, o backend garante que **toda vez que um webhook do MC
 
 ### Diagrama de Sequência: Webhook MCP → Recuperação de Sessão → Atualização de Relatório
 
-mermaid
+```mermaid
 sequenceDiagram
     participant MCP as MCP Server
     participant BE as Backend
@@ -204,7 +204,7 @@ sequenceDiagram
         end
     end
     Note over BE: O relatório é sempre atualizado, não importa se a sessão foi criada em outra sessão ou restaurada do Blob
-
+```
 
 ### Código Responsável
 - `backend/app/api/webhooks.py` (endpoint `/webhooks/mcp`):
