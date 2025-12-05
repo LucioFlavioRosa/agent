@@ -5,7 +5,7 @@ from backend.app.core.config import settings
 
 class BackgroundStateSaver:
     _tasks = {}
-    _interval_minutes = 60
+    _interval_minutes = int(getattr(settings, 'PROJECT_STATE_SAVE_INTERVAL_MINUTES', 10))
     _logger = logging.getLogger("BackgroundStateSaver")
 
     @classmethod

@@ -6,24 +6,6 @@ from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
 import logging
-from backend.app.services.project_state_service import ProjectStateService
-from fastapi import HTTPException
-
-REPORT_FIELDS = [
-    "epicos_report",
-    "features_report",
-    "times_descricao_report",
-    "alocacao_times_report",
-    "premissas_riscos_report"
-]
-
-REPORT_TYPE = [
-    "epicos",
-    "features",
-    "times_descricao",
-    "alocacao_times",
-    "premissas_riscos"
-]
 
 class RedisSessionService:
     def __init__(self):
@@ -45,9 +27,8 @@ class RedisSessionService:
     def _deserialize_session(self, session_json: str) -> dict:
         return json.loads(session_json)
 
-    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None, project_id: Optional[str] = None, session_id: Optional[str] = None) -> str:
-        if not session_id:
-            raise ValueError("session_id é obrigatório para criar uma sessão.")
+    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None, project_id: Optional[str] = None) -> str:
+        session_id = str(uuid.uuid4())
         created_at = datetime.utcnow().isoformat()
         if not project_id:
             project_id = str(uuid.uuid4())
@@ -63,11 +44,8 @@ class RedisSessionService:
             "comentario_usuario": comentario_usuario,
             "extracted_text": extracted_text,
             "project_id": project_id,
-            "epicos_report": None,
-            "features_report": None,
-            "times_descricao_report": None,
-            "alocacao_times_report": None,
-            "premissas_riscos_report": None
+            "reports": {},
+            "last_mcp_job_id": None
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
         return session_id
@@ -109,153 +87,54 @@ class RedisSessionService:
         session_data["status"] = status
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
-    async def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None, usuario_executor: Optional[str] = None, projeto: Optional[str] = None):
-        self.logger.info(f"[update_report] Iniciando atualização de relatório para session_id={session_id}, report_type={report_type}")
-        try:
-            session_obj = await self._ensure_session_exists(session_id=session_id, usuario_executor=usuario_executor, projeto=projeto)
-            self.logger.info(f"[update_report] Sessão garantida no Redis para session_id={session_id}")
-        except Exception as e:
-            self.logger.error(f"[update_report] Falha ao garantir sessão no Redis para session_id={session_id}: {e}")
-            raise
+    def update_report(self, session_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None):
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
-            raise ValueError(f"Sessão {session_id} não encontrada no Redis após tentativa de restauração.")
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
         session_data = self._deserialize_session(session_json)
-
-        current_reports = {k: session_data.get(k) for k in REPORT_FIELDS}
-        self.logger.info(f"[update_report] Estado dos campos de relatório ANTES da atualização: {json.dumps(current_reports, ensure_ascii=False)}")
-
-        updated_fields = []
-        # Atualização granular campo a campo
-        if isinstance(report_data, dict):
-            for report_key, report_value in report_data.items():
-                # Exemplo: report_key = 'epicos', report_value = {'epicos_report': [...]}
-                if isinstance(report_value, dict):
-                    for field_key, field_value in report_value.items():
-                        # Exemplo: field_key = 'epicos_report', field_value = [...]
-                        if field_key in REPORT_FIELDS:
-                            if field_value is not None:
-                                session_data[field_key] = field_value
-                                updated_fields.append(field_key)
-                            else:
-                                self.logger.info(f"[update_report] Valor para '{field_key}' é None, mantendo valor anterior.")
-                elif report_key in REPORT_FIELDS:
-                    if report_value is not None:
-                        session_data[report_key] = report_value
-                        updated_fields.append(report_key)
-                    else:
-                        self.logger.info(f"[update_report] Valor para '{report_key}' é None, mantendo valor anterior.")
-        # Preserva todos os campos não atualizados
-        self._preserve_existing_reports(session_data, current_reports, updated_fields)
-
-        self.logger.info(f"[update_report] Estado dos campos de relatório DEPOIS da atualização: {json.dumps({k: session_data.get(k) for k in REPORT_FIELDS}, ensure_ascii=False)}")
-
+        analysis_type_in_session = session_data.get("analysis_type")
+        analysis_type = analysis_type or analysis_type_in_session
+        report_field = None
+        if hasattr(settings, "mcp_config_registry") and settings.mcp_config_registry and hasattr(settings.mcp_config_registry, "agents") and analysis_type in settings.mcp_config_registry.agents:
+            agent_cfg = settings.mcp_config_registry.agents[analysis_type]
+            if hasattr(agent_cfg, "report_mapping") and report_type in agent_cfg.report_mapping:
+                report_field = agent_cfg.report_mapping[report_type]
+        if not report_field:
+            report_field = f"{report_type}_report"
+        if "reports" not in session_data or not isinstance(session_data["reports"], dict):
+            session_data["reports"] = {}
+        session_data["reports"][report_field] = report_data
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-        try:
-            session_obj = SessionData(**session_data)
-            await ProjectStateService.save_state_to_blob(session_obj)
-            self.logger.info(f"[update_report] Estado salvo no Blob Storage para session_id={session_id}")
-        except Exception as e:
-            self.logger.error(f"Erro ao salvar estado imediatamente após update_report: {e}")
 
-        # Validação pós-atualização
-        session_json_after = self.redis_client.get(key)
-        session_data_after = self._deserialize_session(session_json_after)
-        for k in REPORT_FIELDS:
-            if k not in updated_fields and current_reports[k] is not None and session_data_after.get(k) is None:
-                self.logger.critical(f"[update_report] Campo de relatório '{k}' foi perdido durante a atualização do relatório '{report_type}' para session_id={session_id}. Estado antes: {json.dumps(current_reports, ensure_ascii=False)}; Estado depois: {json.dumps({kk: session_data_after.get(kk) for kk in REPORT_FIELDS}, ensure_ascii=False)}")
-                raise HTTPException(status_code=500, detail=f"Campo de relatório '{k}' foi perdido durante a atualização.")
-
-    def _preserve_existing_reports(self, session_data: dict, current_reports: dict, updated_fields):
-        for k in REPORT_FIELDS:
-            if k not in updated_fields:
-                session_data[k] = current_reports[k]
-
-    async def _ensure_session_exists(self, session_id: str, usuario_executor: Optional[str] = None, projeto: Optional[str] = None) -> SessionData:
-        self.logger.info(f"[_ensure_session_exists] Verificando existência da sessão no Redis para session_id={session_id}")
-        try:
-            session = self.get_session(session_id)
-            self.logger.info(f"[_ensure_session_exists] Sessão encontrada no Redis para session_id={session_id}")
-            return session
-        except Exception as e:
-            self.logger.warning(f"[_ensure_session_exists] Sessão não encontrada no Redis para session_id={session_id}: {e}")
-        state = None
-        if usuario_executor and projeto:
-            self.logger.info(f"[_ensure_session_exists] Tentando carregar estado do Blob via usuario_executor={usuario_executor}, projeto={projeto}")
-            try:
-                state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto, session_id=session_id)
-                if state:
-                    self.logger.info(f"[_ensure_session_exists] Estado encontrado no Blob via usuario_executor/projeto para session_id={session_id}")
-            except Exception as e:
-                self.logger.warning(f"[_ensure_session_exists] Falha ao buscar estado no Blob via usuario_executor/projeto: {e}")
-        if not state:
-            self.logger.info(f"[_ensure_session_exists] Tentando carregar estado do Blob via session_id={session_id}")
-            try:
-                state = await ProjectStateService.load_latest_state_by_session_id(session_id)
-                if state:
-                    self.logger.info(f"[_ensure_session_exists] Estado encontrado no Blob via session_id={session_id}")
-            except Exception as e:
-                self.logger.warning(f"[_ensure_session_exists] Falha ao buscar estado no Blob via session_id: {e}")
-        if state:
-            usuario_executor_restore = state.get("usuario_executor")
-            projeto_restore = state.get("projeto")
-            analysis_type_restore = state.get("analysis_type")
-            for k in REPORT_FIELDS:
-                if k not in state:
-                    state[k] = None
-                    self.logger.warning(f"[restore_session_from_state] Campo de relatório '{k}' ausente ao restaurar do Blob, preenchendo com None.")
-            self.logger.info(f"[_ensure_session_exists] Restaurando sessão no Redis para session_id={session_id}, usuario_executor={usuario_executor_restore}, projeto={projeto_restore}, analysis_type={analysis_type_restore}")
-            self.restore_session_from_state(
-                usuario_executor_restore,
-                projeto_restore,
-                analysis_type_restore,
-                state,
-                session_id=session_id
-            )
-            session = self.get_session(session_id)
-            self.logger.info(f"[_ensure_session_exists] Sessão restaurada no Redis para session_id={session_id}")
-            return session
-        self.logger.error(f"[_ensure_session_exists] Sessão não encontrada no Redis nem no Blob para session_id={session_id}")
-        raise ValueError(f"Sessão {session_id} não encontrada no Redis nem no Blob Storage.")
-
-    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any], session_id: str) -> str:
+    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
         extracted_text = project_state.get("extracted_text")
         project_id = project_state.get("project_id")
-        state_session_id = project_state.get("session_id")
-        if state_session_id and session_id != state_session_id:
-            self.logger.warning(f"[restore_session_from_state] Aviso: session_id fornecido ({session_id}) é diferente do session_id no estado ({state_session_id}). Usando o session_id do estado: {state_session_id}")
-            session_id = state_session_id
-        missing_fields = []
-        restored_fields = []
-        session_data = {
-            "session_id": session_id,
-            "usuario_executor": usuario_executor,
-            "projeto": projeto,
-            "analysis_type": analysis_type,
-            "created_at": project_state.get("created_at"),
-            "steps": [],
-            "last_saved_to_blob": project_state.get("last_saved_to_blob"),
-            "docx_files": project_state.get("docx_files", []),
-            "comentario_usuario": comentario_usuario,
-            "extracted_text": extracted_text,
-            "project_id": project_id
-        }
-        for k in REPORT_FIELDS:
-            if k in project_state:
-                session_data[k] = project_state[k]
-                restored_fields.append(k)
-            else:
-                session_data[k] = None
-                missing_fields.append(k)
-        if missing_fields:
-            self.logger.warning(f"[restore_session_from_state] Os seguintes campos de relatório estavam ausentes ao restaurar do Blob e foram preenchidos com None: {missing_fields}")
-        if restored_fields:
-            self.logger.info(f"[restore_session_from_state] Campos de relatório restaurados: {', '.join(restored_fields)}")
-        else:
-            self.logger.info(f"[restore_session_from_state] Nenhum campo de relatório restaurado explicitamente.")
-        self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
+        last_mcp_job_id = project_state.get("last_mcp_job_id") if "last_mcp_job_id" in project_state else None
+        session_id = self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id)
+        key = f"session:{session_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+        session_data = self._deserialize_session(session_json)
+        reports = {}
+        if "reports" in project_state and isinstance(project_state["reports"], dict):
+            reports.update(project_state["reports"])
+        legacy_fields = [
+            "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
+        ]
+        for field in legacy_fields:
+            if field in project_state and project_state[field] is not None:
+                reports[field] = project_state[field]
+        session_data["reports"] = reports
+        session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
+        session_data["docx_files"] = project_state.get("docx_files", [])
+        session_data["comentario_usuario"] = comentario_usuario
+        session_data["extracted_text"] = extracted_text
+        session_data["project_id"] = project_id
+        session_data["last_mcp_job_id"] = last_mcp_job_id
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return session_id
 
     def add_docx_file(self, session_id: str, blob_url: str):
@@ -291,20 +170,42 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         BackgroundStateSaver.schedule_periodic_save(session_id)
 
-    def get_session_by_project(self, usuario_executor: str, projeto: str) -> Optional[SessionData]:
-        self.logger.info(f"Buscando sessão por usuario_executor='{usuario_executor}', projeto='{projeto}'")
+    def update_session_job_id(self, session_id: str, job_id: str):
+        key = f"session:{session_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Sessão {session_id} não encontrada no Redis.")
+        session_data = self._deserialize_session(session_json)
+        session_data["last_mcp_job_id"] = job_id
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        try:
+            self.redis_client.setex(f"jobid:{job_id}", self.session_ttl, session_id)
+            self.logger.info(f"Persistida relação job_id -> session_id: {job_id} -> {session_id}")
+        except Exception as e:
+            self.logger.error(f"Erro ao persistir job_id -> session_id no Redis: {e}")
+
+    def get_session_by_job_id(self, job_id: str) -> Optional[SessionData]:
+        self.logger.info(f"Buscando sessão por job_id: {job_id}")
+        session_id = None
+        try:
+            session_id = self.redis_client.get(f"jobid:{job_id}")
+            if session_id:
+                self.logger.info(f"Encontrado session_id '{session_id}' para job_id '{job_id}' via chave direta.")
+                return self.get_session(session_id)
+        except Exception as e:
+            self.logger.error(f"Erro ao buscar session_id por job_id no Redis: {e}")
+        self.logger.warning(f"Chave direta jobid:{job_id} não encontrada. Buscando por varredura em todas as sessões.")
         try:
             for key in self.redis_client.scan_iter(match="session:*"):
                 session_json = self.redis_client.get(key)
                 if not session_json:
                     continue
                 session_data = self._deserialize_session(session_json)
-                if (
-                    session_data.get("usuario_executor") == usuario_executor and
-                    session_data.get("projeto") == projeto
-                ):
-                    self.logger.info(f"Encontrada sessão ativa para usuario_executor='{usuario_executor}', projeto='{projeto}', session_id='{session_data.get('session_id')}'")
+                if session_data.get("last_mcp_job_id") == job_id:
+                    session_id_found = session_data.get("session_id")
+                    self.logger.info(f"Encontrado session_id '{session_id_found}' para job_id '{job_id}' por varredura.")
                     return SessionData(**session_data)
         except Exception as e:
-            self.logger.error(f"Erro ao buscar sessão por usuario_executor e projeto: {e}")
+            self.logger.error(f"Erro ao varrer sessões para job_id '{job_id}': {e}")
+        self.logger.error(f"Sessão não encontrada para job_id: {job_id}")
         return None

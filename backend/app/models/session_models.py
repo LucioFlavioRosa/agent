@@ -21,14 +21,11 @@ class SessionData(BaseModel):
     comentario_usuario: Optional[str] = Field(default=None)
     extracted_text: Optional[str] = Field(default=None)
     project_id: Optional[str] = Field(default=None)
-    epicos_report: Optional[Dict[str, Any]] = Field(default=None)
-    features_report: Optional[Dict[str, Any]] = Field(default=None)
-    times_descricao_report: Optional[Dict[str, Any]] = Field(default=None)
-    alocacao_times_report: Optional[Dict[str, Any]] = Field(default=None)
-    premissas_riscos_report: Optional[Dict[str, Any]] = Field(default=None)
+    reports: Dict[str, Any] = Field(default_factory=dict)
+    last_mcp_job_id: Optional[str] = Field(default=None)
 
     def to_project_state(self) -> Dict[str, Any]:
-        state = {
+        return {
             "usuario_executor": self.usuario_executor,
             "projeto": self.projeto,
             "analysis_type": self.analysis_type,
@@ -38,26 +35,20 @@ class SessionData(BaseModel):
             "comentario_usuario": self.comentario_usuario,
             "extracted_text": self.extracted_text,
             "project_id": self.project_id,
-            "epicos_report": self.epicos_report if hasattr(self, 'epicos_report') else None,
-            "features_report": self.features_report if hasattr(self, 'features_report') else None,
-            "times_descricao_report": self.times_descricao_report if hasattr(self, 'times_descricao_report') else None,
-            "alocacao_times_report": self.alocacao_times_report if hasattr(self, 'alocacao_times_report') else None,
-            "premissas_riscos_report": self.premissas_riscos_report if hasattr(self, 'premissas_riscos_report') else None,
-            "session_id": self.session_id
+            "reports": self.reports,
+            "last_mcp_job_id": self.last_mcp_job_id
         }
-        for k in [
-            "epicos_report",
-            "features_report",
-            "times_descricao_report",
-            "alocacao_times_report",
-            "premissas_riscos_report"
-        ]:
-            if k not in state:
-                state[k] = None
-        return state
 
     @classmethod
     def from_project_state(cls, state: Dict[str, Any]) -> "SessionData":
+        reports = state.get("reports", {})
+        migrated_reports = dict(reports) if reports else {}
+        legacy_fields = [
+            "epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"
+        ]
+        for field in legacy_fields:
+            if field in state and state[field] is not None:
+                migrated_reports[field] = state[field]
         return cls(
             session_id=state.get("session_id", ""),
             usuario_executor=state.get("usuario_executor", ""),
@@ -70,9 +61,6 @@ class SessionData(BaseModel):
             comentario_usuario=state.get("comentario_usuario"),
             extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
-            epicos_report=state.get("epicos_report") if "epicos_report" in state else None,
-            features_report=state.get("features_report") if "features_report" in state else None,
-            times_descricao_report=state.get("times_descricao_report") if "times_descricao_report" in state else None,
-            alocacao_times_report=state.get("alocacao_times_report") if "alocacao_times_report" in state else None,
-            premissas_riscos_report=state.get("premissas_riscos_report") if "premissas_riscos_report" in state else None
+            reports=migrated_reports,
+            last_mcp_job_id=state.get("last_mcp_job_id")
         )
