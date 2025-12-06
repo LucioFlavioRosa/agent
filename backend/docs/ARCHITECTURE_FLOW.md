@@ -61,13 +61,13 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (`list_user_projects`)
 
 ### 2. Verificação de Projeto Existente
-- O frontend chama `/projects/check` para saber se o projeto existe. Se existir, retorna o estado completo do projeto (incluindo `project_id` e os campos individuais de relatório: `epicos_report`, `features_report`, etc).
+- O frontend chama `/projects/check` enviando o campo `projeto` (nome do projeto). O backend converte internamente para `project_id` usando o método auxiliar, e todas as operações subsequentes usam `project_id` como identificador principal.
 - Código:
   - `backend/app/api/projects.py` (`/projects/check`)
-  - `backend/app/services/project_state_service.py` (`load_latest_state_from_blob`)
+  - `backend/app/services/project_state_service.py` (`_get_project_id_by_name`, `load_latest_state_from_blob`)
 
 ### 3. Upload de DOCX e Extração de Texto (Processamento Paralelo)
-- O upload do arquivo DOCX e a extração do texto ocorrem em paralelo. O backend retorna tanto a URL do arquivo quanto o texto extraído.
+- O upload do arquivo DOCX e a extração do texto ocorrem em paralelo. O backend retorna tanto a URL do arquivo quanto o texto extraído, além de `project_id` e `nome_projeto`.
 - Código:
   - `backend/app/api/upload.py` (`/upload/docx`)
   - `backend/app/services/blob_storage_service.py` (`upload_and_extract_docx`)
@@ -101,8 +101,8 @@ flowchart TD
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 ### 8. Comunicação Backend ↔ MCP (Incluindo Webhooks)
-- O backend envia payloads para o MCP (sempre com texto extraído, nunca URL). MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam relatórios na sessão Redis.
-- O campo `project_id` é criado no momento de criação do projeto e será reutilizado em toda interação no projeto. Toda comunicação com o MCP utiliza o `project_id` como identificador principal. O backend busca a sessão correspondente usando o `project_id` persistido no Redis. O `job_id` é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
+- O backend envia payloads para o MCP sempre usando `project_id` como identificador principal. O campo `nome_projeto` é enviado apenas para log/debug. O MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam relatórios na sessão Redis usando `project_id`.
+- O backend busca a sessão correspondente usando o `project_id` persistido no Redis. O `job_id` é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
 - Código:
   - `backend/app/services/mcp_client_service.py` (`start_analysis`)
   - `backend/app/services/redis_session_service.py` (`get_session_by_project_id`)
@@ -138,29 +138,32 @@ sequenceDiagram
     BE->>KV: Carrega segredos
     BE->>BS: Lista projetos
     BE-->>FE: Lista de projetos
-    FE->>BE: POST /upload/docx (arquivo)
+    FE->>BE: POST /upload/docx (arquivo, projeto)
     BE->>BS: Salva arquivo
     BE->>BE: Extrai texto
-    BE->>RS: Cria sessão (com campos de relatório individuais e project_id)
-    BE-->>FE: blob_url, texto extraído, session_id
-    FE->>BE: POST /analysis/start (projeto, analysis_type, project_id)
-    BE->>MCP: Envia payload (texto extraído, project_id)
+    BE->>RS: Cria sessão (com campos de relatório individuais, project_id e nome_projeto)
+    BE-->>FE: blob_url, texto extraído, session_id, project_id, nome_projeto
+    FE->>BE: POST /analysis/start (projeto, analysis_type)
+    BE->>BE: Busca ou cria project_id correspondente ao nome do projeto
+    BE->>MCP: Envia payload (project_id, nome_projeto, texto extraído)
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado inicial
-    BE-->>FE: job_id, session_id, project_id
+    BE-->>FE: job_id, session_id, project_id, nome_projeto
 
 ### 2. Fluxo de Projeto Existente
 mermaid
 sequenceDiagram
-    FE->>BE: GET /projects/check
-    BE->>BS: Busca estado
-    BE-->>FE: exists: true, state (com campos de relatório individuais e project_id)
-    FE->>BE: POST /analysis/start (sem upload, com project_id)
-    BE->>RS: Restaura sessão do estado (com project_id)
-    BE->>MCP: Envia payload (texto extraído do estado, project_id)
+    FE->>BE: GET /projects/check (projeto)
+    BE->>BE: Busca project_id correspondente ao nome do projeto
+    BE->>BS: Busca estado usando project_id
+    BE-->>FE: exists: true, state (com campos de relatório individuais, project_id e nome_projeto)
+    FE->>BE: POST /analysis/start (projeto, analysis_type)
+    BE->>BE: Busca project_id correspondente ao nome do projeto
+    BE->>RS: Restaura sessão do estado (com project_id e nome_projeto)
+    BE->>MCP: Envia payload (project_id, nome_projeto, texto extraído)
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado
-    BE-->>FE: job_id, session_id, project_id
+    BE-->>FE: job_id, session_id, project_id, nome_projeto
 
 ### 3. Fluxo de Atualização de Relatório
 mermaid
@@ -247,3 +250,4 @@ flowchart LR
 - Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
 - Toda a comunicação com o MCP utiliza o project_id como identificador principal. O job_id é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
 - Todos os relatórios são salvos em campos individuais (`epicos_report`, `features_report`, etc). Não existe mais a chave `reports` no estado do projeto ou sessão.
+- O backend aceita o campo "projeto" (nome do projeto) do frontend, converte internamente para project_id, e responde sempre com ambos.
