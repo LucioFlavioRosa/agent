@@ -8,6 +8,7 @@ class MCPStartAnalysisPayload(BaseModel):
     comentario_usuario: Optional[str] = Field(None, description="Comentário adicional enviado pelo usuário.")
     usuario_executor: str = Field(..., description="Usuário executor extraído do token JWT.")
     project_id: str = Field(..., description="Identificador único do projeto.")
+    nome_projeto: Optional[str] = Field(None, description="Nome legível do projeto (apenas para log/debug).")
 
     @validator('analysis_type')
     def analysis_type_must_not_be_empty(cls, v):
