@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Request
 from backend.app.models.mcp_webhook_models import MCPWebhookPayload
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.utils.webhook_validator import validate_report_data_structure
+from backend.app.services.project_state_service import ProjectStateService
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
@@ -33,6 +34,8 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 payload.report_data
             )
             logger.info(f"Relatório atualizado para sessão (project_id={payload.project_id}, nome_projeto={session.projeto})")
+            # Salva imediatamente o estado no Blob Storage após atualizar o Redis
+            await ProjectStateService.save_state_to_blob(session)
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
         return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.projeto}
