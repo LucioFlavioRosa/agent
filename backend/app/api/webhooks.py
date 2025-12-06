@@ -10,20 +10,23 @@ logger = logging.getLogger("webhooks_api")
 @router.post("/mcp", status_code=200, tags=["Webhooks"])
 async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
     redis_service = RedisSessionService()
-    logger.info(f"Recebido webhook MCP para job_id: {payload.job_id}, status: {payload.status}")
+    logger.info(f"Recebido webhook MCP para job_id: {payload.job_id}, status: {payload.status}, project_id: {getattr(payload, 'project_id', None)}")
     try:
-        logger.info(f"Buscando sessão associada ao job_id: {payload.job_id}")
-        session = redis_service.get_session_by_job_id(payload.job_id)
+        if not getattr(payload, 'project_id', None):
+            logger.error(f"Webhook recebido sem project_id. Payload inválido.")
+            raise HTTPException(status_code=400, detail="project_id é obrigatório no webhook MCP.")
+        logger.info(f"Buscando sessão associada ao project_id: {payload.project_id}")
+        session = redis_service.get_session_by_project_id(payload.project_id)
         if not session:
-            logger.error(f"Webhook recebido para job_id não encontrado: {payload.job_id}. Estado do Redis pode estar inconsistente.")
-            raise HTTPException(status_code=404, detail=f"Sessão não encontrada para job_id: {payload.job_id}")
+            logger.error(f"Webhook recebido para project_id não encontrado: {payload.project_id}. Estado do Redis pode estar inconsistente.")
+            raise HTTPException(status_code=404, detail=f"Sessão não encontrada para project_id: {payload.project_id}")
         analysis_type = getattr(session, "analysis_type", None)
         if payload.status in {"in_progress", "done"}:
             if not payload.report_type:
-                logger.error(f"Webhook sem report_type para job_id {payload.job_id}")
+                logger.error(f"Webhook sem report_type para project_id {payload.project_id}")
                 raise HTTPException(status_code=400, detail="report_type é obrigatório quando status é 'in_progress' ou 'done'")
             if not validate_report_data_structure(payload.report_type, payload.report_data, analysis_type):
-                logger.error(f"Estrutura de report_data inválida para report_type '{payload.report_type}', analysis_type '{analysis_type}' e job_id '{payload.job_id}'")
+                logger.error(f"Estrutura de report_data inválida para report_type '{payload.report_type}', analysis_type '{analysis_type}' e project_id '{payload.project_id}'")
                 raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida para report_type '{payload.report_type}' e analysis_type '{analysis_type}'")
             redis_service.update_report(
                 session.session_id,
@@ -31,7 +34,7 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 payload.report_data,
                 analysis_type=analysis_type
             )
-            logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (job_id={payload.job_id})")
+            logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (project_id={payload.project_id})")
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
         return {"status": "ok"}
