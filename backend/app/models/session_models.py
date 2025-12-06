@@ -21,7 +21,6 @@ class SessionData(BaseModel):
     comentario_usuario: Optional[str] = Field(default=None)
     extracted_text: Optional[str] = Field(default=None)
     project_id: Optional[str] = Field(default=None)
-    last_mcp_job_id: Optional[str] = Field(default=None)
     epicos_report: Optional[Any] = Field(default=None)
     features_report: Optional[Any] = Field(default=None)
     times_descricao_report: Optional[Any] = Field(default=None)
@@ -39,7 +38,6 @@ class SessionData(BaseModel):
             "comentario_usuario": self.comentario_usuario,
             "extracted_text": self.extracted_text,
             "project_id": self.project_id,
-            "last_mcp_job_id": self.last_mcp_job_id,
             "epicos_report": self.epicos_report,
             "features_report": self.features_report,
             "times_descricao_report": self.times_descricao_report,
@@ -68,7 +66,6 @@ class SessionData(BaseModel):
             comentario_usuario=state.get("comentario_usuario"),
             extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
-            last_mcp_job_id=state.get("last_mcp_job_id"),
             epicos_report=get_report_field("epicos_report"),
             features_report=get_report_field("features_report"),
             times_descricao_report=get_report_field("times_descricao_report"),
