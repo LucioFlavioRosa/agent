@@ -1,6 +1,6 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File
-from pydantic import BaseModel, root_validator
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
+from pydantic import BaseModel
 from typing import Optional
 
 from ..middleware.auth_middleware import get_current_user, _extract_usuario_executor
@@ -22,19 +22,9 @@ class StartAnalysisRequest(BaseModel):
     project_id: Optional[str] = None
 
 class StartAnalysisResponse(BaseModel):
-    job_id: str
     message: str
-    session_id: str
-    project_id: Optional[str] = None
+    project_id: str
     nome_projeto: Optional[str] = None
-
-def _get_or_create_project_id(project_state: dict, provided_id: Optional[str], usuario_executor: str, projeto: str) -> str:
-    if project_state and project_state.get("project_id"):
-        return project_state.get("project_id")
-    if provided_id:
-        return provided_id
-    # Busca por project_id pelo nome do projeto
-    return str(uuid.uuid4())
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
@@ -49,45 +39,43 @@ async def start_analysis(
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
-    # Busca o project_id correspondente ao nome do projeto, se não fornecido
     project_id_final = project_id
     if not project_id_final:
         project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, projeto)
+    if not project_id_final:
+        project_id_final = str(uuid.uuid4())
     project_state = None
     if project_id_final:
         project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id_final)
-    else:
-        project_state = None
-    session_id = None
+    session_exists = bool(project_state)
     texto_extraido = None
-    if not project_id_final:
-        project_id_final = str(uuid.uuid4())
-    if project_state:
-        session_id = redis_service.restore_session_from_state(
+    if arquivo_docx is not None:
+        texto_extraido = arquivo_docx
+    else:
+        if session_exists:
+            try:
+                session = redis_service.get_session_by_project_id(project_id_final)
+                texto_extraido = getattr(session, "extracted_text", None)
+            except Exception as e:
+                logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
+                texto_extraido = None
+    if session_exists:
+        redis_service.restore_session_from_state(
             usuario_executor,
             projeto,
             analysis_type,
             project_state
         )
     else:
-        session_id = redis_service.create_session(
+        redis_service.create_session(
             usuario_executor,
             projeto,
             analysis_type,
+            project_id=project_id_final,
             comentario_usuario=comentario_usuario,
-            extracted_text=arquivo_docx,
-            project_id=project_id_final
+            extracted_text=texto_extraido
         )
-    BackgroundStateSaver.schedule_periodic_save(session_id)
-    if arquivo_docx is not None:
-        texto_extraido = arquivo_docx
-    else:
-        try:
-            session = redis_service.get_session(session_id)
-            texto_extraido = getattr(session, "extracted_text", None)
-        except Exception as e:
-            logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
-            texto_extraido = None
+    BackgroundStateSaver.schedule_periodic_save(project_id_final)
     mcp_payload = MCPStartAnalysisPayload(
         projeto=projeto,
         analysis_type=analysis_type,
@@ -99,15 +87,12 @@ async def start_analysis(
     )
     mcp_client = MCPClientService()
     try:
-        mcp_response = await mcp_client.start_analysis(mcp_payload)
-        job_id = mcp_response.job_id
+        await mcp_client.start_analysis(mcp_payload)
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
     return StartAnalysisResponse(
-        job_id=job_id,
         message="Análise solicitada com sucesso ao agente.",
-        session_id=session_id,
         project_id=project_id_final,
         nome_projeto=projeto
     )
