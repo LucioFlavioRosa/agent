@@ -27,6 +27,7 @@ Content-Type: application/json
   "projects": [
     { 
       "projeto": "ProjetoNovo",
+      "nome_projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
       "last_saved_to_blob": "2024-06-01T12:30:00Z",
@@ -49,6 +50,7 @@ Authorization: Bearer <token>
   "state": { 
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
+    "nome_projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
@@ -90,7 +92,9 @@ comentario_usuario=Comentário opcional
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid",
-  "job_id": "ghijkl-uuid"
+  "job_id": "ghijkl-uuid",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 ### 1.4 Início de Análise (POST /analysis/start)
@@ -105,8 +109,7 @@ Content-Type: application/json
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
-  "comentario_usuario": "Este é um comentário adicional do usuário.",
-  "project_id": "projeto-uuid-123"
+  "comentario_usuario": "Este é um comentário adicional do usuário."
 }
 
 **Requisição (projeto existente, sem novo upload):**
@@ -118,9 +121,28 @@ Content-Type: application/json
 { 
   "projeto": "ProjetoExistente",
   "analysis_type": "criacao_epicos_azure_devops",
-  "comentario_usuario": "Comentário sem arquivo.",
-  "project_id": "projeto-uuid-123"
+  "comentario_usuario": "Comentário sem arquivo."
 }
+
+**Fluxo interno:**
+- O backend recebe o campo "projeto" (nome legível do projeto) do frontend.
+- O backend busca o project_id correspondente ao nome do projeto (se existir); caso contrário, gera um novo project_id.
+- Todas as operações internas e comunicação com o MCP passam a usar project_id como identificador principal.
+- O backend pode enviar nome_projeto na resposta para exibição no frontend.
+
+**Payload enviado do backend para o MCP:**
+
+{
+  "projeto": "ProjetoNovo",
+  "analysis_type": "criacao_epicos_azure_devops",
+  "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
+  "comentario_usuario": "Este é um comentário adicional do usuário.",
+  "usuario_executor": "user@example.com",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
+}
+
+> **Nota:** O campo project_id é sempre utilizado como identificador principal na comunicação com o MCP. O campo nome_projeto é enviado apenas para log/debug.
 
 **Resposta:**
 
@@ -128,10 +150,9 @@ Content-Type: application/json
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
-  "project_id": "projeto-uuid-123"
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
-
-> **Nota:** O campo project_id é criado no momento de criação do projeto e será reutilizado em toda interação no projeto. Toda comunicação com o MCP utiliza o project_id como identificador principal.
 
 ### 1.5 Atualização de Relatório (PUT /session/{session_id}/report)
 
@@ -149,7 +170,9 @@ Content-Type: application/json
 **Resposta:**
 
 { 
-  "status": "ok"
+  "status": "ok",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 ### 1.6 Consulta de Relatórios (GET /session/{session_id}/reports)
@@ -166,7 +189,9 @@ Authorization: Bearer <token>
   "features_report": { "features": [{ "id": 1, "nome": "Login" }]},
   "times_descricao_report": null,
   "alocacao_times_report": null,
-  "premissas_riscos_report": null
+  "premissas_riscos_report": null,
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 ---
@@ -346,7 +371,8 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
-  "project_id": "projeto-uuid-123"
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 **Erro:**
@@ -363,7 +389,9 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
   "features_report": { "features": [{ "id": 1, "nome": "Login" }]},
   "times_descricao_report": null,
   "alocacao_times_report": null,
-  "premissas_riscos_report": null
+  "premissas_riscos_report": null,
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 **Erro:**
@@ -380,6 +408,7 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
   "state": { 
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
+    "nome_projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
@@ -415,6 +444,7 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
   "projects": [
     { 
       "projeto": "ProjetoNovo",
+      "nome_projeto": "ProjetoNovo",
       "analysis_type": "criacao_epicos_azure_devops",
       "created_at": "2024-06-01T12:00:00Z",
       "last_saved_to_blob": "2024-06-01T12:30:00Z",
@@ -437,14 +467,18 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid",
-  "job_id": "ghijkl-uuid"
+  "job_id": "ghijkl-uuid",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 ### 3.6 /session/{session_id}/report (atualização de relatório)
 **Sucesso:**
 
 { 
-  "status": "ok"
+  "status": "ok",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 **Erro:**
@@ -457,7 +491,9 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
 **Sucesso:**
 
 { 
-  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
+  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 **Erro:**
@@ -472,7 +508,9 @@ O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeam
 { 
   "docx_files": [
     "https://storage.blob.core.windows.net/usuario/projeto/arquivos_recebidos/docx/Sprint2.docx"
-  ]
+  ],
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 **Erro:**
@@ -512,7 +550,7 @@ Resposta:
 
 { 
   "user_info": { "usuario_executor": "user@example.com", "sub": "uuid", "name": "Nome do Usuário", "email": "user@example.com", "roles": ["admin"]},
-  "projects": [{ "projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}]
+  "projects": [{ "projeto": "ProjetoNovo", "nome_projeto": "ProjetoNovo", "analysis_type": "criacao_epicos_azure_devops", "created_at": "2024-06-01T12:00:00Z", "last_saved_to_blob": "2024-06-01T12:30:00Z", "project_id": "projeto-uuid-123"}]
 }
 
 ### 2. Verificação de Projeto
@@ -527,6 +565,7 @@ Resposta:
   "state": { 
     "usuario_executor": "user@example.com",
     "projeto": "ProjetoNovo",
+    "nome_projeto": "ProjetoNovo",
     "analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
     "last_saved_to_blob": "2024-06-01T12:30:00Z",
@@ -555,7 +594,9 @@ Resposta:
   "extracted_text": "Texto extraído do DOCX da reunião",
   "message": "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)",
   "session_id": "ghijkl-uuid",
-  "job_id": "ghijkl-uuid"
+  "job_id": "ghijkl-uuid",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 ### 4. Início de Análise
@@ -567,8 +608,7 @@ Authorization: Bearer <token>
   "projeto": "ProjetoNovo",
   "analysis_type": "criacao_epicos_azure_devops",
   "arquivo_docx": "Texto extraído do arquivo DOCX da reunião",
-  "comentario_usuario": "Este é um comentário adicional do usuário.",
-  "project_id": "projeto-uuid-123"
+  "comentario_usuario": "Este é um comentário adicional do usuário."
 }
 
 Resposta:
@@ -577,7 +617,8 @@ Resposta:
   "job_id": "123456",
   "message": "Análise solicitada com sucesso ao agente.",
   "session_id": "abcdef-uuid",
-  "project_id": "projeto-uuid-123"
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 > **Nota:** Toda a comunicação com o MCP utiliza o project_id como identificador principal. O job_id é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
@@ -615,7 +656,9 @@ Resposta:
   "features_report": { "features": [{ "id": 1, "nome": "Login" }]},
   "times_descricao_report": null,
   "alocacao_times_report": null,
-  "premissas_riscos_report": null
+  "premissas_riscos_report": null,
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 ### 8. Salvamento Manual de Estado
@@ -626,7 +669,9 @@ Authorization: Bearer <token>
 Resposta:
 
 { 
-  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json"
+  "blob_url": "https://storage.blob.core.windows.net/usuario/projeto/estados/estado_20240601T120000Z.json",
+  "project_id": "projeto-uuid-123",
+  "nome_projeto": "ProjetoNovo"
 }
 
 ---
@@ -639,3 +684,4 @@ Resposta:
 - O upload de DOCX retorna tanto a URL do arquivo quanto o texto extraído, em paralelo.
 - Para erros, o backend sempre retorna o campo `detail` no corpo JSON.
 - Toda a comunicação com o MCP utiliza o project_id como identificador principal. O job_id é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
+- O backend aceita o campo "projeto" (nome do projeto) do frontend, converte internamente para project_id, e responde sempre com ambos.
