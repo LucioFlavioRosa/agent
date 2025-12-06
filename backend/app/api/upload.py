@@ -6,7 +6,10 @@ from typing import Optional
 from ..middleware.auth_middleware import get_current_user, _extract_usuario_executor
 from ..services.blob_storage_service import upload_and_extract_docx
 from ..services.redis_session_service import RedisSessionService
+from ..services.project_state_service import ProjectStateService
 from ..models.docx_models import UploadDocxResponse
+
+import uuid
 
 router = APIRouter()
 logger = logging.getLogger("upload_api")
@@ -24,6 +27,10 @@ async def upload_docx(
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
     try:
+        # Busca o project_id correspondente ao nome do projeto, se não fornecido
+        project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, projeto)
+        if not project_id:
+            project_id = str(uuid.uuid4())
         blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
         blob_filename = f"{analysis_type}.docx"
         blob_url, texto_extraido = await upload_and_extract_docx(file, blob_folder, blob_filename, background_tasks)
@@ -39,7 +46,8 @@ async def upload_docx(
         projeto,
         analysis_type,
         comentario_usuario=comentario_usuario,
-        extracted_text=texto_extraido
+        extracted_text=texto_extraido,
+        project_id=project_id
     )
     try:
         redis_service.add_docx_file(session_id, blob_url)
@@ -55,5 +63,7 @@ async def upload_docx(
         extracted_text=texto_extraido,
         message=mensagem,
         session_id=session_id,
-        job_id=session_id
+        job_id=session_id,
+        project_id=project_id,
+        nome_projeto=projeto
     )
