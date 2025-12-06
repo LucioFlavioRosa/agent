@@ -6,7 +6,7 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 
 ## Diagrama Geral do Fluxo (Mermaid)
 
-```mermaid
+mermaid
 flowchart TD
     subgraph Frontend
         Z[Usuário/Frontend]
@@ -47,7 +47,7 @@ flowchart TD
     AD -->|Salva Estado| AE
     AG -->|Salvamento Periódico| AE
     AC -->|Carrega Segredos| AA
-```
+
 ---
 
 ## Etapas do Fluxo e Código Responsável
@@ -115,18 +115,12 @@ flowchart TD
   - `backend/app/api/session.py` (`PUT /session/project/{project_id}/report`)
   - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`)
 
-### 10. Fluxo de Erro e Recuperação
-- O sistema lida com falhas do MCP, Key Vault, Redis e Blob Storage, propagando erros padronizados para o frontend.
-- Código:
-  - Handlers de exceção em todos os endpoints
-  - `backend/app/services/startup_validator.py`
-
 ---
 
 ## Fluxos Críticos de Negócio
 
 ### 1. Fluxo de Novo Projeto
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -149,9 +143,9 @@ sequenceDiagram
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado inicial
     BE-->>FE: job_id, project_id, nome_projeto
-```
+
 ### 2. Fluxo de Projeto Existente
-```mermaid
+mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (projeto)
     BE->>BE: Busca project_id correspondente ao nome do projeto
@@ -164,17 +158,21 @@ sequenceDiagram
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado
     BE-->>FE: job_id, project_id, nome_projeto
-```
-### 3. Fluxo de Atualização de Relatório
-```mermaid
+
+### 3. Fluxo de Atualização de Relatório (Webhook MCP)
+mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, project_id, status, report_data)
     BE->>RS: Busca sessão por project_id (usando relação persistida project_id)
     BE->>RS: Atualiza relatório individual na sessão (ex: epicos_report)
-    BE->>BS: Salva estado
-```
+    par Atualização paralela
+        BE->>RS: Salva sessão atualizada no Redis
+        BE->>BS: Salva estado atualizado no Blob Storage
+    end
+
+
 ### 4. Fluxo de Erro e Recuperação
-```mermaid
+mermaid
 sequenceDiagram
     BE->>MCP: start_analysis
     MCP-->>BE: status: error, error_message, project_id
@@ -185,7 +183,7 @@ sequenceDiagram
     BE->>RS: get_session
     RS-->>BE: erro
     BE-->>FE: 503 Service Unavailable, detail
-```
+
 ---
 
 ## Integração com Múltiplos Key Vaults
@@ -196,7 +194,7 @@ sequenceDiagram
 - Fallback: Se um segredo não for encontrado no Key Vault, o backend tenta variável de ambiente.
 - Validação: Campos obrigatórios são validados por `settings.validate_required_fields`.
 
-```mermaid
+mermaid
 flowchart LR
     Start((Startup)) --> LoadSecrets[ConfigLoaderService.load_secrets_from_key_vault]
     LoadSecrets -->|Por tipo| AzureSecretManager
@@ -205,7 +203,7 @@ flowchart LR
     KeyVaults -->|Retorna segredo| AzureSecretManager
     AzureSecretManager -->|Fallback| EnvVars[Variáveis de Ambiente]
     AzureSecretManager -->|Seta no settings| Settings
-```
+
 ---
 
 ## Configuração Dinâmica de Agentes MCP
@@ -216,7 +214,7 @@ flowchart LR
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 **Exemplo de configuração de agente:**
-```json
+
 {
   "agents": {
     "criacao_epicos_azure_devops": {
@@ -231,7 +229,7 @@ flowchart LR
     }
   }
 }
-```
+
 ---
 
 ## Observações
@@ -248,3 +246,19 @@ flowchart LR
 - Toda a comunicação com o MCP utiliza o project_id como identificador principal. O job_id é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
 - Todos os relatórios são salvos em campos individuais (`epicos_report`, `features_report`, etc). Não existe mais a chave `reports` no estado do projeto ou sessão.
 - O backend aceita o campo "projeto" (nome do projeto) do frontend, converte internamente para project_id, e responde sempre com ambos.
+
+---
+
+## Atualização de Relatório via Webhook MCP: Fluxo Paralelo
+
+Após o backend receber uma resposta do MCP via webhook, o estado do projeto é atualizado no Redis e, em paralelo, salvo imediatamente no Blob Storage. Esse fluxo garante consistência e persistência dos dados em ambas as camadas.
+
+mermaid
+sequenceDiagram
+    MCP->>BE: Webhook MCP (job_id, project_id, status, report_data)
+    BE->>RS: Atualiza relatório individual na sessão (ex: epicos_report)
+    par Atualização paralela
+        BE->>RS: Salva sessão atualizada no Redis
+        BE->>BS: Salva estado atualizado no Blob Storage
+    end
+
