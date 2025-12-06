@@ -9,6 +9,7 @@ class MCPWebhookPayload(BaseModel):
     report_data: Optional[Any] = Field(None)
     error_type: Optional[str] = Field(None)
     error_message: Optional[str] = Field(None)
+    project_id: str = Field(..., description="Identificador único do projeto.")
 
     @validator('status')
     def status_must_be_valid(cls, v):
@@ -32,4 +33,10 @@ class MCPWebhookPayload(BaseModel):
         status = values.get('status')
         if status == 'error' and not v:
             raise ValueError("error_message é obrigatório quando status é 'error'")
+        return v
+
+    @validator('project_id', always=True)
+    def project_id_must_be_present(cls, v, values):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_id é obrigatório e deve ser uma string não vazia')
         return v
