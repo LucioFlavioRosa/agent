@@ -21,7 +21,7 @@ class MCPStartAnalysisPayload(BaseModel):
         return v
 
 class MCPStartAnalysisResponse(BaseModel):
-    job_id: str
+    project_id: str
 
 class MCPClientService:
     def __init__(self, base_url: str = None):
@@ -50,7 +50,6 @@ class MCPClientService:
                 payload_dict = payload.model_dump()
             else:
                 payload_dict = payload.dict()
-            # Garante que project_id está presente e é o identificador principal
             if not payload_dict.get("project_id"):
                 raise Exception("project_id é obrigatório para comunicação com MCP")
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -63,7 +62,7 @@ class MCPClientService:
                     logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
                 response.raise_for_status()
                 data = response.json()
-                return MCPStartAnalysisResponse(**data)
+                return MCPStartAnalysisResponse(project_id=data.get("project_id", payload.project_id))
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
         except Exception as exc:
