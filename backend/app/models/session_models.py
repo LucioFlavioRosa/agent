@@ -37,11 +37,11 @@ class SessionData(BaseModel):
             "comentario_usuario": self.comentario_usuario,
             "extracted_text": self.extracted_text,
             "project_id": self.project_id,
-            "epicos_report": self.epicos_report,
-            "features_report": self.features_report,
-            "times_descricao_report": self.times_descricao_report,
-            "alocacao_times_report": self.alocacao_times_report,
-            "premissas_riscos_report": self.premissas_riscos_report
+            "epicos_report": self.epicos_report if self.epicos_report is not None else [],
+            "features_report": self.features_report if self.features_report is not None else [],
+            "times_descricao_report": self.times_descricao_report if self.times_descricao_report is not None else [],
+            "alocacao_times_report": self.alocacao_times_report if self.alocacao_times_report is not None else [],
+            "premissas_riscos_report": self.premissas_riscos_report if self.premissas_riscos_report is not None else []
         }
 
     @classmethod
@@ -52,7 +52,7 @@ class SessionData(BaseModel):
                 return state[field]
             if legacy_reports and field in legacy_reports and legacy_reports[field] is not None:
                 return legacy_reports[field]
-            return None
+            return []
         return cls(
             usuario_executor=state.get("usuario_executor", ""),
             projeto=state.get("projeto", ""),
