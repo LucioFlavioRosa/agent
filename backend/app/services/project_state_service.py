@@ -12,9 +12,10 @@ class ProjectStateService:
         usuario_executor = state.get("usuario_executor")
         projeto = state.get("projeto")
         project_id = state.get("project_id")
-        nome_projeto = projeto
+        nome_projeto = state.get("nome_projeto") or projeto
         state["project_id"] = project_id
         state["nome_projeto"] = nome_projeto
+        state["docx_blob_url"] = state.get("docx_blob_url")
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         blob_folder = f"{usuario_executor}/{projeto}/estados"
         blob_filename = f"estado_{timestamp}.json"
@@ -93,11 +94,20 @@ class ProjectStateService:
                 state = json.loads(state_bytes.decode("utf-8"))
                 item = {
                     "projeto": state.get("projeto", projeto),
-                    "nome_projeto": state.get("projeto", projeto),
+                    "nome_projeto": state.get("nome_projeto", projeto),
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
-                    "project_id": state.get("project_id")
+                    "project_id": state.get("project_id"),
+                    "docx_blob_url": state.get("docx_blob_url"),
+                    "docx_files": state.get("docx_files", []),
+                    "comentario_usuario": state.get("comentario_usuario"),
+                    "extracted_text": state.get("extracted_text"),
+                    "epicos_report": state.get("epicos_report"),
+                    "features_report": state.get("features_report"),
+                    "times_descricao_report": state.get("times_descricao_report"),
+                    "alocacao_times_report": state.get("alocacao_times_report"),
+                    "premissas_riscos_report": state.get("premissas_riscos_report")
                 }
                 result.append(item)
             return result
