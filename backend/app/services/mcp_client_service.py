@@ -12,6 +12,7 @@ class MCPStartAnalysisPayload(BaseModel):
     comentario_usuario: Optional[str] = Field(None)
     usuario_executor: str = Field(...)
     project_id: str = Field(...)
+    nome_projeto: Optional[str] = Field(None)
 
     @validator('analysis_type')
     def analysis_type_must_not_be_empty(cls, v):
@@ -49,6 +50,9 @@ class MCPClientService:
                 payload_dict = payload.model_dump()
             else:
                 payload_dict = payload.dict()
+            # Garante que project_id está presente e é o identificador principal
+            if not payload_dict.get("project_id"):
+                raise Exception("project_id é obrigatório para comunicação com MCP")
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
