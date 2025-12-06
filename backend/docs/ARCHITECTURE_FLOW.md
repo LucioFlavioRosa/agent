@@ -112,7 +112,7 @@ flowchart TD
 ### 9. Atualização de Relatórios e Propagação de Estado
 - Relatórios são atualizados via endpoint ou webhook. Toda atualização aciona o salvamento automático do estado no Blob Storage. Cada relatório é salvo em seu campo individual (`epicos_report`, `features_report`, etc).
 - Código:
-  - `backend/app/api/session.py` (`PUT /session/{session_id}/report`)
+  - `backend/app/api/session.py` (`PUT /session/project/{project_id}/report`)
   - `backend/app/services/redis_session_service.py` (`update_report`, `update_session_on_state_change`)
 
 ### 10. Fluxo de Erro e Recuperação
@@ -142,13 +142,13 @@ sequenceDiagram
     BE->>BS: Salva arquivo
     BE->>BE: Extrai texto
     BE->>RS: Cria sessão (com campos de relatório individuais, project_id e nome_projeto)
-    BE-->>FE: blob_url, texto extraído, session_id, project_id, nome_projeto
+    BE-->>FE: blob_url, texto extraído, project_id, nome_projeto
     FE->>BE: POST /analysis/start (projeto, analysis_type)
     BE->>BE: Busca ou cria project_id correspondente ao nome do projeto
     BE->>MCP: Envia payload (project_id, nome_projeto, texto extraído)
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado inicial
-    BE-->>FE: job_id, session_id, project_id, nome_projeto
+    BE-->>FE: job_id, project_id, nome_projeto
 
 ### 2. Fluxo de Projeto Existente
 mermaid
@@ -163,13 +163,13 @@ sequenceDiagram
     BE->>MCP: Envia payload (project_id, nome_projeto, texto extraído)
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado
-    BE-->>FE: job_id, session_id, project_id, nome_projeto
+    BE-->>FE: job_id, project_id, nome_projeto
 
 ### 3. Fluxo de Atualização de Relatório
 mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, project_id, status, report_type, report_data)
-    BE->>RS: Busca sessão por project_id (usando relação persistida project_id -> session_id)
+    BE->>RS: Busca sessão por project_id (usando relação persistida project_id)
     BE->>RS: Atualiza relatório individual na sessão (ex: epicos_report)
     BE->>BS: Salva estado
 
