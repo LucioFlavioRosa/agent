@@ -27,7 +27,6 @@ async def upload_docx(
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
     try:
-        # Busca o project_id correspondente ao nome do projeto, se não fornecido
         project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, projeto)
         if not project_id:
             project_id = str(uuid.uuid4())
@@ -41,7 +40,7 @@ async def upload_docx(
         logger.error(f"Erro inesperado no Blob Storage ou extração: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo ou extrair texto: {str(e)}")
     redis_service = RedisSessionService()
-    session_id = redis_service.create_session(
+    redis_service.create_session(
         usuario_executor,
         projeto,
         analysis_type,
@@ -50,11 +49,11 @@ async def upload_docx(
         project_id=project_id
     )
     try:
-        redis_service.add_docx_file(session_id, blob_url)
+        redis_service.add_docx_file(project_id, blob_url)
     except Exception as e:
         logger.error(f"Erro ao adicionar arquivo DOCX à sessão: {e}")
     try:
-        redis_service.update_session_extracted_text(session_id, texto_extraido)
+        redis_service.update_session_extracted_text(project_id, texto_extraido)
     except Exception as e:
         logger.error(f"Erro ao salvar texto extraído na sessão: {e}")
     mensagem = "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)"
@@ -62,8 +61,6 @@ async def upload_docx(
         blob_url=blob_url,
         extracted_text=texto_extraido,
         message=mensagem,
-        session_id=session_id,
-        job_id=session_id,
         project_id=project_id,
         nome_projeto=projeto
     )
