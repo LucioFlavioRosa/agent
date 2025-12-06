@@ -83,24 +83,16 @@ class RedisSessionService:
         session_data["status"] = status
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
-    def update_report(self, project_id: str, report_type: str, report_data: Any, analysis_type: Optional[str] = None):
+    def update_report(self, project_id: str, report_data: Dict[str, Any]):
         key = f"project:{project_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
             raise ValueError(f"Projeto {project_id} não encontrado no Redis.")
         session_data = self._deserialize_session(session_json)
-        analysis_type_in_session = session_data.get("analysis_type")
-        analysis_type = analysis_type or analysis_type_in_session
-        report_field = None
-        if hasattr(settings, "mcp_config_registry") and settings.mcp_config_registry and hasattr(settings.mcp_config_registry, "agents") and analysis_type in settings.mcp_config_registry.agents:
-            agent_cfg = settings.mcp_config_registry.agents[analysis_type]
-            if hasattr(agent_cfg, "report_mapping") and report_type in agent_cfg.report_mapping:
-                report_field = agent_cfg.report_mapping[report_type]
-        if not report_field:
-            report_field = f"{report_type}_report"
-        if "reports" not in session_data or not isinstance(session_data["reports"], dict):
-            session_data["reports"] = {}
-        session_data["reports"][report_field] = report_data
+        if not isinstance(report_data, dict) or len(report_data) != 1:
+            raise ValueError("report_data deve ser um dicionário com exatamente uma chave de relatório")
+        for report_field, value in report_data.items():
+            session_data[report_field] = value
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
