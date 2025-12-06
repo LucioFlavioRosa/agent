@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, status, Request, Depends
+from fastapi import APIRouter, HTTPException, status, Request
 from backend.app.models.mcp_webhook_models import MCPWebhookPayload
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.utils.webhook_validator import validate_report_data_structure
@@ -29,12 +29,12 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 logger.error(f"Estrutura de report_data inválida para report_type '{payload.report_type}', analysis_type '{analysis_type}' e project_id '{payload.project_id}'")
                 raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida para report_type '{payload.report_type}' e analysis_type '{analysis_type}'")
             redis_service.update_report(
-                session.session_id,
+                payload.project_id,
                 payload.report_type,
                 payload.report_data,
                 analysis_type=analysis_type
             )
-            logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (project_id={payload.project_id}, nome_projeto={session.projeto})")
+            logger.info(f"Relatório '{payload.report_type}' atualizado para sessão (project_id={payload.project_id}, nome_projeto={session.projeto})")
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
         return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.projeto}
