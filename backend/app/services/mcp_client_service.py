@@ -40,6 +40,10 @@ class MCPClientService:
         return self.base_url
 
     async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
+        # O MCP deve responder sempre em JSON, no formato:
+        # { <type_report>: [ {conteúdo}, ... ] }
+        # type_report pode ser: epicos_report, features_report, times_descricao_report, alocacao_times_report, premissas_riscos_report
+        # O backend espera que o campo report_data do webhook do MCP seja um dicionário com exatamente uma chave de relatório, cujo valor é uma lista.
         raw_base = self.get_mcp_endpoint(payload.analysis_type)
         logging.info(f"🕵️ [DEBUG URL] Bruta vinda da env: '[{raw_base}]'")
         base = raw_base.strip().rstrip("/")
