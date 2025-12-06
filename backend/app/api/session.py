@@ -14,15 +14,8 @@ def get_project_reports(project_id: str):
     redis_service = RedisSessionService()
     try:
         session = redis_service.get_session_by_project_id(project_id)
-        return {
-            "epicos_report": session.epicos_report,
-            "features_report": session.features_report,
-            "times_descricao_report": session.times_descricao_report,
-            "alocacao_times_report": session.alocacao_times_report,
-            "premissas_riscos_report": session.premissas_riscos_report,
-            "project_id": session.project_id,
-            "nome_projeto": session.projeto
-        }
+        state = session.to_project_state()
+        return state
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
 
