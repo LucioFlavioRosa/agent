@@ -1,39 +1,29 @@
 {
   "agents": {
     "criacao_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["epicos_report"],
-      "report_mapping": {
-        "epicos": "epicos_report"
-      }
+      "agent_name": "Epicos Azure DevOps",
+      "mcp_url": "https://mcp-epicos.azurewebsites.net",
+      "report_fields": ["epicos_report"]
     },
-    "refinamento_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["epicos_report"],
-      "report_mapping": {
-        "refinamento_epicos": "epicos_report"
-      }
+    "features_generation": {
+      "agent_name": "Features Generator",
+      "mcp_url": "https://mcp-features.azurewebsites.net",
+      "report_fields": ["features_report"]
     },
-    "criacao_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["features_report"],
-      "report_mapping": {
-        "features": "features_report"
-      }
+    "times_descricao_generation": {
+      "agent_name": "Times Descrição Generator",
+      "mcp_url": "https://mcp-times.azurewebsites.net",
+      "report_fields": ["times_descricao_report"]
     },
-    "refinamento_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["features_report"],
-      "report_mapping": {
-        "features": "features_report"
-      }
-    }
-  }
-  }
+    "alocacao_times_generation": {
+      "agent_name": "Alocação Times Generator",
+      "mcp_url": "https://mcp-alocacao.azurewebsites.net",
+      "report_fields": ["alocacao_times_report"]
+    },
+    "premissas_riscos_generation": {
+      "agent_name": "Premissas e Riscos Generator",
+      "mcp_url": "https://mcp-premissas.azurewebsites.net",
+      "report_fields": ["premissas_riscos_report"]
     }
   }
 }
