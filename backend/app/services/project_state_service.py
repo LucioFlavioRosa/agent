@@ -77,6 +77,7 @@ class ProjectStateService:
         try:
             _, container_client = _get_blob_clients()
             prefix = f"{usuario_executor}/"
+            logger.info(f"Buscando projetos do usuário diretamente do Blob Storage: prefix={prefix}")
             blobs = list(container_client.list_blobs(name_starts_with=prefix))
             for blob in blobs:
                 parts = blob.name.split('/')
@@ -110,9 +111,10 @@ class ProjectStateService:
                     "premissas_riscos_report": state.get("premissas_riscos_report")
                 }
                 result.append(item)
+            logger.info(f"Projetos encontrados para usuario_executor={usuario_executor}: {len(result)} projetos")
             return result
         except Exception as e:
-            logger.error(f"Erro ao listar projetos do usuário {usuario_executor}: {e}")
+            logger.error(f"Erro ao listar projetos do usuário {usuario_executor} no Blob Storage: {e}")
             return []
 
     @staticmethod
@@ -131,9 +133,11 @@ class ProjectStateService:
     async def _fetch_and_sanitize_projects(usuario_executor: str) -> list:
         logger = logging.getLogger("ProjectStateService")
         try:
+            logger.info(f"Buscando lista de projetos do usuário diretamente do Blob Storage no login: usuario_executor={usuario_executor}")
             projects = await ProjectStateService.list_user_projects(usuario_executor)
             sanitized = ProjectStateService._sanitize_project_list(projects)
+            logger.info(f"Sanitização concluída: {len(sanitized)} projetos válidos retornados")
             return sanitized
         except Exception as e:
-            logger.error(f"Erro ao buscar projetos do usuário {usuario_executor}: {e}")
+            logger.error(f"Erro ao buscar projetos do usuário {usuario_executor} no Blob Storage: {e}")
             return []
