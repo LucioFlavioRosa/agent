@@ -39,4 +39,9 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
     if not usuario_executor:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
+    for p in projects:
+        if "nome_projeto" not in p:
+            p["nome_projeto"] = p.get("projeto", "")
+        if "project_id" not in p:
+            p["project_id"] = p.get("project_id", "")
     return AuthLoginResponse(user_info=current_user, projects=projects)
