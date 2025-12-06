@@ -7,7 +7,7 @@ class MCPStartAnalysisPayload(BaseModel):
     arquivo_docx: Optional[str] = Field(None, description="Texto extraído do arquivo docx com a transcrição da reunião. NÃO é a URL do Blob Storage.")
     comentario_usuario: Optional[str] = Field(None, description="Comentário adicional enviado pelo usuário.")
     usuario_executor: str = Field(..., description="Usuário executor extraído do token JWT.")
-    session_id: str = Field(..., description="Identificador da sessão.")
+    project_id: str = Field(..., description="Identificador único do projeto.")
 
     @validator('analysis_type')
     def analysis_type_must_not_be_empty(cls, v):
