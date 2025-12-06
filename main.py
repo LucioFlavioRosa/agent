@@ -4,27 +4,27 @@ import os
 import asyncio
 import httpx
 from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
 # --- CONFIGURAÇÃO ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="2.0.0 - Peers CodeAI Spec")
+app = FastAPI(title="MCP Mock Service", version="2.1.0 - Dual Route Support")
 router = APIRouter()
 
 # URL do Backend Principal (Ajuste conforme necessário ou use variável de ambiente)
 BACKEND_BASE_URL = os.environ.get("TARGET_BACKEND_URL", "http://localhost:8000")
 
-# --- MODELOS (Baseado na doc: "Payload enviado do backend para o MCP") ---
+# --- MODELOS ---
 class MCPStartPayload(BaseModel):
     projeto: str
     analysis_type: str
     arquivo_docx: Optional[str] = None
     comentario_usuario: Optional[str] = None
     usuario_executor: Optional[str] = None
-    project_id: str  # Obrigatório conforme doc
+    project_id: str  # Obrigatório
     nome_projeto: Optional[str] = None
 
 # --- DADOS MOCKADOS ---
@@ -49,7 +49,7 @@ DATA_EPICOS = {
     ]
 }
 
-# Cenário 2: Features (Baseado no épico de autenticação)
+# Cenário 2: Features
 DATA_FEATURES = {
     "features_report": [
         {"id": 101, "epico_id": 1, "nome": "Configurar App Registration Azure", "descricao": "Criar app no entra ID"},
@@ -70,10 +70,10 @@ DATA_RISCOS = {
 async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: str):
     logger.info(f"⏳ [MOCK] Processando Job {job_id} para Projeto {project_id} ({analysis_type})...")
     
-    # Simula tempo de processamento
+    # Simula tempo de processamento da IA
     await asyncio.sleep(5) 
     
-    # 1. SELEÇÃO DE DADOS BASEADA NO TIPO DE ANÁLISE
+    # 1. SELEÇÃO DE DADOS
     report_data = {}
     
     if "features" in analysis_type:
@@ -83,27 +83,26 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
         logger.info("👉 Selecionando dados de RISCOS")
         report_data = DATA_RISCOS
     else:
-        # Default para épicos ou qualquer outro
         logger.info("👉 Selecionando dados de ÉPICOS (Default)")
         report_data = DATA_EPICOS
 
-    # 2. PREPARAÇÃO DO PAYLOAD DO WEBHOOK (Conforme Doc 2.1)
+    # 2. PREPARAÇÃO DO PAYLOAD
     webhook_payload = {
         "job_id": job_id,
         "project_id": project_id,
         "status": "done",
-        # O report_data já contém a chave correta (ex: 'epicos_report') dentro dele
         "report_data": report_data 
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
+        # Garante URL limpa sem barra no final
         base_url = BACKEND_BASE_URL.rstrip('/')
         webhook_url = f"{base_url}/webhooks/mcp"
         
         logger.info(f"📤 [WEBHOOK] Enviando para {webhook_url}")
         
         try:
-            # TENTATIVA 1: Webhook Padrão
+            # TENTATIVA 1: Webhook Padrão (POST)
             resp = await client.post(webhook_url, json=webhook_payload)
             
             if resp.status_code == 200:
@@ -115,12 +114,10 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
         except Exception as e:
             logger.error(f"❌ [ERRO CONEXÃO] {e}")
 
-        # TENTATIVA 2: Fallback (PUT direto na sessão conforme Doc 1.5)
-        # URL Correta: /session/project/{project_id}/report
+        # TENTATIVA 2: Fallback (PUT direto na sessão)
         fallback_url = f"{base_url}/session/project/{project_id}/report"
         logger.info(f"🔄 [FALLBACK] Tentando endpoint direto: {fallback_url}")
         
-        # O endpoint de report espera { "report_data": { ... } }
         fallback_payload = { "report_data": report_data }
         
         try:
@@ -144,12 +141,13 @@ def home():
 
 @router.post("/start")
 async def start_analysis(payload: MCPStartPayload, background_tasks: BackgroundTasks):
-    # ... (código da função start_analysis permanece igual) ...
-    # Gera um Job ID único para esta execução
+    # Gera um Job ID único
     new_job_id = str(uuid.uuid4())
     
     logger.info(f"⚡ [START] Recebido para Project ID: {payload.project_id}")
+    logger.info(f"📝 Comentário: {payload.comentario_usuario or 'Nenhum'}")
 
+    # Processamento em Background (Fire and Forget)
     background_tasks.add_task(
         process_and_send_webhook,
         job_id=new_job_id,
@@ -157,6 +155,7 @@ async def start_analysis(payload: MCPStartPayload, background_tasks: BackgroundT
         analysis_type=payload.analysis_type
     )
 
+    # Resposta Imediata
     return {
         "message": "Análise solicitada com sucesso ao agente (MOCK).",
         "job_id": new_job_id,
@@ -165,13 +164,13 @@ async def start_analysis(payload: MCPStartPayload, background_tasks: BackgroundT
     }
 
 # ==============================================================================
-# CORREÇÃO AQUI: Registrar o router em DOIS lugares para garantir compatibilidade
+# CONFIGURAÇÃO DE ROTAS (DUPLO REGISTRO)
 # ==============================================================================
 
-# 1. Registra para funcionar se o Backend chamar a URL completa (ex: .../api/v1/analysis/start)
+# 1. Registra para chamadas longas (Padrão peers-codeai)
 app.include_router(router, prefix="/api/v1/analysis") 
 
-# 2. Registra TAMBÉM na raiz para funcionar se o Backend chamar direto (ex: .../start)
+# 2. Registra na raiz para chamadas diretas (Fallback de configuração)
 app.include_router(router, prefix="") 
 
 if __name__ == "__main__":
