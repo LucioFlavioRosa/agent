@@ -94,18 +94,18 @@ flowchart TD
   - `backend/app/core/config.py` (`Settings`)
 
 ### 7. Configuração Dinâmica de Agentes MCP
-- Arquivo: `backend/config/mcp_agents.json` define agentes MCP, URLs, campos de relatório e mapeamentos.
+- Arquivo: `backend/config/mcp_agents.json` define agentes MCP, URLs e campos de relatório.
 - Carregamento: `MCPConfigService.load_config` carrega o JSON na inicialização.
 - Roteamento: `MCPClientService.get_mcp_endpoint` seleciona a URL do MCP conforme `analysis_type`.
-- Mapeamento de Relatórios: `RedisSessionService.update_report` usa `report_mapping` para salvar relatórios no campo correto.
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 ### 8. Comunicação Backend ↔ MCP (Incluindo Webhooks)
 - O backend envia payloads para o MCP sempre usando `project_id` como identificador principal. O campo `nome_projeto` é enviado apenas para log/debug. O MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam relatórios na sessão Redis usando `project_id`.
 - O backend busca a sessão correspondente usando o `project_id` persistido no Redis. O `job_id` é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
+- O campo `report_data` do webhook do MCP deve ser um dicionário com exatamente uma chave, que pode ser: `epicos_report`, `features_report`, `times_descricao_report`, `alocacao_times_report` ou `premissas_riscos_report`. O valor é sempre uma lista de itens do relatório. O backend atualiza diretamente o campo correspondente no estado do projeto/sessão.
 - Código:
   - `backend/app/services/mcp_client_service.py` (`start_analysis`)
-  - `backend/app/services/redis_session_service.py` (`get_session_by_project_id`)
+  - `backend/app/services/redis_session_service.py` (`get_session_by_project_id`, `update_report`)
   - `backend/app/api/analysis.py` (envio do project_id ao MCP)
   - `backend/app/api/webhooks.py` (busca sessão por `project_id` no webhook)
 
@@ -168,7 +168,7 @@ sequenceDiagram
 ### 3. Fluxo de Atualização de Relatório
 mermaid
 sequenceDiagram
-    MCP->>BE: Webhook (job_id, project_id, status, report_type, report_data)
+    MCP->>BE: Webhook (job_id, project_id, status, report_data)
     BE->>RS: Busca sessão por project_id (usando relação persistida project_id)
     BE->>RS: Atualiza relatório individual na sessão (ex: epicos_report)
     BE->>BS: Salva estado
@@ -210,10 +210,9 @@ flowchart LR
 
 ## Configuração Dinâmica de Agentes MCP
 
-- Arquivo: `backend/config/mcp_agents.json` define agentes MCP, URLs, campos de relatório e mapeamentos.
+- Arquivo: `backend/config/mcp_agents.json` define agentes MCP, URLs e campos de relatório.
 - Carregamento: `MCPConfigService.load_config` carrega o JSON na inicialização.
 - Roteamento: `MCPClientService.get_mcp_endpoint` seleciona a URL do MCP conforme `analysis_type`.
-- Mapeamento de Relatórios: `RedisSessionService.update_report` usa `report_mapping` para salvar relatórios no campo correto (campo individual).
 - Extensibilidade: Novos agentes podem ser adicionados apenas editando o JSON.
 
 **Exemplo de configuração de agente:**
@@ -223,14 +222,12 @@ flowchart LR
     "criacao_epicos_azure_devops": {
       "agent_name": "Epicos Azure DevOps",
       "mcp_url": "https://mcp-epicos.azurewebsites.net",
-      "report_fields": ["epicos_report"],
-      "report_mapping": {"epicos": "epicos_report"}
+      "report_fields": ["epicos_report"]
     },
     "features_generation": {
       "agent_name": "Features Generator",
       "mcp_url": "https://mcp-features.azurewebsites.net",
-      "report_fields": ["features_report"],
-      "report_mapping": {"features": "features_report"}
+      "report_fields": ["features_report"]
     }
   }
 }
