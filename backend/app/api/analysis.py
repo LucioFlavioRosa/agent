@@ -26,12 +26,14 @@ class StartAnalysisResponse(BaseModel):
     message: str
     session_id: str
     project_id: Optional[str] = None
+    nome_projeto: Optional[str] = None
 
-def _get_or_create_project_id(project_state: dict, provided_id: Optional[str]) -> str:
+def _get_or_create_project_id(project_state: dict, provided_id: Optional[str], usuario_executor: str, projeto: str) -> str:
     if project_state and project_state.get("project_id"):
         return project_state.get("project_id")
     if provided_id:
         return provided_id
+    # Busca por project_id pelo nome do projeto
     return str(uuid.uuid4())
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
@@ -47,10 +49,19 @@ async def start_analysis(
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
-    project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
+    # Busca o project_id correspondente ao nome do projeto, se não fornecido
+    project_id_final = project_id
+    if not project_id_final:
+        project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, projeto)
+    project_state = None
+    if project_id_final:
+        project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id_final)
+    else:
+        project_state = None
     session_id = None
     texto_extraido = None
-    project_id_final = _get_or_create_project_id(project_state, project_id)
+    if not project_id_final:
+        project_id_final = str(uuid.uuid4())
     if project_state:
         session_id = redis_service.restore_session_from_state(
             usuario_executor,
@@ -83,7 +94,8 @@ async def start_analysis(
         arquivo_docx=texto_extraido,
         comentario_usuario=comentario_usuario,
         usuario_executor=usuario_executor,
-        project_id=project_id_final
+        project_id=project_id_final,
+        nome_projeto=projeto
     )
     mcp_client = MCPClientService()
     try:
@@ -96,5 +108,6 @@ async def start_analysis(
         job_id=job_id,
         message="Análise solicitada com sucesso ao agente.",
         session_id=session_id,
-        project_id=project_id_final
+        project_id=project_id_final,
+        nome_projeto=projeto
     )
