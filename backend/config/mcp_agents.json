@@ -1,56 +1,28 @@
 {
   "agents": {
     "criacao_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
+      "agent_name": "Epicos Azure DevOps",
+      "mcp_url": "https://mcp-epicos.azurewebsites.net",
       "report_fields": ["epicos_report"],
-      "report_mapping": {
-        "epicos": "epicos_report"
-      }
+      "report_mapping": {"epicos": "epicos_report"}
     },
     "refinamento_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
+      "agent_name": "Refinamento Epicos Azure DevOps",
+      "mcp_url": "https://mcp-refinamento.azurewebsites.net",
       "report_fields": ["epicos_report"],
-      "report_mapping": {
-        "refinamento_epicos": "epicos_report"
-      }
+      "report_mapping": {"epicos": "epicos_report"}
     },
-    "criacao_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
+    "features_generation": {
+      "agent_name": "Features Generator",
+      "mcp_url": "https://mcp-features.azurewebsites.net",
       "report_fields": ["features_report"],
-      "report_mapping": {
-        "features": "features_report"
-      }
+      "report_mapping": {"features": "features_report"}
     },
-    "refinamento_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["features_report"],
-      "report_mapping": {
-        "features": "features_report"
-      }
-    },
-    "criacao_planejamento_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["times_descricao_report", "alocacao_times_report", "premissas_riscos_report"],
-      "report_mapping": {
-        "times": "times_descricao_report",
-        "alocacao": "alocacao_times_report",
-        "premissas": "premissas_riscos_report"
-      }
-    },
-    "refinamento_planejamento_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net/fake-mcp/api/v1/analysis",
-      "report_fields": ["times_descricao_report", "alocacao_times_report", "premissas_riscos_report"],
-      "report_mapping": {
-        "times": "times_descricao_report",
-        "alocacao": "alocacao_times_report",
-        "premissas": "premissas_riscos_report"
-      }
+    "tech_debt_analysis": {
+      "agent_name": "Tech Debt Analyzer",
+      "mcp_url": "https://mcp-techdebt.azurewebsites.net",
+      "report_fields": ["tech_debt_report"],
+      "report_mapping": {"tech_debt": "tech_debt_report"}
     }
   }
 }
