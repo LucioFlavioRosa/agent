@@ -1,14 +1,14 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, Any, Literal
+from typing import Optional, Any, Literal, Dict
 
 class MCPWebhookPayload(BaseModel):
     job_id: str = Field(...)
     status: Literal['in_progress', 'done', 'error'] = Field(...)
     progress: Optional[int] = Field(None)
-    report_type: Optional[str] = Field(None)
-    report_data: Optional[Any] = Field(None)
+    report_data: Optional[Dict[str, Any]] = Field(None)
     error_type: Optional[str] = Field(None)
     error_message: Optional[str] = Field(None)
+    project_id: Optional[str] = Field(None)
 
     @validator('status')
     def status_must_be_valid(cls, v):
@@ -21,10 +21,11 @@ class MCPWebhookPayload(BaseModel):
     def report_data_required_for_status(cls, v, values):
         status = values.get('status')
         if status in {'in_progress', 'done'}:
-            if v is None:
-                raise ValueError("report_data é obrigatório quando status é 'in_progress' ou 'done'")
-            if not isinstance(v, dict):
-                raise ValueError("report_data deve ser um dicionário")
+            if v is None or not isinstance(v, dict) or len(v) != 1:
+                raise ValueError("report_data deve ser um dicionário com exatamente uma chave quando status é 'in_progress' ou 'done'")
+            key = list(v.keys())[0]
+            if not isinstance(v[key], list):
+                raise ValueError("O valor da chave de report_data deve ser uma lista")
         return v
 
     @validator('error_message', always=True)
