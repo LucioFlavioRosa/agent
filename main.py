@@ -136,22 +136,20 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
 
 @router.get("/")
 def home():
-    return {"status": "Mock MCP Online v2.0", "target_backend": BACKEND_BASE_URL}
+    return {
+        "status": "Mock MCP Online v2.1", 
+        "routes": ["/start", "/api/v1/analysis/start"],
+        "target_backend": BACKEND_BASE_URL
+    }
 
 @router.post("/start")
 async def start_analysis(payload: MCPStartPayload, background_tasks: BackgroundTasks):
-    """
-    Recebe a solicitação do Backend e agenda o webhook.
-    Endpoint: [POST] /fake-mcp/api/v1/analysis/start
-    """
-    
+    # ... (código da função start_analysis permanece igual) ...
     # Gera um Job ID único para esta execução
     new_job_id = str(uuid.uuid4())
     
-    logger.info(f"⚡ [START] Recebido para Project ID: {payload.project_id} | Tipo: {payload.analysis_type}")
-    logger.info(f"📄 Dados recebidos: Docx (len): {len(payload.arquivo_docx or '')} chars")
+    logger.info(f"⚡ [START] Recebido para Project ID: {payload.project_id}")
 
-    # Agenda o envio do resultado em background
     background_tasks.add_task(
         process_and_send_webhook,
         job_id=new_job_id,
@@ -159,20 +157,24 @@ async def start_analysis(payload: MCPStartPayload, background_tasks: BackgroundT
         analysis_type=payload.analysis_type
     )
 
-    # Resposta Síncrona Imediata (Conforme Doc 1.4 Resposta)
     return {
         "message": "Análise solicitada com sucesso ao agente (MOCK).",
-        "job_id": new_job_id,       # O mock gera o job_id
+        "job_id": new_job_id,
         "project_id": payload.project_id,
         "nome_projeto": payload.nome_projeto or "Projeto Desconhecido"
     }
 
-# Inclui o router com o prefixo esperado pelo seu Client Service
-# Se o seu backend chama "base_url/start", ajuste o prefixo abaixo.
-# Supondo que o backend chame http://mcp-url/start, usamos prefixo vazio ou ajustamos no Client.
-app.include_router(router, prefix="/api/v1/analysis") # Ajuste o prefixo conforme configuração do seu backend
+# ==============================================================================
+# CORREÇÃO AQUI: Registrar o router em DOIS lugares para garantir compatibilidade
+# ==============================================================================
+
+# 1. Registra para funcionar se o Backend chamar a URL completa (ex: .../api/v1/analysis/start)
+app.include_router(router, prefix="/api/v1/analysis") 
+
+# 2. Registra TAMBÉM na raiz para funcionar se o Backend chamar direto (ex: .../start)
+app.include_router(router, prefix="") 
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8001)) # Porta diferente do backend para evitar conflito local
+    port = int(os.environ.get("PORT", 8001))
     uvicorn.run(app, host="0.0.0.0", port=port)
