@@ -17,4 +17,4 @@ class MCPStartAnalysisPayload(BaseModel):
         return v
 
 class MCPStartAnalysisResponse(BaseModel):
-    job_id: str = Field(..., description="Identificador do job criado no MCP.")
+    project_id: str = Field(..., description="Identificador único do projeto.")
