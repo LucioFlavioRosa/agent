@@ -10,7 +10,6 @@ class SessionStep(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 class SessionData(BaseModel):
-    session_id: str = Field(...)
     usuario_executor: str = Field(...)
     projeto: str = Field(...)
     analysis_type: str = Field(...)
@@ -20,7 +19,7 @@ class SessionData(BaseModel):
     docx_files: List[str] = Field(default_factory=list)
     comentario_usuario: Optional[str] = Field(default=None)
     extracted_text: Optional[str] = Field(default=None)
-    project_id: Optional[str] = Field(default=None)
+    project_id: str = Field(...)
     epicos_report: Optional[Any] = Field(default=None)
     features_report: Optional[Any] = Field(default=None)
     times_descricao_report: Optional[Any] = Field(default=None)
@@ -55,7 +54,6 @@ class SessionData(BaseModel):
                 return legacy_reports[field]
             return None
         return cls(
-            session_id=state.get("session_id", ""),
             usuario_executor=state.get("usuario_executor", ""),
             projeto=state.get("projeto", ""),
             analysis_type=state.get("analysis_type", ""),
