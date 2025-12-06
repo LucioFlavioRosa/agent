@@ -16,12 +16,19 @@ async def check_project(
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Verificando existência do projeto '{projeto}' para usuario_executor='{usuario_executor}'")
     try:
-        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
+        # Busca o project_id correspondente ao nome do projeto
+        project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, projeto)
+        if not project_id:
+            logger.info(f"Projeto '{projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
+            return {"exists": False}
+        # Carrega o estado usando o project_id
+        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id)
         if state:
             state.pop("analysis_name", None)
             logger.info(f"Projeto '{projeto}' encontrado para usuario_executor='{usuario_executor}'. Estado retornado.")
-            project_id = state.get("project_id")
-            response = {"exists": True, "state": {**state, "project_id": project_id}}
+            state["project_id"] = project_id
+            state["nome_projeto"] = state.get("projeto", projeto)
+            response = {"exists": True, "state": state}
             return response
         else:
             logger.info(f"Projeto '{projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
@@ -34,4 +41,8 @@ async def check_project(
 async def list_projects(current_user: dict = Depends(get_current_user)):
     usuario_executor = _extract_usuario_executor(current_user)
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
+    # Garante que cada item tenha project_id e nome_projeto
+    for p in projects:
+        if "nome_projeto" not in p:
+            p["nome_projeto"] = p.get("projeto", "")
     return projects
