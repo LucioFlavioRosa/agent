@@ -25,16 +25,9 @@ class ProjectStateService:
         return blob_client.url
 
     @staticmethod
-    async def load_latest_state_from_blob(usuario_executor: str, nome_projeto: Optional[str] = None, project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
-        if project_id is None and nome_projeto is not None:
-            project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
-            if not project_id:
-                logger.info(f"Nenhum project_id encontrado para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
-                return None
         if project_id:
-            # Buscar pelo project_id
-            blob_folder = None
             _, container_client = _get_blob_clients()
             prefix = f"{usuario_executor}/"
             blobs = list(container_client.list_blobs(name_starts_with=prefix))
@@ -48,27 +41,6 @@ class ProjectStateService:
                         return state
             logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}")
             return None
-        elif nome_projeto:
-            blob_folder = f"{usuario_executor}/{nome_projeto}/estados"
-            _, container_client = _get_blob_clients()
-            blobs = list(container_client.list_blobs(name_starts_with=blob_folder+"/"))
-            if not blobs:
-                logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
-                return None
-            blobs_sorted = sorted(
-                [b for b in blobs if b.name.endswith(".json")],
-                key=lambda b: b.name,
-                reverse=True
-            )
-            if not blobs_sorted:
-                logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
-                return None
-            latest_blob = blobs_sorted[0]
-            blob_client = container_client.get_blob_client(latest_blob.name)
-            state_bytes = blob_client.download_blob().readall()
-            state = json.loads(state_bytes.decode("utf-8"))
-            logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
-            return state
         else:
             logger.info(f"Nenhum parâmetro fornecido para buscar estado.")
             return None
@@ -88,8 +60,8 @@ class ProjectStateService:
         return None
 
     @staticmethod
-    async def get_latest_analysis_metadata(usuario_executor: str, nome_projeto: Optional[str] = None, project_id: Optional[str] = None) -> Dict[str, str]:
-        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, nome_projeto=nome_projeto, project_id=project_id)
+    async def get_latest_analysis_metadata(usuario_executor: str, project_id: Optional[str] = None) -> Dict[str, str]:
+        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id)
         if not state:
             return {}
         analysis_type = state.get("analysis_type")
