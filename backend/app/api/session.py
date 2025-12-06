@@ -7,8 +7,7 @@ from backend.app.services.project_state_service import ProjectStateService
 router = APIRouter()
 
 class UpdateReportRequest(BaseModel):
-    report_type: str
-    report_data: Any
+    report_data: Dict[str, Any]
 
 @router.get("/project/{project_id}/reports")
 def get_project_reports(project_id: str):
@@ -31,9 +30,9 @@ def get_project_reports(project_id: str):
 def update_project_report(project_id: str, req: UpdateReportRequest):
     redis_service = RedisSessionService()
     try:
-        session = redis_service.get_session_by_project_id(project_id)
-        redis_service.update_report(project_id, req.report_type, req.report_data, analysis_type=session.analysis_type)
+        redis_service.update_report(project_id, req.report_data)
         redis_service.update_session_on_state_change(project_id, {})
+        session = redis_service.get_session_by_project_id(project_id)
         return {"status": "ok", "project_id": project_id, "nome_projeto": session.projeto}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao atualizar relatório: {e}")
