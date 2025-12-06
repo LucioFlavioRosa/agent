@@ -44,6 +44,7 @@ class RedisSessionService:
             "comentario_usuario": comentario_usuario,
             "extracted_text": extracted_text,
             "project_id": project_id,
+            "nome_projeto": projeto,
             "reports": {}
         }
         self.redis_client.setex(f"session:{session_id}", self.session_ttl, self._serialize_session(session_data))
@@ -111,7 +112,8 @@ class RedisSessionService:
         comentario_usuario = project_state.get("comentario_usuario")
         extracted_text = project_state.get("extracted_text")
         project_id = project_state.get("project_id")
-        session_id = self.create_session(usuario_executor, projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id)
+        nome_projeto = project_state.get("nome_projeto") or project_state.get("projeto") or projeto
+        session_id = self.create_session(usuario_executor, nome_projeto, analysis_type, comentario_usuario=comentario_usuario, extracted_text=extracted_text, project_id=project_id)
         key = f"session:{session_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
@@ -132,6 +134,8 @@ class RedisSessionService:
         session_data["comentario_usuario"] = comentario_usuario
         session_data["extracted_text"] = extracted_text
         session_data["project_id"] = project_id
+        session_data["nome_projeto"] = nome_projeto
+        session_data["projeto"] = nome_projeto
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         self.redis_client.setex(f"projectid:{project_id}", self.session_ttl, session_id)
         return session_id
