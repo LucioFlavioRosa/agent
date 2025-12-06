@@ -159,8 +159,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 { 
-  "report_type": "epicos",
-  "report_data": { "epicos": [{ "id": 1, "titulo": "Como usuário..." }]}
+  "report_data": { "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }] }
 }
 
 **Resposta:**
@@ -203,8 +202,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "project_id": "<string>",
   "status": "in_progress" | "done" | "error",
   "progress": <opcional, int>,
-  "report_type": <string, obrigatório quando status="in_progress" ou "done">,
-  "report_data": <dict, obrigatório quando status="in_progress" ou "done">,
+  "report_data": { "epicos_report": [{ ... }] },
   "error_type": <string, obrigatório quando status="error">,
   "error_message": <string, obrigatório quando status="error">
 }
@@ -214,8 +212,7 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 - `project_id`: string. Identificador único do projeto, usado para buscar a sessão correspondente.
 - `status`: string. Um dos valores: `in_progress`, `done`, `error`.
 - `progress`: inteiro opcional (0-100), só para status `in_progress`.
-- `report_type`: string. Obrigatório para status `in_progress` ou `done`. Exemplo: `epicos`, `features`, `tech_debt`.
-- `report_data`: objeto/dict. Obrigatório para status `in_progress` ou `done`. Estrutura depende do tipo de relatório.
+- `report_data`: objeto/dict. Obrigatório para status `in_progress` ou `done`. Estrutura: `{<report_field>: [ ... ]}`. Exemplo: `{ "epicos_report": [{ ... }] }`
 - `error_type`: string. Obrigatório para status `error`.
 - `error_message`: string. Obrigatório para status `error`.
 
@@ -230,9 +227,8 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "project_id": "projeto-uuid-123",
   "status": "in_progress",
   "progress": 40,
-  "report_type": "epicos",
   "report_data": { 
-    "epicos": [
+    "epicos_report": [
       { "id": 1, "titulo": "Como usuário..." }
     ]
   }
@@ -244,9 +240,8 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "job_id": "123456",
   "project_id": "projeto-uuid-123",
   "status": "done",
-  "report_type": "epicos",
   "report_data": { 
-    "epicos": [
+    "epicos_report": [
       { "id": 1, "titulo": "Como usuário...", "descricao": "..." },
       { "id": 2, "titulo": "Como admin...", "descricao": "..." }
     ]
@@ -269,9 +264,8 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "job_id": "7891011",
   "project_id": "projeto-uuid-456",
   "status": "done",
-  "report_type": "features",
   "report_data": { 
-    "features": [
+    "features_report": [
       { "id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD" }
     ]
   }
@@ -283,9 +277,8 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "job_id": "555777",
   "project_id": "projeto-uuid-789",
   "status": "done",
-  "report_type": "tech_debt",
   "report_data": { 
-    "tech_debt": [
+    "premissas_riscos_report": [
       { "id": 1, "descricao": "Código duplicado" }
     ]
   }
@@ -293,42 +286,25 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
 
 ### 2.3 Estrutura de report_data Esperada por Tipo
 
-- Para `report_type: "epicos"`:
-  - `report_data` deve conter a chave `epicos` com uma lista de épicos:
-    
-    {
-      "epicos": [
-        { "id": 1, "titulo": "Como usuário...", "descricao": "..." }
-      ]
-    }
-    
-- Para `report_type: "features"`:
-  - `report_data` deve conter a chave `features` com uma lista de features:
-    
-    {
-      "features": [
-        { "id": 1, "nome": "Login", "descricao": "Permitir login com Azure AD" }
-      ]
-    }
-    
-- Para `report_type: "tech_debt"`:
-  - `report_data` deve conter a chave `tech_debt` com uma lista de itens de débito técnico:
-    
-    {
-      "tech_debt": [
-        { "id": 1, "descricao": "Código duplicado" }
-      ]
-    ]
-    }
-    
+- Para `epicos_report`:
+    { "epicos_report": [ { ... } ] }
+- Para `features_report`:
+    { "features_report": [ { ... } ] }
+- Para `times_descricao_report`:
+    { "times_descricao_report": [ { ... } ] }
+- Para `alocacao_times_report`:
+    { "alocacao_times_report": [ { ... } ] }
+- Para `premissas_riscos_report`:
+    { "premissas_riscos_report": [ { ... } ] }
+
+> O backend irá atualizar apenas o campo correspondente no estado do projeto.
 
 ### 2.4 Regras Importantes para o MCP
 
 - O campo `project_id` deve ser exatamente o mesmo recebido do backend na chamada de início de análise.
-- O campo `report_type` DEVE ser igual ao tipo de relatório definido no mapeamento do backend para o `analysis_type` correspondente.
-- O campo principal de `report_data` (ex: `epicos`, `features`, `tech_debt`) deve estar presente e conter a lista de resultados.
-- Para status `error`, não envie `report_type` nem `report_data`.
-- Para status `in_progress` e `done`, ambos `report_type` e `report_data` são obrigatórios.
+- O campo principal de `report_data` (ex: `epicos_report`, `features_report`, etc) deve estar presente e conter a lista de resultados.
+- Para status `error`, não envie `report_data`.
+- Para status `in_progress` e `done`, `report_data` é obrigatório e deve conter exatamente uma chave de relatório.
 - O backend rejeitará webhooks com estrutura inválida ou campos ausentes.
 - O backend busca a sessão pelo project_id persistido no Redis. Se não encontrar, retorna 404 e loga o erro detalhadamente.
 
@@ -338,7 +314,6 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   "job_id": "123456",
   "project_id": "projeto-uuid-123",
   "status": "done",
-  "report_type": "epicos",
   "report_data": { 
     "errado": [
       { "id": 1, "titulo": "Como usuário..." }
@@ -346,16 +321,17 @@ O MCP deve enviar um POST para o endpoint `/webhooks/mcp` do backend com o segui
   }
 }
 
-**Motivo:** O campo esperado em `report_data` para `report_type: "epicos"` é `epicos`, não `errado`.
+**Motivo:** O campo esperado em `report_data` deve ser um dos: `epicos_report`, `features_report`, `times_descricao_report`, `alocacao_times_report`, `premissas_riscos_report`.
 
-### 2.6 Resumo do Mapeamento report_type → report_data
+### 2.6 Resumo dos Campos de Relatório Aceitos
 
-| analysis_type                  | report_type  | Campo principal em report_data |
-|-------------------------------|--------------|-------------------------------|
-| criacao_epicos_azure_devops    | epicos       | epicos_report                |
-| refinamento_epicos_azure_devops| epicos       | epicos_report                        |
-
-O MCP deve garantir que o campo principal de `report_data` corresponda ao mapeamento acima.
+| Campo em report_data           |
+|-------------------------------|
+| epicos_report                 |
+| features_report               |
+| times_descricao_report        |
+| alocacao_times_report         |
+| premissas_riscos_report       |
 
 ---
 
@@ -619,8 +595,7 @@ Resposta:
   "project_id": "projeto-uuid-123",
   "status": "in_progress",
   "progress": 50,
-  "report_type": "epicos",
-  "report_data": { "epicos": [{ "id": 1, "titulo": "Como usuário..." }]}
+  "report_data": { "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }]}
 }
 
 ### 6. Webhook de Conclusão (MCP → Backend)
@@ -629,8 +604,7 @@ Resposta:
   "job_id": "123456",
   "project_id": "projeto-uuid-123",
   "status": "done",
-  "report_type": "epicos",
-  "report_data": { "epicos": [{ "id": 1, "titulo": "Como usuário...", "descricao": "..." }]}
+  "report_data": { "epicos_report": [{ "id": 1, "titulo": "Como usuário...", "descricao": "..." }]}
 }
 
 ### 7. Consulta de Relatórios
