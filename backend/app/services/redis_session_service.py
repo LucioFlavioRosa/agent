@@ -6,6 +6,8 @@ from typing import Dict, Any, Optional
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData, SessionStep
 import logging
+import asyncio
+from backend.app.services.project_state_service import ProjectStateService
 
 class RedisSessionService:
     def __init__(self):
@@ -84,6 +86,13 @@ class RedisSessionService:
         session_data["status"] = status
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
+    async def _save_to_blob_after_update(self, project_id: str):
+        try:
+            session = self.get_session_by_project_id(project_id)
+            await ProjectStateService.save_state_to_blob(session)
+        except Exception as e:
+            self.logger.error(f"Erro ao salvar estado no Blob após update_report para project_id={project_id}: {e}")
+
     def update_report(self, project_id: str, report_data: Dict[str, Any]):
         key = f"project:{project_id}"
         session_json = self.redis_client.get(key)
@@ -95,6 +104,7 @@ class RedisSessionService:
         for report_field, value in report_data.items():
             session_data[report_field] = value
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        asyncio.create_task(self._save_to_blob_after_update(project_id))
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         comentario_usuario = project_state.get("comentario_usuario")
