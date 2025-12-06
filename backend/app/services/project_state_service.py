@@ -11,6 +11,10 @@ class ProjectStateService:
         state = session_data.to_project_state()
         usuario_executor = state.get("usuario_executor")
         projeto = state.get("projeto")
+        project_id = state.get("project_id")
+        nome_projeto = projeto
+        state["project_id"] = project_id
+        state["nome_projeto"] = nome_projeto
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         blob_folder = f"{usuario_executor}/{projeto}/estados"
         blob_filename = f"estado_{timestamp}.json"
@@ -21,33 +25,71 @@ class ProjectStateService:
         return blob_client.url
 
     @staticmethod
-    async def load_latest_state_from_blob(usuario_executor: str, projeto: str) -> Optional[Dict[str, Any]]:
+    async def load_latest_state_from_blob(usuario_executor: str, nome_projeto: Optional[str] = None, project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
-        logger.info(f"Buscando estado para usuario_executor={usuario_executor}, projeto={projeto}")
-        blob_folder = f"{usuario_executor}/{projeto}/estados"
-        _, container_client = _get_blob_clients()
-        blobs = list(container_client.list_blobs(name_starts_with=blob_folder+"/"))
-        if not blobs:
-            logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}")
+        if project_id is None and nome_projeto is not None:
+            project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
+            if not project_id:
+                logger.info(f"Nenhum project_id encontrado para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
+                return None
+        if project_id:
+            # Buscar pelo project_id
+            blob_folder = None
+            _, container_client = _get_blob_clients()
+            prefix = f"{usuario_executor}/"
+            blobs = list(container_client.list_blobs(name_starts_with=prefix))
+            for blob in blobs:
+                if blob.name.endswith('.json'):
+                    blob_client = container_client.get_blob_client(blob.name)
+                    state_bytes = blob_client.download_blob().readall()
+                    state = json.loads(state_bytes.decode("utf-8"))
+                    if state.get("project_id") == project_id:
+                        logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, project_id={project_id}")
+                        return state
+            logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}")
             return None
-        blobs_sorted = sorted(
-            [b for b in blobs if b.name.endswith(".json")],
-            key=lambda b: b.name,
-            reverse=True
-        )
-        if not blobs_sorted:
-            logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, projeto={projeto}")
+        elif nome_projeto:
+            blob_folder = f"{usuario_executor}/{nome_projeto}/estados"
+            _, container_client = _get_blob_clients()
+            blobs = list(container_client.list_blobs(name_starts_with=blob_folder+"/"))
+            if not blobs:
+                logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
+                return None
+            blobs_sorted = sorted(
+                [b for b in blobs if b.name.endswith(".json")],
+                key=lambda b: b.name,
+                reverse=True
+            )
+            if not blobs_sorted:
+                logger.info(f"Nenhum arquivo .json de estado encontrado para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
+                return None
+            latest_blob = blobs_sorted[0]
+            blob_client = container_client.get_blob_client(latest_blob.name)
+            state_bytes = blob_client.download_blob().readall()
+            state = json.loads(state_bytes.decode("utf-8"))
+            logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}")
+            return state
+        else:
+            logger.info(f"Nenhum parâmetro fornecido para buscar estado.")
             return None
-        latest_blob = blobs_sorted[0]
-        blob_client = container_client.get_blob_client(latest_blob.name)
-        state_bytes = blob_client.download_blob().readall()
-        state = json.loads(state_bytes.decode("utf-8"))
-        logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, projeto={projeto}")
-        return state
 
     @staticmethod
-    async def get_latest_analysis_metadata(usuario_executor: str, projeto: str) -> Dict[str, str]:
-        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, projeto)
+    async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
+        _, container_client = _get_blob_clients()
+        prefix = f"{usuario_executor}/"
+        blobs = list(container_client.list_blobs(name_starts_with=prefix))
+        for blob in blobs:
+            if blob.name.endswith('.json'):
+                blob_client = container_client.get_blob_client(blob.name)
+                state_bytes = blob_client.download_blob().readall()
+                state = json.loads(state_bytes.decode("utf-8"))
+                if state.get("projeto") == nome_projeto:
+                    return state.get("project_id")
+        return None
+
+    @staticmethod
+    async def get_latest_analysis_metadata(usuario_executor: str, nome_projeto: Optional[str] = None, project_id: Optional[str] = None) -> Dict[str, str]:
+        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, nome_projeto=nome_projeto, project_id=project_id)
         if not state:
             return {}
         analysis_type = state.get("analysis_type")
@@ -79,6 +121,7 @@ class ProjectStateService:
                 state = json.loads(state_bytes.decode("utf-8"))
                 item = {
                     "projeto": state.get("projeto", projeto),
+                    "nome_projeto": state.get("projeto", projeto),
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
