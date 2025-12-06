@@ -34,10 +34,10 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 payload.report_data,
                 analysis_type=analysis_type
             )
-            logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (project_id={payload.project_id})")
+            logger.info(f"Relatório '{payload.report_type}' atualizado para sessão {session.session_id} (project_id={payload.project_id}, nome_projeto={session.projeto})")
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
-        return {"status": "ok"}
+        return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.projeto}
     except HTTPException as exc:
         raise exc
     except Exception as exc:
