@@ -83,14 +83,12 @@ async def start_analysis(
         arquivo_docx=texto_extraido,
         comentario_usuario=comentario_usuario,
         usuario_executor=usuario_executor,
-        session_id=session_id
+        project_id=project_id_final
     )
     mcp_client = MCPClientService()
     try:
         mcp_response = await mcp_client.start_analysis(mcp_payload)
         job_id = mcp_response.job_id
-        redis_service.update_session_on_state_change(session_id, {"last_mcp_job_id": job_id})
-        redis_service.update_session_job_id(session_id, job_id)
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
