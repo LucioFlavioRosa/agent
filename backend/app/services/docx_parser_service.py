@@ -3,9 +3,6 @@ from docx import Document
 import io
 
 async def extract_text_from_docx(file: UploadFile) -> str:
-    """
-    Extrai todo o texto de um arquivo .docx recebido via UploadFile.
-    """
     try:
         file.file.seek(0)
         doc_bytes = await file.read()
