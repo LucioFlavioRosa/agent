@@ -37,8 +37,9 @@ flowchart TD
     AB -->|Busca Segredos| AC
     AA -->|Verifica Projeto| AD
     AD -->|Busca Estado| AE
-    AA -->|Upload DOCX| AE
+    AA -->|Inicia Análise (com arquivo docx)| AE
     AE -->|Extrai Texto| AA
+    AE -->|Salva arquivo no Blob| AA
     AA -->|Cria Sessão| AD
     AA -->|Envia para MCP| AF
     AF -->|Job ID| AA
@@ -66,11 +67,13 @@ flowchart TD
   - `backend/app/api/projects.py` (`/projects/check`)
   - `backend/app/services/project_state_service.py` (`_get_project_id_by_name`, `load_latest_state_from_blob`)
 
-### 3. Upload de DOCX e Extração de Texto (Processamento Paralelo)
-- O upload do arquivo DOCX e a extração do texto ocorrem em paralelo. O backend retorna tanto a URL do arquivo quanto o texto extraído, além de `project_id` e `nome_projeto`.
+### 3. Início de Análise com Upload de DOCX
+- O frontend chama `/analysis/start` enviando os campos `nome_projeto`, `analysis_type`, `instrucoes_extras` e opcionalmente `arquivo_docx` como arquivo via multipart/form-data.
+- O backend extrai o texto do arquivo DOCX e salva o arquivo no Blob Storage em paralelo.
+- O texto extraído é enviado ao MCP no campo `arquivo_docx` do payload.
 - Código:
-  - `backend/app/api/upload.py` (`/upload/docx`)
-  - `backend/app/services/blob_storage_service.py` (`upload_and_extract_docx`)
+  - `backend/app/api/analysis.py` (`POST /analysis/start`)
+  - `backend/app/services/blob_storage_service.py` (`upload_docx_to_blob`)
   - `backend/app/services/docx_parser_service.py` (`extract_text_from_docx`)
 
 ### 4. Criação e Gerenciamento de Sessão no Redis
@@ -132,14 +135,15 @@ sequenceDiagram
     BE->>KV: Carrega segredos
     BE->>BS: Lista projetos
     BE-->>FE: Lista de projetos
-    FE->>BE: POST /upload/docx (arquivo, nome_projeto, analysis_type, instrucoes_extras)
-    BE->>BS: Salva arquivo
-    BE->>BE: Extrai texto
-    BE->>RS: Cria sessão (com campos de relatório individuais, project_id e nome_projeto)
-    BE-->>FE: blob_url, texto extraído, project_id, nome_projeto
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras, arquivo_docx)
     BE->>BE: Busca ou cria project_id correspondente ao nome do projeto
-    BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, arquivo_docx)
+    BE->>BE: Extrai texto do arquivo docx
+    par Processamento paralelo
+        BE->>BS: Salva arquivo docx no Blob Storage
+        BE->>BE: Extrai texto do arquivo docx
+    end
+    BE->>RS: Cria sessão (com campos de relatório individuais, project_id e nome_projeto)
+    BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído do arquivo docx)
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado inicial
     BE-->>FE: job_id, project_id, nome_projeto
@@ -154,7 +158,12 @@ sequenceDiagram
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras, arquivo_docx)
     BE->>BE: Busca project_id correspondente ao nome do projeto
     BE->>RS: Restaura sessão do estado (com project_id e nome_projeto)
-    BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, arquivo_docx)
+    BE->>BE: Extrai texto do arquivo docx
+    par Processamento paralelo
+        BE->>BS: Salva arquivo docx no Blob Storage
+        BE->>BE: Extrai texto do arquivo docx
+    end
+    BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído do arquivo docx)
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado
     BE-->>FE: job_id, project_id, nome_projeto
@@ -187,31 +196,13 @@ sequenceDiagram
 
 ## Observações
 
-- O campo `analysis_name` foi removido de todos os fluxos e payloads.
-- Para iniciar análise, é obrigatório informar `analysis_type` e pelo menos um de `arquivo_docx` (texto extraído) ou `instrucoes_extras`.
+- O endpoint /upload/docx foi removido. O upload de arquivo DOCX e a extração de texto ocorrem exclusivamente via POST /analysis/start.
+- Para iniciar análise, é obrigatório informar `analysis_type` e pelo menos um de `arquivo_docx` (arquivo) ou `instrucoes_extras`.
 - O upload de DOCX processa upload e extração de texto em paralelo, retornando ambos imediatamente.
 - O salvamento de estado no Blob Storage é automático e periódico, disparado por alterações de relatório ou estado.
 - O cache de segredos do Key Vault é thread-safe e evita múltiplas chamadas desnecessárias.
-- O Redis **deve** ser configurado via Key Vault (não via variáveis de ambiente do App Service).
+- O Redis deve ser configurado via Key Vault (não via variáveis de ambiente do App Service).
 - Para ambientes com Redis em subrede privada, o App Service deve estar integrado à mesma VNET.
-- O sistema pode operar em modo de teste com autenticação mockada (`SKIP_AUTH_FOR_TESTING`), útil para desenvolvimento local.
-- Todos os exemplos de payload e resposta estão detalhados em `backend/docs/API_PAYLOAD_EXAMPLES.md`.
-- Toda a comunicação com o MCP utiliza o project_id como identificador principal. O job_id é apenas um identificador da execução no MCP, mas não é usado para buscar sessões no backend.
+- Toda a comunicação com o MCP utiliza o project_id como identificador principal.
 - Todos os relatórios são salvos em campos individuais (`epicos_report`, `features_report`, etc). Não existe mais a chave `reports` ou campos obsoletos no estado do projeto ou sessão.
 - O backend aceita o campo "nome_projeto" do frontend, converte internamente para project_id, e responde sempre com ambos.
-
----
-
-## Atualização de Relatório via Webhook MCP: Fluxo Paralelo
-
-Após o backend receber uma resposta do MCP via webhook, o estado do projeto é atualizado no Redis e, em paralelo, salvo imediatamente no Blob Storage. Esse fluxo garante consistência e persistência dos dados em ambas as camadas.
-
-mermaid
-sequenceDiagram
-    MCP->>BE: Webhook MCP (job_id, project_id, status, report_data)
-    BE->>RS: Atualiza relatório individual na sessão (ex: features_report)
-    par Atualização paralela
-        BE->>RS: Salva sessão atualizada no Redis
-        BE->>BS: Salva estado atualizado no Blob Storage
-    end
-
