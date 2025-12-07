@@ -11,7 +11,7 @@ class SessionStep(BaseModel):
 
 class SessionData(BaseModel):
     usuario_executor: str = Field(...)
-    projeto: str = Field(...)
+    nome_projeto: str = Field(...)
     analysis_type: str = Field(...)
     created_at: datetime = Field(...)
     steps: List[SessionStep] = Field(default_factory=list)
@@ -26,9 +26,9 @@ class SessionData(BaseModel):
     premissas_riscos_report: Optional[Any] = Field(default=None)
 
     def to_project_state(self) -> Dict[str, Any]:
-        return {
+        state = {
             "usuario_executor": self.usuario_executor,
-            "projeto": self.projeto,
+            "nome_projeto": self.nome_projeto,
             "analysis_type": self.analysis_type,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_saved_to_blob": self.last_saved_to_blob.isoformat() if self.last_saved_to_blob else None,
@@ -41,12 +41,17 @@ class SessionData(BaseModel):
             "alocacao_times_report": self.alocacao_times_report if self.alocacao_times_report is not None else [],
             "premissas_riscos_report": self.premissas_riscos_report if self.premissas_riscos_report is not None else []
         }
+        # Remove campos obsoletos se presentes
+        state.pop("projeto", None)
+        state.pop("comentario_usuario", None)
+        state.pop("docx_blob_url", None)
+        return state
 
     @classmethod
     def from_project_state(cls, state: Dict[str, Any]) -> "SessionData":
         return cls(
             usuario_executor=state.get("usuario_executor", ""),
-            projeto=state.get("projeto", ""),
+            nome_projeto=state.get("nome_projeto", ""),
             analysis_type=state.get("analysis_type", ""),
             created_at=datetime.fromisoformat(state["created_at"]) if state.get("created_at") else datetime.utcnow(),
             steps=[],
