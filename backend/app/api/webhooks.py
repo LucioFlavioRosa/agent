@@ -29,16 +29,16 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             if not validate_report_data_structure(payload.report_data, analysis_type):
                 logger.error(f"Estrutura de report_data inválida para analysis_type '{analysis_type}' e project_id '{payload.project_id}'")
                 raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida para analysis_type '{analysis_type}'")
-            redis_service.update_report(
-                payload.project_id,
-                payload.report_data
-            )
-            logger.info(f"Relatório atualizado para sessão (project_id={payload.project_id}, nome_projeto={session.projeto})")
-            # Salva imediatamente o estado no Blob Storage após atualizar o Redis
+            report_field = list(payload.report_data.keys())[0]
+            report_value = payload.report_data[report_field]
+            session_dict = session.dict()
+            session_dict[report_field] = report_value
+            redis_service.update_report(payload.project_id, payload.report_data)
+            logger.info(f"Relatório atualizado para sessão (project_id={payload.project_id}, nome_projeto={session.nome_projeto})")
             await ProjectStateService.save_state_to_blob(session)
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
-        return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.projeto}
+        return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
     except HTTPException as exc:
         raise exc
     except Exception as exc:
