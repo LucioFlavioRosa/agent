@@ -15,6 +15,9 @@ def get_project_reports(project_id: str):
     try:
         session = redis_service.get_session_by_project_id(project_id)
         state = session.to_project_state()
+        state.pop("nome_projeto", None)
+        state.pop("comentario_usuario", None)
+        state.pop("docx_blob_url", None)
         return state
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
@@ -26,7 +29,7 @@ def update_project_report(project_id: str, req: UpdateReportRequest):
         redis_service.update_report(project_id, req.report_data)
         redis_service.update_session_on_state_change(project_id, {})
         session = redis_service.get_session_by_project_id(project_id)
-        return {"status": "ok", "project_id": project_id, "nome_projeto": session.projeto}
+        return {"status": "ok", "project_id": project_id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao atualizar relatório: {e}")
 
@@ -36,7 +39,7 @@ async def save_project_state(project_id: str):
     try:
         session = redis_service.get_session_by_project_id(project_id)
         url = await ProjectStateService.save_state_to_blob(session)
-        return {"blob_url": url, "project_id": session.project_id, "nome_projeto": session.projeto}
+        return {"blob_url": url, "project_id": session.project_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao salvar estado: {e}")
 
@@ -45,6 +48,6 @@ def get_project_docx_files(project_id: str):
     redis_service = RedisSessionService()
     try:
         session = redis_service.get_session_by_project_id(project_id)
-        return {"docx_files": session.docx_files, "project_id": session.project_id, "nome_projeto": session.projeto}
+        return {"docx_files": session.docx_files, "project_id": session.project_id}
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
