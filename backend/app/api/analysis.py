@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form, Request
 from pydantic import BaseModel
 from typing import Optional
 
@@ -8,18 +8,13 @@ from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayl
 from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
 from ..services.background_state_saver import BackgroundStateSaver
+from ..services.blob_storage_service import upload_docx_to_blob
+from ..services.docx_parser_service import extract_text_from_docx
 
 import uuid
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
-
-class StartAnalysisRequest(BaseModel):
-    nome_projeto: str
-    analysis_type: str
-    instrucoes_extras: Optional[str] = None
-    arquivo_docx: Optional[str] = None
-    project_id: Optional[str] = None
 
 class StartAnalysisResponse(BaseModel):
     message: str
@@ -28,12 +23,13 @@ class StartAnalysisResponse(BaseModel):
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
+    request: Request,
     background_tasks: BackgroundTasks,
-    nome_projeto: str = Body(...),
-    analysis_type: str = Body(...),
-    instrucoes_extras: Optional[str] = Body(None),
-    arquivo_docx: Optional[str] = Body(None),
-    project_id: Optional[str] = Body(None),
+    nome_projeto: str = Form(...),
+    analysis_type: str = Form(...),
+    instrucoes_extras: Optional[str] = Form(None),
+    arquivo_docx: Optional[UploadFile] = File(None),
+    project_id: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
@@ -49,8 +45,22 @@ async def start_analysis(
         project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id_final)
     session_exists = bool(project_state)
     texto_extraido = None
+    blob_url = None
     if arquivo_docx is not None:
-        texto_extraido = arquivo_docx
+        try:
+            texto_extraido = await extract_text_from_docx(arquivo_docx)
+        except Exception as e:
+            logger.error(f"Erro ao extrair texto do docx: {e}")
+            raise HTTPException(status_code=400, detail=f"Erro ao extrair texto do docx: {str(e)}")
+        blob_folder = f"{usuario_executor}/{nome_projeto}/arquivos_recebidos/docx"
+        blob_filename = f"{analysis_type}.docx"
+        background_tasks.add_task(
+            upload_docx_to_blob,
+            arquivo_docx,
+            blob_folder,
+            blob_filename,
+            background_tasks
+        )
     else:
         if session_exists:
             try:
@@ -59,6 +69,8 @@ async def start_analysis(
             except Exception as e:
                 logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
                 texto_extraido = None
+    if not texto_extraido and not instrucoes_extras:
+        raise HTTPException(status_code=400, detail="É obrigatório fornecer arquivo_docx ou instrucoes_extras.")
     if session_exists:
         redis_service.restore_session_from_state(
             usuario_executor,
