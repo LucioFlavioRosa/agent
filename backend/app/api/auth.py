@@ -40,6 +40,10 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
     for p in projects:
+        # Remove chaves obsoletas
+        p.pop("projeto", None)
+        p.pop("comentario_usuario", None)
+        p.pop("docx_blob_url", None)
         if "nome_projeto" not in p:
             p["nome_projeto"] = p.get("projeto", "")
         if "project_id" not in p:
