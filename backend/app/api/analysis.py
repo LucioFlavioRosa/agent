@@ -24,7 +24,6 @@ class StartAnalysisRequest(BaseModel):
 class StartAnalysisResponse(BaseModel):
     message: str
     project_id: str
-    nome_projeto: Optional[str] = None
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
@@ -82,8 +81,7 @@ async def start_analysis(
         arquivo_docx=texto_extraido,
         comentario_usuario=comentario_usuario,
         usuario_executor=usuario_executor,
-        project_id=project_id_final,
-        nome_projeto=projeto
+        project_id=project_id_final
     )
     mcp_client = MCPClientService()
     try:
@@ -93,6 +91,5 @@ async def start_analysis(
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
     return StartAnalysisResponse(
         message="Análise solicitada com sucesso ao agente.",
-        project_id=project_id_final,
-        nome_projeto=projeto
+        project_id=project_id_final
     )
