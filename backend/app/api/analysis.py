@@ -15,9 +15,9 @@ router = APIRouter()
 logger = logging.getLogger("analysis_api")
 
 class StartAnalysisRequest(BaseModel):
-    projeto: str
+    nome_projeto: str
     analysis_type: str
-    comentario_usuario: Optional[str] = None
+    instrucoes_extras: Optional[str] = None
     arquivo_docx: Optional[str] = None
     project_id: Optional[str] = None
 
@@ -29,19 +29,19 @@ class StartAnalysisResponse(BaseModel):
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
     background_tasks: BackgroundTasks,
-    projeto: str = Body(...),
+    nome_projeto: str = Body(...),
     analysis_type: str = Body(...),
-    comentario_usuario: Optional[str] = Body(None),
+    instrucoes_extras: Optional[str] = Body(None),
     arquivo_docx: Optional[str] = Body(None),
     project_id: Optional[str] = Body(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
-    logger.info(f"Iniciando análise para projeto '{projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
+    logger.info(f"Iniciando análise para projeto '{nome_projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
     project_id_final = project_id
     if not project_id_final:
-        project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, projeto)
+        project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
     if not project_id_final:
         project_id_final = str(uuid.uuid4())
     project_state = None
@@ -62,28 +62,27 @@ async def start_analysis(
     if session_exists:
         redis_service.restore_session_from_state(
             usuario_executor,
-            projeto,
+            nome_projeto,
             analysis_type,
             project_state
         )
     else:
         redis_service.create_session(
             usuario_executor,
-            projeto,
+            nome_projeto,
             analysis_type,
             project_id=project_id_final,
-            comentario_usuario=comentario_usuario,
             extracted_text=texto_extraido
         )
     BackgroundStateSaver.schedule_periodic_save(project_id_final)
     mcp_payload = MCPStartAnalysisPayload(
-        projeto=projeto,
+        projeto=nome_projeto,
         analysis_type=analysis_type,
         arquivo_docx=texto_extraido,
-        comentario_usuario=comentario_usuario,
+        comentario_usuario=instrucoes_extras,
         usuario_executor=usuario_executor,
         project_id=project_id_final,
-        nome_projeto=projeto
+        nome_projeto=nome_projeto
     )
     mcp_client = MCPClientService()
     try:
@@ -94,5 +93,5 @@ async def start_analysis(
     return StartAnalysisResponse(
         message="Análise solicitada com sucesso ao agente.",
         project_id=project_id_final,
-        nome_projeto=projeto
+        nome_projeto=nome_projeto
     )
