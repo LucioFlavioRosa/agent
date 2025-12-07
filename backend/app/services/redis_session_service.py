@@ -29,12 +29,12 @@ class RedisSessionService:
     def _deserialize_session(self, session_json: str) -> dict:
         return json.loads(session_json)
 
-    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None) -> str:
+    def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None) -> str:
         created_at = datetime.utcnow().isoformat()
         last_saved_to_blob = datetime.utcnow().isoformat()
         session_data = {
             "usuario_executor": usuario_executor,
-            "projeto": projeto,
+            "nome_projeto": nome_projeto,
             "analysis_type": analysis_type,
             "created_at": created_at,
             "steps": [],
@@ -109,10 +109,10 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         asyncio.create_task(self._save_to_blob_after_update(project_id))
 
-    def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
+    def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         extracted_text = project_state.get("extracted_text")
         project_id = project_state.get("project_id")
-        self.create_session(usuario_executor, projeto, analysis_type, project_id=project_id, extracted_text=extracted_text)
+        self.create_session(usuario_executor, nome_projeto, analysis_type, project_id=project_id, extracted_text=extracted_text)
         key = f"project:{project_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
@@ -122,7 +122,7 @@ class RedisSessionService:
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["extracted_text"] = extracted_text
         session_data["project_id"] = project_id
-        session_data["projeto"] = projeto
+        session_data["nome_projeto"] = nome_projeto
         session_data["epicos_report"] = project_state.get("epicos_report", [])
         session_data["features_report"] = project_state.get("features_report", [])
         session_data["times_descricao_report"] = project_state.get("times_descricao_report", [])
