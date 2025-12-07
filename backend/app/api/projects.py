@@ -22,10 +22,11 @@ async def check_project(
             return {"exists": False}
         state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id)
         if state:
-            state.pop("analysis_name", None)
+            state.pop("nome_projeto", None)
+            state.pop("comentario_usuario", None)
+            state.pop("docx_blob_url", None)
             logger.info(f"Projeto '{projeto}' encontrado para usuario_executor='{usuario_executor}'. Estado retornado.")
             state["project_id"] = project_id
-            state["nome_projeto"] = state.get("projeto", projeto)
             response = {"exists": True, "state": state}
             return response
         else:
@@ -40,6 +41,6 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
     usuario_executor = _extract_usuario_executor(current_user)
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
     for p in projects:
-        if "nome_projeto" not in p:
-            p["nome_projeto"] = p.get("projeto", "")
+        if "nome_projeto" in p:
+            p.pop("nome_projeto", None)
     return projects
