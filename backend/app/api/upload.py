@@ -18,19 +18,19 @@ logger = logging.getLogger("upload_api")
 async def upload_docx(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    projeto: str = Form(...),
+    nome_projeto: str = Form(...),
     analysis_type: str = Form(...),
-    comentario_usuario: Optional[str] = Form(None),
+    instrucoes_extras: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
     if not file.filename.lower().endswith(".docx"):
         raise HTTPException(status_code=400, detail="Apenas arquivos .docx são permitidos.")
     try:
-        project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, projeto)
+        project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
         if not project_id:
             project_id = str(uuid.uuid4())
-        blob_folder = f"{usuario_executor}/{projeto}/arquivos_recebidos/docx"
+        blob_folder = f"{usuario_executor}/{nome_projeto}/arquivos_recebidos/docx"
         blob_filename = f"{analysis_type}.docx"
         blob_url, texto_extraido = await upload_and_extract_docx(file, blob_folder, blob_filename, background_tasks)
     except ValueError as ve:
@@ -42,11 +42,10 @@ async def upload_docx(
     redis_service = RedisSessionService()
     redis_service.create_session(
         usuario_executor,
-        projeto,
+        nome_projeto,
         analysis_type,
-        comentario_usuario=comentario_usuario,
-        extracted_text=texto_extraido,
-        project_id=project_id
+        project_id=project_id,
+        extracted_text=texto_extraido
     )
     try:
         redis_service.add_docx_file(project_id, blob_url)
@@ -56,15 +55,11 @@ async def upload_docx(
         redis_service.update_session_extracted_text(project_id, texto_extraido)
     except Exception as e:
         logger.error(f"Erro ao salvar texto extraído na sessão: {e}")
-    try:
-        redis_service.update_docx_blob_url(project_id, blob_url)
-    except Exception as e:
-        logger.error(f"Erro ao atualizar docx_blob_url na sessão: {e}")
     mensagem = "Arquivo processado com sucesso. Pronto para análise. (Upload opcional para projetos existentes)"
     return UploadDocxResponse(
         blob_url=blob_url,
         extracted_text=texto_extraido,
         message=mensagem,
         project_id=project_id,
-        nome_projeto=projeto
+        nome_projeto=nome_projeto
     )
