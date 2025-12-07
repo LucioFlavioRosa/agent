@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 _blob_service_client_singleton = None
 _container_client_singleton = None
 
-
 def _get_blob_clients():
     global _blob_service_client_singleton, _container_client_singleton
     connection_string = getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None)
@@ -44,22 +43,7 @@ def _sync_upload(file_bytes: bytes, blob_folder: str, blob_filename: str):
 
 async def upload_docx_to_blob(file: UploadFile, blob_folder: str, blob_filename: str, background_tasks: BackgroundTasks) -> str:
     try:
-        file_bytes = await file.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo: {str(e)}")
-    background_tasks.add_task(
-        _sync_upload, 
-        file_bytes=file_bytes, 
-        blob_folder=blob_folder, 
-        blob_filename=blob_filename
-    )
-    _, container_client = _get_blob_clients()
-    blob_path = f"{blob_folder}/{blob_filename}"
-    blob_client = container_client.get_blob_client(blob_path)
-    return blob_client.url
-
-async def upload_and_extract_docx(file: UploadFile, blob_folder: str, blob_filename: str, background_tasks: BackgroundTasks):
-    try:
+        file.file.seek(0)
         file_bytes = await file.read()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo: {str(e)}")
@@ -72,28 +56,4 @@ async def upload_and_extract_docx(file: UploadFile, blob_folder: str, blob_filen
     _, container_client = _get_blob_clients()
     blob_path = f"{blob_folder}/{blob_filename}"
     blob_client = container_client.get_blob_client(blob_path)
-    blob_url = blob_client.url
-    async def extract_text_from_bytes():
-        try:
-            import tempfile
-            from fastapi import UploadFile as FastAPIUploadFile
-            with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                tmp.write(file_bytes)
-                tmp.flush()
-                tmp.seek(0)
-                class DummyUploadFile:
-                    def __init__(self, filename, content):
-                        self.filename = filename
-                        self.file = io.BytesIO(content)
-                    async def read(self):
-                        self.file.seek(0)
-                        return self.file.read()
-                dummy_file = DummyUploadFile(blob_filename, file_bytes)
-                text = await extract_text_from_docx(dummy_file)
-                return text
-        except Exception as e:
-            logger.error(f"Erro ao extrair texto do docx em paralelo: {e}")
-            return ""
-    text_task = asyncio.create_task(extract_text_from_bytes())
-    extracted_text = await text_task
-    return blob_url, extracted_text
+    return blob_client.url
