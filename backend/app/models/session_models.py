@@ -44,13 +44,6 @@ class SessionData(BaseModel):
 
     @classmethod
     def from_project_state(cls, state: Dict[str, Any]) -> "SessionData":
-        legacy_reports = state.get("reports", {})
-        def get_report_field(field):
-            if field in state and state[field] is not None:
-                return state[field]
-            if legacy_reports and field in legacy_reports and legacy_reports[field] is not None:
-                return legacy_reports[field]
-            return []
         return cls(
             usuario_executor=state.get("usuario_executor", ""),
             projeto=state.get("projeto", ""),
@@ -61,9 +54,9 @@ class SessionData(BaseModel):
             docx_files=state.get("docx_files", []),
             extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
-            epicos_report=get_report_field("epicos_report"),
-            features_report=get_report_field("features_report"),
-            times_descricao_report=get_report_field("times_descricao_report"),
-            alocacao_times_report=get_report_field("alocacao_times_report"),
-            premissas_riscos_report=get_report_field("premissas_riscos_report")
+            epicos_report=state.get("epicos_report", []),
+            features_report=state.get("features_report", []),
+            times_descricao_report=state.get("times_descricao_report", []),
+            alocacao_times_report=state.get("alocacao_times_report", []),
+            premissas_riscos_report=state.get("premissas_riscos_report", [])
         )
