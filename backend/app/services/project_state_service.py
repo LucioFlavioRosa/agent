@@ -10,16 +10,14 @@ class ProjectStateService:
     async def save_state_to_blob(session_data) -> str:
         state = session_data.to_project_state()
         usuario_executor = state.get("usuario_executor")
-        projeto = state.get("projeto")
+        nome_projeto = state.get("nome_projeto")
         project_id = state.get("project_id")
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        # Atualiza last_saved_to_blob para o momento do salvamento
         state["last_saved_to_blob"] = datetime.datetime.utcnow().isoformat()
-        # Remove campos obsoletos do estado antes de salvar
-        state.pop("nome_projeto", None)
+        state.pop("projeto", None)
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
-        blob_folder = f"{usuario_executor}/{projeto}/estados"
+        blob_folder = f"{usuario_executor}/{nome_projeto}/estados"
         blob_filename = f"estado_{timestamp}.json"
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
@@ -40,8 +38,7 @@ class ProjectStateService:
                     state_bytes = blob_client.download_blob().readall()
                     state = json.loads(state_bytes.decode("utf-8"))
                     if state.get("project_id") == project_id:
-                        # Remove campos obsoletos do estado carregado
-                        state.pop("nome_projeto", None)
+                        state.pop("projeto", None)
                         state.pop("comentario_usuario", None)
                         state.pop("docx_blob_url", None)
                         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, project_id={project_id}")
@@ -62,7 +59,7 @@ class ProjectStateService:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                if state.get("projeto") == nome_projeto:
+                if state.get("nome_projeto") == nome_projeto:
                     return state.get("project_id")
         return None
 
@@ -87,23 +84,22 @@ class ProjectStateService:
             for blob in blobs:
                 parts = blob.name.split('/')
                 if len(parts) >= 4 and parts[2] == 'estados' and blob.name.endswith('.json'):
-                    projeto = parts[1]
-                    if projeto not in projects:
-                        projects[projeto] = []
-                    projects[projeto].append(blob)
+                    nome_projeto = parts[1]
+                    if nome_projeto not in projects:
+                        projects[nome_projeto] = []
+                    projects[nome_projeto].append(blob)
             result = []
-            for projeto, blob_list in projects.items():
+            for nome_projeto, blob_list in projects.items():
                 blob_list_sorted = sorted(blob_list, key=lambda b: b.name, reverse=True)
                 latest_blob = blob_list_sorted[0]
                 blob_client = container_client.get_blob_client(latest_blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                # Remove campos obsoletos do estado carregado
-                state.pop("nome_projeto", None)
+                state.pop("projeto", None)
                 state.pop("comentario_usuario", None)
                 state.pop("docx_blob_url", None)
                 item = {
-                    "projeto": state.get("projeto", projeto),
+                    "nome_projeto": state.get("nome_projeto", nome_projeto),
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
@@ -128,8 +124,7 @@ class ProjectStateService:
         for p in projects:
             if isinstance(p, dict):
                 p = dict(p)
-                p.pop("analysis_name", None)
-                p.pop("nome_projeto", None)
+                p.pop("projeto", None)
                 p.pop("comentario_usuario", None)
                 p.pop("docx_blob_url", None)
                 if "project_id" not in p or not p["project_id"]:
