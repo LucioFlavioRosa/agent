@@ -29,22 +29,20 @@ class RedisSessionService:
     def _deserialize_session(self, session_json: str) -> dict:
         return json.loads(session_json)
 
-    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, project_id: str, comentario_usuario: Optional[str] = None, extracted_text: Optional[str] = None, docx_blob_url: Optional[str] = None) -> str:
+    def create_session(self, usuario_executor: str, projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None) -> str:
         created_at = datetime.utcnow().isoformat()
+        last_saved_to_blob = datetime.utcnow().isoformat()
         session_data = {
             "usuario_executor": usuario_executor,
             "projeto": projeto,
             "analysis_type": analysis_type,
             "created_at": created_at,
             "steps": [],
-            "last_saved_to_blob": None,
+            "last_saved_to_blob": last_saved_to_blob,
             "docx_files": [],
-            "comentario_usuario": comentario_usuario,
             "extracted_text": extracted_text,
             "project_id": project_id,
-            "nome_projeto": projeto,
-            "reports": {},
-            "docx_blob_url": docx_blob_url
+            "reports": {}
         }
         self.redis_client.setex(f"project:{project_id}", self.session_ttl, self._serialize_session(session_data))
         return project_id
@@ -101,18 +99,16 @@ class RedisSessionService:
         session_data = self._deserialize_session(session_json)
         if not isinstance(report_data, dict) or len(report_data) != 1:
             raise ValueError("report_data deve ser um dicionário com exatamente uma chave de relatório")
-        for report_field, value in report_data.items():
-            session_data[report_field] = value
+        report_field = list(report_data.keys())[0]
+        session_data[report_field] = report_data[report_field]
+        session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         asyncio.create_task(self._save_to_blob_after_update(project_id))
 
     def restore_session_from_state(self, usuario_executor: str, projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
-        comentario_usuario = project_state.get("comentario_usuario")
         extracted_text = project_state.get("extracted_text")
         project_id = project_state.get("project_id")
-        nome_projeto = project_state.get("nome_projeto") or project_state.get("projeto") or projeto
-        docx_blob_url = project_state.get("docx_blob_url")
-        self.create_session(usuario_executor, nome_projeto, analysis_type, project_id=project_id, comentario_usuario=comentario_usuario, extracted_text=extracted_text, docx_blob_url=docx_blob_url)
+        self.create_session(usuario_executor, projeto, analysis_type, project_id=project_id, extracted_text=extracted_text)
         key = f"project:{project_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
@@ -130,12 +126,9 @@ class RedisSessionService:
         session_data["reports"] = reports
         session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
         session_data["docx_files"] = project_state.get("docx_files", [])
-        session_data["comentario_usuario"] = comentario_usuario
         session_data["extracted_text"] = extracted_text
         session_data["project_id"] = project_id
-        session_data["nome_projeto"] = nome_projeto
-        session_data["projeto"] = nome_projeto
-        session_data["docx_blob_url"] = docx_blob_url
+        session_data["projeto"] = projeto
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
@@ -149,24 +142,6 @@ class RedisSessionService:
             session_data["docx_files"] = []
         if blob_url not in session_data["docx_files"]:
             session_data["docx_files"].append(blob_url)
-        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-
-    def update_docx_blob_url(self, project_id: str, blob_url: str):
-        key = f"project:{project_id}"
-        session_json = self.redis_client.get(key)
-        if not session_json:
-            raise ValueError(f"Projeto {project_id} não encontrado no Redis.")
-        session_data = self._deserialize_session(session_json)
-        session_data["docx_blob_url"] = blob_url
-        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-
-    def update_session_extracted_text(self, project_id: str, extracted_text: str):
-        key = f"project:{project_id}"
-        session_json = self.redis_client.get(key)
-        if not session_json:
-            raise ValueError(f"Projeto {project_id} não encontrado no Redis.")
-        session_data = self._deserialize_session(session_json)
-        session_data["extracted_text"] = extracted_text
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def update_session_on_state_change(self, project_id: str, updated_fields: Dict[str, Any]):
