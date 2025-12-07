@@ -9,13 +9,13 @@ class ProjectStateService:
     @staticmethod
     async def save_state_to_blob(session_data) -> str:
         state = session_data.to_project_state()
+        state.pop("nome_projeto", None)
+        state.pop("comentario_usuario", None)
+        state.pop("docx_blob_url", None)
+        state["last_saved_to_blob"] = datetime.datetime.utcnow().isoformat()
         usuario_executor = state.get("usuario_executor")
         projeto = state.get("projeto")
         project_id = state.get("project_id")
-        nome_projeto = state.get("nome_projeto") or projeto
-        state["project_id"] = project_id
-        state["nome_projeto"] = nome_projeto
-        state["docx_blob_url"] = state.get("docx_blob_url")
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         blob_folder = f"{usuario_executor}/{projeto}/estados"
         blob_filename = f"estado_{timestamp}.json"
@@ -38,6 +38,9 @@ class ProjectStateService:
                     state_bytes = blob_client.download_blob().readall()
                     state = json.loads(state_bytes.decode("utf-8"))
                     if state.get("project_id") == project_id:
+                        state.pop("nome_projeto", None)
+                        state.pop("comentario_usuario", None)
+                        state.pop("docx_blob_url", None)
                         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, project_id={project_id}")
                         return state
             logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}")
@@ -92,16 +95,16 @@ class ProjectStateService:
                 blob_client = container_client.get_blob_client(latest_blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
+                state.pop("nome_projeto", None)
+                state.pop("comentario_usuario", None)
+                state.pop("docx_blob_url", None)
                 item = {
                     "projeto": state.get("projeto", projeto),
-                    "nome_projeto": state.get("nome_projeto", projeto),
                     "analysis_type": state.get("analysis_type"),
                     "created_at": state.get("created_at"),
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
                     "project_id": state.get("project_id"),
-                    "docx_blob_url": state.get("docx_blob_url"),
                     "docx_files": state.get("docx_files", []),
-                    "comentario_usuario": state.get("comentario_usuario"),
                     "extracted_text": state.get("extracted_text"),
                     "epicos_report": state.get("epicos_report"),
                     "features_report": state.get("features_report"),
@@ -121,7 +124,9 @@ class ProjectStateService:
         for p in projects:
             if isinstance(p, dict):
                 p = dict(p)
-                p.pop("analysis_name", None)
+                p.pop("nome_projeto", None)
+                p.pop("comentario_usuario", None)
+                p.pop("docx_blob_url", None)
                 if "project_id" not in p or not p["project_id"]:
                     continue
                 sanitized.append(p)
