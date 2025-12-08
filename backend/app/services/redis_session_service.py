@@ -113,10 +113,11 @@ class RedisSessionService:
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
         report_value = report_data[report_field]
+        # Atualização seletiva: apenas o campo presente em report_data é atualizado, os demais são preservados
         if report_value is not None:
             session_data[report_field] = report_value
             session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
-        # Preserva os demais campos de relatório e não altera analysis_type, exceto se explicitamente presente
+        # Não altera outros campos de relatório
         if "analysis_type" in report_data:
             session_data["analysis_type"] = report_data["analysis_type"]
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
