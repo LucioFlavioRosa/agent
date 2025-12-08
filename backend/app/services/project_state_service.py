@@ -6,6 +6,8 @@ from backend.app.services.blob_storage_service import _get_blob_clients
 import logging
 
 class ProjectStateService:
+    _project_id_cache = {}
+
     @staticmethod
     async def save_state_to_blob(session_data) -> str:
         state = session_data.to_project_state()
@@ -20,6 +22,7 @@ class ProjectStateService:
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
+        ProjectStateService._invalidate_project_id_cache(nome_projeto)
         return blob_client.url
 
     @staticmethod
@@ -48,6 +51,9 @@ class ProjectStateService:
 
     @staticmethod
     async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
+        cache_key = f"{usuario_executor}:{nome_projeto}"
+        if cache_key in ProjectStateService._project_id_cache:
+            return ProjectStateService._project_id_cache[cache_key]
         _, container_client = _get_blob_clients()
         prefix = f"{usuario_executor}/"
         blobs = list(container_client.list_blobs(name_starts_with=prefix))
@@ -57,8 +63,16 @@ class ProjectStateService:
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
                 if state.get("nome_projeto") == nome_projeto:
-                    return state.get("project_id")
+                    project_id = state.get("project_id")
+                    ProjectStateService._project_id_cache[cache_key] = project_id
+                    return project_id
         return None
+
+    @staticmethod
+    def _invalidate_project_id_cache(nome_projeto: str):
+        keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto}")]
+        for k in keys_to_remove:
+            del ProjectStateService._project_id_cache[k]
 
     @staticmethod
     async def get_latest_analysis_metadata(usuario_executor: str, project_id: Optional[str] = None) -> Dict[str, str]:
