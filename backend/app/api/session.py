@@ -21,7 +21,6 @@ def get_project_reports(project_id: str):
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
         state.pop("extracted_text", None)
-        # Passo 7: Normalização dos campos de relatório antes de retornar
         report_fields = [
             "epicos_report",
             "features_report",
@@ -52,19 +51,22 @@ def get_project_reports(project_id: str):
 @router.put("/project/{project_id}/report")
 def update_project_report(project_id: str, req: UpdateReportRequest):
     redis_service = RedisSessionService()
+    logger = logging.getLogger("session_api")
     try:
         if not req.report_data or not isinstance(req.report_data, dict) or len(req.report_data) != 1:
             raise HTTPException(status_code=400, detail="report_data deve ser um dicionário com exatamente uma chave de relatório.")
+        session_before = redis_service.get_session_by_project_id(project_id)
+        logger.debug(f"[SESSION] Antes da atualização: {[getattr(session_before, rf, None) for rf in ['epicos_report','features_report','times_descricao_report','alocacao_times_report','premissas_riscos_report']]}")
         redis_service.update_report(project_id, req.report_data)
-        session = redis_service.get_session_by_project_id(project_id)
-        # Dispara o salvamento automático do estado completo no Blob Storage
+        session_after = redis_service.get_session_by_project_id(project_id)
+        logger.debug(f"[SESSION] Depois da atualização: {[getattr(session_after, rf, None) for rf in ['epicos_report','features_report','times_descricao_report','alocacao_times_report','premissas_riscos_report']]}")
         import asyncio
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            loop.create_task(ProjectStateService.save_state_to_blob(session))
+            loop.create_task(ProjectStateService.save_state_to_blob(session_after))
         else:
-            loop.run_until_complete(ProjectStateService.save_state_to_blob(session))
-        return {"status": "ok", "project_id": project_id, "nome_projeto": session.nome_projeto}
+            loop.run_until_complete(ProjectStateService.save_state_to_blob(session_after))
+        return {"status": "ok", "project_id": project_id, "nome_projeto": session_after.nome_projeto}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao atualizar relatório: {e}")
 
