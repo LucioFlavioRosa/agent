@@ -109,14 +109,14 @@ class RedisSessionService:
             "alocacao_times_report",
             "premissas_riscos_report"
         ]
+        if len(list(report_data.keys()))>1:
+            raise ValueError(f"erro, deve haver apenas uma chave o report")
         report_field = list(report_data.keys())[0]
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
         report_value = report_data[report_field]
-        # Atualização seletiva: apenas o campo presente em report_data é atualizado, os demais são preservados
-        if report_value is not None:
-            session_data[report_field] = report_value
-            session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
+        session_data[report_field] = report_value
+        session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
         # Não altera outros campos de relatório
         if "analysis_type" in report_data:
             session_data["analysis_type"] = report_data["analysis_type"]
