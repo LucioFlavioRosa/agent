@@ -17,7 +17,7 @@ class MCPWebhookPayload(BaseModel):
             raise ValueError(f"status deve ser um dos: {allowed}")
         return v
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_report_data_structure(cls, values):
         status = values.get('status')
         report_data = values.get('report_data')
