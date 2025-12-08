@@ -39,12 +39,7 @@ class RedisSessionService:
             "created_at": created_at,
             "last_saved_to_blob": last_saved_to_blob,
             "docx_files": [],
-            "project_id": project_id,
-            "epicos_report": [],
-            "features_report": [],
-            "times_descricao_report": [],
-            "alocacao_times_report": [],
-            "premissas_riscos_report": []
+            "project_id": project_id
         }
         if extracted_text is not None:
             session_data["extracted_text"] = extracted_text
@@ -114,14 +109,6 @@ class RedisSessionService:
         session_data["last_modified"] = datetime.utcnow().isoformat()
         self.logger.debug(f"Atualizando campo de relatório '{report_field}' para project_id={project_id}. Valor anterior: {valor_anterior} | Novo valor: {report_value}")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(ProjectStateService.save_state_to_blob(SessionData(**session_data)))
-            else:
-                loop.run_until_complete(ProjectStateService.save_state_to_blob(SessionData(**session_data)))
-        except Exception as e:
-            self.logger.error(f"Erro ao disparar salvamento do estado completo no Blob após update_report: {e}")
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
