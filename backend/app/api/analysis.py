@@ -60,6 +60,7 @@ async def start_analysis(
         raise HTTPException(status_code=400, detail="É obrigatório fornecer arquivo_docx ou comentario_extra.")
     session_exists = bool(project_state)
     if session_exists:
+        # Apenas restaura a sessão do estado existente, sem sobrescrever campos de relatório
         redis_service.restore_session_from_state(
             usuario_executor,
             nome_projeto,
@@ -67,6 +68,7 @@ async def start_analysis(
             project_state
         )
     else:
+        # Criação inicial: campos de relatório vazios
         redis_service.create_session(
             usuario_executor,
             nome_projeto,
