@@ -21,7 +21,10 @@ class ProjectStateService:
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
+        logger = logging.getLogger("ProjectStateService")
+        logger.debug(f"[save_state_to_blob] Estado ANTES do salvamento: {json.dumps(state, ensure_ascii=False)}")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
+        logger.debug(f"[save_state_to_blob] Estado DEPOIS do salvamento: {json.dumps(state, ensure_ascii=False)}")
         ProjectStateService._invalidate_project_id_cache(nome_projeto)
         return blob_client.url
 
