@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 
 class MCPStartAnalysisPayload(BaseModel):
@@ -15,14 +15,6 @@ class MCPStartAnalysisPayload(BaseModel):
         if not v or not isinstance(v, str) or not v.strip():
             raise ValueError('analysis_type deve ser uma string não vazia')
         return v
-
-    @root_validator
-    def at_least_one_text_field(cls, values):
-        arquivo_docx = values.get('arquivo_docx')
-        comentario_usuario = values.get('comentario_usuario')
-        if (not arquivo_docx or not str(arquivo_docx).strip()) and (not comentario_usuario or not str(comentario_usuario).strip()):
-            raise ValueError('É obrigatório fornecer pelo menos arquivo_docx (texto extraído) ou comentario_usuario.')
-        return values
 
 class MCPStartAnalysisResponse(BaseModel):
     project_id: str = Field(..., description="Identificador único do projeto.")
