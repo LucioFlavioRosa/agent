@@ -104,10 +104,12 @@ class RedisSessionService:
         if not isinstance(report_data, dict) or len(report_data) != 1:
             raise ValueError("report_data deve ser um dicionário com exatamente uma chave de relatório")
         report_field = list(report_data.keys())[0]
-        session_data[report_field] = report_data[report_field]
-        session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
-        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-        asyncio.create_task(self._save_to_blob_after_update(project_id))
+        report_value = report_data[report_field]
+        if report_value is not None:
+            session_data[report_field] = report_value
+            session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
+            self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+            asyncio.create_task(self._save_to_blob_after_update(project_id))
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         extracted_text = project_state.get("extracted_text")
