@@ -41,8 +41,9 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
     redis_service = RedisSessionService()
+    import logging
+    logger = logging.getLogger("auth_api")
     for p in projects:
-        # Remove chaves obsoletas
         p.pop("projeto", None)
         p.pop("comentario_usuario", None)
         p.pop("docx_blob_url", None)
@@ -50,14 +51,14 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
             p["nome_projeto"] = p.get("projeto", "")
         if "project_id" not in p:
             p["project_id"] = p.get("project_id", "")
-        # Salva o estado mais recente no Redis, sem criar ou modificar o estado
         try:
+            logger.debug(f"Sincronizando sessão do projeto '{p.get('nome_projeto')}' (project_id={p.get('project_id')}) no Redis após login.")
             redis_service.restore_session_from_state(
                 usuario_executor=p.get("usuario_executor", usuario_executor),
                 nome_projeto=p.get("nome_projeto", ""),
                 analysis_type=p.get("analysis_type", ""),
                 project_state=p
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Erro ao restaurar sessão do projeto '{p.get('nome_projeto')}' (project_id={p.get('project_id')}): {e}")
     return AuthLoginResponse(user_info=current_user, projects=projects)
