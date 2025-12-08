@@ -122,7 +122,7 @@ flowchart TD
 
 ## Fluxos Críticos de Negócio
 
-### 1. Fluxo de Novo Projeto
+### 1. Fluxo de Novo Projeto (Criação de project_id)
 mermaid
 sequenceDiagram
     participant FE as Frontend
@@ -136,19 +136,25 @@ sequenceDiagram
     BE->>BS: Lista projetos
     BE-->>FE: Lista de projetos
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras, arquivo_docx)
-    BE->>BE: Busca ou cria project_id correspondente ao nome do projeto
+    BE->>BE: Busca project_id pelo nome do projeto
+    alt Projeto não existe
+        BE->>BE: Cria novo project_id (uuid)
+        BE->>RS: Cria sessão (com novo project_id)
+    else Projeto já existe
+        BE->>BE: Usa project_id existente
+        BE->>RS: Restaura sessão do estado existente
+    end
     BE->>BE: Extrai texto do arquivo docx
     par Processamento paralelo
         BE->>BS: Salva arquivo docx no Blob Storage
         BE->>BE: Extrai texto do arquivo docx
     end
-    BE->>RS: Cria sessão (com campos de relatório individuais, project_id e nome_projeto)
     BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído do arquivo docx)
     MCP-->>BE: job_id, project_id
     BE->>BS: Salva estado inicial
     BE-->>FE: job_id, project_id, nome_projeto
 
-### 2. Fluxo de Projeto Existente
+### 2. Fluxo de Projeto Existente (Reutilização de project_id)
 mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
@@ -206,3 +212,5 @@ sequenceDiagram
 - Toda a comunicação com o MCP utiliza o project_id como identificador principal.
 - Todos os relatórios são salvos em campos individuais (`epicos_report`, `features_report`, etc). Não existe mais a chave `reports` ou campos obsoletos no estado do projeto ou sessão.
 - O backend aceita o campo "nome_projeto" do frontend, converte internamente para project_id, e responde sempre com ambos.
+- O project_id é criado apenas quando o projeto é novo. Para projetos existentes, o project_id é lido do estado e mantido como referência única para todas as ações futuras relacionadas ao projeto.
+- O ProjectStateService mantém um cache local do mapeamento nome_projeto → project_id, que é invalidado sempre que um novo estado é salvo no Blob Storage (ex: criação de projeto novo ou atualização de estado). Isso reduz chamadas desnecessárias ao Blob Storage e garante consistência do identificador.
