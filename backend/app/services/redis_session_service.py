@@ -105,7 +105,6 @@ class RedisSessionService:
         report_field = list(report_data.keys())[0]
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
-        # Passo 2: garantir que o campo existe e é lista
         if report_field not in session_data or session_data[report_field] is None or not isinstance(session_data[report_field], list):
             self.logger.debug(f"Campo '{report_field}' não existia ou era None. Inicializando como lista vazia antes de atualizar.")
             session_data[report_field] = []
@@ -126,35 +125,12 @@ class RedisSessionService:
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
-        self.create_session(usuario_executor, nome_projeto, analysis_type, project_id=project_id)
-        key = f"project:{project_id}"
-        session_json = self.redis_client.get(key)
-        if not session_json:
-            raise ValueError(f"Projeto {project_id} não encontrado no Redis.")
-        session_data = self._deserialize_session(session_json)
-        session_data["last_saved_to_blob"] = project_state.get("last_saved_to_blob")
-        session_data["docx_files"] = project_state.get("docx_files", [])
-        session_data["project_id"] = project_id
+        session_data = dict(project_state)
+        session_data["usuario_executor"] = usuario_executor
         session_data["nome_projeto"] = nome_projeto
-        # Passo 3: garantir que todos os campos de relatório sejam listas
-        normalized_fields = 0
-        for report_field in [
-            "epicos_report",
-            "features_report",
-            "times_descricao_report",
-            "alocacao_times_report",
-            "premissas_riscos_report"
-        ]:
-            valor = project_state.get(report_field)
-            if valor is None or not isinstance(valor, list):
-                session_data[report_field] = []
-                normalized_fields += 1
-                self.logger.warning(f"Campo de relatório '{report_field}' estava None ou ausente ao restaurar do estado do projeto. Inicializando como lista vazia.")
-            else:
-                session_data[report_field] = valor
+        session_data["analysis_type"] = analysis_type
+        key = f"project:{project_id}"
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-        if normalized_fields > 0:
-            self.logger.info(f"Normalização: {normalized_fields} campos de relatório convertidos para lista ao restaurar sessão do estado.")
         return project_id
 
     def add_docx_file(self, project_id: str, blob_url: str):
