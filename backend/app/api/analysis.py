@@ -61,8 +61,7 @@ async def start_analysis(
             blob_filename,
             background_tasks
         )
-    if not texto_extraido and not comentario_extra:
-        raise HTTPException(status_code=400, detail="É obrigatório fornecer arquivo_docx ou comentario_extra.")
+    # Removido: validação obrigatória de arquivo_docx ou comentario_extra
     if project_state:
         redis_service.restore_session_from_state(
             usuario_executor,
