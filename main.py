@@ -46,10 +46,28 @@ DATA_EPICOS = {
     ]
 }
 
+DATA_EPICOS_REFINAMENTO = {
+    "epicos_report": [
+        { "id": 1, "titulo": "Autenticação e Segurança para a primeira fase", 
+         "descricao": "Implementar login via Azure AD sem ser multi tenant.", "prioridade": "Alta" },
+        { "id": 2, "titulo": "Processamento de Documentos", "descricao": "Upload e extração de texto.", "prioridade": "Alta" }
+    ]
+}
+
 DATA_FEATURES = {
     "features_report": [
         {"id": 101, "epico_id": 1, "nome": "Configurar App Registration Azure", "descricao": "Criar app no entra ID"},
         {"id": 102, "epico_id": 1, "nome": "Middleware de Validação JWT", "descricao": "Validar token no backend Python"}
+    ]
+}
+
+DATA_FEATURES_REFINAMENTO = {
+    "features_report": [
+        {"id": 101, "epico_id": 1, "nome": "Configurar App Registration Azure", 
+         "descricao": "Criar app no entra ID",
+        "critério_de_aceite": "eu tenho que conseguir registrar usuários externos"},
+        {"id": 102, "epico_id": 1, "nome": "Middleware de Validação JWT", 
+         "descricao": "Validar token no backend Python"}
     ]
 }
 
@@ -80,12 +98,17 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
         }
     else:
         # Seleção de Payload
-        if "features" in analysis_type:
+        if "criacao_features_azure_devops" in analysis_type:
             report_data = DATA_FEATURES
+        elif "refinamento_features_azure_devops" in analysis_type:
+            report_data = DATA_FEATURES_REFINAMENTO
+        elif "criacao_epicos_azure_devops" in analysis_type:
+            report_data = DATA_EPICOS
+        elif "refinamento_epicos_azure_devops" in analysis_type:
+            report_data = DATA_EPICOS_REFINAMENTO
         elif "riscos" in analysis_type or "tech_debt" in analysis_type:
             report_data = DATA_RISCOS
-        else:
-            report_data = DATA_EPICOS
+        
 
     # PREPARAÇÃO DO PAYLOAD (Conforme Doc 2.1)
     webhook_payload = {
