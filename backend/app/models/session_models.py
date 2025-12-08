@@ -41,7 +41,6 @@ class SessionData(BaseModel):
             "alocacao_times_report": self.alocacao_times_report if self.alocacao_times_report is not None else [],
             "premissas_riscos_report": self.premissas_riscos_report if self.premissas_riscos_report is not None else []
         }
-        # Remove campos obsoletos se presentes
         state.pop("projeto", None)
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
