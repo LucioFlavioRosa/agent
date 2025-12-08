@@ -19,7 +19,10 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
         if not session:
             logger.error(f"Webhook recebido para project_id não encontrado: {payload.project_id}. Estado do Redis pode estar inconsistente.")
             raise HTTPException(status_code=404, detail=f"Sessão não encontrada para project_id: {payload.project_id}")
-        if payload.status in {"in_progress", "done"}:
+        if payload.status == "in_progress":
+            logger.info(f"Webhook MCP status 'in_progress' recebido para project_id {payload.project_id}. Nenhuma atualização de estado será feita.")
+            return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
+        elif payload.status == "done":
             report_data = payload.report_data
             if not report_data or not isinstance(report_data, dict) or len(report_data) != 1:
                 logger.error(f"Estrutura de report_data inválida para project_id '{payload.project_id}'")
@@ -32,8 +35,7 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             redis_service.update_report(payload.project_id, report_data)
             logger.info(f"Campo de relatório '{report_field}' atualizado via webhook para project_id {payload.project_id}. Valor anterior: {valor_anterior}")
             session = redis_service.get_session_by_project_id(payload.project_id)
-            if payload.status == "done":
-                await ProjectStateService.save_state_to_blob(session)
+            await ProjectStateService.save_state_to_blob(session)
             state = session.to_project_state()
             return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto, "state": state}
         elif payload.status == "error":
