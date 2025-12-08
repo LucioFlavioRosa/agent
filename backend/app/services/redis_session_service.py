@@ -30,6 +30,10 @@ class RedisSessionService:
         return json.loads(session_json)
 
     def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None) -> str:
+        key = f"project:{project_id}"
+        if self.redis_client.exists(key):
+            self.logger.warning(f"Sessão já existe para project_id={project_id}. Não será criada nova sessão.")
+            return project_id
         created_at = datetime.utcnow().isoformat()
         last_saved_to_blob = datetime.utcnow().isoformat()
         session_data = {
@@ -43,7 +47,7 @@ class RedisSessionService:
         }
         if extracted_text is not None:
             session_data["extracted_text"] = extracted_text
-        self.redis_client.setex(f"project:{project_id}", self.session_ttl, self._serialize_session(session_data))
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
     def get_session_by_project_id(self, project_id: str) -> SessionData:
