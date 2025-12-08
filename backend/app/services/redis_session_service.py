@@ -116,11 +116,18 @@ class RedisSessionService:
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
+        key = f"project:{project_id}"
         session_data = dict(project_state)
         session_data["usuario_executor"] = usuario_executor
         session_data["nome_projeto"] = nome_projeto
         session_data["analysis_type"] = analysis_type
-        key = f"project:{project_id}"
+        # Validação de consistência do project_id
+        if not project_id:
+            self.logger.error(f"[restore_session_from_state] Estado não contém project_id para nome_projeto='{nome_projeto}'.")
+            raise ValueError(f"Estado do projeto não contém project_id para nome_projeto='{nome_projeto}'.")
+        if "project_id" in session_data and session_data["project_id"] != project_id:
+            self.logger.critical(f"[restore_session_from_state] Divergência de project_id detectada: project_id do estado='{session_data['project_id']}', esperado='{project_id}'.")
+            raise ValueError(f"Divergência de project_id detectada ao restaurar sessão: estado='{session_data['project_id']}', esperado='{project_id}'")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
