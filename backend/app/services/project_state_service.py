@@ -17,7 +17,7 @@ class ProjectStateService:
         state.pop("projeto", None)
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
-        # Garante que todos os campos de relatório estejam presentes e não sobrescreve nenhum campo existente
+        state.pop("extracted_text", None)
         report_fields = [
             "epicos_report",
             "features_report",
@@ -54,6 +54,7 @@ class ProjectStateService:
                         state.pop("projeto", None)
                         state.pop("comentario_usuario", None)
                         state.pop("docx_blob_url", None)
+                        state.pop("extracted_text", None)
                         logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, project_id={project_id}")
                         return state
             logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}")
@@ -111,6 +112,7 @@ class ProjectStateService:
                 state.pop("projeto", None)
                 state.pop("comentario_usuario", None)
                 state.pop("docx_blob_url", None)
+                state.pop("extracted_text", None)
                 report_fields = [
                     "epicos_report",
                     "features_report",
@@ -130,7 +132,6 @@ class ProjectStateService:
                     "last_saved_to_blob": state.get("last_saved_to_blob"),
                     "project_id": state.get("project_id"),
                     "docx_files": state.get("docx_files", []),
-                    "extracted_text": state.get("extracted_text"),
                     "epicos_report": state.get("epicos_report"),
                     "features_report": state.get("features_report"),
                     "times_descricao_report": state.get("times_descricao_report"),
@@ -152,6 +153,7 @@ class ProjectStateService:
                 p.pop("projeto", None)
                 p.pop("comentario_usuario", None)
                 p.pop("docx_blob_url", None)
+                p.pop("extracted_text", None)
                 if "project_id" not in p or not p["project_id"]:
                     continue
                 sanitized.append(p)
