@@ -33,12 +33,10 @@ async def start_analysis(
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{nome_projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
-    # Busca o project_id pelo nome do projeto
     project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
     project_state = None
     session_exists = False
     if project_id_final:
-        # Projeto já existe, carrega o estado mais recente do projeto
         project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id_final)
         try:
             redis_service.get_session_by_project_id(project_id_final)
@@ -46,7 +44,6 @@ async def start_analysis(
         except Exception:
             session_exists = False
     else:
-        # Projeto novo, gera novo project_id
         project_id_final = str(uuid.uuid4())
     texto_extraido = None
     blob_url = None
@@ -67,7 +64,6 @@ async def start_analysis(
     if not texto_extraido and not comentario_extra:
         raise HTTPException(status_code=400, detail="É obrigatório fornecer arquivo_docx ou comentario_extra.")
     if project_state:
-        # Projeto existente: restaura sessão a partir do estado
         redis_service.restore_session_from_state(
             usuario_executor,
             nome_projeto,
@@ -75,13 +71,13 @@ async def start_analysis(
             project_state
         )
     else:
-        # Projeto novo: cria nova sessão
         redis_service.create_session(
             usuario_executor,
             nome_projeto,
             analysis_type,
             project_id=project_id_final,
-            extracted_text=texto_extraido
+            extracted_text=texto_extraido,
+            initial_state=None
         )
     if blob_url:
         redis_service.add_docx_file(project_id_final, blob_url)
