@@ -15,11 +15,9 @@ def get_project_reports(project_id: str):
     try:
         session = redis_service.get_session_by_project_id(project_id)
         state = session.to_project_state()
-        # Remove chaves obsoletas
         state.pop("projeto", None)
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
-        # Monta resposta apenas com campos individuais de relatório
         reports = {
             "epicos_report": state.get("epicos_report"),
             "features_report": state.get("features_report"),
@@ -39,7 +37,6 @@ def update_project_report(project_id: str, req: UpdateReportRequest):
     try:
         if not req.report_data or not isinstance(req.report_data, dict) or len(req.report_data) != 1:
             raise HTTPException(status_code=400, detail="report_data deve ser um dicionário com exatamente uma chave de relatório.")
-        # Atualiza apenas o campo de relatório específico recebido
         redis_service.update_report(project_id, req.report_data)
         redis_service.update_session_on_state_change(project_id, {})
         session = redis_service.get_session_by_project_id(project_id)
