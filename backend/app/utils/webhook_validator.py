@@ -27,4 +27,5 @@ def validate_report_data_structure(report_data: dict, analysis_type: str) -> boo
     unexpected_keys = set(report_data.keys()) - set(valid_report_fields)
     if unexpected_keys:
         logger.warning(f"report_data contém chaves inesperadas: {unexpected_keys}")
+    logger.info(f"Estrutura de report_data válida para campo '{report_field}' e analysis_type '{analysis_type}'")
     return True
