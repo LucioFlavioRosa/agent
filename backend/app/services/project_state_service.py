@@ -26,46 +26,51 @@ class ProjectStateService:
         return blob_client.url
 
     @staticmethod
-    async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None) -> Optional[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
-        if project_id:
-            _, container_client = _get_blob_clients()
-            prefix = f"{usuario_executor}/"
-            blobs = list(container_client.list_blobs(name_starts_with=prefix))
-            for blob in blobs:
-                if blob.name.endswith('.json'):
-                    blob_client = container_client.get_blob_client(blob.name)
-                    state_bytes = blob_client.download_blob().readall()
-                    state = json.loads(state_bytes.decode("utf-8"))
-                    if state.get("project_id") == project_id:
-                        state.pop("projeto", None)
-                        state.pop("comentario_usuario", None)
-                        state.pop("docx_blob_url", None)
-                        state.pop("extracted_text", None)
-                        return state
-            logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}")
-            return None
-        else:
-            logger.info(f"Nenhum parâmetro fornecido para buscar estado.")
-            return None
+        _, container_client = _get_blob_clients()
+        prefix = f"{usuario_executor}/"
+        blobs = list(container_client.list_blobs(name_starts_with=prefix))
+        states = []
+        for blob in blobs:
+            if blob.name.endswith('.json'):
+                blob_client = container_client.get_blob_client(blob.name)
+                state_bytes = blob_client.download_blob().readall()
+                state = json.loads(state_bytes.decode("utf-8"))
+                state.pop("projeto", None)
+                state.pop("comentario_usuario", None)
+                state.pop("docx_blob_url", None)
+                state.pop("extracted_text", None)
+                if project_id and state.get("project_id") == project_id:
+                    return state
+                if nome_projeto and state.get("nome_projeto") == nome_projeto:
+                    states.append((blob, state))
+        if nome_projeto and states:
+            # Ordena pelo campo last_saved_to_blob (desc) ou nome do blob (desc)
+            def get_sort_key(item):
+                state = item[1]
+                ts = state.get("last_saved_to_blob")
+                if ts:
+                    try:
+                        return datetime.datetime.fromisoformat(ts)
+                    except Exception:
+                        pass
+                return datetime.datetime.min
+            states_sorted = sorted(states, key=get_sort_key, reverse=True)
+            return states_sorted[0][1]
+        logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}, nome_projeto={nome_projeto}")
+        return None
 
     @staticmethod
     async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
         cache_key = f"{usuario_executor}:{nome_projeto}"
         if cache_key in ProjectStateService._project_id_cache:
             return ProjectStateService._project_id_cache[cache_key]
-        _, container_client = _get_blob_clients()
-        prefix = f"{usuario_executor}/"
-        blobs = list(container_client.list_blobs(name_starts_with=prefix))
-        for blob in blobs:
-            if blob.name.endswith('.json'):
-                blob_client = container_client.get_blob_client(blob.name)
-                state_bytes = blob_client.download_blob().readall()
-                state = json.loads(state_bytes.decode("utf-8"))
-                if state.get("nome_projeto") == nome_projeto:
-                    project_id = state.get("project_id")
-                    ProjectStateService._project_id_cache[cache_key] = project_id
-                    return project_id
+        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=None, nome_projeto=nome_projeto)
+        if state and state.get("project_id"):
+            project_id = state.get("project_id")
+            ProjectStateService._project_id_cache[cache_key] = project_id
+            return project_id
         return None
 
     @staticmethod
