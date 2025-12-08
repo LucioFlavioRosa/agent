@@ -15,7 +15,7 @@
   - [5.3 Salvar Estado do Projeto (POST /session/project/{project_id}/save-state)](#53-salvar-estado-do-projeto-post-sessionprojectproject_idsave-state)
   - [5.4 Listar Arquivos DOCX do Projeto (GET /session/project/{project_id}/docx-files)](#54-listar-arquivos-docx-do-projeto-get-sessionprojectproject_iddocx-files)
 - [6. Webhooks MCP → Backend](#6-webhooks-mcp--backend)
-  - [6.1 Webhook de Progresso/Conclusão/Erro (POST /webhooks/mcp)](#61-webhook-de-progresso-conclusão-erro-post-webhooksmcp)
+  - [6.1 Webhook de Progresso/Conclusão/Erro (POST /webhooksmcp)](#61-webhook-de-progresso-conclusão-erro-post-webhooksmcp)
 - [7. Tratamento de Erros](#7-tratamento-de-erros)
 - [8. Fluxo Completo de Comunicação Frontend ↔ Backend ↔ MCP](#8-fluxo-completo-de-comunicação-frontend-↔-backend-↔-mcp)
 - [9. Boas Práticas de Integração](#9-boas-práticas-de-integração)
@@ -38,12 +38,9 @@ Obtém as informações necessárias para autenticação via Azure AD no fronten
 
 **Requisição:**
 
-
 GET /auth/config HTTP/1.1
 
-
 **Resposta:**
-
 
 {
   "client_id": "<client-id>",
@@ -52,7 +49,6 @@ GET /auth/config HTTP/1.1
   "redirect_uri": "http://localhost:3000/auth/callback",
   "scope": "User.Read"
 }
-
 
 **Explicação:**
 - Use esses dados para configurar a biblioteca MSAL.js no frontend e obter o token JWT do Azure AD.
@@ -65,14 +61,11 @@ Autentica o usuário (valida o token JWT enviado pelo frontend) e retorna inform
 
 **Requisição:**
 
-
 POST /auth/login HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
 
-
 **Resposta:**
-
 
 {
   "user_info": {
@@ -93,7 +86,6 @@ Content-Type: application/json
   ]
 }
 
-
 **Explicação:**
 - O token JWT deve ser obtido via Azure AD e enviado no header Authorization.
 - O backend valida o token, extrai o usuário e retorna os projetos associados.
@@ -108,13 +100,10 @@ Verifica se um projeto existe para o usuário autenticado.
 
 **Requisição:**
 
-
 GET /projects/check?nome_projeto=ProjetoNovo HTTP/1.1
 Authorization: Bearer <token>
 
-
 **Resposta (projeto existe):**
-
 
 {
   "exists": true,
@@ -134,14 +123,11 @@ Authorization: Bearer <token>
   }
 }
 
-
 **Resposta (projeto não existe):**
-
 
 {
   "exists": false
 }
-
 
 **Explicação:**
 - Envie o nome do projeto como query param. O backend converte para `project_id` internamente.
@@ -155,13 +141,10 @@ Lista todos os projetos do usuário autenticado.
 
 **Requisição:**
 
-
 GET /projects/list HTTP/1.1
 Authorization: Bearer <token>
 
-
 **Resposta:**
-
 
 [
   {
@@ -173,7 +156,6 @@ Authorization: Bearer <token>
   },
   ...
 ]
-
 
 **Explicação:**
 - Use este endpoint para popular listas de projetos no frontend.
@@ -188,7 +170,6 @@ Inicia uma análise enviando um arquivo DOCX (opcional) e/ou instruções extras
 
 **Requisição (com arquivo DOCX):**
 
-
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: multipart/form-data
@@ -198,9 +179,7 @@ analysis_type=criacao_epicos_azure_devops
 instrucoes_extras=Este é um comentário adicional do usuário.
 arquivo_docx=<arquivo.docx>
 
-
 **Requisição (sem arquivo DOCX, apenas instruções):**
-
 
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
@@ -210,9 +189,7 @@ nome_projeto=ProjetoNovo
 analysis_type=criacao_epicos_azure_devops
 instrucoes_extras=Descreva o sistema de login.
 
-
 **Resposta:**
-
 
 {
   "message": "Análise solicitada com sucesso ao agente.",
@@ -220,6 +197,10 @@ instrucoes_extras=Descreva o sistema de login.
   "nome_projeto": "ProjetoNovo"
 }
 
+**Nota importante:**
+- A resposta **não** contém o estado do projeto (`state`).
+- O estado do projeto **não é retornado** neste endpoint. Para obter o estado atualizado, utilize `GET /projects/check` ou `GET /session/project/{project_id}/reports`.
+- O estado do projeto é criado **apenas** no momento da criação do projeto. Após isso, ele é lido do Blob Storage e atualizado somente quando o MCP retorna status `done` via webhook.
 
 **Explicação:**
 - `nome_projeto` e `analysis_type` são obrigatórios.
@@ -237,13 +218,10 @@ Obtém todos os relatórios do projeto.
 
 **Requisição:**
 
-
 GET /session/project/projeto-uuid-123/reports HTTP/1.1
 Authorization: Bearer <token>
 
-
 **Resposta:**
-
 
 {
   "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }],
@@ -255,7 +233,6 @@ Authorization: Bearer <token>
   "nome_projeto": "ProjetoNovo"
 }
 
-
 **Explicação:**
 - Cada relatório é retornado em seu campo individual. O valor pode ser lista, null ou vazio.
 
@@ -266,7 +243,6 @@ Authorization: Bearer <token>
 Atualiza um relatório específico do projeto.
 
 **Requisição:**
-
 
 PUT /session/project/projeto-uuid-123/report HTTP/1.1
 Authorization: Bearer <token>
@@ -280,16 +256,13 @@ Content-Type: application/json
   }
 }
 
-
 **Resposta:**
-
 
 {
   "status": "ok",
   "project_id": "projeto-uuid-123",
   "nome_projeto": "ProjetoNovo"
 }
-
 
 **Explicação:**
 - O campo `report_data` deve ser um dicionário com **exatamente uma** chave de relatório (`epicos_report`, `features_report`, etc), cujo valor é uma lista.
@@ -303,20 +276,16 @@ Salva o estado atual do projeto no Blob Storage.
 
 **Requisição:**
 
-
 POST /session/project/projeto-uuid-123/save-state HTTP/1.1
 Authorization: Bearer <token>
 
-
 **Resposta:**
-
 
 {
   "blob_url": "https://.../estado_20240601T123000Z.json",
   "project_id": "projeto-uuid-123",
   "nome_projeto": "ProjetoNovo"
 }
-
 
 **Explicação:**
 - Use para forçar o salvamento do estado atual do projeto no Blob Storage.
@@ -329,20 +298,16 @@ Lista todos os arquivos DOCX enviados para o projeto.
 
 **Requisição:**
 
-
 GET /session/project/projeto-uuid-123/docx-files HTTP/1.1
 Authorization: Bearer <token>
 
-
 **Resposta:**
-
 
 {
   "docx_files": ["https://.../arquivo1.docx", "https://.../arquivo2.docx"],
   "project_id": "projeto-uuid-123",
   "nome_projeto": "ProjetoNovo"
 }
-
 
 ---
 
@@ -353,7 +318,6 @@ Authorization: Bearer <token>
 Recebe atualizações do MCP sobre o progresso, conclusão ou erro de uma análise.
 
 **Requisição (progresso):**
-
 
 POST /webhooks/mcp HTTP/1.1
 Content-Type: application/json
@@ -370,9 +334,7 @@ Content-Type: application/json
   }
 }
 
-
 **Requisição (conclusão):**
-
 
 POST /webhooks/mcp HTTP/1.1
 Content-Type: application/json
@@ -389,9 +351,7 @@ Content-Type: application/json
   }
 }
 
-
 **Requisição (erro):**
-
 
 POST /webhooks/mcp HTTP/1.1
 Content-Type: application/json
@@ -404,9 +364,7 @@ Content-Type: application/json
   "error_message": "Tempo limite excedido ao processar análise."
 }
 
-
 **Resposta:**
-
 
 {
   "status": "ok",
@@ -414,11 +372,11 @@ Content-Type: application/json
   "nome_projeto": "ProjetoNovo"
 }
 
-
 **Explicação:**
 - O campo `report_data` deve ser um dicionário com uma única chave de relatório, cujo valor é uma lista.
-- O backend atualiza apenas o relatório correspondente no Redis.
+- O backend atualiza apenas o relatório correspondente no Redis **e salva o estado no Blob Storage somente quando o status for `done`**.
 - Em caso de erro, apenas loga o erro e retorna status ok.
+- Para status `in_progress`, o backend **não** atualiza o estado no Redis ou Blob Storage.
 
 ---
 
@@ -436,11 +394,9 @@ A API retorna códigos de status HTTP padronizados. Exemplos:
 
 **Exemplo de erro:**
 
-
 {
   "detail": "Token Azure AD expirado."
 }
-
 
 **Como lidar:**
 - Sempre trate erros no frontend exibindo mensagens amigáveis ao usuário.
@@ -453,13 +409,13 @@ A API retorna códigos de status HTTP padronizados. Exemplos:
 
 ## 8.1 Novo Projeto
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
     participant MCP as MCP Server
     FE->>BE: POST /auth/login (token)
-    BE-->>FE: Lista de projetos
+    BE-->>FE: Lista de projetos (lidos do Blob Storage)
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras, arquivo_docx)
     BE->>BE: Extrai texto do arquivo docx
     par Processamento paralelo
@@ -469,11 +425,13 @@ sequenceDiagram
     BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-```
+
+
+**Nota:** O estado do projeto é criado **apenas** no momento da criação. Após isso, ele é lido do Blob Storage e salvo no Redis apenas para leitura e resposta ao usuário. Não há definição ou retorno de estado no endpoint de início de análise.
 
 ## 8.2 Projeto Existente
 
-```mermaid
+mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
     BE-->>FE: exists: true, state
@@ -483,23 +441,27 @@ sequenceDiagram
     BE->>MCP: Envia payload
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-```
+
+
+**Nota:** O estado do projeto é apenas lido do Blob Storage e salvo no Redis. Não há redefinição ou retorno do estado no endpoint de início de análise.
 
 ## 8.3 Atualização de Relatório via Webhook
 
-```mermaid
+mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, project_id, status, report_data)
-    BE->>BE: Atualiza relatório individual na sessão
+    BE->>BE: Se status == 'done', atualiza relatório individual na sessão e salva estado no Redis e Blob Storage
     par Atualização paralela
-        BE->>BE: Salva sessão atualizada no Redis
-        BE->>BE: Salva estado atualizado no Blob Storage
+        BE->>RS: Salva sessão atualizada no Redis
+        BE->>BS: Salva estado atualizado no Blob Storage
     end
-```
+
+
+**Nota:** O backend só atualiza o estado do projeto no Redis e Blob Storage quando o status do webhook for `done`. Para `in_progress`, apenas loga o progresso, sem atualizar o estado.
 
 ## 8.4 Fluxo de Erro e Recuperação
 
-```mermaid
+mermaid
 sequenceDiagram
     BE->>MCP: start_analysis
     MCP-->>BE: status: error, error_message, project_id
@@ -508,7 +470,7 @@ sequenceDiagram
     BE-->>FE: 503 Service Unavailable, detail
     BE->>BE: Falha ao buscar sessão
     BE-->>FE: 503 Service Unavailable, detail
-```
+
 
 ---
 
@@ -524,6 +486,7 @@ sequenceDiagram
 - O backend pode retornar campos de relatório como `null`, lista vazia ou preenchida, dependendo do progresso da análise.
 - O campo `nome_projeto` é aceito como referência humana, mas o backend sempre converte para `project_id` internamente.
 - O upload de DOCX e extração de texto são processados em paralelo para melhor performance.
-- O backend salva automaticamente o estado do projeto em Blob Storage após cada atualização relevante.
+- O backend salva automaticamente o estado do projeto em Blob Storage após cada atualização relevante (apenas quando status do MCP for `done`).
+- O estado do projeto é criado **apenas** na criação do projeto. Após isso, ele é lido do Blob Storage e atualizado somente quando o MCP retorna status `done` via webhook.
 
 ---
