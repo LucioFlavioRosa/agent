@@ -17,6 +17,19 @@ class ProjectStateService:
         state.pop("projeto", None)
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
+        # Garante que todos os campos de relatório estejam presentes e não sobrescreve nenhum campo existente
+        report_fields = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        for field in report_fields:
+            if field not in state:
+                state[field] = []
+            elif state[field] is None:
+                state[field] = []
         blob_folder = f"{usuario_executor}/{nome_projeto}/estados"
         blob_filename = f"estado_{timestamp}.json"
         blob_path = f"{blob_folder}/{blob_filename}"
@@ -98,6 +111,18 @@ class ProjectStateService:
                 state.pop("projeto", None)
                 state.pop("comentario_usuario", None)
                 state.pop("docx_blob_url", None)
+                report_fields = [
+                    "epicos_report",
+                    "features_report",
+                    "times_descricao_report",
+                    "alocacao_times_report",
+                    "premissas_riscos_report"
+                ]
+                for field in report_fields:
+                    if field not in state:
+                        state[field] = []
+                    elif state[field] is None:
+                        state[field] = []
                 item = {
                     "nome_projeto": state.get("nome_projeto", nome_projeto),
                     "analysis_type": state.get("analysis_type"),
