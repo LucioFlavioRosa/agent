@@ -125,6 +125,7 @@ class RedisSessionService:
         session_data[report_field] = report_value
         session_data["last_modified"] = datetime.utcnow().isoformat()
         self.logger.debug(f"Atualizando campo de relatório '{report_field}' para project_id={project_id}. Valor anterior: {valor_anterior} | Novo valor: {report_value}")
+        # Não modificar nenhum outro campo de relatório, apenas atualizar o campo informado
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
