@@ -17,7 +17,6 @@ class SessionData(BaseModel):
     steps: List[SessionStep] = Field(default_factory=list)
     last_saved_to_blob: datetime = Field(...)
     docx_files: List[str] = Field(default_factory=list, description="Lista de URLs de todos os arquivos DOCX enviados pelo usuário")
-    extracted_text: Optional[str] = Field(default=None)
     project_id: str = Field(...)
     epicos_report: Optional[Any] = Field(default=None)
     features_report: Optional[Any] = Field(default=None)
@@ -33,7 +32,6 @@ class SessionData(BaseModel):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_saved_to_blob": self.last_saved_to_blob.isoformat() if self.last_saved_to_blob else None,
             "docx_files": self.docx_files,
-            "extracted_text": self.extracted_text,
             "project_id": self.project_id,
             "epicos_report": self.epicos_report if self.epicos_report is not None else [],
             "features_report": self.features_report if self.features_report is not None else [],
@@ -44,6 +42,7 @@ class SessionData(BaseModel):
         state.pop("projeto", None)
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
+        state.pop("extracted_text", None)
         return state
 
     @classmethod
@@ -56,7 +55,6 @@ class SessionData(BaseModel):
             steps=[],
             last_saved_to_blob=datetime.fromisoformat(state["last_saved_to_blob"]) if state.get("last_saved_to_blob") else datetime.utcnow(),
             docx_files=state.get("docx_files", []),
-            extracted_text=state.get("extracted_text"),
             project_id=state.get("project_id"),
             epicos_report=state.get("epicos_report", []),
             features_report=state.get("features_report", []),
