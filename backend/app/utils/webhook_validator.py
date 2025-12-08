@@ -24,4 +24,7 @@ def validate_report_data_structure(report_data: dict, analysis_type: str) -> boo
     if not isinstance(value, list):
         logger.error(f"O valor da chave '{report_field}' deve ser uma lista.")
         return False
+    unexpected_keys = set(report_data.keys()) - set(valid_report_fields)
+    if unexpected_keys:
+        logger.warning(f"report_data contém chaves inesperadas: {unexpected_keys}")
     return True
