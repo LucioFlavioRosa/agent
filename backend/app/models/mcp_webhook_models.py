@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 from typing import Optional, Any, Literal, Dict
 
 class MCPWebhookPayload(BaseModel):
@@ -17,20 +17,27 @@ class MCPWebhookPayload(BaseModel):
             raise ValueError(f"status deve ser um dos: {allowed}")
         return v
 
-    @validator('report_data', always=True)
-    def report_data_required_for_status(cls, v, values):
+    @root_validator
+    def validate_report_data_structure(cls, values):
         status = values.get('status')
+        report_data = values.get('report_data')
+        valid_report_fields = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
         if status in {'in_progress', 'done'}:
-            if v is None or not isinstance(v, dict) or len(v) != 1:
+            if report_data is None or not isinstance(report_data, dict) or len(report_data) != 1:
                 raise ValueError("report_data deve ser um dicionário com exatamente uma chave quando status é 'in_progress' ou 'done'")
-            key = list(v.keys())[0]
-            if not isinstance(v[key], list):
-                raise ValueError("O valor da chave de report_data deve ser uma lista")
-        return v
-
-    @validator('error_message', always=True)
-    def error_message_required_for_error(cls, v, values):
-        status = values.get('status')
-        if status == 'error' and not v:
-            raise ValueError("error_message é obrigatório quando status é 'error'")
-        return v
+            report_field = list(report_data.keys())[0]
+            if report_field not in valid_report_fields:
+                raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
+            value = report_data[report_field]
+            if not isinstance(value, list):
+                raise ValueError(f"O valor da chave '{report_field}' deve ser uma lista")
+        if status == 'error':
+            if not values.get('error_message'):
+                raise ValueError("error_message é obrigatório quando status é 'error'")
+        return values
