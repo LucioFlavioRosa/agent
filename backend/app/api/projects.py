@@ -25,6 +25,21 @@ async def check_project(
             state.pop("projeto", None)
             state.pop("comentario_usuario", None)
             state.pop("docx_blob_url", None)
+            # Passo 8: Normalização dos campos de relatório antes de retornar
+            report_fields = [
+                "epicos_report",
+                "features_report",
+                "times_descricao_report",
+                "alocacao_times_report",
+                "premissas_riscos_report"
+            ]
+            normalized_count = 0
+            for field in report_fields:
+                if field not in state or state[field] is None or not isinstance(state[field], list):
+                    state[field] = []
+                    normalized_count += 1
+            if normalized_count > 0:
+                logger.debug(f"Normalização: {normalized_count} campos de relatório convertidos para lista em check_project().")
             state["project_id"] = project_id
             state["nome_projeto"] = state.get("nome_projeto", nome_projeto)
             response = {"exists": True, "state": state}
