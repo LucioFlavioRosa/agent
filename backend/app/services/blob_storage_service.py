@@ -6,6 +6,7 @@ from backend.app.core.config import settings
 import asyncio
 from backend.app.services.docx_parser_service import extract_text_from_docx
 import json
+from backend.app.utils.json_encoder import safe_json_dumps
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def upload_json_to_blob(json_data: dict, blob_folder: str, blob_filename: str) -
     blob_path = f"{blob_folder}/{blob_filename}"
     blob_client = container_client.get_blob_client(blob_path)
     blob_client.upload_blob(
-        json.dumps(json_data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        safe_json_dumps(json_data).encode("utf-8"),
         overwrite=True,
         content_settings=None
     )
