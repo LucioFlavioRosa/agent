@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Request
 from backend.app.models.mcp_webhook_models import MCPWebhookPayload
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
+from backend.app.services.audit_service import AuditService
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
@@ -12,6 +13,14 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
     redis_service = RedisSessionService()
     logger.info(f"Recebido webhook MCP para job_id: {payload.job_id}, status: {payload.status}, project_id: {getattr(payload, 'project_id', None)}")
     try:
+        try:
+            AuditService.save_mcp_to_backend_payload(
+                payload=payload.dict(),
+                webhook_type=payload.status,
+                project_id=getattr(payload, 'project_id', None)
+            )
+        except Exception as e:
+            logger.error(f"Erro ao auditar payload MCP->backend em /webhooks/mcp: {e}")
         if not getattr(payload, 'project_id', None):
             logger.error(f"Webhook recebido sem project_id. Payload inválido.")
             raise HTTPException(status_code=400, detail="project_id é obrigatório no webhook MCP.")
@@ -21,7 +30,8 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             raise HTTPException(status_code=404, detail=f"Sessão não encontrada para project_id: {payload.project_id}")
         if payload.status == "in_progress":
             logger.info(f"Webhook MCP status 'in_progress' recebido para project_id {payload.project_id}. Nenhuma atualização de estado será feita.")
-            return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
+            response = {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
+            return response
         elif payload.status == "done":
             report_data = payload.report_data
             if not report_data or not isinstance(report_data, dict) or len(report_data) != 1:
@@ -37,11 +47,14 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             session = redis_service.get_session_by_project_id(payload.project_id)
             await ProjectStateService.save_state_to_blob(session)
             state = session.to_project_state()
-            return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto, "state": state}
+            response = {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto, "state": state}
+            return response
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
-            return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
-        return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
+            response = {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
+            return response
+        response = {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
+        return response
     except HTTPException as exc:
         raise exc
     except Exception as exc:
