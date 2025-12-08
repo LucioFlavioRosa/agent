@@ -40,6 +40,13 @@ def update_project_report(project_id: str, req: UpdateReportRequest):
             raise HTTPException(status_code=400, detail="report_data deve ser um dicionário com exatamente uma chave de relatório.")
         redis_service.update_report(project_id, req.report_data)
         session = redis_service.get_session_by_project_id(project_id)
+        # Dispara o salvamento automático do estado completo no Blob Storage
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(ProjectStateService.save_state_to_blob(session))
+        else:
+            loop.run_until_complete(ProjectStateService.save_state_to_blob(session))
         return {"status": "ok", "project_id": project_id, "nome_projeto": session.nome_projeto}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao atualizar relatório: {e}")
