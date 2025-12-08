@@ -1,4 +1,3 @@
-import json
 import logging
 from datetime import datetime
 from backend.app.services.blob_storage_service import _get_blob_clients, upload_json_to_blob
@@ -9,6 +8,7 @@ from backend.app.models.audit_models import (
     BackendToMCPPayload
 )
 import uuid
+from backend.app.utils.json_encoder import safe_json_dumps
 
 logger = logging.getLogger("AuditService")
 
@@ -23,6 +23,7 @@ class AuditService:
 
     @staticmethod
     def upload_json_to_blob(json_data: dict, blob_folder: str, blob_filename: str) -> str:
+        from backend.app.services.blob_storage_service import upload_json_to_blob
         return upload_json_to_blob(json_data, blob_folder, blob_filename)
 
     @classmethod
@@ -36,7 +37,9 @@ class AuditService:
         )
         filename = cls._generate_filename("frontend_to_backend", project_id)
         folder = f"front_back_comunicacao/{usuario_executor or 'unknown'}"
-        cls.upload_json_to_blob(audit_payload.dict(), folder, filename)
+        audit_dict = audit_payload.dict()
+        json_str = safe_json_dumps(audit_dict)
+        cls.upload_json_to_blob(json.loads(json_str), folder, filename)
 
     @classmethod
     def save_backend_to_frontend_payload(cls, response: dict, endpoint: str, status_code: int, usuario_executor: str = None, project_id: str = None):
@@ -49,7 +52,9 @@ class AuditService:
         )
         filename = cls._generate_filename("backend_to_frontend", project_id)
         folder = f"front_back_comunicacao/{usuario_executor or 'unknown'}"
-        cls.upload_json_to_blob(audit_payload.dict(), folder, filename)
+        audit_dict = audit_payload.dict()
+        json_str = safe_json_dumps(audit_dict)
+        cls.upload_json_to_blob(json.loads(json_str), folder, filename)
 
     @classmethod
     def save_mcp_to_backend_payload(cls, payload: dict, webhook_type: str, project_id: str = None):
@@ -60,7 +65,9 @@ class AuditService:
         )
         filename = cls._generate_filename("mcp_to_backend", project_id)
         folder = f"mcp_back_comunicacao/{project_id or 'unknown'}"
-        cls.upload_json_to_blob(audit_payload.dict(), folder, filename)
+        audit_dict = audit_payload.dict()
+        json_str = safe_json_dumps(audit_dict)
+        cls.upload_json_to_blob(json.loads(json_str), folder, filename)
 
     @classmethod
     def save_backend_to_mcp_payload(cls, payload: dict, analysis_type: str, project_id: str = None):
@@ -71,4 +78,6 @@ class AuditService:
         )
         filename = cls._generate_filename("backend_to_mcp", project_id)
         folder = f"mcp_back_comunicacao/{project_id or 'unknown'}"
-        cls.upload_json_to_blob(audit_payload.dict(), folder, filename)
+        audit_dict = audit_payload.dict()
+        json_str = safe_json_dumps(audit_dict)
+        cls.upload_json_to_blob(json.loads(json_str), folder, filename)
