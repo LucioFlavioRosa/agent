@@ -6,13 +6,10 @@ from backend.app.core.config import settings
 from fastapi.encoders import jsonable_encoder
 
 class MCPStartAnalysisPayload(BaseModel):
-    projeto: str = Field(...)
-    analysis_type: str = Field(...)
-    arquivo_docx: Optional[str] = Field(None)
-    comentario_usuario: Optional[str] = Field(None)
-    usuario_executor: str = Field(...)
     project_id: str = Field(...)
-    nome_projeto: Optional[str] = Field(None)
+    arquivo_docx: Optional[str] = Field(None)
+    comentario_extra: Optional[str] = Field(None)
+    analysis_type: str = Field(...)
 
     @validator('analysis_type')
     def analysis_type_must_not_be_empty(cls, v):
@@ -39,34 +36,24 @@ class MCPClientService:
                 return agent_cfg.mcp_url.rstrip('/')
         return self.base_url
 
-    async def start_analysis(self, payload: MCPStartAnalysisPayload) -> MCPStartAnalysisResponse:
-        # O MCP deve responder sempre em JSON, no formato:
-        # { <type_report>: [ {conteúdo}, ... ] }
-        # type_report pode ser: epicos_report, features_report, times_descricao_report, alocacao_times_report, premissas_riscos_report
-        # O backend espera que o campo report_data do webhook do MCP seja um dicionário com exatamente uma chave de relatório, cujo valor é uma lista.
-        raw_base = self.get_mcp_endpoint(payload.analysis_type)
+    async def start_analysis(self, payload: dict) -> MCPStartAnalysisResponse:
+        raw_base = self.get_mcp_endpoint(payload["analysis_type"])
         logging.info(f"🕵️ [DEBUG URL] Bruta vinda da env: '[{raw_base}]'")
         base = raw_base.strip().rstrip("/")
         url = f"{base}/start"
         logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
         try:
-            if hasattr(payload, "model_dump"):
-                payload_dict = payload.model_dump()
-            else:
-                payload_dict = payload.dict()
-            if not payload_dict.get("project_id"):
-                raise Exception("project_id é obrigatório para comunicação com MCP")
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
-                    json=jsonable_encoder(payload_dict), 
+                    json=jsonable_encoder(payload),
                     headers={"Content-Type": "application/json"}
                 )
                 if response.status_code != 200:
                     logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
                 response.raise_for_status()
                 data = response.json()
-                return MCPStartAnalysisResponse(project_id=data.get("project_id", payload.project_id))
+                return MCPStartAnalysisResponse(project_id=data.get("project_id", payload["project_id"]))
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
         except Exception as exc:
