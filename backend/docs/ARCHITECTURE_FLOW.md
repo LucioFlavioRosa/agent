@@ -214,3 +214,20 @@ sequenceDiagram
 - O backend aceita o campo "nome_projeto" do frontend, converte internamente para project_id, e responde sempre com ambos.
 - O project_id é criado apenas quando o projeto é novo. Para projetos existentes, o project_id é lido do estado e mantido como referência única para todas as ações futuras relacionadas ao projeto.
 - O ProjectStateService mantém um cache local do mapeamento nome_projeto → project_id, que é invalidado sempre que um novo estado é salvo no Blob Storage (ex: criação de projeto novo ou atualização de estado). Isso reduz chamadas desnecessárias ao Blob Storage e garante consistência do identificador.
+
+---
+
+## Fluxo de Auditoria de Payloads
+
+Para garantir rastreabilidade e auditoria completa das interações entre frontend, backend e MCP, o backend salva automaticamente todos os payloads de comunicação em pastas dedicadas no Blob Storage:
+
+- **front_back_comunicacao/**: Armazena todos os payloads enviados do frontend para o backend (requisições) e do backend para o frontend (respostas). Os arquivos são organizados por usuário executor.
+- **mcp_back_comunicacao/**: Armazena todos os payloads enviados do MCP para o backend (webhooks) e do backend para o MCP (requisições). Os arquivos são organizados por project_id.
+
+Cada payload de auditoria é salvo como um arquivo JSON individual, contendo timestamp, endpoint, método, dados do payload, usuário executor e project_id (quando aplicável). Isso permite auditoria detalhada, rastreamento de bugs e análise de fluxo de dados entre sistemas.
+
+- Código responsável:
+  - `backend/app/services/audit_service.py`: métodos save_frontend_to_backend_payload, save_backend_to_frontend_payload, save_mcp_to_backend_payload, save_backend_to_mcp_payload
+  - `backend/app/services/blob_storage_service.py`: método upload_json_to_blob
+
+Esses arquivos podem ser consultados posteriormente para auditoria, troubleshooting e compliance.
