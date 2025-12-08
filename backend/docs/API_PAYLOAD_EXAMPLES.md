@@ -453,7 +453,7 @@ A API retorna códigos de status HTTP padronizados. Exemplos:
 
 ## 8.1 Novo Projeto
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -469,11 +469,11 @@ sequenceDiagram
     BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-
+```
 
 ## 8.2 Projeto Existente
 
-mermaid
+```mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
     BE-->>FE: exists: true, state
@@ -483,11 +483,11 @@ sequenceDiagram
     BE->>MCP: Envia payload
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-
+```
 
 ## 8.3 Atualização de Relatório via Webhook
 
-mermaid
+```mermaid
 sequenceDiagram
     MCP->>BE: Webhook (job_id, project_id, status, report_data)
     BE->>BE: Atualiza relatório individual na sessão
@@ -495,11 +495,11 @@ sequenceDiagram
         BE->>BE: Salva sessão atualizada no Redis
         BE->>BE: Salva estado atualizado no Blob Storage
     end
-
+```
 
 ## 8.4 Fluxo de Erro e Recuperação
 
-mermaid
+```mermaid
 sequenceDiagram
     BE->>MCP: start_analysis
     MCP-->>BE: status: error, error_message, project_id
@@ -508,7 +508,7 @@ sequenceDiagram
     BE-->>FE: 503 Service Unavailable, detail
     BE->>BE: Falha ao buscar sessão
     BE-->>FE: 503 Service Unavailable, detail
-
+```
 
 ---
 
