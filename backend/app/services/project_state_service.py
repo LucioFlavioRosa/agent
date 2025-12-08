@@ -39,22 +39,6 @@ class ProjectStateService:
                         state.pop("comentario_usuario", None)
                         state.pop("docx_blob_url", None)
                         state.pop("extracted_text", None)
-                        # Passo 4: Normalização dos campos de relatório
-                        report_fields = [
-                            "epicos_report",
-                            "features_report",
-                            "times_descricao_report",
-                            "alocacao_times_report",
-                            "premissas_riscos_report"
-                        ]
-                        normalized_count = 0
-                        for field in report_fields:
-                            if field not in state or state[field] is None or not isinstance(state[field], list):
-                                state[field] = []
-                                normalized_count += 1
-                        if normalized_count > 0:
-                            logger.info(f"Normalização: {normalized_count} campos de relatório convertidos para lista em load_latest_state_from_blob().")
-                        logger.info(f"Estado carregado com sucesso para usuario_executor={usuario_executor}, project_id={project_id}")
                         return state
             logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}")
             return None
@@ -112,21 +96,6 @@ class ProjectStateService:
                 state.pop("comentario_usuario", None)
                 state.pop("docx_blob_url", None)
                 state.pop("extracted_text", None)
-                # Passo 5: Normalização dos campos de relatório
-                report_fields = [
-                    "epicos_report",
-                    "features_report",
-                    "times_descricao_report",
-                    "alocacao_times_report",
-                    "premissas_riscos_report"
-                ]
-                normalized_count = 0
-                for field in report_fields:
-                    if field not in state or state[field] is None or not isinstance(state[field], list):
-                        state[field] = []
-                        normalized_count += 1
-                if normalized_count > 0:
-                    logger.debug(f"Normalização: {normalized_count} campos de relatório convertidos para lista em list_user_projects().")
                 item = {
                     "nome_projeto": state.get("nome_projeto", nome_projeto),
                     "analysis_type": state.get("analysis_type"),
