@@ -105,9 +105,15 @@ class RedisSessionService:
         report_field = list(report_data.keys())[0]
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
+        # Passo 2: garantir que o campo existe e é lista
+        if report_field not in session_data or session_data[report_field] is None or not isinstance(session_data[report_field], list):
+            self.logger.debug(f"Campo '{report_field}' não existia ou era None. Inicializando como lista vazia antes de atualizar.")
+            session_data[report_field] = []
+        valor_anterior = session_data[report_field]
         report_value = report_data[report_field]
         session_data[report_field] = report_value
         session_data["last_modified"] = datetime.utcnow().isoformat()
+        self.logger.debug(f"Atualizando campo de relatório '{report_field}' para project_id={project_id}. Valor anterior: {valor_anterior} | Novo valor: {report_value}")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         try:
             loop = asyncio.get_event_loop()
@@ -130,6 +136,8 @@ class RedisSessionService:
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["project_id"] = project_id
         session_data["nome_projeto"] = nome_projeto
+        # Passo 3: garantir que todos os campos de relatório sejam listas
+        normalized_fields = 0
         for report_field in [
             "epicos_report",
             "features_report",
@@ -137,9 +145,16 @@ class RedisSessionService:
             "alocacao_times_report",
             "premissas_riscos_report"
         ]:
-            if report_field in project_state:
-                session_data[report_field] = project_state[report_field]
+            valor = project_state.get(report_field)
+            if valor is None or not isinstance(valor, list):
+                session_data[report_field] = []
+                normalized_fields += 1
+                self.logger.warning(f"Campo de relatório '{report_field}' estava None ou ausente ao restaurar do estado do projeto. Inicializando como lista vazia.")
+            else:
+                session_data[report_field] = valor
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        if normalized_fields > 0:
+            self.logger.info(f"Normalização: {normalized_fields} campos de relatório convertidos para lista ao restaurar sessão do estado.")
         return project_id
 
     def add_docx_file(self, project_id: str, blob_url: str):
