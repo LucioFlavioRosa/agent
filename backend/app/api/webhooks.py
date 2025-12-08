@@ -32,6 +32,7 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             report_field = list(payload.report_data.keys())[0]
             logger.info(f"Atualizando campo de relatório '{report_field}' para project_id {payload.project_id}")
             redis_service.update_report(payload.project_id, {report_field: payload.report_data[report_field]})
+            logger.info(f"Campo '{report_field}' atualizado. Demais campos de relatório foram preservados do estado anterior.")
             await ProjectStateService.save_state_to_blob(redis_service.get_session_by_project_id(payload.project_id))
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
