@@ -29,7 +29,7 @@ class RedisSessionService:
     def _deserialize_session(self, session_json: str) -> dict:
         return json.loads(session_json)
 
-    def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None) -> str:
+    def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None, initial_state: Optional[Dict[str, Any]] = None) -> str:
         key = f"project:{project_id}"
         if self.redis_client.exists(key):
             self.logger.warning(f"Sessão já existe para project_id={project_id}. Não será criada nova sessão.")
@@ -45,6 +45,19 @@ class RedisSessionService:
             "docx_files": [],
             "project_id": project_id
         }
+        report_fields = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        if initial_state:
+            for field in report_fields:
+                session_data[field] = initial_state.get(field, [])
+        else:
+            for field in report_fields:
+                session_data[field] = []
         if extracted_text is not None:
             session_data["extracted_text"] = extracted_text
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
@@ -121,7 +134,16 @@ class RedisSessionService:
         session_data["usuario_executor"] = usuario_executor
         session_data["nome_projeto"] = nome_projeto
         session_data["analysis_type"] = analysis_type
-        # Validação de consistência do project_id
+        report_fields = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        for field in report_fields:
+            if field not in session_data:
+                session_data[field] = []
         if not project_id:
             self.logger.error(f"[restore_session_from_state] Estado não contém project_id para nome_projeto='{nome_projeto}'.")
             raise ValueError(f"Estado do projeto não contém project_id para nome_projeto='{nome_projeto}'.")
