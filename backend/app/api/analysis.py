@@ -79,7 +79,6 @@ async def start_analysis(
         )
     # Removido: validação obrigatória de arquivo_docx ou comentario_extra
     if project_state:
-        # Passa o project_state integralmente para restaurar a sessão, preservando os relatórios existentes
         redis_service.restore_session_from_state(
             usuario_executor,
             nome_projeto,
