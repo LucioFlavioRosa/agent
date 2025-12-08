@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, validator
 from backend.app.core.config import settings
 from fastapi.encoders import jsonable_encoder
+from backend.app.services.audit_service import AuditService
 
 class MCPStartAnalysisPayload(BaseModel):
     project_id: str = Field(...)
@@ -49,6 +50,7 @@ class MCPClientService:
             "analysis_type": payload["analysis_type"]
         }
         try:
+            AuditService.save_backend_to_mcp_payload(mcp_payload, payload["analysis_type"], payload["project_id"])
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
