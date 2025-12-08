@@ -77,7 +77,7 @@ async def start_analysis(
         redis_service.add_docx_file(project_id_final, blob_url)
     mcp_payload = {
         "project_id": project_id_final,
-        "arquivo_docx": texto_extraido,
+        "texto_extraido_do_docx": texto_extraido,
         "comentario_extra": comentario_extra,
         "analysis_type": analysis_type
     }
