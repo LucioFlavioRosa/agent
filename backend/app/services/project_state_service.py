@@ -46,7 +46,6 @@ class ProjectStateService:
                 if nome_projeto and state.get("nome_projeto") == nome_projeto:
                     states.append((blob, state))
         if nome_projeto and states:
-            # Ordena pelo campo last_saved_to_blob (desc) ou nome do blob (desc)
             def get_sort_key(item):
                 state = item[1]
                 ts = state.get("last_saved_to_blob")
