@@ -4,6 +4,7 @@ import os
 from backend.app.core.config import settings
 from backend.app.middleware.auth_middleware import get_current_user, _extract_usuario_executor
 from backend.app.services.project_state_service import ProjectStateService
+from backend.app.services.redis_session_service import RedisSessionService
 
 router = APIRouter()
 
@@ -39,6 +40,7 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
     if not usuario_executor:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
+    redis_service = RedisSessionService()
     for p in projects:
         # Remove chaves obsoletas
         p.pop("projeto", None)
@@ -48,4 +50,14 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
             p["nome_projeto"] = p.get("projeto", "")
         if "project_id" not in p:
             p["project_id"] = p.get("project_id", "")
+        # Salva o estado mais recente no Redis, sem criar ou modificar o estado
+        try:
+            redis_service.restore_session_from_state(
+                usuario_executor=p.get("usuario_executor", usuario_executor),
+                nome_projeto=p.get("nome_projeto", ""),
+                analysis_type=p.get("analysis_type", ""),
+                project_state=p
+            )
+        except Exception:
+            pass
     return AuthLoginResponse(user_info=current_user, projects=projects)
