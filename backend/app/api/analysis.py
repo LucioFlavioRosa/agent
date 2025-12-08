@@ -4,10 +4,9 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ..middleware.auth_middleware import get_current_user, _extract_usuario_executor
-from ..services.mcp_client_service import MCPClientService, MCPStartAnalysisPayload
+from ..services.mcp_client_service import MCPClientService
 from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
-from ..services.background_state_saver import BackgroundStateSaver
 from ..services.blob_storage_service import upload_docx_to_blob
 from ..services.docx_parser_service import extract_text_from_docx
 
@@ -20,6 +19,7 @@ class StartAnalysisResponse(BaseModel):
     message: str
     project_id: str
     nome_projeto: Optional[str] = None
+    state: Optional[dict] = None
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
@@ -27,23 +27,19 @@ async def start_analysis(
     background_tasks: BackgroundTasks,
     nome_projeto: str = Form(...),
     analysis_type: str = Form(...),
-    instrucoes_extras: Optional[str] = Form(None),
+    comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None),
-    project_id: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{nome_projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
-    project_id_final = project_id
-    if not project_id_final:
-        project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
-    if not project_id_final:
-        project_id_final = str(uuid.uuid4())
+    project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
     project_state = None
     if project_id_final:
         project_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id_final)
-    session_exists = bool(project_state)
+    else:
+        project_id_final = str(uuid.uuid4())
     texto_extraido = None
     blob_url = None
     if arquivo_docx is not None:
@@ -54,23 +50,15 @@ async def start_analysis(
             raise HTTPException(status_code=400, detail=f"Erro ao extrair texto do docx: {str(e)}")
         blob_folder = f"{usuario_executor}/{nome_projeto}/arquivos_recebidos/docx"
         blob_filename = f"{analysis_type}.docx"
-        background_tasks.add_task(
-            upload_docx_to_blob,
+        blob_url = await upload_docx_to_blob(
             arquivo_docx,
             blob_folder,
             blob_filename,
             background_tasks
         )
-    else:
-        if session_exists:
-            try:
-                session = redis_service.get_session_by_project_id(project_id_final)
-                texto_extraido = getattr(session, "extracted_text", None)
-            except Exception as e:
-                logger.error(f"Erro ao buscar texto extraído da sessão: {e}")
-                texto_extraido = None
-    if not texto_extraido and not instrucoes_extras:
-        raise HTTPException(status_code=400, detail="É obrigatório fornecer arquivo_docx ou instrucoes_extras.")
+    if not texto_extraido and not comentario_extra:
+        raise HTTPException(status_code=400, detail="É obrigatório fornecer arquivo_docx ou comentario_extra.")
+    session_exists = bool(project_state)
     if session_exists:
         redis_service.restore_session_from_state(
             usuario_executor,
@@ -83,26 +71,28 @@ async def start_analysis(
             usuario_executor,
             nome_projeto,
             analysis_type,
-            project_id=project_id_final
+            project_id=project_id_final,
+            extracted_text=texto_extraido
         )
-    BackgroundStateSaver.schedule_periodic_save(project_id_final)
-    mcp_payload = MCPStartAnalysisPayload(
-        projeto=nome_projeto,
-        analysis_type=analysis_type,
-        arquivo_docx=texto_extraido,
-        comentario_usuario=instrucoes_extras,
-        usuario_executor=usuario_executor,
-        project_id=project_id_final,
-        nome_projeto=nome_projeto
-    )
+    if blob_url:
+        redis_service.add_docx_file(project_id_final, blob_url)
+    mcp_payload = {
+        "project_id": project_id_final,
+        "arquivo_docx": texto_extraido,
+        "comentario_extra": comentario_extra,
+        "analysis_type": analysis_type
+    }
     mcp_client = MCPClientService()
     try:
         await mcp_client.start_analysis(mcp_payload)
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
+    session = redis_service.get_session_by_project_id(project_id_final)
+    state = session.to_project_state()
     return StartAnalysisResponse(
         message="Análise solicitada com sucesso ao agente.",
         project_id=project_id_final,
-        nome_projeto=nome_projeto
+        nome_projeto=nome_projeto,
+        state=state
     )
