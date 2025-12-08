@@ -7,7 +7,7 @@ from fastapi.encoders import jsonable_encoder
 
 class MCPStartAnalysisPayload(BaseModel):
     project_id: str = Field(...)
-    arquivo_docx: Optional[str] = Field(None)
+    texto_extraido_do_docx: Optional[str] = Field(None)
     comentario_extra: Optional[str] = Field(None)
     analysis_type: str = Field(...)
 
@@ -42,11 +42,18 @@ class MCPClientService:
         base = raw_base.strip().rstrip("/")
         url = f"{base}/start"
         logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
+        # Ajuste do payload para o MCP conforme novo fluxo
+        mcp_payload = {
+            "project_id": payload["project_id"],
+            "texto_extraido_do_docx": payload.get("texto_extraido_do_docx"),
+            "comentario_extra": payload.get("comentario_extra"),
+            "analysis_type": payload["analysis_type"]
+        }
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
-                    json=jsonable_encoder(payload),
+                    json=jsonable_encoder(mcp_payload),
                     headers={"Content-Type": "application/json"}
                 )
                 if response.status_code != 200:
