@@ -2,19 +2,11 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-class SessionStep(BaseModel):
-    step_id: str = Field(...)
-    timestamp: datetime = Field(...)
-    action: str = Field(...)
-    status: str = Field(...)
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
-
 class SessionData(BaseModel):
     usuario_executor: str = Field(...)
     nome_projeto: str = Field(...)
     analysis_type: str = Field(...)
     created_at: datetime = Field(...)
-    steps: List[SessionStep] = Field(default_factory=list)
     last_saved_to_blob: datetime = Field(...)
     docx_files: List[str] = Field(default_factory=list, description="Lista de URLs de todos os arquivos DOCX enviados pelo usuário")
     project_id: str = Field(...)
@@ -52,7 +44,6 @@ class SessionData(BaseModel):
             nome_projeto=state.get("nome_projeto", ""),
             analysis_type=state.get("analysis_type", ""),
             created_at=datetime.fromisoformat(state["created_at"]) if state.get("created_at") else datetime.utcnow(),
-            steps=[],
             last_saved_to_blob=datetime.fromisoformat(state["last_saved_to_blob"]) if state.get("last_saved_to_blob") else datetime.utcnow(),
             docx_files=state.get("docx_files", []),
             project_id=state.get("project_id"),
