@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import datetime
-from backend.app.services.blob_storage_service import _get_blob_clients
+from backend.app.services.blob_storage_service import _get_blob_clients, upload_json_to_blob
 from backend.app.models.audit_models import (
     FrontendToBackendPayload,
     BackendToFrontendPayload,
@@ -23,16 +23,7 @@ class AuditService:
 
     @staticmethod
     def upload_json_to_blob(json_data: dict, blob_folder: str, blob_filename: str) -> str:
-        _, container_client = _get_blob_clients()
-        blob_path = f"{blob_folder}/{blob_filename}"
-        blob_client = container_client.get_blob_client(blob_path)
-        blob_client.upload_blob(
-            json.dumps(json_data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-            overwrite=True,
-            content_settings=None
-        )
-        logger.info(f"Payload de auditoria salvo em: {blob_client.url}")
-        return blob_client.url
+        return upload_json_to_blob(json_data, blob_folder, blob_filename)
 
     @classmethod
     def save_frontend_to_backend_payload(cls, payload: dict, endpoint: str, method: str, usuario_executor: str = None, project_id: str = None):
