@@ -139,11 +139,11 @@ class RedisSessionService:
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["project_id"] = project_id
         session_data["nome_projeto"] = nome_projeto
-        session_data["epicos_report"] = project_state.get("epicos_report", [])
-        session_data["features_report"] = project_state.get("features_report", [])
-        session_data["times_descricao_report"] = project_state.get("times_descricao_report", [])
-        session_data["alocacao_times_report"] = project_state.get("alocacao_times_report", [])
-        session_data["premissas_riscos_report"] = project_state.get("premissas_riscos_report", [])
+        session_data["epicos_report"] = project_state.get("epicos_report") if "epicos_report" in project_state else []
+        session_data["features_report"] = project_state.get("features_report") if "features_report" in project_state else []
+        session_data["times_descricao_report"] = project_state.get("times_descricao_report") if "times_descricao_report" in project_state else []
+        session_data["alocacao_times_report"] = project_state.get("alocacao_times_report") if "alocacao_times_report" in project_state else []
+        session_data["premissas_riscos_report"] = project_state.get("premissas_riscos_report") if "premissas_riscos_report" in project_state else []
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
