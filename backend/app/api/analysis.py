@@ -33,7 +33,6 @@ async def start_analysis(
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
-    # Auditoria: salva payload recebido do frontend
     try:
         form_data = await request.form()
         form_dict = dict(form_data)
@@ -80,6 +79,7 @@ async def start_analysis(
         )
     # Removido: validação obrigatória de arquivo_docx ou comentario_extra
     if project_state:
+        # Passa o project_state integralmente para restaurar a sessão, preservando os relatórios existentes
         redis_service.restore_session_from_state(
             usuario_executor,
             nome_projeto,
@@ -114,7 +114,6 @@ async def start_analysis(
         project_id=project_id_final,
         nome_projeto=nome_projeto
     )
-    # Auditoria: salva payload de resposta do backend para o frontend
     try:
         AuditService.save_backend_to_frontend_payload(
             response=response_payload.dict(),
