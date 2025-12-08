@@ -54,7 +54,7 @@ async def start_analysis(
             logger.error(f"Erro ao extrair texto do docx: {e}")
             raise HTTPException(status_code=400, detail=f"Erro ao extrair texto do docx: {str(e)}")
         blob_folder = f"{usuario_executor}/{nome_projeto}/arquivos_recebidos/docx"
-        blob_filename = f"{analysis_type}.docx"
+        blob_filename = f"{analysis_type}/{arquivo_docx.filename}"
         blob_url = await upload_docx_to_blob(
             arquivo_docx,
             blob_folder,
