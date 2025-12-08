@@ -117,11 +117,10 @@ class RedisSessionService:
         report_value = report_data[report_field]
         session_data[report_field] = report_value
         session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
-        # Não altera outros campos de relatório
         if "analysis_type" in report_data:
             session_data["analysis_type"] = report_data["analysis_type"]
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-        asyncio.create_task(self._save_to_blob_after_update(project_id))
+        # Removido salvamento automático no Blob Storage aqui (conforme instrução do usuário)
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
