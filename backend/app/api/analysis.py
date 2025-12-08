@@ -83,8 +83,7 @@ async def start_analysis(
             usuario_executor,
             nome_projeto,
             analysis_type,
-            project_id=project_id_final,
-            extracted_text=texto_extraido
+            project_id=project_id_final
         )
     BackgroundStateSaver.schedule_periodic_save(project_id_final)
     mcp_payload = MCPStartAnalysisPayload(
