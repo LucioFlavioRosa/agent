@@ -42,7 +42,6 @@ class MCPClientService:
         base = raw_base.strip().rstrip("/")
         url = f"{base}/start"
         logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
-        # Ajuste do payload para o MCP conforme novo fluxo
         mcp_payload = {
             "project_id": payload["project_id"],
             "texto_extraido_do_docx": payload.get("texto_extraido_do_docx"),
