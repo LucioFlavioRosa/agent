@@ -38,8 +38,8 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 logger.error(f"Estrutura de report_data inválida para project_id '{payload.project_id}'")
                 raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida")
             report_field = list(report_data.keys())[0]
-            # Buscar o estado atual da sessão do Redis e atualizar apenas o campo do relatório correspondente
             try:
+                session_atual = redis_service.get_session_by_project_id(payload.project_id)
                 redis_service.update_report(payload.project_id, report_data)
             except Exception as e:
                 logger.error(f"Erro ao atualizar relatório '{report_field}' para project_id '{payload.project_id}': {e}")
