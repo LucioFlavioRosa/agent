@@ -19,7 +19,6 @@ class StartAnalysisResponse(BaseModel):
     message: str
     project_id: str
     nome_projeto: Optional[str] = None
-    state: Optional[dict] = None
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
@@ -88,11 +87,8 @@ async def start_analysis(
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
-    session = redis_service.get_session_by_project_id(project_id_final)
-    state = session.to_project_state()
     return StartAnalysisResponse(
         message="Análise solicitada com sucesso ao agente.",
         project_id=project_id_final,
-        nome_projeto=nome_projeto,
-        state=state
+        nome_projeto=nome_projeto
     )
