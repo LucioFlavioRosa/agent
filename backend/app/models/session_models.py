@@ -33,11 +33,11 @@ class SessionData(BaseModel):
             "last_saved_to_blob": self.last_saved_to_blob.isoformat() if self.last_saved_to_blob else None,
             "docx_files": self.docx_files,
             "project_id": self.project_id,
-            "epicos_report": self.epicos_report if self.epicos_report is not None else [],
-            "features_report": self.features_report if self.features_report is not None else [],
-            "times_descricao_report": self.times_descricao_report if self.times_descricao_report is not None else [],
-            "alocacao_times_report": self.alocacao_times_report if self.alocacao_times_report is not None else [],
-            "premissas_riscos_report": self.premissas_riscos_report if self.premissas_riscos_report is not None else []
+            "epicos_report": self.epicos_report,
+            "features_report": self.features_report,
+            "times_descricao_report": self.times_descricao_report,
+            "alocacao_times_report": self.alocacao_times_report,
+            "premissas_riscos_report": self.premissas_riscos_report
         }
         state.pop("projeto", None)
         state.pop("comentario_usuario", None)
@@ -56,9 +56,9 @@ class SessionData(BaseModel):
             last_saved_to_blob=datetime.fromisoformat(state["last_saved_to_blob"]) if state.get("last_saved_to_blob") else datetime.utcnow(),
             docx_files=state.get("docx_files", []),
             project_id=state.get("project_id"),
-            epicos_report=state.get("epicos_report", []),
-            features_report=state.get("features_report", []),
-            times_descricao_report=state.get("times_descricao_report", []),
-            alocacao_times_report=state.get("alocacao_times_report", []),
-            premissas_riscos_report=state.get("premissas_riscos_report", [])
+            epicos_report=state.get("epicos_report"),
+            features_report=state.get("features_report"),
+            times_descricao_report=state.get("times_descricao_report"),
+            alocacao_times_report=state.get("alocacao_times_report"),
+            premissas_riscos_report=state.get("premissas_riscos_report")
         )
