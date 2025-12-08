@@ -120,7 +120,6 @@ class RedisSessionService:
         report_field = list(report_data.keys())[0]
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
-        # Não inicializar outros campos como listas vazias, apenas atualizar o campo informado
         valor_anterior = session_data.get(report_field)
         report_value = report_data[report_field]
         session_data[report_field] = report_value
@@ -135,7 +134,6 @@ class RedisSessionService:
         session_data["usuario_executor"] = usuario_executor
         session_data["nome_projeto"] = nome_projeto
         session_data["analysis_type"] = analysis_type
-        # Não sobrescrever campos de relatório existentes como listas vazias
         if not project_id:
             self.logger.error(f"[restore_session_from_state] Estado não contém project_id para nome_projeto='{nome_projeto}'.")
             raise ValueError(f"Estado do projeto não contém project_id para nome_projeto='{nome_projeto}'.")
