@@ -54,7 +54,10 @@ class RedisSessionService:
         ]
         if initial_state:
             for field in report_fields:
-                session_data[field] = initial_state.get(field, [])
+                if field in initial_state:
+                    session_data[field] = initial_state[field]
+                else:
+                    session_data[field] = None
         else:
             for field in report_fields:
                 session_data[field] = []
@@ -134,16 +137,7 @@ class RedisSessionService:
         session_data["usuario_executor"] = usuario_executor
         session_data["nome_projeto"] = nome_projeto
         session_data["analysis_type"] = analysis_type
-        report_fields = [
-            "epicos_report",
-            "features_report",
-            "times_descricao_report",
-            "alocacao_times_report",
-            "premissas_riscos_report"
-        ]
-        for field in report_fields:
-            if field not in session_data:
-                session_data[field] = []
+        # Removida a lógica que sobrescrevia os campos de relatório por listas vazias
         if not project_id:
             self.logger.error(f"[restore_session_from_state] Estado não contém project_id para nome_projeto='{nome_projeto}'.")
             raise ValueError(f"Estado do projeto não contém project_id para nome_projeto='{nome_projeto}'.")
