@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Any, Dict
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
+import logging
 
 router = APIRouter()
 
@@ -12,6 +13,7 @@ class UpdateReportRequest(BaseModel):
 @router.get("/project/{project_id}/reports")
 def get_project_reports(project_id: str):
     redis_service = RedisSessionService()
+    logger = logging.getLogger("session_api")
     try:
         session = redis_service.get_session_by_project_id(project_id)
         state = session.to_project_state()
@@ -19,6 +21,21 @@ def get_project_reports(project_id: str):
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
         state.pop("extracted_text", None)
+        # Passo 7: Normalização dos campos de relatório antes de retornar
+        report_fields = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        normalized_count = 0
+        for field in report_fields:
+            if field not in state or state[field] is None or not isinstance(state[field], list):
+                state[field] = []
+                normalized_count += 1
+        if normalized_count > 0:
+            logger.debug(f"Normalização: {normalized_count} campos de relatório convertidos para lista em get_project_reports().")
         reports = {
             "epicos_report": state.get("epicos_report"),
             "features_report": state.get("features_report"),
