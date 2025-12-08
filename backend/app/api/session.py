@@ -18,6 +18,7 @@ def get_project_reports(project_id: str):
         state.pop("projeto", None)
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
+        state.pop("extracted_text", None)
         reports = {
             "epicos_report": state.get("epicos_report"),
             "features_report": state.get("features_report"),
