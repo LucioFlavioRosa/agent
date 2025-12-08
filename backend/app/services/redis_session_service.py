@@ -45,7 +45,6 @@ class RedisSessionService:
             "docx_files": [],
             "project_id": project_id
         }
-        # Se initial_state for fornecido, copiar exatamente os campos de relatório do estado
         report_fields = [
             "epicos_report",
             "features_report",
@@ -55,9 +54,10 @@ class RedisSessionService:
         ]
         if initial_state:
             for field in report_fields:
-                if field in initial_state:
-                    session_data[field] = initial_state[field]
-        # Não inicializar campos de relatório como lista vazia se initial_state for None
+                session_data[field] = initial_state.get(field, [])
+        else:
+            for field in report_fields:
+                session_data[field] = []
         if extracted_text is not None:
             session_data["extracted_text"] = extracted_text
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
@@ -117,10 +117,14 @@ class RedisSessionService:
         report_field = list(report_data.keys())[0]
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
-        # Atualiza apenas o campo de relatório correspondente, preservando os demais
-        session_data[report_field] = report_data[report_field]
+        if report_field not in session_data or session_data[report_field] is None or not isinstance(session_data[report_field], list):
+            self.logger.debug(f"Campo '{report_field}' não existia ou era None. Inicializando como lista vazia antes de atualizar.")
+            session_data[report_field] = []
+        valor_anterior = session_data[report_field]
+        report_value = report_data[report_field]
+        session_data[report_field] = report_value
         session_data["last_modified"] = datetime.utcnow().isoformat()
-        self.logger.debug(f"Atualizando campo de relatório '{report_field}' para project_id={project_id}. Demais campos de relatório serão preservados.")
+        self.logger.debug(f"Atualizando campo de relatório '{report_field}' para project_id={project_id}. Valor anterior: {valor_anterior} | Novo valor: {report_value}")
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
@@ -130,8 +134,16 @@ class RedisSessionService:
         session_data["usuario_executor"] = usuario_executor
         session_data["nome_projeto"] = nome_projeto
         session_data["analysis_type"] = analysis_type
-        # Copia exatamente os campos de relatório do project_state, não inicializa como lista vazia
-        # Remove qualquer lógica de inicialização extra
+        report_fields = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        for field in report_fields:
+            if field not in session_data:
+                session_data[field] = []
         if not project_id:
             self.logger.error(f"[restore_session_from_state] Estado não contém project_id para nome_projeto='{nome_projeto}'.")
             raise ValueError(f"Estado do projeto não contém project_id para nome_projeto='{nome_projeto}'.")
