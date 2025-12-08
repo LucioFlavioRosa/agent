@@ -14,22 +14,6 @@ class ProjectStateService:
         project_id = state.get("project_id")
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         state["last_saved_to_blob"] = datetime.datetime.utcnow().isoformat()
-        state.pop("projeto", None)
-        state.pop("comentario_usuario", None)
-        state.pop("docx_blob_url", None)
-        state.pop("extracted_text", None)
-        report_fields = [
-            "epicos_report",
-            "features_report",
-            "times_descricao_report",
-            "alocacao_times_report",
-            "premissas_riscos_report"
-        ]
-        for field in report_fields:
-            if field not in state:
-                state[field] = []
-            elif state[field] is None:
-                state[field] = []
         blob_folder = f"{usuario_executor}/{nome_projeto}/estados"
         blob_filename = f"estado_{timestamp}.json"
         blob_path = f"{blob_folder}/{blob_filename}"
