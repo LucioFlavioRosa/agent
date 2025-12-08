@@ -23,16 +23,12 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             raise HTTPException(status_code=404, detail=f"Sessão não encontrada para project_id: {payload.project_id}")
         analysis_type = getattr(session, "analysis_type", None)
         if payload.status in {"in_progress", "done"}:
-            if not payload.report_data or not isinstance(payload.report_data, dict) or len(payload.report_data) != 1:
-                logger.error(f"Webhook com report_data inválido para project_id {payload.project_id}")
-                raise HTTPException(status_code=400, detail="report_data deve ser um dicionário com exatamente uma chave de relatório.")
-            if not validate_report_data_structure(payload.report_data, analysis_type):
+            report_data = payload.report_data
+            if not validate_report_data_structure(report_data, analysis_type):
                 logger.error(f"Estrutura de report_data inválida para analysis_type '{analysis_type}' e project_id '{payload.project_id}'")
                 raise HTTPException(status_code=400, detail=f"Estrutura de report_data inválida para analysis_type '{analysis_type}'")
-            report_field = list(payload.report_data.keys())[0]
-            logger.info(f"Atualizando campo de relatório '{report_field}' para project_id {payload.project_id}")
-            redis_service.update_report(payload.project_id, {report_field: payload.report_data[report_field]})
-            logger.info(f"Campo '{report_field}' atualizado. Demais campos de relatório foram preservados do estado anterior.")
+            redis_service.update_report(payload.project_id, report_data)
+            logger.info(f"Campo de relatório atualizado via webhook para project_id {payload.project_id}")
             await ProjectStateService.save_state_to_blob(redis_service.get_session_by_project_id(payload.project_id))
         elif payload.status == "error":
             logger.error(f"Webhook de erro recebido: job_id={payload.job_id}, error_type={payload.error_type}, error_message={payload.error_message}")
