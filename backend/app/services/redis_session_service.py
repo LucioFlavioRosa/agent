@@ -94,6 +94,16 @@ class RedisSessionService:
         except Exception as e:
             self.logger.error(f"Erro ao salvar estado no Blob após update_report para project_id={project_id}: {e}")
 
+    def _update_single_field(self, project_id: str, field_name: str, field_value: Any):
+        key = f"project:{project_id}"
+        session_json = self.redis_client.get(key)
+        if not session_json:
+            raise ValueError(f"Projeto {project_id} não encontrado no Redis.")
+        session_data = self._deserialize_session(session_json)
+        session_data[field_name] = field_value
+        session_data["last_modified"] = datetime.utcnow().isoformat()
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+
     def update_report(self, project_id: str, report_data: Dict[str, Any]):
         key = f"project:{project_id}"
         session_json = self.redis_client.get(key)
@@ -109,18 +119,13 @@ class RedisSessionService:
             "alocacao_times_report",
             "premissas_riscos_report"
         ]
-        if len(list(report_data.keys()))>1:
+        if len(list(report_data.keys())) > 1:
             raise ValueError(f"erro, deve haver apenas uma chave o report")
         report_field = list(report_data.keys())[0]
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
         report_value = report_data[report_field]
-        session_data[report_field] = report_value
-        session_data["last_saved_to_blob"] = datetime.utcnow().isoformat()
-        if "analysis_type" in report_data:
-            session_data["analysis_type"] = report_data["analysis_type"]
-        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-        # Removido salvamento automático no Blob Storage aqui (conforme instrução do usuário)
+        self._update_single_field(project_id, report_field, report_value)
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
