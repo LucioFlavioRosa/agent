@@ -1,5 +1,4 @@
 import logging
-import json
 from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks, UploadFile, File, Form, Request
 from pydantic import BaseModel
 from typing import Optional
@@ -10,7 +9,6 @@ from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
 from ..services.blob_storage_service import upload_docx_to_blob
 from ..services.docx_parser_service import extract_text_from_docx
-from ..services.audit_service import AuditService
 
 import uuid
 
@@ -33,20 +31,6 @@ async def start_analysis(
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
-    try:
-        form_data = await request.form()
-        form_dict = dict(form_data)
-        if arquivo_docx is not None:
-            form_dict["arquivo_docx_filename"] = arquivo_docx.filename
-        AuditService.save_frontend_to_backend_payload(
-            payload=form_dict,
-            endpoint="/analysis/start",
-            method="POST",
-            usuario_executor=usuario_executor,
-            project_id=None
-        )
-    except Exception as e:
-        logger.error(f"Erro ao auditar payload frontend->backend: {e}")
     logger.info(f"Iniciando análise para projeto '{nome_projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
     redis_service = RedisSessionService()
     project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
@@ -108,19 +92,8 @@ async def start_analysis(
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
-    response_payload = StartAnalysisResponse(
+    return StartAnalysisResponse(
         message="Análise solicitada com sucesso ao agente.",
         project_id=project_id_final,
         nome_projeto=nome_projeto
     )
-    try:
-        AuditService.save_backend_to_frontend_payload(
-            response=response_payload.dict(),
-            endpoint="/analysis/start",
-            status_code=200,
-            usuario_executor=usuario_executor,
-            project_id=project_id_final
-        )
-    except Exception as e:
-        logger.error(f"Erro ao auditar payload backend->frontend: {e}")
-    return response_payload

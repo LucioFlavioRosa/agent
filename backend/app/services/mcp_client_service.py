@@ -3,9 +3,7 @@ import httpx
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, validator
 from backend.app.core.config import settings
-from backend.app.services.audit_service import AuditService
-from backend.app.utils.json_encoder import safe_json_dumps
-import json
+from fastapi.encoders import jsonable_encoder
 
 class MCPStartAnalysisPayload(BaseModel):
     project_id: str = Field(...)
@@ -51,12 +49,10 @@ class MCPClientService:
             "analysis_type": payload["analysis_type"]
         }
         try:
-            AuditService.save_backend_to_mcp_payload(mcp_payload, payload["analysis_type"], payload["project_id"])
-            json_payload = safe_json_dumps(mcp_payload)
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url,
-                    content=json_payload,
+                    json=jsonable_encoder(mcp_payload),
                     headers={"Content-Type": "application/json"}
                 )
                 if response.status_code != 200:

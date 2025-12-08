@@ -21,10 +21,7 @@ class ProjectStateService:
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
-        logger = logging.getLogger("ProjectStateService")
-        logger.debug(f"[save_state_to_blob] Estado ANTES do salvamento: {json.dumps(state, ensure_ascii=False)}")
         blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
-        logger.debug(f"[save_state_to_blob] Estado DEPOIS do salvamento: {json.dumps(state, ensure_ascii=False)}")
         ProjectStateService._invalidate_project_id_cache(nome_projeto)
         return blob_client.url
 
@@ -45,7 +42,6 @@ class ProjectStateService:
                 state.pop("docx_blob_url", None)
                 state.pop("extracted_text", None)
                 if project_id and state.get("project_id") == project_id:
-                    logger.debug(f"[load_latest_state_from_blob] Estado carregado para project_id={project_id}: {json.dumps({k: v for k, v in state.items() if k in ['epicos_report','features_report','times_descricao_report','alocacao_times_report','premissas_riscos_report']}, ensure_ascii=False)}")
                     return state
                 if nome_projeto and state.get("nome_projeto") == nome_projeto:
                     states.append((blob, state))
@@ -60,7 +56,6 @@ class ProjectStateService:
                         pass
                 return datetime.datetime.min
             states_sorted = sorted(states, key=get_sort_key, reverse=True)
-            logger.debug(f"[load_latest_state_from_blob] Estado carregado para nome_projeto={nome_projeto}: {json.dumps({k: v for k, v in states_sorted[0][1].items() if k in ['epicos_report','features_report','times_descricao_report','alocacao_times_report','premissas_riscos_report']}, ensure_ascii=False)}")
             return states_sorted[0][1]
         logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}, nome_projeto={nome_projeto}")
         return None
