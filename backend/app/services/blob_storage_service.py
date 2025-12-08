@@ -5,6 +5,7 @@ from azure.storage.blob import BlobServiceClient, ContentSettings
 from backend.app.core.config import settings
 import asyncio
 from backend.app.services.docx_parser_service import extract_text_from_docx
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -56,4 +57,16 @@ async def upload_docx_to_blob(file: UploadFile, blob_folder: str, blob_filename:
     _, container_client = _get_blob_clients()
     blob_path = f"{blob_folder}/{blob_filename}"
     blob_client = container_client.get_blob_client(blob_path)
+    return blob_client.url
+
+def upload_json_to_blob(json_data: dict, blob_folder: str, blob_filename: str) -> str:
+    _, container_client = _get_blob_clients()
+    blob_path = f"{blob_folder}/{blob_filename}"
+    blob_client = container_client.get_blob_client(blob_path)
+    blob_client.upload_blob(
+        json.dumps(json_data, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        overwrite=True,
+        content_settings=None
+    )
+    logger.info(f"Payload de auditoria salvo em: {blob_client.url}")
     return blob_client.url
