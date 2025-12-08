@@ -63,13 +63,6 @@ class RedisSessionService:
         session_data["status"] = status
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
-    async def _save_to_blob_after_update(self, project_id: str):
-        try:
-            session = self.get_session_by_project_id(project_id)
-            await ProjectStateService.save_state_to_blob(session)
-        except Exception as e:
-            self.logger.error(f"Erro ao salvar estado no Blob após update_report para project_id={project_id}: {e}")
-
     def _update_single_field(self, project_id: str, field_name: str, field_value: Any):
         key = f"project:{project_id}"
         session_json = self.redis_client.get(key)
