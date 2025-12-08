@@ -125,7 +125,10 @@ class RedisSessionService:
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
         report_value = report_data[report_field]
-        self._update_single_field(project_id, report_field, report_value)
+        # Atualiza apenas o campo presente no report_data, mantendo os demais inalterados
+        session_data[report_field] = report_value
+        session_data["last_modified"] = datetime.utcnow().isoformat()
+        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
@@ -139,11 +142,16 @@ class RedisSessionService:
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["project_id"] = project_id
         session_data["nome_projeto"] = nome_projeto
-        session_data["epicos_report"] = project_state.get("epicos_report") if "epicos_report" in project_state else []
-        session_data["features_report"] = project_state.get("features_report") if "features_report" in project_state else []
-        session_data["times_descricao_report"] = project_state.get("times_descricao_report") if "times_descricao_report" in project_state else []
-        session_data["alocacao_times_report"] = project_state.get("alocacao_times_report") if "alocacao_times_report" in project_state else []
-        session_data["premissas_riscos_report"] = project_state.get("premissas_riscos_report") if "premissas_riscos_report" in project_state else []
+        # Corrigido: mantém o valor do estado do projeto mais atual para cada campo de relatório
+        for report_field in [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]:
+            if report_field in project_state:
+                session_data[report_field] = project_state[report_field]
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
