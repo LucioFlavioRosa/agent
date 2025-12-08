@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional
 from backend.app.core.config import settings
-from backend.app.models.session_models import SessionData, SessionStep
+from backend.app.models.session_models import SessionData
 import logging
 import asyncio
 from backend.app.services.project_state_service import ProjectStateService
@@ -37,7 +37,6 @@ class RedisSessionService:
             "nome_projeto": nome_projeto,
             "analysis_type": analysis_type,
             "created_at": created_at,
-            "steps": [],
             "last_saved_to_blob": last_saved_to_blob,
             "docx_files": [],
             "project_id": project_id,
@@ -47,26 +46,10 @@ class RedisSessionService:
             "alocacao_times_report": [],
             "premissas_riscos_report": []
         }
+        if extracted_text is not None:
+            session_data["extracted_text"] = extracted_text
         self.redis_client.setex(f"project:{project_id}", self.session_ttl, self._serialize_session(session_data))
         return project_id
-
-    def add_step(self, project_id: str, action: str, status: str, metadata: Optional[Dict[str, Any]] = None):
-        key = f"project:{project_id}"
-        session_json = self.redis_client.get(key)
-        if not session_json:
-            raise ValueError(f"Projeto {project_id} não encontrado no Redis.")
-        session_data = self._deserialize_session(session_json)
-        step_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().isoformat()
-        step = {
-            "step_id": step_id,
-            "timestamp": timestamp,
-            "action": action,
-            "status": status,
-            "metadata": metadata or {}
-        }
-        session_data["steps"].append(step)
-        self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def get_session_by_project_id(self, project_id: str) -> SessionData:
         key = f"project:{project_id}"
@@ -74,8 +57,6 @@ class RedisSessionService:
         if not session_json:
             raise ValueError(f"Projeto {project_id} não encontrado no Redis.")
         session_dict = self._deserialize_session(session_json)
-        steps = [SessionStep(**step) for step in session_dict.get("steps", [])]
-        session_dict["steps"] = steps
         return SessionData(**session_dict)
 
     def update_session_status(self, project_id: str, status: str):
@@ -125,10 +106,17 @@ class RedisSessionService:
         if report_field not in valid_report_fields:
             raise ValueError(f"Chave de relatório '{report_field}' não é válida. Esperado uma das: {valid_report_fields}")
         report_value = report_data[report_field]
-        # Atualiza apenas o campo presente no report_data, mantendo os demais inalterados
         session_data[report_field] = report_value
         session_data["last_modified"] = datetime.utcnow().isoformat()
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(ProjectStateService.save_state_to_blob(SessionData(**session_data)))
+            else:
+                loop.run_until_complete(ProjectStateService.save_state_to_blob(SessionData(**session_data)))
+        except Exception as e:
+            self.logger.error(f"Erro ao disparar salvamento do estado completo no Blob após update_report: {e}")
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
@@ -142,7 +130,6 @@ class RedisSessionService:
         session_data["docx_files"] = project_state.get("docx_files", [])
         session_data["project_id"] = project_id
         session_data["nome_projeto"] = nome_projeto
-        # Corrigido: mantém o valor do estado do projeto mais atual para cada campo de relatório
         for report_field in [
             "epicos_report",
             "features_report",
@@ -168,7 +155,6 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
 
     def update_session_on_state_change(self, project_id: str, updated_fields: Dict[str, Any]):
-        from backend.app.services.background_state_saver import BackgroundStateSaver
         key = f"project:{project_id}"
         session_json = self.redis_client.get(key)
         if not session_json:
@@ -177,4 +163,3 @@ class RedisSessionService:
         session_data.update(updated_fields)
         session_data["last_modified"] = datetime.utcnow().isoformat()
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-        BackgroundStateSaver.schedule_periodic_save(project_id)
