@@ -19,7 +19,7 @@ async def check_project(
         project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
         logger.info(f"[CHECK] Resultado _get_project_id_by_name: {project_id}")
         if not project_id:
-            logger.warning(f"[CHECK] Nenhum project_id encontrado para nome_projeto='{nome_projeto}' e usuario_executor='{usuario_executor}'. Verificando estados de resumo no Blob Storage...")
+            logger.warning(f"[CHECK] Nenhum project_id encontrado para nome_projeto='{nome_projeto}' e usuario_executor='{usuario_executor}'. Fallback: tentando buscar diretamente no Blob Storage...")
             latest_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, nome_projeto=nome_projeto)
             if latest_state and latest_state.get("project_id"):
                 project_id = latest_state.get("project_id")
