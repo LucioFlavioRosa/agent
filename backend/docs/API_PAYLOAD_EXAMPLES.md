@@ -170,6 +170,9 @@ Authorization: Bearer <token>
 
 ## 4.1 Iniciar Análise (POST /analysis/start)
 
+O frontend deve enviar apenas o campo `nome_projeto` (e nunca `project_id`). O backend irá internamente converter `nome_projeto` para `project_id` usando o serviço ProjectStateService. Se o projeto já existir, o mesmo `project_id` será utilizado. Se for um novo projeto, o backend irá gerar um novo `project_id` e retornar na resposta.
+
+Exemplo de requisição:
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: multipart/form-data
@@ -179,11 +182,14 @@ analysis_type=criacao_epicos_azure_devops
 instrucoes_extras=Este é um comentário adicional do usuário.
 arquivo_docx=<arquivo.docx>
 
+Exemplo de resposta de sucesso:
 {
   "message": "Análise solicitada com sucesso ao agente.",
   "project_id": "projeto-uuid-123",
   "nome_projeto": "ProjetoNovo"
 }
+
+Observação: O campo `project_id` nunca deve ser enviado pelo frontend. O backend retorna o `project_id` na resposta para uso em operações subsequentes.
 
 ---
 
@@ -401,6 +407,7 @@ sequenceDiagram
     FE->>BE: POST /auth/login (token)
     BE-->>FE: Lista de projetos (resumo: nome_projeto, ultima_analysis_type, created_at, ultima_atualizacao, project_id)
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras, arquivo_docx)
+    BE->>BE: Converte nome_projeto para project_id (gera novo se não existir)
     BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
@@ -412,6 +419,7 @@ sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
     BE-->>FE: exists: true, state (resumo + todos os estados disponíveis)
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, ...)
+    BE->>BE: Converte nome_projeto para project_id (recupera existente)
     BE->>MCP: Envia payload
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
