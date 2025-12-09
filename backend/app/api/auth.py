@@ -43,21 +43,19 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
         logger.error("Usuário não autenticado: usuario_executor ausente no token.")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
     projetos = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
-    redis_service = RedisSessionService()
-    resumo_list = []
+    # Validação extra: loga duplicatas se existirem antes da sanitização (para debug)
+    ids = [p.get("project_id") for p in projetos]
+    nomes = [p.get("nome_projeto") for p in projetos]
+    if len(ids) != len(set(ids)):
+        logger.warning(f"Projetos duplicados detectados por project_id antes da sanitização: {ids}")
+    if len(nomes) != len(set(nomes)):
+        logger.warning(f"Projetos duplicados detectados por nome_projeto antes da sanitização: {nomes}")
+    # Garante que a lista final não contém duplicatas
+    projetos_unicos = {}
     for p in projetos:
-        project_id = p.get("project_id")
-        resumo_state = redis_service.get_resumo_state(project_id)
-        if resumo_state:
-            resumo = {
-                "nome_projeto": resumo_state.get("nome_projeto", ""),
-                "ultima_analysis_type": resumo_state.get("ultima_analysis_type", ""),
-                "created_at": resumo_state.get("created_at", None),
-                "ultima_atualizacao": resumo_state.get("ultima_atualizacao", resumo_state.get("last_saved_to_blob", None)),
-                "project_id": resumo_state.get("project_id")
-            }
-            resumo_list.append(resumo)
-        else:
-            resumo_list.append(p)
-    logger.info(f"Login bem-sucedido para usuario_executor={usuario_executor}. Projetos retornados: {len(resumo_list)}")
+        key = p.get("project_id") or p.get("nome_projeto")
+        if key and key not in projetos_unicos:
+            projetos_unicos[key] = p
+    resumo_list = list(projetos_unicos.values())
+    logger.info(f"Login bem-sucedido para usuario_executor={usuario_executor}. Projetos únicos retornados: {len(resumo_list)}")
     return AuthLoginResponse(user_info=current_user, projects=resumo_list)
