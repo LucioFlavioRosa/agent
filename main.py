@@ -27,12 +27,10 @@ class MCPStartPayload(BaseModel):
     usuario_executor: Optional[str] = None
 
 # --- DADOS MOCKADOS ---
-DATA_EPICOS = {
-    "epicos_report": [
+DATA_EPICOS =  [
         { "id": 1, "titulo": "Autenticação e Segurança", "descricao": "Implementar login via Azure AD.", "prioridade": "Alta" },
         { "id": 2, "titulo": "Processamento de Documentos", "descricao": "Upload e extração de texto.", "prioridade": "Alta" }
     ]
-}
 
 DATA_EPICOS_REFINAMENTO = {
     "epicos_report": [
