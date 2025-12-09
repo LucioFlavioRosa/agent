@@ -46,12 +46,42 @@ class ProjectStateService:
 
     @staticmethod
     async def save_state_to_blob(session_data, report_type: Optional[str] = None) -> str:
+        logger = logging.getLogger("ProjectStateService")
         usuario_executor = getattr(session_data, "usuario_executor", None)
         nome_projeto = getattr(session_data, "nome_projeto", None)
         project_id = getattr(session_data, "project_id", None)
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         last_update = datetime.datetime.utcnow()
         estados_base_folder = f"{usuario_executor}/{nome_projeto}/estados"
+        # Passo 1: Validação defensiva dos campos obrigatórios
+        campos_obrigatorios = {
+            "usuario_executor": usuario_executor,
+            "nome_projeto": nome_projeto,
+            "project_id": project_id
+        }
+        campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor]
+        if campos_faltando:
+            logger.warning(f"Campos obrigatórios ausentes em session_data: {campos_faltando}. Tentando buscar estado do Blob Storage...")
+            # Tenta buscar o estado mais recente do Blob Storage
+            estado_blob = None
+            try:
+                estado_blob = await ProjectStateService.load_latest_state_from_blob(
+                    usuario_executor or "",
+                    project_id=project_id,
+                    nome_projeto=nome_projeto
+                )
+            except Exception as e:
+                logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
+            if estado_blob:
+                # Preenche os campos faltantes com os valores do Blob
+                for campo in campos_faltando:
+                    valor_blob = estado_blob.get(campo)
+                    if valor_blob:
+                        setattr(session_data, campo, valor_blob)
+                        campos_obrigatorios[campo] = valor_blob
+                campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor]
+            if campos_faltando:
+                raise ValueError(f"Não é possível salvar o estado: campos obrigatórios ausentes mesmo após fallback do Blob Storage: {campos_faltando}")
         if report_type:
             subfolder_map = {
                 "epicos_report": "epicos",
@@ -80,10 +110,25 @@ class ProjectStateService:
     @staticmethod
     def _build_resumo_state(session_data, last_update):
         nome_projeto = getattr(session_data, "nome_projeto", None)
+        usuario_executor = getattr(session_data, "usuario_executor", None)
+        project_id = getattr(session_data, "project_id", None)
         ultima_analysis_type = getattr(session_data, "ultima_analysis_type", None) or getattr(session_data, "analysis_type", None)
         created_at = getattr(session_data, "created_at", None)
         if isinstance(created_at, str):
             created_at = datetime.datetime.fromisoformat(created_at)
+        # Passo 2: Validação defensiva dos campos obrigatórios
+        if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
+            nome_projeto = getattr(session_data, 'nome_projeto', None) or 'PROJETO_SEM_NOME'
+            if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
+                raise ValueError("Campo 'nome_projeto' é obrigatório e não pode ser None ou vazio para criar o estado de resumo.")
+        if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
+            usuario_executor = getattr(session_data, 'usuario_executor', None) or 'USUARIO_SEM_NOME'
+            if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
+                raise ValueError("Campo 'usuario_executor' é obrigatório e não pode ser None ou vazio para criar o estado de resumo.")
+        if not project_id or not isinstance(project_id, str) or not project_id.strip():
+            project_id = getattr(session_data, 'project_id', None) or 'PROJECT_ID_SEM_NOME'
+            if not project_id or not isinstance(project_id, str) or not project_id.strip():
+                raise ValueError("Campo 'project_id' é obrigatório e não pode ser None ou vazio para criar o estado de resumo.")
         return EstadoResumoProjeto(
             nome_projeto=nome_projeto,
             ultima_analysis_type=ultima_analysis_type,
