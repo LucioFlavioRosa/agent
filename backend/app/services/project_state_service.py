@@ -41,7 +41,7 @@ class ProjectStateService:
     @staticmethod
     def _build_resumo_state(session_data, last_update):
         nome_projeto = getattr(session_data, "nome_projeto", None)
-        ultima_analysis_type = getattr(session_data, "analysis_type", None)
+        ultima_analysis_type = getattr(session_data, "ultima_analysis_type", None) or getattr(session_data, "analysis_type", None)
         created_at = getattr(session_data, "created_at", None)
         if isinstance(created_at, str):
             created_at = datetime.datetime.fromisoformat(created_at)
@@ -55,7 +55,7 @@ class ProjectStateService:
     @staticmethod
     def _build_report_state(session_data, report_type, last_update):
         nome_projeto = getattr(session_data, "nome_projeto", None)
-        ultima_analysis_type = getattr(session_data, "analysis_type", None)
+        ultima_analysis_type = getattr(session_data, "ultima_analysis_type", None) or getattr(session_data, "analysis_type", None)
         created_at = getattr(session_data, "created_at", None)
         if isinstance(created_at, str):
             created_at = datetime.datetime.fromisoformat(created_at)
@@ -157,3 +157,22 @@ class ProjectStateService:
         keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto}")]
         for k in keys_to_remove:
             del ProjectStateService._project_id_cache[k]
+
+    @staticmethod
+    async def get_report_state(project_id: str, report_type: str) -> Optional[Dict[str, Any]]:
+        from backend.app.services.redis_session_service import RedisSessionService
+        redis_service = RedisSessionService()
+        state = redis_service.get_report_state(project_id, report_type)
+        if state:
+            return state
+        usuario_executor = None
+        nome_projeto = None
+        resumo_state = redis_service.get_resumo_state(project_id)
+        if resumo_state:
+            usuario_executor = resumo_state.get("usuario_executor")
+            nome_projeto = resumo_state.get("nome_projeto")
+        if usuario_executor and nome_projeto:
+            blob_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id, nome_projeto=nome_projeto, report_type=report_type)
+            if blob_state:
+                return blob_state
+        return None
