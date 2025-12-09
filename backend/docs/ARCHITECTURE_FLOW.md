@@ -51,6 +51,41 @@ flowchart TD
 
 ---
 
+## Estrutura de Pastas no Blob Storage
+
+mermaid
+flowchart TD
+    root[Blob Storage]
+    subgraph usuario_executor
+        projeto[projeto]
+        subgraph estados
+            resumo[resumo/]
+            epicos[epicos/]
+            features[features/]
+            times[Times Descricao/]
+            alocacao[Alocacao Times/]
+            premissas[Premissas Riscos/]
+        end
+    end
+    root --> usuario_executor
+    usuario_executor --> projeto
+    projeto --> estados
+    estados --> resumo
+    estados --> epicos
+    estados --> features
+    estados --> times
+    estados --> alocacao
+    estados --> premissas
+
+    resumo --> estado_resumo_json[estado_resumo_*.json]
+    epicos --> estado_epicos_json[estado_epicos_report_*.json]
+    features --> estado_features_json[estado_features_report_*.json]
+    times --> estado_times_json[estado_times_descricao_report_*.json]
+    alocacao --> estado_alocacao_json[estado_alocacao_times_report_*.json]
+    premissas --> estado_premissas_json[estado_premissas_riscos_report_*.json]
+
+---
+
 ## Etapas do Fluxo e Código Responsável
 
 ### 1. Login e Autenticação via Azure AD
@@ -62,10 +97,10 @@ flowchart TD
   - `backend/app/services/project_state_service.py` (`list_user_projects`)
 
 ### 2. Verificação de Projeto Existente
-- O frontend chama `/projects/check` enviando o campo `nome_projeto`. O backend converte internamente para `project_id` usando o método auxiliar, e retorna o estado de resumo do projeto.
+- O frontend chama `/projects/check` enviando o campo `nome_projeto`. O backend converte internamente para `project_id` usando o método auxiliar, e retorna o estado completo do projeto, incluindo todos os estados salvos (resumo + reports).
 - Código:
   - `backend/app/api/projects.py` (`/projects/check`)
-  - `backend/app/services/project_state_service.py` (`_get_project_id_by_name`, `load_latest_state_from_blob`)
+  - `backend/app/services/project_state_service.py` (`_get_project_id_by_name`, `load_all_states_from_blob`)
 
 ### 3. Início de Análise com Upload de DOCX
 - O frontend chama `/analysis/start` enviando os campos `nome_projeto`, `analysis_type`, `instrucoes_extras` e opcionalmente `arquivo_docx` como arquivo via multipart/form-data.
@@ -76,14 +111,14 @@ flowchart TD
   - `backend/app/services/blob_storage_service.py` (`upload_docx_to_blob`)
   - `backend/app/services/docx_parser_service.py` (`extract_text_from_docx`)
 
-### 4. Criação e Gerenciamento de Estado Resumo e Estados Individuais de Report no Redis
-- O backend cria e persiste o estado de resumo do projeto no Redis e Blob Storage. Estados individuais de report são criados e atualizados conforme o tipo de análise executada.
+### 4. Criação e Gerenciamento de Estado Resumo e Estados Individuais de Report no Redis e Blob Storage
+- O backend cria e persiste o estado de resumo do projeto no Redis e Blob Storage. Estados individuais de report são criados e atualizados conforme o tipo de análise executada. Cada tipo de estado é salvo em sua pasta específica no Blob Storage.
 - Código:
   - `backend/app/services/redis_session_service.py` (`create_session`, `create_report_state`, `update_report_state`, `get_report_state`)
-  - `backend/app/models/project_state_models.py` (`EstadoResumoProjeto`, `EstadoEpicos`, `EstadoFeatures`, `EstadoTimesDescricao`, `EstadoAlocacaoTimes`, `EstadoPremissasRiscos`)
+  - `backend/app/models/project_state_models.py` (`EstadoResumoProjeto`, `EstadoEpicos`, `EstadoFeatures`, `EstadoTimesDescricao`, `EstadoAlocacaoTimes`, `EstadoPremissasRiscos`, `EstadoCompletoProjetoResponse`)
 
 ### 5. Salvamento Automático e Periódico de Estado no Blob Storage
-- Estados de resumo e de report são salvos periodicamente no Blob Storage via `BackgroundStateSaver`. Mudanças em relatórios ou estado acionam o salvamento automático.
+- Estados de resumo e de report são salvos periodicamente no Blob Storage via `BackgroundStateSaver`. Mudanças em relatórios ou estado acionam o salvamento automático. Cada tipo de estado é salvo em sua respectiva pasta.
 - Código:
   - `backend/app/services/background_state_saver.py` (`schedule_periodic_save`)
   - `backend/app/services/project_state_service.py` (`save_state_to_blob`)
@@ -103,7 +138,7 @@ flowchart TD
 
 ### 8. Comunicação Backend ↔ MCP (Incluindo Webhooks)
 - O backend envia payloads para o MCP sempre usando `project_id` como identificador principal. O MCP responde com `job_id` e envia webhooks de progresso/conclusão, que atualizam estados individuais de report no Redis e Blob Storage.
-- O campo `report_data` do webhook do MCP deve ser um dicionário com exatamente uma chave, que pode ser: `epicos_report`, `features_report`, `times_descricao_report`, `alocacao_times_report` ou `premissas_riscos_report`. O backend atualiza diretamente o estado individual correspondente, sem sobrescrever outros relatórios.
+- O campo `report_data` do webhook do MCP deve ser um dicionário com exatamente uma chave, que pode ser: `epicos_report`, `features_report`, `times_descricao_report`, `alocacao_times_report`, ou `premissas_riscos_report`. O backend atualiza diretamente o estado individual correspondente, sem sobrescrever outros relatórios. Cada tipo de report é salvo em sua pasta específica.
 - Código:
   - `backend/app/services/mcp_client_service.py` (`start_analysis`)
   - `backend/app/services/redis_session_service.py` (`get_report_state`, `update_report_state`)
@@ -115,54 +150,20 @@ flowchart TD
   - `backend/app/api/session.py` (`GET /session/project/{project_id}/report/{report_type}`)
   - `backend/app/services/project_state_service.py` (`get_report_state`)
 
----
-
-## Fluxos Críticos de Negócio
-
-### 1. Fluxo de Novo Projeto (Criação de project_id)
-mermaid
-sequenceDiagram
-    participant FE as Frontend
-    participant BE as Backend
-    participant KV as Key Vault
-    participant BS as Blob Storage
-    participant RS as Redis
-    participant MCP as MCP Server
-    FE->>BE: POST /auth/login (token)
-    BE->>KV: Carrega segredos
-    BE->>BS: Lista projetos
-    BE-->>FE: Lista de projetos (resumo)
-    FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras, arquivo_docx)
-    BE->>BE: Cria novo project_id (uuid)
-    BE->>RS: Cria estado de resumo do projeto
-    BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído do arquivo docx)
-    MCP-->>BE: job_id, project_id
-    BE->>BS: Salva estado de resumo
-    BE-->>FE: job_id, project_id, nome_projeto
-
-### 2. Fluxo de Atualização de Estado Individual de Report
-mermaid
-sequenceDiagram
-    MCP->>BE: Webhook (job_id, project_id, status, report_data, analysis_type)
-    BE->>BE: Usa analysis_type para determinar report_type
-    BE->>RS: Atualiza estado individual do report (ex: features_report)
-    BE->>BS: Salva estado individual do report no Blob Storage
-    BE-->>FE: status ok
-
-### 3. Consulta de Estado Individual de Report
-mermaid
-sequenceDiagram
-    FE->>BE: GET /session/project/{project_id}/report/{report_type}
-    BE->>RS: Busca estado individual do report
-    BE-->>FE: Estado individual do report (campos: nome_projeto, ultima_analysis_type, created_at, ultima_atualizacao, <report_field>)
+### 10. Consulta de Estado Completo do Projeto
+- O backend retorna todos os estados salvos (resumo + reports) para o projeto, lendo sempre o arquivo mais recente de cada pasta. Se algum estado não existir, retorna o campo como `None` ou lista vazia conforme o modelo.
+- Código:
+  - `backend/app/api/projects.py` (`GET /projects/check`)
+  - `backend/app/api/session.py` (`GET /session/project/{project_id}/reports`)
+  - `backend/app/services/project_state_service.py` (`load_all_states_from_blob`)
 
 ---
 
 ## Observações
 
-- O backend mantém um estado de resumo do projeto e estados individuais para cada report.
+- O backend mantém um estado de resumo do projeto e estados individuais para cada report, cada um salvo em sua pasta específica no Blob Storage.
 - O campo `ultima_analysis_type` indica qual foi a última análise executada no projeto ou report.
 - O backend atualiza apenas o estado do report correspondente ao `analysis_type` recebido no webhook.
 - O frontend deve fazer polling periódico para consultar estados de reports enquanto o MCP processa a análise.
-- Para obter o estado de um report específico, utilize o endpoint `GET /session/project/{project_id}/report/{report_type}`.
-- O backend nunca retorna o estado completo do projeto em endpoints de login ou listagem, apenas o resumo.
+- Para obter o estado completo do projeto, utilize o endpoint `GET /session/project/{project_id}/reports` ou `GET /projects/check`.
+- O backend sempre retorna o estado mais atual de cada pasta.
