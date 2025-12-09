@@ -29,6 +29,8 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             return {"status": "ok", "project_id": payload.project_id, "nome_projeto": session.nome_projeto}
             
         elif payload.status == "done":
+            import json
+            logger.info(f"🔍 [DEBUG WEBHOOK] Conteúdo recebido do MCP: {json.dumps(payload.report_data)}")
             report_data = payload.report_data
             if not report_data or not isinstance(report_data, dict) or len(report_data) != 1:
                 logger.error(f"Estrutura de report_data inválida para project_id '{payload.project_id}'")
