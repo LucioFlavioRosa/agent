@@ -44,6 +44,51 @@ class RedisSessionService:
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
         self.logger = logging.getLogger("RedisSessionService")
 
+    def get_session_by_project_id(self, project_id: str) -> Optional[SessionData]:
+        """
+        Recupera a sessão do Redis e converte para o modelo SessionData.
+        O Webhook precisa disso para acessar atributos como session.nome_projeto.
+        """
+        data = self.get_resumo_state(project_id)
+        if data:
+            try:
+                # Converte o dicionário do Redis para o Objeto SessionData
+                return SessionData(**data)
+            except Exception as e:
+                self.logger.error(f"Erro ao converter dados do Redis para SessionData: {e}")
+                # Em caso de erro de validação, tenta retornar None ou lidar conforme sua necessidade
+                return None
+        return None
+
+    def update_report(self, project_id: str, report_data: Dict[str, Any]):
+        """
+        Atualiza os dados do relatório (ex: epicos_report) dentro da sessão principal no Redis.
+        Isso garante que o próximo 'get_session' traga os dados atualizados.
+        """
+        key = f"project:{project_id}:resumo"
+        session_json = self.redis_client.get(key)
+        
+        if session_json:
+            try:
+                session_data = self._deserialize_session(session_json)
+                
+                # Mescla os dados do relatório (ex: {"epicos_report": [...]}) na sessão
+                session_data.update(report_data)
+                
+                # Atualiza timestamp
+                session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
+                
+                # Salva de volta no Redis com TTL renovado
+                self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
+                self.logger.info(f"Relatório merged e atualizado no Redis para projeto {project_id}")
+            except Exception as e:
+                self.logger.error(f"Erro ao atualizar report no Redis: {e}")
+                raise e
+        else:
+            msg = f"Tentativa de atualizar report para sessão inexistente no Redis: {project_id}"
+            self.logger.error(msg)
+            # Opcional: Levantar erro ou ignorar dependendo da regra de negócio
+
     def _serialize_session(self, session_data: dict) -> str:
         return json.dumps(session_data)
 
