@@ -32,6 +32,12 @@ async def start_analysis(
 ):
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{nome_projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
+    if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
+        logger.error(f"Falha ao extrair usuario_executor do token JWT: '{usuario_executor}'")
+        raise HTTPException(status_code=401, detail="Campo 'usuario_executor' ausente ou inválido no token JWT.")
+    if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
+        logger.error(f"Campo 'nome_projeto' ausente ou vazio no formulário: '{nome_projeto}'")
+        raise HTTPException(status_code=400, detail="Campo 'nome_projeto' ausente ou vazio no formulário.")
     redis_service = RedisSessionService()
     project_id_final = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
     project_state = None
@@ -45,6 +51,9 @@ async def start_analysis(
             session_exists = False
     else:
         project_id_final = str(uuid.uuid4())
+    if not project_id_final or not isinstance(project_id_final, str) or not project_id_final.strip():
+        logger.error(f"Falha ao gerar ou recuperar project_id_final: '{project_id_final}'")
+        raise HTTPException(status_code=500, detail="Falha ao gerar ou recuperar project_id do projeto.")
     texto_extraido = None
     blob_url = None
     if arquivo_docx is not None:
@@ -80,12 +89,11 @@ async def start_analysis(
             "project_id": project_id_final,
             "usuario_executor": usuario_executor
         }
-        # Passo 3: Validação dos campos obrigatórios antes de criar sessão
         campos_obrigatorios = ["nome_projeto", "usuario_executor", "project_id"]
-        campos_faltando = [campo for campo in campos_obrigatorios if not resumo_state.get(campo)]
+        campos_faltando = [campo for campo in campos_obrigatorios if not resumo_state.get(campo) or (isinstance(resumo_state.get(campo), str) and not resumo_state.get(campo).strip())]
         if campos_faltando:
             logger.critical(f"Erro ao inicializar sessão: campos obrigatórios ausentes no estado do projeto: {campos_faltando}")
-            raise HTTPException(status_code=500, detail="Erro ao inicializar sessão: campos obrigatórios ausentes no estado do projeto.")
+            raise HTTPException(status_code=500, detail=f"Erro ao inicializar sessão: campos obrigatórios ausentes no estado do projeto: {campos_faltando}")
         redis_service.create_session(
             usuario_executor,
             nome_projeto,
