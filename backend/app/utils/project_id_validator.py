@@ -1,7 +1,6 @@
 import uuid
 import logging
 import asyncio
-# A importação foi removida daqui para evitar o Circular Import
 
 def ensure_project_id(session_data: dict, usuario_executor: str = None, nome_projeto: str = None) -> str:
     from backend.app.services.project_state_service import ProjectStateService
