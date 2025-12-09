@@ -39,32 +39,29 @@ async def check_project(
                 return {"exists": False}
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id=project_id)
         logger.info(f"[CHECK] Resultado load_all_states_from_blob: {bool(state)} para project_id={project_id}")
-        if state:
-            report_fields = [
-                "epicos",
-                "features",
-                "times_descricao",
-                "alocacao_times",
-                "premissas_riscos"
-            ]
-            for field in report_fields:
-                if state.get(field) is None:
-                    state[field] = None
-                else:
-                    report_key = field + "_report"
-                    if report_key in state[field] and (state[field][report_key] is None or not isinstance(state[field][report_key], list)):
-                        state[field][report_key] = []
-            if state.get("resumo") and "project_id" not in state["resumo"]:
-                logger.error(f"[CHECK] Estado de resumo encontrado para '{nome_projeto}' mas project_id está ausente. Estado inválido ignorado.")
-                return {"exists": False}
-            if state.get("resumo") and "nome_projeto" not in state["resumo"]:
-                state["resumo"]["nome_projeto"] = nome_projeto
-            response = {"exists": True, "state": state}
-            logger.info(f"[CHECK] Projeto '{nome_projeto}' encontrado para usuario_executor='{usuario_executor}' com project_id válido.")
-            return response
-        else:
-            logger.info(f"Projeto '{nome_projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
+        # Validação extra: se o estado de resumo não contiver project_id, retorna exists: false
+        if not state or not state.get("resumo") or not state["resumo"] or not state["resumo"].get("project_id"):
+            logger.error(f"[CHECK] Estado de resumo encontrado para '{nome_projeto}' mas project_id está ausente. Estado inválido ignorado.")
             return {"exists": False}
+        if state.get("resumo") and "nome_projeto" not in state["resumo"]:
+            state["resumo"]["nome_projeto"] = nome_projeto
+        report_fields = [
+            "epicos",
+            "features",
+            "times_descricao",
+            "alocacao_times",
+            "premissas_riscos"
+        ]
+        for field in report_fields:
+            if state.get(field) is None:
+                state[field] = None
+            else:
+                report_key = field + "_report"
+                if report_key in state[field] and (state[field][report_key] is None or not isinstance(state[field][report_key], list)):
+                    state[field][report_key] = []
+        response = {"exists": True, "state": state}
+        logger.info(f"[CHECK] Projeto '{nome_projeto}' encontrado para usuario_executor='{usuario_executor}' com project_id válido.")
+        return response
     except Exception as e:
         logger.error(f"Erro ao buscar estado do projeto '{nome_projeto}' para usuario_executor='{usuario_executor}': {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao buscar estado do projeto: {str(e)}")
