@@ -16,5 +16,11 @@ class MCPStartAnalysisPayload(BaseModel):
             raise ValueError('analysis_type deve ser uma string não vazia')
         return v
 
+    @validator('project_id')
+    def project_id_must_not_be_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_id deve ser uma string não vazia')
+        return v
+
 class MCPStartAnalysisResponse(BaseModel):
     project_id: str = Field(..., description="Identificador único do projeto.")
