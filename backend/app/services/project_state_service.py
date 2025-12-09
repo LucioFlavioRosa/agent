@@ -50,7 +50,6 @@ class ProjectStateService:
                 nome_projeto = state.get("nome_projeto", "")
                 project_id = state.get("project_id")
                 if not project_id or not isinstance(project_id, str) or not project_id.strip():
-                    # Tenta garantir project_id
                     project_id = ensure_project_id(state, usuario_executor, nome_projeto)
                     if not project_id or not isinstance(project_id, str) or not project_id.strip():
                         logger.warning(f"Estado de resumo ignorado por ausência de project_id: {blob.name}")
@@ -64,14 +63,35 @@ class ProjectStateService:
                 }
                 resumo_states.append(resumo)
         logger.info(f"Projetos de resumo retornados para usuario_executor={usuario_executor}: {len(resumo_states)}")
-        return resumo_states
+        # Agrupa por project_id (ou nome_projeto se project_id ausente), mantém apenas o mais recente
+        projetos_unicos = {}
+        for resumo in resumo_states:
+            key = resumo.get("project_id") or resumo.get("nome_projeto")
+            if not key:
+                continue
+            atualizacao = resumo.get("ultima_atualizacao") or resumo.get("created_at")
+            try:
+                atualizacao_dt = datetime.datetime.fromisoformat(atualizacao) if atualizacao else datetime.datetime.min
+            except Exception:
+                atualizacao_dt = datetime.datetime.min
+            if key not in projetos_unicos or (
+                projetos_unicos[key]["_atualizacao_dt"] < atualizacao_dt
+            ):
+                resumo["_atualizacao_dt"] = atualizacao_dt
+                projetos_unicos[key] = resumo
+        # Remove campo auxiliar
+        projetos_final = []
+        for v in projetos_unicos.values():
+            v.pop("_atualizacao_dt", None)
+            projetos_final.append(v)
+        logger.info(f"Projetos únicos e mais recentes retornados: {len(projetos_final)}")
+        return projetos_final
 
     @staticmethod
     async def save_state_to_blob(session_data, report_type: Optional[str] = None) -> str:
         logger = logging.getLogger("ProjectStateService")
         usuario_executor = ProjectStateService._get_val(session_data, "usuario_executor")
         nome_projeto = ProjectStateService._get_val(session_data, "nome_projeto")
-        # project_id garantido via utilitário
         project_id = ensure_project_id(session_data, usuario_executor, nome_projeto)
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         last_update = datetime.datetime.utcnow()
@@ -145,7 +165,6 @@ class ProjectStateService:
     def _build_resumo_state(session_data, last_update):
         nome_projeto = ProjectStateService._get_val(session_data, "nome_projeto")
         usuario_executor = ProjectStateService._get_val(session_data, "usuario_executor")
-        # project_id garantido via utilitário
         project_id = ensure_project_id(session_data, usuario_executor, nome_projeto)
         ultima_analysis_type = ProjectStateService._get_val(session_data, "ultima_analysis_type") or ProjectStateService._get_val(session_data, "analysis_type")
         created_at = ProjectStateService._get_val(session_data, "created_at")
@@ -204,7 +223,6 @@ class ProjectStateService:
                 state = json.loads(state_bytes.decode("utf-8"))
                 pid = state.get("project_id")
                 if not pid or not isinstance(pid, str) or not pid.strip():
-                    # Tenta garantir project_id
                     nome_proj = state.get("nome_projeto")
                     pid = ensure_project_id(state, usuario_executor, nome_proj)
                     if not pid or not isinstance(pid, str) or not pid.strip():
@@ -246,29 +264,21 @@ class ProjectStateService:
     @staticmethod
     async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
         cache_key = f"{usuario_executor}:{nome_projeto}"
-        
-        # 1. Tenta pegar do cache local da memória
         if cache_key in ProjectStateService._project_id_cache:
             return ProjectStateService._project_id_cache[cache_key]
-        
-        # 2. Se não estiver no cache, busca no Blob Storage
         state = await ProjectStateService.load_latest_state_from_blob(
             usuario_executor, 
             project_id=None, 
             nome_projeto=nome_projeto
         )
-        
-        # 3. Se encontrou, atualiza o cache e retorna
         if state and state.get("project_id"):
             project_id = state.get("project_id")
             ProjectStateService._project_id_cache[cache_key] = project_id
             return project_id
-            
         return None
 
     @staticmethod
     def _invalidate_project_id_cache(nome_projeto: str):
-        # Invalida entradas de cache relacionadas a este projeto
         keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto}")]
         for k in keys_to_remove:
             del ProjectStateService._project_id_cache[k]
@@ -277,30 +287,20 @@ class ProjectStateService:
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
         logger.info(f"Carregando todos os estados para usuario={usuario_executor}, project_id={project_id}")
         _, container_client = _get_blob_clients()
-        
-        # 1. Carregar o Resumo
         nome_projeto = None
         resumo_state = None
-        
-        # Busca blobs de resumo
         prefix_resumo = f"{usuario_executor}/"
         blobs_resumo = list(container_client.list_blobs(name_starts_with=prefix_resumo))
-        
         candidatos_resumo = []
         for blob in blobs_resumo:
-            # Filtra apenas arquivos json de resumo
             if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                
-                # Verifica se o ID bate
                 pid = state.get("project_id")
                 if pid == project_id:
                     candidatos_resumo.append((blob, state))
-
         if candidatos_resumo:
-            # Ordena para pegar o mais recente
             def get_sort_key(item):
                 state = item[1]
                 ts = state.get("ultima_atualizacao") or state.get("last_saved_to_blob")
@@ -310,15 +310,11 @@ class ProjectStateService:
                     except Exception:
                         pass
                 return datetime.datetime.min
-            
             candidatos_resumo.sort(key=get_sort_key, reverse=True)
             resumo_state = candidatos_resumo[0][1]
             nome_projeto = resumo_state.get("nome_projeto")
         else:
-            # Se não achar o resumo, não tem como buscar o resto (precisamos do nome do projeto para o path)
             return {}
-
-        # 2. Carregar os outros relatórios
         report_types = [
             "epicos_report",
             "features_report",
@@ -326,7 +322,6 @@ class ProjectStateService:
             "alocacao_times_report",
             "premissas_riscos_report"
         ]
-        
         subfolder_map = {
             "epicos_report": "epicos",
             "features_report": "features",
@@ -334,7 +329,6 @@ class ProjectStateService:
             "alocacao_times_report": "alocacao_times",
             "premissas_riscos_report": "premissas_riscos"
         }
-
         states_dict = {
             "resumo": resumo_state,
             "epicos": None,
@@ -343,31 +337,23 @@ class ProjectStateService:
             "alocacao_times": None,
             "premissas_riscos": None
         }
-
         if nome_projeto:
             for report_type in report_types:
                 subfolder = subfolder_map[report_type]
-                # Caminho: user/projeto/estados/tipo/arquivo.json
                 prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
                 file_prefix = f"estado_{report_type}_"
-                
                 blobs = list(container_client.list_blobs(name_starts_with=prefix))
                 candidatos_report = []
-                
                 for blob in blobs:
                     if blob.name.endswith('.json') and file_prefix in blob.name:
                         blob_client = container_client.get_blob_client(blob.name)
                         state_bytes = blob_client.download_blob().readall()
                         state = json.loads(state_bytes.decode("utf-8"))
-                        
                         if state.get("project_id") == project_id:
                             candidatos_report.append((blob, state))
-                
                 if candidatos_report:
                     candidatos_report.sort(key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao", datetime.datetime.min.isoformat())), reverse=True)
                     latest_state = candidatos_report[0][1]
-                    
-                    # Mapeia para o nome da chave no dicionário de resposta
                     key_map = {
                         "epicos_report": "epicos",
                         "features_report": "features",
@@ -376,5 +362,4 @@ class ProjectStateService:
                         "premissas_riscos_report": "premissas_riscos"
                     }
                     states_dict[key_map[report_type]] = latest_state
-
         return EstadoCompletoProjetoResponse(**states_dict).dict()
