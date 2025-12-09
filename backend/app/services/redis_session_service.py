@@ -30,6 +30,12 @@ class RedisSessionService:
         return json.loads(session_json)
 
     def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None, initial_state: Optional[Dict[str, Any]] = None) -> str:
+        if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
+            raise ValueError("Parâmetros obrigatórios (usuario_executor, nome_projeto, project_id) não podem ser None ou vazios. [usuario_executor]")
+        if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
+            raise ValueError("Parâmetros obrigatórios (usuario_executor, nome_projeto, project_id) não podem ser None ou vazios. [nome_projeto]")
+        if not project_id or not isinstance(project_id, str) or not project_id.strip():
+            raise ValueError("Parâmetros obrigatórios (usuario_executor, nome_projeto, project_id) não podem ser None ou vazios. [project_id]")
         key = f"project:{project_id}:resumo"
         created_at = datetime.utcnow().isoformat()
         last_saved_to_blob = datetime.utcnow().isoformat()
@@ -72,10 +78,53 @@ class RedisSessionService:
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
         project_id = project_state.get("project_id")
+        nome_projeto_val = project_state.get("nome_projeto")
+        usuario_executor_val = project_state.get("usuario_executor")
+        if not nome_projeto_val or not isinstance(nome_projeto_val, str) or not nome_projeto_val.strip():
+            self.logger.warning("Campo 'nome_projeto' ausente/inválido em project_state. Tentando buscar estado do Blob Storage...")
+            blob_state = None
+            try:
+                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
+                    usuario_executor or "",
+                    project_id=project_id,
+                    nome_projeto=nome_projeto
+                ))
+            except Exception as e:
+                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
+            if blob_state:
+                nome_projeto_val = blob_state.get("nome_projeto")
+        if not usuario_executor_val or not isinstance(usuario_executor_val, str) or not usuario_executor_val.strip():
+            self.logger.warning("Campo 'usuario_executor' ausente/inválido em project_state. Tentando buscar estado do Blob Storage...")
+            blob_state = None
+            try:
+                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
+                    usuario_executor or "",
+                    project_id=project_id,
+                    nome_projeto=nome_projeto
+                ))
+            except Exception as e:
+                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
+            if blob_state:
+                usuario_executor_val = blob_state.get("usuario_executor")
+        if not project_id or not isinstance(project_id, str) or not project_id.strip():
+            self.logger.warning("Campo 'project_id' ausente/inválido em project_state. Tentando buscar estado do Blob Storage...")
+            blob_state = None
+            try:
+                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
+                    usuario_executor or "",
+                    project_id=project_id,
+                    nome_projeto=nome_projeto
+                ))
+            except Exception as e:
+                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
+            if blob_state:
+                project_id = blob_state.get("project_id")
+        if not nome_projeto_val or not usuario_executor_val or not project_id:
+            raise ValueError("Parâmetros obrigatórios (usuario_executor, nome_projeto, project_id) não podem ser None ou vazios ao restaurar sessão.")
         key = f"project:{project_id}:resumo"
         session_data = dict(project_state)
-        session_data["usuario_executor"] = usuario_executor
-        session_data["nome_projeto"] = nome_projeto
+        session_data["usuario_executor"] = usuario_executor_val
+        session_data["nome_projeto"] = nome_projeto_val
         session_data["analysis_type"] = analysis_type
         session_data["ultima_analysis_type"] = analysis_type
         session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
