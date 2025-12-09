@@ -10,7 +10,8 @@ from backend.app.models.project_state_models import (
     EstadoFeatures,
     EstadoTimesDescricao,
     EstadoAlocacaoTimes,
-    EstadoPremissasRiscos
+    EstadoPremissasRiscos,
+    EstadoCompletoProjetoResponse
 )
 from backend.app.config.analysis_type_to_report_mapping import analysis_type_to_report_mapping
 
@@ -24,11 +25,23 @@ class ProjectStateService:
         project_id = getattr(session_data, "project_id", None)
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         last_update = datetime.datetime.utcnow()
-        blob_folder = f"{usuario_executor}/{nome_projeto}/estados"
+        estados_base_folder = f"{usuario_executor}/{nome_projeto}/estados"
         if report_type:
+            subfolder_map = {
+                "epicos_report": "epicos",
+                "features_report": "features",
+                "times_descricao_report": "times_descricao",
+                "alocacao_times_report": "alocacao_times",
+                "premissas_riscos_report": "premissas_riscos"
+            }
+            subfolder = subfolder_map.get(report_type)
+            if not subfolder:
+                raise ValueError(f"Report type desconhecido: {report_type}")
+            blob_folder = f"{estados_base_folder}/{subfolder}"
             blob_filename = f"estado_{report_type}_{timestamp}.json"
             state = ProjectStateService._build_report_state(session_data, report_type, last_update)
         else:
+            blob_folder = f"{estados_base_folder}/resumo"
             blob_filename = f"estado_resumo_{timestamp}.json"
             state = ProjectStateService._build_resumo_state(session_data, last_update)
         blob_path = f"{blob_folder}/{blob_filename}"
@@ -107,17 +120,27 @@ class ProjectStateService:
     async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None, report_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
         _, container_client = _get_blob_clients()
-        prefix = f"{usuario_executor}/"
+        estados_base_folder = f"{usuario_executor}/"
+        if report_type:
+            subfolder_map = {
+                "epicos_report": "epicos",
+                "features_report": "features",
+                "times_descricao_report": "times_descricao",
+                "alocacao_times_report": "alocacao_times",
+                "premissas_riscos_report": "premissas_riscos"
+            }
+            subfolder = subfolder_map.get(report_type)
+            if not subfolder:
+                return None
+            prefix = f"{estados_base_folder}{nome_projeto}/estados/{subfolder}/"
+            file_prefix = f"estado_{report_type}_"
+        else:
+            prefix = f"{estados_base_folder}{nome_projeto}/estados/resumo/"
+            file_prefix = "estado_resumo_"
         blobs = list(container_client.list_blobs(name_starts_with=prefix))
         states = []
         for blob in blobs:
-            if blob.name.endswith('.json'):
-                if report_type:
-                    if f"estado_{report_type}_" not in blob.name:
-                        continue
-                else:
-                    if "estado_resumo_" not in blob.name:
-                        continue
+            if blob.name.endswith('.json') and file_prefix in blob.name:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
@@ -139,6 +162,88 @@ class ProjectStateService:
             return states_sorted[0][1]
         logger.info(f"Nenhum estado encontrado para usuario_executor={usuario_executor}, project_id={project_id}, nome_projeto={nome_projeto}, report_type={report_type}")
         return None
+
+    @staticmethod
+    async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
+        _, container_client = _get_blob_clients()
+        # Buscar nome_projeto pelo project_id no estado resumo
+        nome_projeto = None
+        resumo_state = None
+        prefix_resumo = f"{usuario_executor}/"
+        blobs_resumo = list(container_client.list_blobs(name_starts_with=f"{prefix_resumo}"))
+        resumo_states = []
+        for blob in blobs_resumo:
+            if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
+                blob_client = container_client.get_blob_client(blob.name)
+                state_bytes = blob_client.download_blob().readall()
+                state = json.loads(state_bytes.decode("utf-8"))
+                if state.get("project_id") == project_id:
+                    resumo_states.append((blob, state))
+        if resumo_states:
+            def get_sort_key(item):
+                state = item[1]
+                ts = state.get("ultima_atualizacao") or state.get("last_saved_to_blob")
+                if ts:
+                    try:
+                        return datetime.datetime.fromisoformat(ts)
+                    except Exception:
+                        pass
+                return datetime.datetime.min
+            resumo_states_sorted = sorted(resumo_states, key=get_sort_key, reverse=True)
+            resumo_state = resumo_states_sorted[0][1]
+            nome_projeto = resumo_state.get("nome_projeto")
+        else:
+            return {}
+        # Buscar cada report
+        report_types = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        subfolder_map = {
+            "epicos_report": "epicos",
+            "features_report": "features",
+            "times_descricao_report": "times_descricao",
+            "alocacao_times_report": "alocacao_times",
+            "premissas_riscos_report": "premissas_riscos"
+        }
+        states_dict = {
+            "resumo": resumo_state,
+            "epicos": None,
+            "features": None,
+            "times_descricao": None,
+            "alocacao_times": None,
+            "premissas_riscos": None
+        }
+        for report_type in report_types:
+            subfolder = subfolder_map[report_type]
+            prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
+            file_prefix = f"estado_{report_type}_"
+            blobs = list(container_client.list_blobs(name_starts_with=prefix))
+            states = []
+            for blob in blobs:
+                if blob.name.endswith('.json') and file_prefix in blob.name:
+                    blob_client = container_client.get_blob_client(blob.name)
+                    state_bytes = blob_client.download_blob().readall()
+                    state = json.loads(state_bytes.decode("utf-8"))
+                    if state.get("project_id") == project_id:
+                        states.append((blob, state))
+            if states:
+                states_sorted = sorted(states, key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao", datetime.datetime.min.isoformat())), reverse=True)
+                latest_state = states_sorted[0][1]
+                if report_type == "epicos_report":
+                    states_dict["epicos"] = latest_state
+                elif report_type == "features_report":
+                    states_dict["features"] = latest_state
+                elif report_type == "times_descricao_report":
+                    states_dict["times_descricao"] = latest_state
+                elif report_type == "alocacao_times_report":
+                    states_dict["alocacao_times"] = latest_state
+                elif report_type == "premissas_riscos_report":
+                    states_dict["premissas_riscos"] = latest_state
+        return EstadoCompletoProjetoResponse(**states_dict).dict()
 
     @staticmethod
     async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
