@@ -4,41 +4,29 @@ import os
 import asyncio
 import httpx
 from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 
 # --- CONFIGURAÇÃO ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="2.2.0 - Strict Spec Compliance")
+app = FastAPI(title="MCP Mock Service", version="2.3.0 - Fixed Webhook Spec")
 router = APIRouter()
 
-# URL do Backend Principal
+# URL do Backend Principal (Deve ser configurada nas Variáveis de Ambiente do Azure)
 BACKEND_BASE_URL = os.environ.get("TARGET_BACKEND_URL", "http://localhost:8000")
 
-# --- MODELOS AJUSTADOS (CRÍTICO) ---
+# --- MODELOS ---
 class MCPStartPayload(BaseModel):
-    # 1. Ajustado para bater com a doc: 'project_id' é o identificador principal
     project_id: str 
-    
-    # 2. Ajustado: 'analysis_type' se mantém
     analysis_type: str
-    
-    # 3. CORREÇÃO: O backend envia 'instrucoes_extras', não 'comentario_usuario'
     instrucoes_extras: Optional[str] = None 
-    
-    # 4. Ajustado: 'arquivo_docx' (texto extraído)
     arquivo_docx: Optional[str] = None
-    
-    # 5. CORREÇÃO: O backend envia 'nome_projeto', e não 'projeto'. 
-    # Deixei opcional pois o ID é o que importa.
     nome_projeto: Optional[str] = None 
-
-    # Campos que não estão na doc oficial de envio devem ser removidos ou opcionais
     usuario_executor: Optional[str] = None
 
-# --- DADOS MOCKADOS (Mantidos) ---
+# --- DADOS MOCKADOS ---
 DATA_EPICOS = {
     "epicos_report": [
         { "id": 1, "titulo": "Autenticação e Segurança", "descricao": "Implementar login via Azure AD.", "prioridade": "Alta" },
@@ -48,15 +36,15 @@ DATA_EPICOS = {
 
 DATA_EPICOS_REFINAMENTO = {
     "epicos_report": [
-        { "id": 1, "titulo": "Autenticação e Segurança para a primeira fase", 
-         "descricao": "Implementar login via Azure AD sem ser multi tenant.", "prioridade": "Alta" },
+        { "id": 1, "titulo": "Autenticação e Segurança - Fase 1", 
+         "descricao": "Implementar login via Azure AD single-tenant.", "prioridade": "Alta" },
         { "id": 2, "titulo": "Processamento de Documentos", "descricao": "Upload e extração de texto.", "prioridade": "Alta" }
     ]
 }
 
 DATA_FEATURES = {
     "features_report": [
-        {"id": 101, "epico_id": 1, "nome": "Configurar App Registration Azure", "descricao": "Criar app no entra ID"},
+        {"id": 101, "epico_id": 1, "nome": "Configurar App Registration Azure", "descricao": "Criar app no Entra ID"},
         {"id": 102, "epico_id": 1, "nome": "Middleware de Validação JWT", "descricao": "Validar token no backend Python"}
     ]
 }
@@ -64,8 +52,8 @@ DATA_FEATURES = {
 DATA_FEATURES_REFINAMENTO = {
     "features_report": [
         {"id": 101, "epico_id": 1, "nome": "Configurar App Registration Azure", 
-         "descricao": "Criar app no entra ID",
-        "critério_de_aceite": "eu tenho que conseguir registrar usuários externos"},
+         "descricao": "Criar app no Entra ID",
+        "critério_de_aceite": "Usuários do domínio da empresa devem conseguir logar."},
         {"id": 102, "epico_id": 1, "nome": "Middleware de Validação JWT", 
          "descricao": "Validar token no backend Python"}
     ]
@@ -73,7 +61,7 @@ DATA_FEATURES_REFINAMENTO = {
 
 DATA_RISCOS = {
     "premissas_riscos_report": [
-        {"id": 1, "tipo": "Risco", "descricao": "Latência alta na comunicação."},
+        {"id": 1, "tipo": "Risco", "descricao": "Latência alta na comunicação entre serviços."},
         {"id": 2, "tipo": "Premissa", "descricao": "Redis disponível na VNET."}
     ]
 }
@@ -82,14 +70,14 @@ DATA_RISCOS = {
 async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: str):
     logger.info(f"⏳ [MOCK] Processando Job {job_id} para Projeto {project_id} ({analysis_type})...")
     
-    # Simula latência
+    # 1. Simula tempo de processamento da IA
     await asyncio.sleep(5) 
     
-    # Lógica simples para decidir sucesso ou erro (pode criar um header especial para forçar erro se quiser)
     status = "done"
     report_data = {}
     error_payload = {}
 
+    # 2. Lógica de Erro Simulado
     if "erro_teste" in analysis_type:
         status = "error"
         error_payload = {
@@ -97,24 +85,28 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
             "error_message": "Erro simulado pelo Mock MCP para teste de resiliência."
         }
     else:
-        # Seleção de Payload
-        if "criacao_features_azure_devops" in analysis_type:
+        # 3. Seleção de Dados Mockados
+        if "criacao_features" in analysis_type:
             report_data = DATA_FEATURES
-        elif "refinamento_features_azure_devops" in analysis_type:
+        elif "refinamento_features" in analysis_type:
             report_data = DATA_FEATURES_REFINAMENTO
-        elif "criacao_epicos_azure_devops" in analysis_type:
+        elif "criacao_epicos" in analysis_type:
             report_data = DATA_EPICOS
-        elif "refinamento_epicos_azure_devops" in analysis_type:
+        elif "refinamento_epicos" in analysis_type:
             report_data = DATA_EPICOS_REFINAMENTO
         elif "riscos" in analysis_type or "tech_debt" in analysis_type:
             report_data = DATA_RISCOS
+        else:
+            # Default fallback se o tipo for desconhecido
+            report_data = DATA_EPICOS 
         
 
-    # PREPARAÇÃO DO PAYLOAD (Conforme Doc 2.1)
+    # 4. PREPARAÇÃO DO PAYLOAD (CORRIGIDO)
     webhook_payload = {
         "job_id": job_id,
         "project_id": project_id,
         "status": status,
+        "analysis_type": analysis_type  # <--- CORREÇÃO CRÍTICA AQUI: O Backend exige isso para rotear o relatório
     }
 
     if status == "done":
@@ -122,11 +114,12 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
     elif status == "error":
         webhook_payload.update(error_payload)
 
+    # 5. Envio do Webhook
     async with httpx.AsyncClient(timeout=30.0) as client:
         base_url = BACKEND_BASE_URL.rstrip('/')
         webhook_url = f"{base_url}/webhooks/mcp"
         
-        logger.info(f"📤 [WEBHOOK] Enviando {status} para {webhook_url}")
+        logger.info(f"📤 [WEBHOOK] Enviando para {webhook_url}")
         
         try:
             # TENTATIVA 1: Webhook Padrão
@@ -141,14 +134,13 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
         except Exception as e:
             logger.error(f"❌ [ERRO CONEXÃO] {e}")
 
-        # TENTATIVA 2: Fallback (Apenas se for sucesso, pois endpoint de report não aceita erro)
+        # TENTATIVA 2: Fallback (PUT direto na sessão)
+        # Só faz sentido se tivermos dados válidos (não for erro)
         if status == "done":
             fallback_url = f"{base_url}/session/project/{project_id}/report"
-            logger.info(f"🔄 [FALLBACK] Tentando: {fallback_url}")
+            logger.info(f"🔄 [FALLBACK] Tentando salvar direto em: {fallback_url}")
             try:
-                # Nota: A doc diz que esse endpoint espera { "report_data": ... } no corpo? 
-                # Se for PUT direto, verifique se o wrapper report_data é necessário.
-                # Baseado na doc 1.5: { "report_data": { ... } } -> Correto.
+                # O endpoint PUT espera { "report_data": { ... } }
                 resp = await client.put(fallback_url, json={"report_data": report_data})
                 if resp.status_code == 200:
                     logger.info("✅ [SALVO VIA PUT] Fallback funcionou.")
@@ -162,8 +154,7 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
 @router.get("/")
 def home():
     return {
-        "status": "Mock MCP Online v2.2", 
-        "routes": ["/start", "/api/v1/analysis/start"],
+        "status": "Mock MCP Online v2.3", 
         "target_backend": BACKEND_BASE_URL
     }
 
@@ -172,8 +163,7 @@ async def start_analysis(payload: MCPStartPayload, background_tasks: BackgroundT
     new_job_id = str(uuid.uuid4())
     
     logger.info(f"⚡ [START] Recebido para Project ID: {payload.project_id}")
-    # Uso correto do campo instrucoes_extras
-    logger.info(f"📝 Instruções: {payload.instrucoes_extras or 'Nenhuma'}")
+    logger.info(f"📝 Tipo Análise: {payload.analysis_type}")
 
     background_tasks.add_task(
         process_and_send_webhook,
@@ -189,11 +179,11 @@ async def start_analysis(payload: MCPStartPayload, background_tasks: BackgroundT
         "nome_projeto": payload.nome_projeto or "Projeto Sem Nome"
     }
 
-# Roteamento duplo para garantir compatibilidade
+# Roteamento duplo para garantir compatibilidade com prefixes
 app.include_router(router, prefix="/api/v1/analysis") 
 app.include_router(router, prefix="") 
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8001))
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
