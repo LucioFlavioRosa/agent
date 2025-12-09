@@ -60,20 +60,24 @@ class AzureADService:
         self.logger.debug(f"AZURE_AD_AUDIENCE: {self.audience}")
 
     def _extract_usuario_executor_from_claims(self, claims: dict) -> Optional[str]:
-        return (
+        usuario = (
             claims.get("preferred_username") or
             claims.get("email") or
             claims.get("upn")
         )
+        self.logger.info(f"usuario_executor extraído dos claims: {usuario}")
+        return usuario
 
     def validate_token(self, token: str) -> AzureADTokenData:
         try:
             headers = jwt.get_unverified_header(token)
             kid = headers.get('kid')
             if not kid:
+                self.logger.error("Token JWT sem 'kid' no header.")
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token JWT sem 'kid' no header.")
             key = JWKSCache.get_key(kid, self.jwks_uri)
             if not key:
+                self.logger.error("Chave pública não encontrada para o token JWT.")
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Chave pública não encontrada para o token JWT.")
             public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key)
             claims = jwt.decode(
@@ -85,11 +89,16 @@ class AzureADService:
             )
             usuario_executor = self._extract_usuario_executor_from_claims(claims)
             if not usuario_executor:
+                self.logger.error("usuario_executor não encontrado nos claims do token Azure AD.")
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="usuario_executor não encontrado no token Azure AD.")
+            self.logger.info(f"Token JWT validado com sucesso. usuario_executor extraído: {usuario_executor}")
             return AzureADTokenData(usuario_executor=usuario_executor, claims=claims)
         except ExpiredSignatureError:
+            self.logger.error("Token Azure AD expirado.")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token Azure AD expirado.")
         except JWTError as e:
+            self.logger.error(f"Token Azure AD inválido: {str(e)}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Token Azure AD inválido: {str(e)}")
         except Exception as e:
+            self.logger.error(f"Erro ao validar token Azure AD: {str(e)}")
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Erro ao validar token Azure AD: {str(e)}")
