@@ -61,7 +61,6 @@ async def start_analysis(
             blob_filename,
             background_tasks
         )
-    # Removido: validação obrigatória de arquivo_docx ou comentario_extra
     if project_state:
         redis_service.restore_session_from_state(
             usuario_executor,
@@ -70,14 +69,25 @@ async def start_analysis(
             project_state
         )
     else:
+        from datetime import datetime
+        created_at = datetime.utcnow().isoformat()
+        last_saved_to_blob = created_at
+        resumo_state = {
+            "nome_projeto": nome_projeto,
+            "ultima_analysis_type": analysis_type,
+            "created_at": created_at,
+            "ultima_atualizacao": last_saved_to_blob,
+            "project_id": project_id_final
+        }
         redis_service.create_session(
             usuario_executor,
             nome_projeto,
             analysis_type,
             project_id=project_id_final,
             extracted_text=texto_extraido,
-            initial_state=None
+            initial_state=resumo_state
         )
+        await ProjectStateService.save_state_to_blob(resumo_state)
     if blob_url:
         redis_service.add_docx_file(project_id_final, blob_url)
     mcp_payload = {
