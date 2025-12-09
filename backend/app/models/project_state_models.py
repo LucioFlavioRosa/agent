@@ -42,3 +42,11 @@ class EstadoPremissasRiscos(BaseModel):
     created_at: datetime = Field(...)
     ultima_atualizacao: datetime = Field(...)
     premissas_riscos_report: List[Any] = Field(default_factory=list)
+
+class EstadoCompletoProjetoResponse(BaseModel):
+    resumo: Optional[EstadoResumoProjeto] = None
+    epicos: Optional[EstadoEpicos] = None
+    features: Optional[EstadoFeatures] = None
+    times_descricao: Optional[EstadoTimesDescricao] = None
+    alocacao_times: Optional[EstadoAlocacaoTimes] = None
+    premissas_riscos: Optional[EstadoPremissasRiscos] = None
