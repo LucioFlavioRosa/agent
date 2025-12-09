@@ -1,0 +1,44 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List, Any
+from datetime import datetime
+
+class EstadoResumoProjeto(BaseModel):
+    nome_projeto: str = Field(...)
+    ultima_analysis_type: Optional[str] = Field(None)
+    created_at: datetime = Field(...)
+    ultima_atualizacao: datetime = Field(...)
+
+class EstadoEpicos(BaseModel):
+    nome_projeto: str = Field(...)
+    ultima_analysis_type: Optional[str] = Field(None)
+    created_at: datetime = Field(...)
+    ultima_atualizacao: datetime = Field(...)
+    epicos_report: List[Any] = Field(default_factory=list)
+
+class EstadoFeatures(BaseModel):
+    nome_projeto: str = Field(...)
+    ultima_analysis_type: Optional[str] = Field(None)
+    created_at: datetime = Field(...)
+    ultima_atualizacao: datetime = Field(...)
+    features_report: List[Any] = Field(default_factory=list)
+
+class EstadoTimesDescricao(BaseModel):
+    nome_projeto: str = Field(...)
+    ultima_analysis_type: Optional[str] = Field(None)
+    created_at: datetime = Field(...)
+    ultima_atualizacao: datetime = Field(...)
+    times_descricao_report: List[Any] = Field(default_factory=list)
+
+class EstadoAlocacaoTimes(BaseModel):
+    nome_projeto: str = Field(...)
+    ultima_analysis_type: Optional[str] = Field(None)
+    created_at: datetime = Field(...)
+    ultima_atualizacao: datetime = Field(...)
+    alocacao_times_report: List[Any] = Field(default_factory=list)
+
+class EstadoPremissasRiscos(BaseModel):
+    nome_projeto: str = Field(...)
+    ultima_analysis_type: Optional[str] = Field(None)
+    created_at: datetime = Field(...)
+    ultima_atualizacao: datetime = Field(...)
+    premissas_riscos_report: List[Any] = Field(default_factory=list)
