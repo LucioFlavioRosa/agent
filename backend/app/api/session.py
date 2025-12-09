@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Any, Dict
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
-from backend.app.middleware.auth_middleware import get_current_user
+from backend.app.middleware.auth_middleware import get_current_user, _extract_usuario_executor
 import logging
 
 router = APIRouter()
@@ -17,11 +17,6 @@ async def get_project_reports(project_id: str, current_user: dict = Depends(get_
     logger = logging.getLogger("session_api")
     try:
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
-        def normalize_report_field(field, default):
-            value = state.get(field)
-            if value is None:
-                return [] if isinstance(default, list) else default
-            return value
         report_fields = [
             "epicos",
             "features",
