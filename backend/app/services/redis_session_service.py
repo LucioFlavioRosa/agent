@@ -44,6 +44,12 @@ class RedisSessionService:
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
         self.logger = logging.getLogger("RedisSessionService")
 
+    def _serialize_session(self, session_data: dict) -> str:
+        return json.dumps(session_data)
+
+    def _deserialize_session(self, session_json: str) -> dict:
+        return json.loads(session_json)
+
     def get_session_by_project_id(self, project_id: str) -> Optional[SessionData]:
         """
         Recupera a sessão do Redis e converte para o modelo SessionData.
@@ -56,7 +62,6 @@ class RedisSessionService:
                 return SessionData(**data)
             except Exception as e:
                 self.logger.error(f"Erro ao converter dados do Redis para SessionData: {e}")
-                # Em caso de erro de validação, tenta retornar None ou lidar conforme sua necessidade
                 return None
         return None
 
@@ -87,55 +92,55 @@ class RedisSessionService:
         else:
             msg = f"Tentativa de atualizar report para sessão inexistente no Redis: {project_id}"
             self.logger.error(msg)
-            # Opcional: Levantar erro ou ignorar dependendo da regra de negócio
-
-    def _serialize_session(self, session_data: dict) -> str:
-        return json.dumps(session_data)
-
-    def _deserialize_session(self, session_json: str) -> dict:
-        return json.loads(session_json)
 
     def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None, initial_state: Optional[Dict[str, Any]] = None) -> str:
-        # --- Garantia de campos obrigatórios, especialmente project_id ---
+        # --- OTIMIZAÇÃO: Busca única no Blob Storage se faltar algum dado ---
+        blob_state_cached = None
+        
+        def get_blob_state_once():
+            nonlocal blob_state_cached
+            if blob_state_cached is None:
+                try:
+                    # Busca segura (retorna dict vazio se falhar ou não achar)
+                    blob_state_cached = asyncio.run(ProjectStateService.load_latest_state_from_blob(
+                        usuario_executor or "",
+                        project_id=project_id,
+                        nome_projeto=nome_projeto
+                    )) or {}
+                except Exception as e:
+                    self.logger.error(f"Erro ao buscar estado do Blob Storage: {str(e)}")
+                    blob_state_cached = {}
+            return blob_state_cached
+
+        # 1. Garante usuario_executor
         if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
-            blob_state = None
-            try:
-                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
-                    usuario_executor or "",
-                    project_id=project_id,
-                    nome_projeto=nome_projeto
-                ))
-            except Exception as e:
-                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher usuario_executor: {str(e)}")
-            if blob_state:
-                usuario_executor = blob_state.get("usuario_executor")
+            state = get_blob_state_once()
+            usuario_executor = state.get("usuario_executor")
             if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
                 raise ValueError("Campo obrigatorio ausente: usuario_executor")
+
+        # 2. Garante nome_projeto
         if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
-            blob_state = None
-            try:
-                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
-                    usuario_executor or "",
-                    project_id=project_id,
-                    nome_projeto=nome_projeto
-                ))
-            except Exception as e:
-                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher nome_projeto: {str(e)}")
-            if blob_state:
-                nome_projeto = blob_state.get("nome_projeto")
+            state = get_blob_state_once()
+            nome_projeto = state.get("nome_projeto")
             if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
                 raise ValueError("Campo obrigatorio ausente: nome_projeto")
-        # --- NOVA GARANTIA project_id ---
+
+        # 3. Garante project_id
         if not project_id or not isinstance(project_id, str) or not project_id.strip():
-            # Tenta recuperar do Blob Storage ou gera novo UUID
-            session_data = initial_state if initial_state else {}
-            session_data["usuario_executor"] = usuario_executor
-            session_data["nome_projeto"] = nome_projeto
-            pid = ensure_project_id(session_data, usuario_executor, nome_projeto)
-            project_id = pid
+            # Usa os dados já validados para tentar recuperar o ID
+            session_data_temp = initial_state if initial_state else {}
+            session_data_temp["usuario_executor"] = usuario_executor
+            session_data_temp["nome_projeto"] = nome_projeto
+            
+            # ensure_project_id também tem lógica de fallback, mas agora os dados base estão mais sólidos
+            project_id = ensure_project_id(session_data_temp, usuario_executor, nome_projeto)
+
+        # 4. Criação da Sessão no Redis
         key = f"project:{project_id}:resumo"
         created_at = datetime.utcnow().isoformat()
         last_saved_to_blob = datetime.utcnow().isoformat()
+        
         session_data = {
             "usuario_executor": usuario_executor,
             "nome_projeto": nome_projeto,
@@ -146,6 +151,15 @@ class RedisSessionService:
             "ultima_analysis_type": analysis_type,
             "ultima_atualizacao": last_saved_to_blob
         }
+        
+        # Adiciona texto extraído se houver (útil para debug ou reprocessamento)
+        if extracted_text:
+             session_data["extracted_text"] = extracted_text
+
+        # Adiciona estado inicial se houver (mescla com os dados base)
+        if initial_state:
+            session_data.update(initial_state)
+
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
@@ -192,6 +206,7 @@ class RedisSessionService:
         project_id = project_state.get("project_id")
         nome_projeto_val = project_state.get("nome_projeto")
         usuario_executor_val = project_state.get("usuario_executor")
+        
         # --- NOVA GARANTIA project_id ---
         if not project_id or not isinstance(project_id, str) or not project_id.strip():
             session_data = dict(project_state)
@@ -199,32 +214,24 @@ class RedisSessionService:
             session_data["nome_projeto"] = nome_projeto or nome_projeto_val
             pid = ensure_project_id(session_data, session_data["usuario_executor"], session_data["nome_projeto"])
             project_id = pid
-        if not nome_projeto_val or not isinstance(nome_projeto_val, str) or not nome_projeto_val.strip():
-            blob_state = None
-            try:
+            
+        # Otimização: Se já temos os dados no 'project_state', evitamos buscar no blob de novo
+        if (not nome_projeto_val) or (not usuario_executor_val):
+             try:
                 blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
                     usuario_executor or "",
                     project_id=project_id,
                     nome_projeto=nome_projeto
                 ))
-            except Exception as e:
-                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
-            if blob_state:
-                nome_projeto_val = blob_state.get("nome_projeto")
-        if not usuario_executor_val or not isinstance(usuario_executor_val, str) or not usuario_executor_val.strip():
-            blob_state = None
-            try:
-                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
-                    usuario_executor or "",
-                    project_id=project_id,
-                    nome_projeto=nome_projeto
-                ))
-            except Exception as e:
-                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
-            if blob_state:
-                usuario_executor_val = blob_state.get("usuario_executor")
+                if blob_state:
+                    nome_projeto_val = nome_projeto_val or blob_state.get("nome_projeto")
+                    usuario_executor_val = usuario_executor_val or blob_state.get("usuario_executor")
+             except Exception as e:
+                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos: {str(e)}")
+
         if not nome_projeto_val or not usuario_executor_val or not project_id:
             raise ValueError("Campos obrigatórios ausentes ao restaurar sessão: usuario_executor, nome_projeto, project_id")
+            
         key = f"project:{project_id}:resumo"
         session_data = dict(project_state)
         session_data["usuario_executor"] = usuario_executor_val
@@ -233,5 +240,6 @@ class RedisSessionService:
         session_data["ultima_analysis_type"] = analysis_type
         session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
         session_data["project_id"] = project_id
+        
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
