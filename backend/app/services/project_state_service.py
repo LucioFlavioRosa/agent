@@ -174,4 +174,120 @@ class ProjectStateService:
         logger.info(f"Nenhum estado válido encontrado para usuario_executor={usuario_executor}, project_id={project_id}, nome_projeto={nome_projeto}, report_type={report_type}")
         return None
 
-    # Demais métodos permanecem inalterados
+    @staticmethod
+    def load_latest_state_from_blob_sync(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None, report_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        import asyncio
+        try:
+            return asyncio.run(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import nest_asyncio
+                nest_asyncio.apply()
+                return loop.run_until_complete(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
+            else:
+                return loop.run_until_complete(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
+
+    @staticmethod
+    async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
+        cache_key = f"{usuario_executor}:{nome_projeto}"
+        if cache_key in ProjectStateService._project_id_cache:
+            return ProjectStateService._project_id_cache[cache_key]
+        state = await ProjectStateService.load_latest_state_from_blob(
+            usuario_executor, 
+            project_id=None, 
+            nome_projeto=nome_projeto
+        )
+        if state and state.get("project_id"):
+            project_id = state.get("project_id")
+            ProjectStateService._project_id_cache[cache_key] = project_id
+            return project_id
+        return None
+
+    @staticmethod
+    def _invalidate_project_id_cache(nome_projeto: str):
+        keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto}")]
+        for k in keys_to_remove:
+            del ProjectStateService._project_id_cache[k]
+
+    @staticmethod
+    async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
+        logger.info(f"Carregando todos os estados para usuario={usuario_executor}, project_id={project_id}")
+        _, container_client = _get_blob_clients()
+        nome_projeto = None
+        resumo_state = None
+        prefix_resumo = f"{usuario_executor}/"
+        blobs_resumo = list(container_client.list_blobs(name_starts_with=prefix_resumo))
+        candidatos_resumo = []
+        for blob in blobs_resumo:
+            if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
+                blob_client = container_client.get_blob_client(blob.name)
+                state_bytes = blob_client.download_blob().readall()
+                state = json.loads(state_bytes.decode("utf-8"))
+                pid = state.get("project_id")
+                if pid == project_id:
+                    candidatos_resumo.append((blob, state))
+        if candidatos_resumo:
+            def get_sort_key(item):
+                state = item[1]
+                ts = state.get("ultima_atualizacao") or state.get("last_saved_to_blob")
+                if ts:
+                    try:
+                        return datetime.datetime.fromisoformat(ts)
+                    except Exception:
+                        pass
+                return datetime.datetime.min
+            candidatos_resumo.sort(key=get_sort_key, reverse=True)
+            resumo_state = candidatos_resumo[0][1]
+            nome_projeto = resumo_state.get("nome_projeto")
+        else:
+            return {}
+        report_types = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        subfolder_map = {
+            "epicos_report": "epicos",
+            "features_report": "features",
+            "times_descricao_report": "times_descricao",
+            "alocacao_times_report": "alocacao_times",
+            "premissas_riscos_report": "premissas_riscos"
+        }
+        states_dict = {
+            "resumo": resumo_state,
+            "epicos": None,
+            "features": None,
+            "times_descricao": None,
+            "alocacao_times": None,
+            "premissas_riscos": None
+        }
+        if nome_projeto:
+            for report_type in report_types:
+                subfolder = subfolder_map[report_type]
+                prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
+                file_prefix = f"estado_{report_type}_"
+                blobs = list(container_client.list_blobs(name_starts_with=prefix))
+                candidatos_report = []
+                for blob in blobs:
+                    if blob.name.endswith('.json') and file_prefix in blob.name:
+                        blob_client = container_client.get_blob_client(blob.name)
+                        state_bytes = blob_client.download_blob().readall()
+                        state = json.loads(state_bytes.decode("utf-8"))
+                        if state.get("project_id") == project_id:
+                            candidatos_report.append((blob, state))
+                if candidatos_report:
+                    candidatos_report.sort(key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao", datetime.datetime.min.isoformat())), reverse=True)
+                    latest_state = candidatos_report[0][1]
+                    key_map = {
+                        "epicos_report": "epicos",
+                        "features_report": "features",
+                        "times_descricao_report": "times_descricao",
+                        "alocacao_times_report": "alocacao_times",
+                        "premissas_riscos_report": "premissas_riscos"
+                    }
+                    states_dict[key_map[report_type]] = latest_state
+        return EstadoCompletoProjetoResponse(**states_dict).dict()
+
