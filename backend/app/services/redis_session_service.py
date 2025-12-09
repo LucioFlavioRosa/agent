@@ -31,11 +31,47 @@ class RedisSessionService:
 
     def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None, initial_state: Optional[Dict[str, Any]] = None) -> str:
         if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
-            raise ValueError("Campo obrigatorio ausente: usuario_executor")
+            blob_state = None
+            try:
+                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
+                    usuario_executor or "",
+                    project_id=project_id,
+                    nome_projeto=nome_projeto
+                ))
+            except Exception as e:
+                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher usuario_executor: {str(e)}")
+            if blob_state:
+                usuario_executor = blob_state.get("usuario_executor")
+            if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
+                raise ValueError("Campo obrigatorio ausente: usuario_executor")
         if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
-            raise ValueError("Campo obrigatorio ausente: nome_projeto")
+            blob_state = None
+            try:
+                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
+                    usuario_executor or "",
+                    project_id=project_id,
+                    nome_projeto=nome_projeto
+                ))
+            except Exception as e:
+                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher nome_projeto: {str(e)}")
+            if blob_state:
+                nome_projeto = blob_state.get("nome_projeto")
+            if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
+                raise ValueError("Campo obrigatorio ausente: nome_projeto")
         if not project_id or not isinstance(project_id, str) or not project_id.strip():
-            raise ValueError("Campo obrigatorio ausente: project_id")
+            blob_state = None
+            try:
+                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
+                    usuario_executor or "",
+                    project_id=project_id,
+                    nome_projeto=nome_projeto
+                ))
+            except Exception as e:
+                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher project_id: {str(e)}")
+            if blob_state:
+                project_id = blob_state.get("project_id")
+            if not project_id or not isinstance(project_id, str) or not project_id.strip():
+                raise ValueError("Campo obrigatorio ausente: project_id")
         key = f"project:{project_id}:resumo"
         created_at = datetime.utcnow().isoformat()
         last_saved_to_blob = datetime.utcnow().isoformat()
