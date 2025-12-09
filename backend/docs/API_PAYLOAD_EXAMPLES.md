@@ -46,13 +46,20 @@ GET /auth/config HTTP/1.1
 }
 
 ---
+# 2.2 Login e Obtenção de Projetos (POST /auth/login)
 
-## 2.2 Login e Obtenção de Projetos (POST /auth/login)
+Fluxo:
+1. O frontend envia o token JWT via header Authorization.
+2. O backend valida o token usando AzureADService, extrai o usuario_executor dos claims.
+3. O backend busca os projetos associados ao usuario_executor usando ProjectStateService._fetch_and_sanitize_projects.
+4. O backend retorna para o frontend a lista de projetos de resumo (campos: nome_projeto, ultima_analysis_type, created_at, ultima_atualizacao, project_id).
 
+Exemplo de requisição:
 POST /auth/login HTTP/1.1
 Authorization: Bearer <token>
 Content-Type: application/json
 
+Exemplo de resposta de sucesso:
 {
   "user_info": {
     "usuario_executor": "user@example.com",
@@ -72,6 +79,15 @@ Content-Type: application/json
   ]
 }
 
+Exemplo de resposta de erro (token expirado):
+{
+  "detail": "Token Azure AD expirado."
+}
+
+Exemplo de resposta de erro (token inválido):
+{
+  "detail": "Token Azure AD inválido: ..."
+}
 ---
 
 # 3. Gerenciamento de Projetos
