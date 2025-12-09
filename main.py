@@ -84,16 +84,16 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
         }
     else:
         # 3. Seleção de Dados Mockados
-        if "criacao_features" in analysis_type:
+        if "criacao_features_azure_devops" == analysis_type:
             report_data = DATA_FEATURES
-        elif "refinamento_features" in analysis_type:
+        elif "refinamento_features_azure_devops" == analysis_type:
             report_data = DATA_FEATURES_REFINAMENTO
-        elif "criacao_epicos" in analysis_type:
+        elif "criacao_epicos_azure_devops" == analysis_type:
             report_data = DATA_EPICOS
-        elif "refinamento_epicos" in analysis_type:
+        elif "refinamento_epicos_azure_devops" == analysis_type:
             logger.info("✅ Entrou no bloco: REFINAMENTO EPICOS")
             report_data = DATA_EPICOS_REFINAMENTO
-        elif "riscos" in analysis_type or "tech_debt" in analysis_type:
+        elif "criacao_riscos_azure_devops" == analysis_type:
             report_data = DATA_RISCOS
         else:
             # Default fallback se o tipo for desconhecido
