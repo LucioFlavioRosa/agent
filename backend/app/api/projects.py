@@ -14,24 +14,31 @@ async def check_project(
     current_user: dict = Depends(get_current_user)
 ):
     usuario_executor = _extract_usuario_executor(current_user)
-    logger.info(f"Verificando existência do projeto '{nome_projeto}' para usuario_executor='{usuario_executor}'")
+    logger.info(f"[CHECK] Verificando existência do projeto '{nome_projeto}' para usuario_executor='{usuario_executor}'")
     try:
         project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
+        logger.info(f"[CHECK] Resultado _get_project_id_by_name: {project_id}")
         if not project_id:
             logger.warning(f"[CHECK] Nenhum project_id encontrado para nome_projeto='{nome_projeto}' e usuario_executor='{usuario_executor}'. Verificando estados de resumo no Blob Storage...")
-            _, container_client = ProjectStateService._get_blob_clients()
-            prefix = f"{usuario_executor}/{nome_projeto}/estados/resumo/"
-            blobs = list(container_client.list_blobs(name_starts_with=prefix))
-            for blob in blobs:
-                if blob.name.endswith('.json'):
-                    blob_client = container_client.get_blob_client(blob.name)
-                    state_bytes = blob_client.download_blob().readall()
-                    import json
-                    state = json.loads(state_bytes.decode("utf-8"))
-                    pid = state.get("project_id")
-                    logger.warning(f"[CHECK] Estado encontrado: {blob.name}, project_id={pid}")
-            return {"exists": False}
+            latest_state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, nome_projeto=nome_projeto)
+            if latest_state and latest_state.get("project_id"):
+                project_id = latest_state.get("project_id")
+                logger.info(f"[CHECK] Fallback encontrou project_id='{project_id}' via load_latest_state_from_blob")
+            else:
+                _, container_client = ProjectStateService._get_blob_clients()
+                prefix = f"{usuario_executor}/{nome_projeto}/estados/resumo/"
+                blobs = list(container_client.list_blobs(name_starts_with=prefix))
+                for blob in blobs:
+                    if blob.name.endswith('.json'):
+                        blob_client = container_client.get_blob_client(blob.name)
+                        state_bytes = blob_client.download_blob().readall()
+                        import json
+                        state = json.loads(state_bytes.decode("utf-8"))
+                        pid = state.get("project_id")
+                        logger.warning(f"[CHECK] Estado encontrado: {blob.name}, project_id={pid}")
+                return {"exists": False}
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id=project_id)
+        logger.info(f"[CHECK] Resultado load_all_states_from_blob: {bool(state)} para project_id={project_id}")
         if state:
             report_fields = [
                 "epicos",
