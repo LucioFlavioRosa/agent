@@ -56,20 +56,19 @@ class ProjectStateService:
                         continue
                 resumo = {
                     "nome_projeto": state.get("nome_projeto", ""),
-                    "ultima_analysis_type": state.get("ultima_analysis_type", ""),
+                    "ultima_analysis_type": state.get("ultima_analysis_type", state.get("analysis_type", "")),
                     "created_at": state.get("created_at", None),
-                    "ultima_atualizacao": state.get("ultima_atualizacao", state.get("last_saved_to_blob", None)),
+                    "last_saved_to_blob": state.get("ultima_atualizacao", state.get("last_saved_to_blob", None)),
                     "project_id": project_id
                 }
                 resumo_states.append(resumo)
         logger.info(f"Projetos de resumo retornados para usuario_executor={usuario_executor}: {len(resumo_states)}")
-        # Agrupa por project_id (ou nome_projeto se project_id ausente), mantém apenas o mais recente
         projetos_unicos = {}
         for resumo in resumo_states:
             key = resumo.get("project_id") or resumo.get("nome_projeto")
             if not key:
                 continue
-            atualizacao = resumo.get("ultima_atualizacao") or resumo.get("created_at")
+            atualizacao = resumo.get("last_saved_to_blob") or resumo.get("created_at")
             try:
                 atualizacao_dt = datetime.datetime.fromisoformat(atualizacao) if atualizacao else datetime.datetime.min
             except Exception:
@@ -79,10 +78,11 @@ class ProjectStateService:
             ):
                 resumo["_atualizacao_dt"] = atualizacao_dt
                 projetos_unicos[key] = resumo
-        # Remove campo auxiliar
         projetos_final = []
         for v in projetos_unicos.values():
             v.pop("_atualizacao_dt", None)
+            if "analysis_type" in v:
+                v.pop("analysis_type", None)
             projetos_final.append(v)
         logger.info(f"Projetos únicos e mais recentes retornados: {len(projetos_final)}")
         return projetos_final
