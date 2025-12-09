@@ -92,11 +92,14 @@ Exemplo de resposta de erro (token inválido):
 
 # 3. Gerenciamento de Projetos
 
+> **Nota importante:** A partir de 2024-06, todos os estados de projeto (resumo e reports) DEVEM conter o campo `project_id`. Estados sem `project_id` são considerados inválidos e não serão retornados pelo backend. Caso um projeto não possua `project_id`, o backend irá tentar recuperar do Blob Storage ou gerar um novo UUID antes de criar ou retornar qualquer estado.
+
 ## 3.1 Verificar Existência de Projeto (GET /projects/check)
 
 GET /projects/check?nome_projeto=ProjetoNovo HTTP/1.1
 Authorization: Bearer <token>
 
+Exemplo de resposta (projeto existente e válido):
 {
   "exists": true,
   "state": {
@@ -146,6 +149,11 @@ Authorization: Bearer <token>
   }
 }
 
+Exemplo de resposta (projeto não encontrado ou inválido):
+{
+  "exists": false
+}
+
 ---
 
 ## 3.2 Listar Projetos do Usuário (GET /projects/list)
@@ -153,6 +161,7 @@ Authorization: Bearer <token>
 GET /projects/list HTTP/1.1
 Authorization: Bearer <token>
 
+Exemplo de resposta (apenas projetos válidos):
 [
   {
     "nome_projeto": "ProjetoNovo",
@@ -163,6 +172,8 @@ Authorization: Bearer <token>
   },
   ...
 ]
+
+> **Nota:** Projetos sem `project_id` não serão retornados na lista.
 
 ---
 
@@ -460,3 +471,4 @@ sequenceDiagram
 - O campo `ultima_analysis_type` indica qual foi a última análise executada no projeto ou report.
 - O backend atualiza apenas o estado do report correspondente ao `analysis_type` recebido no webhook.
 - O frontend deve fazer polling periódico para consultar estados de reports enquanto o MCP processa a análise.
+- **Atenção:** O campo `project_id` é obrigatório em todos os estados. Caso não esteja presente, o backend irá gerar ou recuperar antes de retornar qualquer resposta.
