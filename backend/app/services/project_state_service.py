@@ -242,3 +242,33 @@ class ProjectStateService:
                 return loop.run_until_complete(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
             else:
                 return loop.run_until_complete(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
+
+    @staticmethod
+    async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
+        cache_key = f"{usuario_executor}:{nome_projeto}"
+        
+        # 1. Tenta pegar do cache local da memória
+        if cache_key in ProjectStateService._project_id_cache:
+            return ProjectStateService._project_id_cache[cache_key]
+        
+        # 2. Se não estiver no cache, busca no Blob Storage
+        state = await ProjectStateService.load_latest_state_from_blob(
+            usuario_executor, 
+            project_id=None, 
+            nome_projeto=nome_projeto
+        )
+        
+        # 3. Se encontrou, atualiza o cache e retorna
+        if state and state.get("project_id"):
+            project_id = state.get("project_id")
+            ProjectStateService._project_id_cache[cache_key] = project_id
+            return project_id
+            
+        return None
+
+    @staticmethod
+    def _invalidate_project_id_cache(nome_projeto: str):
+        # Invalida entradas de cache relacionadas a este projeto
+        keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto}")]
+        for k in keys_to_remove:
+            del ProjectStateService._project_id_cache[k]
