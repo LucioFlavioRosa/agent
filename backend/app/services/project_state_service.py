@@ -23,6 +23,12 @@ class ProjectStateService:
     _project_id_cache = {}
 
     @staticmethod
+    def _normalize_nome_projeto(nome_projeto: Optional[str]) -> Optional[str]:
+        if nome_projeto is None:
+            return None
+        return nome_projeto.strip().lower()
+
+    @staticmethod
     def _get_val(data: Any, key: str, default: Any = None) -> Any:
         if isinstance(data, dict):
             return data.get(key, default)
@@ -65,7 +71,7 @@ class ProjectStateService:
         logger.info(f"Projetos de resumo retornados para usuario_executor={usuario_executor}: {len(resumo_states)}")
         projetos_unicos = {}
         for resumo in resumo_states:
-            key = resumo.get("project_id") or resumo.get("nome_projeto")
+            key = resumo.get("project_id") or ProjectStateService._normalize_nome_projeto(resumo.get("nome_projeto"))
             if not key:
                 continue
             atualizacao = resumo.get("last_saved_to_blob") or resumo.get("created_at")
@@ -90,12 +96,11 @@ class ProjectStateService:
     @staticmethod
     async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
         logger = logging.getLogger("ProjectStateService")
-        cache_key = f"{usuario_executor}:{nome_projeto}"
+        nome_projeto_normalizado = ProjectStateService._normalize_nome_projeto(nome_projeto)
+        cache_key = f"{usuario_executor}:{nome_projeto_normalizado}"
         if cache_key in ProjectStateService._project_id_cache:
-            logger.debug(f"[CACHE] Retornando project_id do cache para usuario_executor={usuario_executor}, nome_projeto={nome_projeto}: {ProjectStateService._project_id_cache[cache_key]}")
+            logger.debug(f"[CACHE] Retornando project_id do cache para usuario_executor={usuario_executor}, nome_projeto={nome_projeto_normalizado}: {ProjectStateService._project_id_cache[cache_key]}")
             return ProjectStateService._project_id_cache[cache_key]
-        nome_projeto_normalizado = nome_projeto.strip().lower() if nome_projeto else None
-        logger.info(f"Buscando project_id para usuario_executor={usuario_executor}, nome_projeto={nome_projeto_normalizado}")
         _, container_client = _get_blob_clients()
         prefix_resumo = f"{usuario_executor}/"
         blobs_resumo = list(container_client.list_blobs(name_starts_with=f"{prefix_resumo}"))
@@ -104,7 +109,7 @@ class ProjectStateService:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                nome_blob = state.get("nome_projeto", "").strip().lower()
+                nome_blob = ProjectStateService._normalize_nome_projeto(state.get("nome_projeto", ""))
                 project_id = state.get("project_id")
                 logger.debug(f"Verificando blob: {blob.name}, nome_projeto_blob={nome_blob}, project_id={project_id}")
                 if nome_blob == nome_projeto_normalizado and project_id and isinstance(project_id, str) and project_id.strip():
@@ -113,6 +118,13 @@ class ProjectStateService:
                     return project_id
         logger.warning(f"Nenhum project_id encontrado para usuario_executor={usuario_executor}, nome_projeto={nome_projeto_normalizado}")
         return None
+
+    @staticmethod
+    def _invalidate_project_id_cache(nome_projeto: str):
+        nome_projeto_normalizado = ProjectStateService._normalize_nome_projeto(nome_projeto)
+        keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto_normalizado}")]
+        for k in keys_to_remove:
+            del ProjectStateService._project_id_cache[k]
 
     @staticmethod
     async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None, report_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -154,8 +166,8 @@ class ProjectStateService:
                     logger.info(f"[DEBUG] Estado encontrado por project_id: {pid} no blob: {blob.name}")
                     return state
                 if nome_projeto:
-                    nome_blob = state.get("nome_projeto", "").strip().lower()
-                    nome_projeto_normalizado = nome_projeto.strip().lower()
+                    nome_blob = ProjectStateService._normalize_nome_projeto(state.get("nome_projeto", ""))
+                    nome_projeto_normalizado = ProjectStateService._normalize_nome_projeto(nome_projeto)
                     if nome_blob == nome_projeto_normalizado:
                         states.append((blob, state))
         if nome_projeto and states:
@@ -173,42 +185,6 @@ class ProjectStateService:
             return states_sorted[0][1]
         logger.info(f"Nenhum estado válido encontrado para usuario_executor={usuario_executor}, project_id={project_id}, nome_projeto={nome_projeto}, report_type={report_type}")
         return None
-
-    @staticmethod
-    def load_latest_state_from_blob_sync(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None, report_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        import asyncio
-        try:
-            return asyncio.run(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
-        except RuntimeError:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                import nest_asyncio
-                nest_asyncio.apply()
-                return loop.run_until_complete(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
-            else:
-                return loop.run_until_complete(ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id, nome_projeto, report_type))
-
-    @staticmethod
-    async def _get_project_id_by_name(usuario_executor: str, nome_projeto: str) -> Optional[str]:
-        cache_key = f"{usuario_executor}:{nome_projeto}"
-        if cache_key in ProjectStateService._project_id_cache:
-            return ProjectStateService._project_id_cache[cache_key]
-        state = await ProjectStateService.load_latest_state_from_blob(
-            usuario_executor, 
-            project_id=None, 
-            nome_projeto=nome_projeto
-        )
-        if state and state.get("project_id"):
-            project_id = state.get("project_id")
-            ProjectStateService._project_id_cache[cache_key] = project_id
-            return project_id
-        return None
-
-    @staticmethod
-    def _invalidate_project_id_cache(nome_projeto: str):
-        keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto}")]
-        for k in keys_to_remove:
-            del ProjectStateService._project_id_cache[k]
 
     @staticmethod
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
@@ -290,4 +266,3 @@ class ProjectStateService:
                     }
                     states_dict[key_map[report_type]] = latest_state
         return EstadoCompletoProjetoResponse(**states_dict).dict()
-
