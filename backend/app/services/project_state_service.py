@@ -58,7 +58,7 @@ class ProjectStateService:
             "nome_projeto": nome_projeto,
             "project_id": project_id
         }
-        campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor]
+        campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor or (isinstance(valor, str) and not valor.strip())]
         if campos_faltando:
             logger.warning(f"Campos obrigatórios ausentes em session_data: {campos_faltando}. Tentando buscar estado do Blob Storage...")
             estado_blob = None
@@ -76,7 +76,7 @@ class ProjectStateService:
                     if valor_blob:
                         setattr(session_data, campo, valor_blob)
                         campos_obrigatorios[campo] = valor_blob
-                campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor]
+                campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor or (isinstance(valor, str) and not valor.strip())]
             if campos_faltando:
                 raise ValueError(f"Não é possível salvar o estado: campos obrigatórios ausentes mesmo após fallback do Blob Storage: {campos_faltando}")
         if report_type:
