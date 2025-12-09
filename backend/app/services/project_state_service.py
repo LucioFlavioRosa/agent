@@ -166,7 +166,6 @@ class ProjectStateService:
     @staticmethod
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
         _, container_client = _get_blob_clients()
-        # Buscar nome_projeto pelo project_id no estado resumo
         nome_projeto = None
         resumo_state = None
         prefix_resumo = f"{usuario_executor}/"
@@ -194,7 +193,6 @@ class ProjectStateService:
             nome_projeto = resumo_state.get("nome_projeto")
         else:
             return {}
-        # Buscar cada report
         report_types = [
             "epicos_report",
             "features_report",
