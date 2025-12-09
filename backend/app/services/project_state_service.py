@@ -272,3 +272,109 @@ class ProjectStateService:
         keys_to_remove = [k for k in ProjectStateService._project_id_cache if k.endswith(f":{nome_projeto}")]
         for k in keys_to_remove:
             del ProjectStateService._project_id_cache[k]
+
+    @staticmethod
+    async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
+        logger.info(f"Carregando todos os estados para usuario={usuario_executor}, project_id={project_id}")
+        _, container_client = _get_blob_clients()
+        
+        # 1. Carregar o Resumo
+        nome_projeto = None
+        resumo_state = None
+        
+        # Busca blobs de resumo
+        prefix_resumo = f"{usuario_executor}/"
+        blobs_resumo = list(container_client.list_blobs(name_starts_with=prefix_resumo))
+        
+        candidatos_resumo = []
+        for blob in blobs_resumo:
+            # Filtra apenas arquivos json de resumo
+            if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
+                blob_client = container_client.get_blob_client(blob.name)
+                state_bytes = blob_client.download_blob().readall()
+                state = json.loads(state_bytes.decode("utf-8"))
+                
+                # Verifica se o ID bate
+                pid = state.get("project_id")
+                if pid == project_id:
+                    candidatos_resumo.append((blob, state))
+
+        if candidatos_resumo:
+            # Ordena para pegar o mais recente
+            def get_sort_key(item):
+                state = item[1]
+                ts = state.get("ultima_atualizacao") or state.get("last_saved_to_blob")
+                if ts:
+                    try:
+                        return datetime.datetime.fromisoformat(ts)
+                    except Exception:
+                        pass
+                return datetime.datetime.min
+            
+            candidatos_resumo.sort(key=get_sort_key, reverse=True)
+            resumo_state = candidatos_resumo[0][1]
+            nome_projeto = resumo_state.get("nome_projeto")
+        else:
+            # Se não achar o resumo, não tem como buscar o resto (precisamos do nome do projeto para o path)
+            return {}
+
+        # 2. Carregar os outros relatórios
+        report_types = [
+            "epicos_report",
+            "features_report",
+            "times_descricao_report",
+            "alocacao_times_report",
+            "premissas_riscos_report"
+        ]
+        
+        subfolder_map = {
+            "epicos_report": "epicos",
+            "features_report": "features",
+            "times_descricao_report": "times_descricao",
+            "alocacao_times_report": "alocacao_times",
+            "premissas_riscos_report": "premissas_riscos"
+        }
+
+        states_dict = {
+            "resumo": resumo_state,
+            "epicos": None,
+            "features": None,
+            "times_descricao": None,
+            "alocacao_times": None,
+            "premissas_riscos": None
+        }
+
+        if nome_projeto:
+            for report_type in report_types:
+                subfolder = subfolder_map[report_type]
+                # Caminho: user/projeto/estados/tipo/arquivo.json
+                prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
+                file_prefix = f"estado_{report_type}_"
+                
+                blobs = list(container_client.list_blobs(name_starts_with=prefix))
+                candidatos_report = []
+                
+                for blob in blobs:
+                    if blob.name.endswith('.json') and file_prefix in blob.name:
+                        blob_client = container_client.get_blob_client(blob.name)
+                        state_bytes = blob_client.download_blob().readall()
+                        state = json.loads(state_bytes.decode("utf-8"))
+                        
+                        if state.get("project_id") == project_id:
+                            candidatos_report.append((blob, state))
+                
+                if candidatos_report:
+                    candidatos_report.sort(key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao", datetime.datetime.min.isoformat())), reverse=True)
+                    latest_state = candidatos_report[0][1]
+                    
+                    # Mapeia para o nome da chave no dicionário de resposta
+                    key_map = {
+                        "epicos_report": "epicos",
+                        "features_report": "features",
+                        "times_descricao_report": "times_descricao",
+                        "alocacao_times_report": "alocacao_times",
+                        "premissas_riscos_report": "premissas_riscos"
+                    }
+                    states_dict[key_map[report_type]] = latest_state
+
+        return EstadoCompletoProjetoResponse(**states_dict).dict()
