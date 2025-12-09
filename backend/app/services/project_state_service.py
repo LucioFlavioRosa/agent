@@ -129,6 +129,79 @@ class ProjectStateService:
             del ProjectStateService._project_id_cache[k]
 
     @staticmethod
+    async def save_state_to_blob(state_data: Any) -> str:
+        """
+        Salva o estado atual do projeto no Blob Storage.
+        Identifica automaticamente se é um resumo ou um relatório específico (épicos, features, etc)
+        baseado nas chaves presentes no dicionário.
+        """
+        logger = logging.getLogger("ProjectStateService")
+        
+        # 1. Converter para dicionário (suporta Pydantic v1/v2, Dict ou Objeto genérico)
+        if hasattr(state_data, "dict"):
+            data = state_data.dict()
+        elif hasattr(state_data, "model_dump"): # Suporte a Pydantic v2
+            data = state_data.model_dump()
+        elif isinstance(state_data, dict):
+            data = state_data
+        else:
+            data = state_data.__dict__
+
+        # 2. Extrair metadados obrigatórios para montar o caminho
+        usuario_executor = data.get("usuario_executor")
+        nome_projeto = data.get("nome_projeto")
+
+        if not usuario_executor or not nome_projeto:
+            error_msg = f"Não é possível salvar estado: 'usuario_executor' ({usuario_executor}) ou 'nome_projeto' ({nome_projeto}) ausentes."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # 3. Determinar o tipo de relatório e a subpasta correta
+        # Isso garante que o arquivo vá para a pasta que o 'load_latest' espera encontrar
+        subfolder_map = {
+            "epicos_report": "epicos",
+            "features_report": "features",
+            "times_descricao_report": "times_descricao",
+            "alocacao_times_report": "alocacao_times",
+            "premissas_riscos_report": "premissas_riscos"
+        }
+
+        report_type = "resumo"
+        subfolder = "resumo"
+
+        # Verifica se existe alguma das chaves de relatório no dicionário
+        for key, folder in subfolder_map.items():
+            if key in data and data[key]: # Verifica se a chave existe e não é vazia/None
+                report_type = key
+                subfolder = folder
+                break
+        
+        # 4. Gerar nome do arquivo com Timestamp UTC
+        timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        filename = f"estado_{report_type}_{timestamp}.json"
+        
+        # Estrutura: usuario/projeto/estados/subpasta/arquivo
+        blob_path = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/{filename}"
+
+        # 5. Realizar o Upload
+        try:
+            _, container_client = _get_blob_clients()
+            blob_client = container_client.get_blob_client(blob_path)
+            
+            # Serializa para JSON (default=str lida com objetos datetime)
+            json_data = json.dumps(data, default=str, ensure_ascii=False)
+            
+            logger.info(f"Iniciando upload de estado para: {blob_path}")
+            blob_client.upload_blob(json_data, overwrite=True)
+            logger.info(f"Upload concluído com sucesso: {blob_path}")
+            
+            return blob_client.url
+            
+        except Exception as e:
+            logger.error(f"Erro ao salvar estado no blob: {str(e)}")
+            raise e
+            
+    @staticmethod
     async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None, report_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
         _, container_client = _get_blob_clients()
