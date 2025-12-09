@@ -19,7 +19,6 @@ async def check_project(
         project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
         if not project_id:
             logger.warning(f"[CHECK] Nenhum project_id encontrado para nome_projeto='{nome_projeto}' e usuario_executor='{usuario_executor}'. Verificando estados de resumo no Blob Storage...")
-            # Busca estados de resumo manualmente para rastrear possíveis problemas
             _, container_client = ProjectStateService._get_blob_clients()
             prefix = f"{usuario_executor}/{nome_projeto}/estados/resumo/"
             blobs = list(container_client.list_blobs(name_starts_with=prefix))
@@ -77,6 +76,11 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
         p.pop("projeto", None)
         p.pop("comentario_usuario", None)
         p.pop("docx_blob_url", None)
+        if "ultima_analysis_type" not in p and "analysis_type" in p:
+            p["ultima_analysis_type"] = p["analysis_type"]
+            p.pop("analysis_type", None)
+        if "analysis_type" in p:
+            p.pop("analysis_type", None)
         projetos_validos.append(p)
     logger.info(f"[LIST] Total de projetos válidos retornados: {len(projetos_validos)}")
     return projetos_validos
