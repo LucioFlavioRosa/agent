@@ -22,11 +22,6 @@ async def check_project(
             return {"exists": False}
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id=project_id)
         if state:
-            def normalize_report_field(field, default):
-                value = state.get(field)
-                if value is None:
-                    return [] if isinstance(default, list) else default
-                return value
             report_fields = [
                 "epicos",
                 "features",
