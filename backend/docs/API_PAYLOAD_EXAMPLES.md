@@ -84,12 +84,49 @@ Authorization: Bearer <token>
 {
   "exists": true,
   "state": {
-    "usuario_executor": "user@example.com",
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_epicos_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "project_id": "projeto-uuid-123"
+    "resumo": {
+      "usuario_executor": "user@example.com",
+      "nome_projeto": "ProjetoNovo",
+      "ultima_analysis_type": "criacao_epicos_azure_devops",
+      "created_at": "2024-06-01T12:00:00Z",
+      "ultima_atualizacao": "2024-06-01T12:30:00Z",
+      "project_id": "projeto-uuid-123"
+    },
+    "epicos": {
+      "nome_projeto": "ProjetoNovo",
+      "ultima_analysis_type": "criacao_epicos_azure_devops",
+      "created_at": "2024-06-01T12:00:00Z",
+      "ultima_atualizacao": "2024-06-01T12:30:00Z",
+      "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }]
+    },
+    "features": {
+      "nome_projeto": "ProjetoNovo",
+      "ultima_analysis_type": "criacao_features_azure_devops",
+      "created_at": "2024-06-01T12:00:00Z",
+      "ultima_atualizacao": "2024-06-01T12:30:00Z",
+      "features_report": [{ "id": 101, "nome": "Login" }]
+    },
+    "times_descricao": {
+      "nome_projeto": "ProjetoNovo",
+      "ultima_analysis_type": "criacao_times_azure_devops",
+      "created_at": "2024-06-01T12:00:00Z",
+      "ultima_atualizacao": "2024-06-01T12:30:00Z",
+      "times_descricao_report": []
+    },
+    "alocacao_times": {
+      "nome_projeto": "ProjetoNovo",
+      "ultima_analysis_type": "criacao_alocacao_azure_devops",
+      "created_at": "2024-06-01T12:00:00Z",
+      "ultima_atualizacao": "2024-06-01T12:30:00Z",
+      "alocacao_times_report": []
+    },
+    "premissas_riscos": {
+      "nome_projeto": "ProjetoNovo",
+      "ultima_analysis_type": "criacao_premissas_azure_devops",
+      "created_at": "2024-06-01T12:00:00Z",
+      "ultima_atualizacao": "2024-06-01T12:30:00Z",
+      "premissas_riscos_report": []
+    }
   }
 }
 
@@ -142,13 +179,49 @@ GET /session/project/projeto-uuid-123/reports HTTP/1.1
 Authorization: Bearer <token>
 
 {
-  "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }],
-  "features_report": [{ "id": 1, "nome": "Login" }],
-  "times_descricao_report": [],
-  "alocacao_times_report": [],
-  "premissas_riscos_report": [],
-  "project_id": "projeto-uuid-123",
-  "nome_projeto": "ProjetoNovo"
+  "resumo": {
+    "usuario_executor": "user@example.com",
+    "nome_projeto": "ProjetoNovo",
+    "ultima_analysis_type": "criacao_epicos_azure_devops",
+    "created_at": "2024-06-01T12:00:00Z",
+    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "project_id": "projeto-uuid-123"
+  },
+  "epicos": {
+    "nome_projeto": "ProjetoNovo",
+    "ultima_analysis_type": "criacao_epicos_azure_devops",
+    "created_at": "2024-06-01T12:00:00Z",
+    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }]
+  },
+  "features": {
+    "nome_projeto": "ProjetoNovo",
+    "ultima_analysis_type": "criacao_features_azure_devops",
+    "created_at": "2024-06-01T12:00:00Z",
+    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "features_report": [{ "id": 101, "nome": "Login" }]
+  },
+  "times_descricao": {
+    "nome_projeto": "ProjetoNovo",
+    "ultima_analysis_type": "criacao_times_azure_devops",
+    "created_at": "2024-06-01T12:00:00Z",
+    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "times_descricao_report": []
+  },
+  "alocacao_times": {
+    "nome_projeto": "ProjetoNovo",
+    "ultima_analysis_type": "criacao_alocacao_azure_devops",
+    "created_at": "2024-06-01T12:00:00Z",
+    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "alocacao_times_report": []
+  },
+  "premissas_riscos": {
+    "nome_projeto": "ProjetoNovo",
+    "ultima_analysis_type": "criacao_premissas_azure_devops",
+    "created_at": "2024-06-01T12:00:00Z",
+    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "premissas_riscos_report": []
+  }
 }
 
 ---
@@ -321,7 +394,7 @@ sequenceDiagram
 mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
-    BE-->>FE: exists: true, state (resumo)
+    BE-->>FE: exists: true, state (resumo + todos os estados disponíveis)
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, ...)
     BE->>MCP: Envia payload
     MCP-->>BE: job_id, project_id
@@ -334,7 +407,7 @@ sequenceDiagram
     MCP->>BE: Webhook (job_id, project_id, status, report_data, analysis_type)
     BE->>BE: Usa analysis_type para determinar report_type
     BE->>RS: Atualiza estado individual do report (ex: features_report)
-    BE->>BS: Salva estado individual do report no Blob Storage
+    BE->>BS: Salva estado individual do report no Blob Storage (pasta específica)
     BE-->>FE: status ok
 
 ## 8.4 Consulta de Estado Individual de Report
@@ -345,13 +418,21 @@ sequenceDiagram
     BE->>RS: Busca estado individual do report
     BE-->>FE: Estado individual do report (campos: nome_projeto, ultima_analysis_type, created_at, ultima_atualizacao, <report_field>)
 
+## 8.5 Consulta de Estado Completo do Projeto
+
+mermaid
+sequenceDiagram
+    FE->>BE: GET /session/project/{project_id}/reports
+    BE->>BS: Busca todos os estados salvos no Blob Storage
+    BE-->>FE: Retorna todos os estados (resumo + reports disponíveis)
+
 ---
 
 # 9. Boas Práticas de Integração
 
 - Sempre utilize o campo `project_id` para identificar projetos em todas as requisições subsequentes.
-- Para obter o estado de um report específico, utilize o endpoint `GET /session/project/{project_id}/report/{report_type}`.
-- O backend mantém um estado de resumo do projeto e estados individuais para cada report.
+- Para obter o estado completo do projeto, utilize o endpoint `GET /session/project/{project_id}/reports` ou `GET /projects/check`.
+- O backend mantém um estado de resumo do projeto e estados individuais para cada report, cada um salvo em sua pasta específica no Blob Storage.
 - O campo `ultima_analysis_type` indica qual foi a última análise executada no projeto ou report.
 - O backend atualiza apenas o estado do report correspondente ao `analysis_type` recebido no webhook.
 - O frontend deve fazer polling periódico para consultar estados de reports enquanto o MCP processa a análise.
