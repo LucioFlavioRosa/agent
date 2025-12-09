@@ -20,28 +20,31 @@ async def check_project(
         if not project_id:
             logger.info(f"Projeto '{nome_projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
             return {"exists": False}
-        state = await ProjectStateService.load_latest_state_from_blob(usuario_executor, project_id=project_id)
+        state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id=project_id)
         if state:
-            state.pop("projeto", None)
-            state.pop("comentario_usuario", None)
-            state.pop("docx_blob_url", None)
-            # Passo 8: Normalização dos campos de relatório antes de retornar
+            def normalize_report_field(field, default):
+                value = state.get(field)
+                if value is None:
+                    return [] if isinstance(default, list) else default
+                return value
             report_fields = [
-                "epicos_report",
-                "features_report",
-                "times_descricao_report",
-                "alocacao_times_report",
-                "premissas_riscos_report"
+                "epicos",
+                "features",
+                "times_descricao",
+                "alocacao_times",
+                "premissas_riscos"
             ]
-            normalized_count = 0
             for field in report_fields:
-                if field not in state or state[field] is None or not isinstance(state[field], list):
-                    state[field] = []
-                    normalized_count += 1
-            if normalized_count > 0:
-                logger.debug(f"Normalização: {normalized_count} campos de relatório convertidos para lista em check_project().")
-            state["project_id"] = project_id
-            state["nome_projeto"] = state.get("nome_projeto", nome_projeto)
+                if state.get(field) is None:
+                    state[field] = None
+                else:
+                    report_key = field + "_report"
+                    if report_key in state[field] and (state[field][report_key] is None or not isinstance(state[field][report_key], list)):
+                        state[field][report_key] = []
+            if state.get("resumo") and "project_id" not in state["resumo"]:
+                state["resumo"]["project_id"] = project_id
+            if state.get("resumo") and "nome_projeto" not in state["resumo"]:
+                state["resumo"]["nome_projeto"] = nome_projeto
             response = {"exists": True, "state": state}
             return response
         else:
