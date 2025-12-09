@@ -18,7 +18,19 @@ async def check_project(
     try:
         project_id = await ProjectStateService._get_project_id_by_name(usuario_executor, nome_projeto)
         if not project_id:
-            logger.info(f"Projeto '{nome_projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
+            logger.warning(f"[CHECK] Nenhum project_id encontrado para nome_projeto='{nome_projeto}' e usuario_executor='{usuario_executor}'. Verificando estados de resumo no Blob Storage...")
+            # Busca estados de resumo manualmente para rastrear possíveis problemas
+            _, container_client = ProjectStateService._get_blob_clients()
+            prefix = f"{usuario_executor}/{nome_projeto}/estados/resumo/"
+            blobs = list(container_client.list_blobs(name_starts_with=prefix))
+            for blob in blobs:
+                if blob.name.endswith('.json'):
+                    blob_client = container_client.get_blob_client(blob.name)
+                    state_bytes = blob_client.download_blob().readall()
+                    import json
+                    state = json.loads(state_bytes.decode("utf-8"))
+                    pid = state.get("project_id")
+                    logger.warning(f"[CHECK] Estado encontrado: {blob.name}, project_id={pid}")
             return {"exists": False}
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id=project_id)
         if state:
@@ -37,10 +49,12 @@ async def check_project(
                     if report_key in state[field] and (state[field][report_key] is None or not isinstance(state[field][report_key], list)):
                         state[field][report_key] = []
             if state.get("resumo") and "project_id" not in state["resumo"]:
-                state["resumo"]["project_id"] = project_id
+                logger.error(f"[CHECK] Estado de resumo encontrado para '{nome_projeto}' mas project_id está ausente. Estado inválido ignorado.")
+                return {"exists": False}
             if state.get("resumo") and "nome_projeto" not in state["resumo"]:
                 state["resumo"]["nome_projeto"] = nome_projeto
             response = {"exists": True, "state": state}
+            logger.info(f"[CHECK] Projeto '{nome_projeto}' encontrado para usuario_executor='{usuario_executor}' com project_id válido.")
             return response
         else:
             logger.info(f"Projeto '{nome_projeto}' NÃO encontrado para usuario_executor='{usuario_executor}'.")
@@ -53,10 +67,16 @@ async def check_project(
 async def list_projects(current_user: dict = Depends(get_current_user)):
     usuario_executor = _extract_usuario_executor(current_user)
     projects = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
+    projetos_validos = []
     for p in projects:
+        if not p.get("project_id") or not isinstance(p.get("project_id"), str) or not p.get("project_id").strip():
+            logger.warning(f"[LIST] Projeto ignorado por ausência de project_id: {p}")
+            continue
         if "nome_projeto" not in p:
             p["nome_projeto"] = p.get("nome_projeto", "")
         p.pop("projeto", None)
         p.pop("comentario_usuario", None)
         p.pop("docx_blob_url", None)
-    return projects
+        projetos_validos.append(p)
+    logger.info(f"[LIST] Total de projetos válidos retornados: {len(projetos_validos)}")
+    return projetos_validos
