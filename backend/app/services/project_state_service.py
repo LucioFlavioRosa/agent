@@ -262,42 +262,53 @@ class ProjectStateService:
     @staticmethod
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
         """
-        Carrega todos os estados mais recentes de um projeto (resumo e relatórios parciais).
-        Inclui lógica de resiliência para preencher campos obrigatórios faltantes (ex: datas).
+        Carrega todos os estados mais recentes, ordenando explicitamente pelo timestamp extraído do nome do arquivo.
         """
         logger.info(f"Carregando todos os estados para usuario={usuario_executor}, project_id={project_id}")
         _, container_client = _get_blob_clients()
         nome_projeto = None
         resumo_state = None
+        
+        # --- FUNÇÃO AUXILIAR DE ORDENAÇÃO ---
+        def extract_timestamp_from_filename(blob_name: str) -> datetime.datetime:
+            try:
+                # Esperado: .../estado_TIPO_20251209T184457Z.json
+                # Pega a parte final: 20251209T184457Z
+                ts_str = blob_name.split("_")[-1].replace(".json", "")
+                return datetime.datetime.strptime(ts_str, "%Y%m%dT%H%M%SZ")
+            except Exception:
+                return datetime.datetime.min
+
         prefix_resumo = f"{usuario_executor}/"
         blobs_resumo = list(container_client.list_blobs(name_starts_with=prefix_resumo))
         
-        # --- BUSCA DO RESUMO ---
+        # --- 1. BUSCA DO RESUMO ---
         candidatos_resumo = []
         for blob in blobs_resumo:
             if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                pid = state.get("project_id")
                 
                 # Validação de ID
-                if not pid or not isinstance(pid, str) or not pid.strip():
-                    pid = validate_and_fix_project_id(state, usuario_executor, state.get("nome_projeto", ""))
-                
+                pid = state.get("project_id")
+                if not pid: 
+                     # Fallback
+                     pid = validate_and_fix_project_id(state, usuario_executor, state.get("nome_projeto", ""))
+
                 if pid == project_id:
                     candidatos_resumo.append((blob, state))
         
         if candidatos_resumo:
-            # Ordena pelo mais recente
-            candidatos_resumo.sort(key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao") or item[1].get("last_saved_to_blob") or datetime.datetime.min.isoformat()), reverse=True)
+            # Ordena usando a função auxiliar
+            candidatos_resumo.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
             resumo_state = candidatos_resumo[0][1]
             nome_projeto = resumo_state.get("nome_projeto")
+            logger.info(f"[RESUMO] Selecionado arquivo mais recente: {candidatos_resumo[0][0].name}")
         else:
-            # Se não achou resumo, não tem como buscar o resto
             return {}
 
-        # --- BUSCA DOS RELATÓRIOS ---
+        # --- 2. BUSCA DOS RELATÓRIOS ---
         states_dict = {
             "resumo": resumo_state,
             "epicos": None,
@@ -328,6 +339,7 @@ class ProjectStateService:
                 subfolder = subfolder_map[report_type]
                 prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
                 file_prefix = f"estado_{report_type}_"
+                
                 blobs = list(container_client.list_blobs(name_starts_with=prefix))
                 candidatos_report = []
                 
@@ -340,12 +352,13 @@ class ProjectStateService:
                             candidatos_report.append((blob, state))
                 
                 if candidatos_report:
-                    # Ordena para pegar o mais recente
-                    candidatos_report.sort(key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao", datetime.datetime.min.isoformat())), reverse=True)
-                    latest_state = candidatos_report[0][1] # Dicionário cru do JSON
+                    # Ordena usando a função auxiliar
+                    candidatos_report.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
                     
-                    # >>> INICIO DA CORREÇÃO DE RESILIÊNCIA <<<
-                    # Preenche campos obrigatórios se faltarem no JSON antigo
+                    latest_state = candidatos_report[0][1]
+                    logger.info(f"[{report_type}] Selecionado arquivo mais recente: {candidatos_report[0][0].name}")
+                    
+                    # Coding Defensivo (Datas)
                     agora_iso = datetime.datetime.utcnow().isoformat()
                     if "ultima_atualizacao" not in latest_state:
                         latest_state["ultima_atualizacao"] = latest_state.get("created_at") or agora_iso
@@ -355,9 +368,7 @@ class ProjectStateService:
                         latest_state["nome_projeto"] = nome_projeto
                     if "project_id" not in latest_state:
                         latest_state["project_id"] = project_id
-                    # >>> FIM DA CORREÇÃO <<<
 
-                    # Mapeia para a chave correta no dicionário de resposta
                     chave_destino = key_map.get(report_type)
                     if chave_destino:
                         states_dict[chave_destino] = latest_state
