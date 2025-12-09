@@ -43,22 +43,19 @@ async def auth_login(current_user: dict = Depends(get_current_user)):
     redis_service = RedisSessionService()
     import logging
     logger = logging.getLogger("auth_api")
+    resumo_list = []
     for p in projects:
-        p.pop("projeto", None)
-        p.pop("comentario_usuario", None)
-        p.pop("docx_blob_url", None)
-        if "nome_projeto" not in p:
-            p["nome_projeto"] = p.get("projeto", "")
-        if "project_id" not in p:
-            p["project_id"] = p.get("project_id", "")
-        try:
-            logger.debug(f"Sincronizando sessão do projeto '{p.get('nome_projeto')}' (project_id={p.get('project_id')}) no Redis após login.")
-            redis_service.restore_session_from_state(
-                usuario_executor=p.get("usuario_executor", usuario_executor),
-                nome_projeto=p.get("nome_projeto", ""),
-                analysis_type=p.get("analysis_type", ""),
-                project_state=p
-            )
-        except Exception as e:
-            logger.error(f"Erro ao restaurar sessão do projeto '{p.get('nome_projeto')}' (project_id={p.get('project_id')}): {e}")
-    return AuthLoginResponse(user_info=current_user, projects=projects)
+        project_id = p.get("project_id")
+        resumo_state = redis_service.get_resumo_state(project_id)
+        if resumo_state:
+            resumo_list.append(resumo_state)
+        else:
+            resumo = {
+                "nome_projeto": p.get("nome_projeto", ""),
+                "ultima_analysis_type": p.get("analysis_type", ""),
+                "created_at": p.get("created_at", None),
+                "ultima_atualizacao": p.get("last_saved_to_blob", None),
+                "project_id": project_id
+            }
+            resumo_list.append(resumo)
+    return AuthLoginResponse(user_info=current_user, projects=resumo_list)
