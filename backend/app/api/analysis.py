@@ -32,9 +32,11 @@ async def start_analysis(
 ):
     usuario_executor = _extract_usuario_executor(current_user)
     logger.info(f"Iniciando análise para projeto '{nome_projeto}' (analysis_type: '{analysis_type}') para usuário {usuario_executor}")
+    # Validação defensiva usuario_executor
     if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
         logger.error(f"Falha ao extrair usuario_executor do token JWT: '{usuario_executor}'")
         raise HTTPException(status_code=401, detail="Campo 'usuario_executor' ausente ou inválido no token JWT.")
+    # Validação defensiva nome_projeto
     if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
         logger.error(f"Campo 'nome_projeto' ausente ou vazio no formulário: '{nome_projeto}'")
         raise HTTPException(status_code=400, detail="Campo 'nome_projeto' ausente ou vazio no formulário.")
@@ -51,6 +53,7 @@ async def start_analysis(
             session_exists = False
     else:
         project_id_final = str(uuid.uuid4())
+    # Validação defensiva project_id_final
     if not project_id_final or not isinstance(project_id_final, str) or not project_id_final.strip():
         logger.error(f"Falha ao gerar ou recuperar project_id_final: '{project_id_final}'")
         raise HTTPException(status_code=500, detail="Falha ao gerar ou recuperar project_id do projeto.")
@@ -89,6 +92,7 @@ async def start_analysis(
             "project_id": project_id_final,
             "usuario_executor": usuario_executor
         }
+        # Validação defensiva resumo_state
         campos_obrigatorios = ["nome_projeto", "usuario_executor", "project_id"]
         campos_faltando = [campo for campo in campos_obrigatorios if not resumo_state.get(campo) or (isinstance(resumo_state.get(campo), str) and not resumo_state.get(campo).strip())]
         if campos_faltando:
