@@ -77,8 +77,15 @@ async def start_analysis(
             "ultima_analysis_type": analysis_type,
             "created_at": created_at,
             "ultima_atualizacao": last_saved_to_blob,
-            "project_id": project_id_final
+            "project_id": project_id_final,
+            "usuario_executor": usuario_executor
         }
+        # Passo 3: Validação dos campos obrigatórios antes de criar sessão
+        campos_obrigatorios = ["nome_projeto", "usuario_executor", "project_id"]
+        campos_faltando = [campo for campo in campos_obrigatorios if not resumo_state.get(campo)]
+        if campos_faltando:
+            logger.critical(f"Erro ao inicializar sessão: campos obrigatórios ausentes no estado do projeto: {campos_faltando}")
+            raise HTTPException(status_code=500, detail="Erro ao inicializar sessão: campos obrigatórios ausentes no estado do projeto.")
         redis_service.create_session(
             usuario_executor,
             nome_projeto,
