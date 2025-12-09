@@ -12,40 +12,31 @@ class UpdateReportRequest(BaseModel):
     report_data: Dict[str, Any]
 
 @router.get("/project/{project_id}/reports")
-def get_project_reports(project_id: str):
-    redis_service = RedisSessionService()
+async def get_project_reports(project_id: str, current_user: dict = Depends(get_current_user)):
+    usuario_executor = _extract_usuario_executor(current_user)
     logger = logging.getLogger("session_api")
     try:
-        session = redis_service.get_session_by_project_id(project_id)
-        state = session.to_project_state()
-        state.pop("projeto", None)
-        state.pop("comentario_usuario", None)
-        state.pop("docx_blob_url", None)
-        state.pop("extracted_text", None)
+        state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
+        def normalize_report_field(field, default):
+            value = state.get(field)
+            if value is None:
+                return [] if isinstance(default, list) else default
+            return value
         report_fields = [
-            "epicos_report",
-            "features_report",
-            "times_descricao_report",
-            "alocacao_times_report",
-            "premissas_riscos_report"
+            "epicos",
+            "features",
+            "times_descricao",
+            "alocacao_times",
+            "premissas_riscos"
         ]
-        normalized_count = 0
         for field in report_fields:
-            if field not in state or state[field] is None or not isinstance(state[field], list):
-                state[field] = []
-                normalized_count += 1
-        if normalized_count > 0:
-            logger.debug(f"Normalização: {normalized_count} campos de relatório convertidos para lista em get_project_reports().")
-        reports = {
-            "epicos_report": state.get("epicos_report"),
-            "features_report": state.get("features_report"),
-            "times_descricao_report": state.get("times_descricao_report"),
-            "alocacao_times_report": state.get("alocacao_times_report"),
-            "premissas_riscos_report": state.get("premissas_riscos_report"),
-            "project_id": state.get("project_id"),
-            "nome_projeto": state.get("nome_projeto")
-        }
-        return reports
+            if state.get(field) is None:
+                state[field] = None
+            else:
+                report_key = field + "_report"
+                if report_key in state[field] and (state[field][report_key] is None or not isinstance(state[field][report_key], list)):
+                    state[field][report_key] = []
+        return state
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
 
