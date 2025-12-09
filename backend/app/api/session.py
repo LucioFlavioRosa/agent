@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Depends
 from pydantic import BaseModel
 from typing import Any, Dict
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
+from backend.app.middleware.auth_middleware import get_current_user
 import logging
 
 router = APIRouter()
@@ -21,7 +22,6 @@ def get_project_reports(project_id: str):
         state.pop("comentario_usuario", None)
         state.pop("docx_blob_url", None)
         state.pop("extracted_text", None)
-        # Passo 7: Normalização dos campos de relatório antes de retornar
         report_fields = [
             "epicos_report",
             "features_report",
@@ -49,6 +49,16 @@ def get_project_reports(project_id: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
 
+@router.get("/project/{project_id}/report/{report_type}")
+async def get_project_report_state(project_id: str, report_type: str, current_user: dict = Depends(get_current_user)):
+    try:
+        state = await ProjectStateService.get_report_state(project_id, report_type)
+        if not state:
+            raise HTTPException(status_code=404, detail=f"Estado do report '{report_type}' não encontrado para project_id '{project_id}'")
+        return state
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Erro ao buscar estado do report: {e}")
+
 @router.put("/project/{project_id}/report")
 def update_project_report(project_id: str, req: UpdateReportRequest):
     redis_service = RedisSessionService()
@@ -57,7 +67,6 @@ def update_project_report(project_id: str, req: UpdateReportRequest):
             raise HTTPException(status_code=400, detail="report_data deve ser um dicionário com exatamente uma chave de relatório.")
         redis_service.update_report(project_id, req.report_data)
         session = redis_service.get_session_by_project_id(project_id)
-        # Dispara o salvamento automático do estado completo no Blob Storage
         import asyncio
         loop = asyncio.get_event_loop()
         if loop.is_running():
