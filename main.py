@@ -91,6 +91,7 @@ async def process_and_send_webhook(job_id: str, project_id: str, analysis_type: 
         elif "criacao_epicos" in analysis_type:
             report_data = DATA_EPICOS
         elif "refinamento_epicos" in analysis_type:
+            logger.info("✅ Entrou no bloco: REFINAMENTO EPICOS")
             report_data = DATA_EPICOS_REFINAMENTO
         elif "riscos" in analysis_type or "tech_debt" in analysis_type:
             report_data = DATA_RISCOS
