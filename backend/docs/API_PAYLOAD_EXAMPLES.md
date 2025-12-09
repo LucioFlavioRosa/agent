@@ -53,6 +53,7 @@ Fluxo:
 2. O backend valida o token usando AzureADService, extrai o usuario_executor dos claims.
 3. O backend busca os projetos associados ao usuario_executor usando ProjectStateService._fetch_and_sanitize_projects.
 4. O backend retorna para o frontend a lista de projetos de resumo (campos: nome_projeto, ultima_analysis_type, created_at, ultima_atualizacao, project_id).
+5. **Novo comportamento:** Mesmo que múltiplos estados existam para o mesmo projeto, o backend retorna apenas o estado mais recente de cada projeto único, eliminando duplicatas por project_id ou nome_projeto.
 
 Exemplo de requisição:
 POST /auth/login HTTP/1.1
@@ -78,6 +79,8 @@ Exemplo de resposta de sucesso:
     }
   ]
 }
+
+> **Observação:** Mesmo que existam múltiplos estados para o mesmo projeto, o backend sempre retorna apenas o mais recente para cada projeto único.
 
 Exemplo de resposta de erro (token expirado):
 {
