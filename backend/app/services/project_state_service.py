@@ -130,7 +130,26 @@ class ProjectStateService:
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
-        blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
+
+        def json_serial(obj):
+            if isinstance(obj, (datetime.datetime, datetime.date)):
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+
+        # Adicionado o parâmetro default=json_serial
+        blob_client.upload_blob(
+            json.dumps(
+                state, 
+                default=json_serial, 
+                ensure_ascii=False, 
+                separators=(',', ':')
+            ).encode("utf-8"), 
+            overwrite=True, 
+            content_settings=None
+        )
+        #blob_client.upload_blob(json.dumps(state, ensure_ascii=False, separators=(',', ':')).encode("utf-8"), overwrite=True, content_settings=None)
+
+        
         ProjectStateService._invalidate_project_id_cache(nome_projeto)
         return blob_client.url
 
