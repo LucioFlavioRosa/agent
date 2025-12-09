@@ -53,7 +53,6 @@ class ProjectStateService:
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         last_update = datetime.datetime.utcnow()
         estados_base_folder = f"{usuario_executor}/{nome_projeto}/estados"
-        # Passo 1: Validação defensiva dos campos obrigatórios
         campos_obrigatorios = {
             "usuario_executor": usuario_executor,
             "nome_projeto": nome_projeto,
@@ -62,7 +61,6 @@ class ProjectStateService:
         campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor]
         if campos_faltando:
             logger.warning(f"Campos obrigatórios ausentes em session_data: {campos_faltando}. Tentando buscar estado do Blob Storage...")
-            # Tenta buscar o estado mais recente do Blob Storage
             estado_blob = None
             try:
                 estado_blob = await ProjectStateService.load_latest_state_from_blob(
@@ -73,7 +71,6 @@ class ProjectStateService:
             except Exception as e:
                 logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
             if estado_blob:
-                # Preenche os campos faltantes com os valores do Blob
                 for campo in campos_faltando:
                     valor_blob = estado_blob.get(campo)
                     if valor_blob:
@@ -116,7 +113,6 @@ class ProjectStateService:
         created_at = getattr(session_data, "created_at", None)
         if isinstance(created_at, str):
             created_at = datetime.datetime.fromisoformat(created_at)
-        # Passo 2: Validação defensiva dos campos obrigatórios
         if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
             nome_projeto = getattr(session_data, 'nome_projeto', None) or 'PROJETO_SEM_NOME'
             if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
