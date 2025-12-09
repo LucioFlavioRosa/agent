@@ -12,7 +12,7 @@
 - [5. Gerenciamento de Sessão e Relatórios](#5-gerenciamento-de-sessão-e-relatórios)
   - [5.1 Consultar Relatórios do Projeto (GET /session/project/{project_id}/reports)](#51-consultar-relatórios-do-projeto-get-sessionprojectproject_idreports)
   - [5.2 Atualizar Relatório Individual (PUT /session/project/{project_id}/report)](#52-atualizar-relatório-individual-put-sessionprojectproject_idreport)
-  - [5.3 Salvar Estado do Projeto (POST /session/project/{project_id}/save-state)](#53-salvar-estado-do-projeto-post-sessionprojectproject_idsave-state)
+  - [5.3 Salvar Estado do Projeto (POST /session/project/{project_id}/save-state)](#53-salvar-estado-do-projeto-post-sessionproject_idsave-state)
   - [5.4 Listar Arquivos DOCX do Projeto (GET /session/project/{project_id}/docx-files)](#54-listar-arquivos-docx-do-projeto-get-sessionprojectproject_iddocx-files)
   - [5.5 Consultar Estado Individual de Report (GET /session/project/{project_id}/report/{report_type})](#55-consultar-estado-individual-de-report-get-sessionprojectproject_idreportreport_type)
 - [6. Webhooks MCP → Backend](#6-webhooks-mcp--backend)
@@ -92,11 +92,14 @@ Exemplo de resposta de erro (token inválido):
 
 # 3. Gerenciamento de Projetos
 
+> **Nota importante:** Todos os estados de projeto devem obrigatoriamente conter o campo `project_id`. Caso um estado não possua `project_id`, ele será ignorado pelos endpoints de listagem e checagem.
+
 ## 3.1 Verificar Existência de Projeto (GET /projects/check)
 
 GET /projects/check?nome_projeto=ProjetoNovo HTTP/1.1
 Authorization: Bearer <token>
 
+Exemplo de resposta quando o projeto existe e possui project_id:
 {
   "exists": true,
   "state": {
@@ -146,6 +149,11 @@ Authorization: Bearer <token>
   }
 }
 
+Exemplo de resposta quando o projeto não existe ou não possui project_id válido:
+{
+  "exists": false
+}
+
 ---
 
 ## 3.2 Listar Projetos do Usuário (GET /projects/list)
@@ -153,6 +161,7 @@ Authorization: Bearer <token>
 GET /projects/list HTTP/1.1
 Authorization: Bearer <token>
 
+Exemplo de resposta:
 [
   {
     "nome_projeto": "ProjetoNovo",
@@ -161,8 +170,16 @@ Authorization: Bearer <token>
     "ultima_atualizacao": "2024-06-01T12:30:00Z",
     "project_id": "projeto-uuid-123"
   },
-  ...
+  {
+    "nome_projeto": "OutroProjeto",
+    "ultima_analysis_type": "criacao_features_azure_devops",
+    "created_at": "2024-06-02T09:00:00Z",
+    "ultima_atualizacao": "2024-06-02T09:30:00Z",
+    "project_id": "projeto-uuid-456"
+  }
 ]
+
+> **Nota:** Apenas projetos com `project_id` válido são retornados. Projetos sem `project_id` são ignorados.
 
 ---
 
@@ -460,3 +477,4 @@ sequenceDiagram
 - O campo `ultima_analysis_type` indica qual foi a última análise executada no projeto ou report.
 - O backend atualiza apenas o estado do report correspondente ao `analysis_type` recebido no webhook.
 - O frontend deve fazer polling periódico para consultar estados de reports enquanto o MCP processa a análise.
+- **Todos os estados de projeto DEVEM conter o campo `project_id`. Estados sem `project_id` são ignorados pelos endpoints de listagem e checagem.**
