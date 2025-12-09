@@ -15,30 +15,9 @@ from backend.app.models.project_state_models import (
 )
 from backend.app.config.analysis_type_to_report_mapping import analysis_type_to_report_mapping
 import uuid
+from backend.app.utils.project_id_validator import ensure_project_id
 
 logger = logging.getLogger("ProjectStateService")
-
-def ensure_project_id(session_data: dict, usuario_executor: str = None, nome_projeto: str = None) -> str:
-    project_id = session_data.get("project_id")
-    if project_id and isinstance(project_id, str) and project_id.strip():
-        return project_id
-    try:
-        from backend.app.services.project_state_service import ProjectStateService
-        estado_blob = None
-        if usuario_executor and nome_projeto:
-            try:
-                estado_blob = ProjectStateService.load_latest_state_from_blob_sync(usuario_executor, nome_projeto=nome_projeto)
-            except Exception as e:
-                logger.error(f"Erro ao buscar estado do Blob Storage para preencher project_id: {str(e)}")
-        if estado_blob and estado_blob.get("project_id"):
-            session_data["project_id"] = estado_blob["project_id"]
-            return estado_blob["project_id"]
-    except Exception as e:
-        logger.error(f"Erro inesperado ao tentar garantir project_id: {str(e)}")
-    novo_id = str(uuid.uuid4())
-    session_data["project_id"] = novo_id
-    logger.critical(f"project_id ausente, gerado novo UUID: {novo_id}")
-    return novo_id
 
 class ProjectStateService:
     _project_id_cache = {}
@@ -68,7 +47,7 @@ class ProjectStateService:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                project_id = state.get("project_id")
+                project_id = ensure_project_id(state, state.get("usuario_executor", usuario_executor), state.get("nome_projeto"))
                 if not project_id or not isinstance(project_id, str) or not project_id.strip():
                     logger.warning(f"Estado de resumo ignorado por ausência de project_id: {blob.name}")
                     continue
@@ -190,33 +169,6 @@ class ProjectStateService:
         return resumo
 
     @staticmethod
-    def _build_report_state(session_data, report_type, last_update):
-        nome_projeto = ProjectStateService._get_val(session_data, "nome_projeto")
-        ultima_analysis_type = ProjectStateService._get_val(session_data, "ultima_analysis_type") or ProjectStateService._get_val(session_data, "analysis_type")
-        created_at = ProjectStateService._get_val(session_data, "created_at")
-        if isinstance(created_at, str):
-            created_at = datetime.datetime.fromisoformat(created_at)
-        report_data = ProjectStateService._get_val(session_data, report_type) or []
-        common_args = {
-            "nome_projeto": nome_projeto,
-            "ultima_analysis_type": ultima_analysis_type,
-            "created_at": created_at or datetime.datetime.utcnow(),
-            "ultima_atualizacao": last_update
-        }
-        if report_type == "epicos_report":
-            return EstadoEpicos(**common_args, epicos_report=report_data).dict()
-        elif report_type == "features_report":
-            return EstadoFeatures(**common_args, features_report=report_data).dict()
-        elif report_type == "times_descricao_report":
-            return EstadoTimesDescricao(**common_args, times_descricao_report=report_data).dict()
-        elif report_type == "alocacao_times_report":
-            return EstadoAlocacaoTimes(**common_args, alocacao_times_report=report_data).dict()
-        elif report_type == "premissas_riscos_report":
-            return EstadoPremissasRiscos(**common_args, premissas_riscos_report=report_data).dict()
-        else:
-            raise ValueError(f"Report type desconhecido: {report_type}")
-
-    @staticmethod
     async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None, report_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
         _, container_client = _get_blob_clients()
@@ -244,7 +196,7 @@ class ProjectStateService:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                pid = state.get("project_id")
+                pid = ensure_project_id(state, state.get("usuario_executor", usuario_executor), state.get("nome_projeto", nome_projeto))
                 if not pid or not isinstance(pid, str) or not pid.strip():
                     logger.warning(f"Estado ignorado por ausência de project_id: {blob.name}")
                     continue
