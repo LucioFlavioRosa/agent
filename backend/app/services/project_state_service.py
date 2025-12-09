@@ -18,6 +18,23 @@ from backend.app.config.analysis_type_to_report_mapping import analysis_type_to_
 class ProjectStateService:
     _project_id_cache = {}
 
+    # --- NOVOS MÉTODOS AUXILIARES ---
+    @staticmethod
+    def _get_val(data: Any, key: str, default: Any = None) -> Any:
+        """Lê valor de um dicionário ou atributo de objeto."""
+        if isinstance(data, dict):
+            return data.get(key, default)
+        return getattr(data, key, default)
+
+    @staticmethod
+    def _set_val(data: Any, key: str, value: Any) -> None:
+        """Define valor em um dicionário ou atributo de objeto."""
+        if isinstance(data, dict):
+            data[key] = value
+        else:
+            setattr(data, key, value)
+    # --------------------------------
+
     @staticmethod
     async def _fetch_and_sanitize_projects(usuario_executor: str) -> List[Dict[str, Any]]:
         logger = logging.getLogger("ProjectStateService")
@@ -47,18 +64,24 @@ class ProjectStateService:
     @staticmethod
     async def save_state_to_blob(session_data, report_type: Optional[str] = None) -> str:
         logger = logging.getLogger("ProjectStateService")
-        usuario_executor = getattr(session_data, "usuario_executor", None)
-        nome_projeto = getattr(session_data, "nome_projeto", None)
-        project_id = getattr(session_data, "project_id", None)
+        
+        # Uso do auxiliar _get_val
+        usuario_executor = ProjectStateService._get_val(session_data, "usuario_executor")
+        nome_projeto = ProjectStateService._get_val(session_data, "nome_projeto")
+        project_id = ProjectStateService._get_val(session_data, "project_id")
+        
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         last_update = datetime.datetime.utcnow()
         estados_base_folder = f"{usuario_executor}/{nome_projeto}/estados"
+        
         campos_obrigatorios = {
             "usuario_executor": usuario_executor,
             "nome_projeto": nome_projeto,
             "project_id": project_id
         }
+        
         campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor or (isinstance(valor, str) and not valor.strip())]
+        
         if campos_faltando:
             logger.warning(f"Campos obrigatórios ausentes em session_data: {campos_faltando}. Tentando buscar estado do Blob Storage...")
             estado_blob = None
@@ -70,15 +93,21 @@ class ProjectStateService:
                 )
             except Exception as e:
                 logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
+            
             if estado_blob:
                 for campo in campos_faltando:
                     valor_blob = estado_blob.get(campo)
                     if valor_blob:
-                        setattr(session_data, campo, valor_blob)
+                        # Uso do auxiliar _set_val
+                        ProjectStateService._set_val(session_data, campo, valor_blob)
                         campos_obrigatorios[campo] = valor_blob
+                
+                # Reavaliar campos faltando após a tentativa de recuperação
                 campos_faltando = [campo for campo, valor in campos_obrigatorios.items() if not valor or (isinstance(valor, str) and not valor.strip())]
+            
             if campos_faltando:
                 raise ValueError(f"Não é possível salvar o estado: campos obrigatórios ausentes mesmo após fallback do Blob Storage: {campos_faltando}")
+
         if report_type:
             subfolder_map = {
                 "epicos_report": "epicos",
@@ -97,6 +126,7 @@ class ProjectStateService:
             blob_folder = f"{estados_base_folder}/resumo"
             blob_filename = f"estado_resumo_{timestamp}.json"
             state = ProjectStateService._build_resumo_state(session_data, last_update)
+        
         blob_path = f"{blob_folder}/{blob_filename}"
         _, container_client = _get_blob_clients()
         blob_client = container_client.get_blob_client(blob_path)
@@ -106,25 +136,31 @@ class ProjectStateService:
 
     @staticmethod
     def _build_resumo_state(session_data, last_update):
-        nome_projeto = getattr(session_data, "nome_projeto", None)
-        usuario_executor = getattr(session_data, "usuario_executor", None)
-        project_id = getattr(session_data, "project_id", None)
-        ultima_analysis_type = getattr(session_data, "ultima_analysis_type", None) or getattr(session_data, "analysis_type", None)
-        created_at = getattr(session_data, "created_at", None)
+        # Uso extensivo do auxiliar _get_val
+        nome_projeto = ProjectStateService._get_val(session_data, "nome_projeto")
+        usuario_executor = ProjectStateService._get_val(session_data, "usuario_executor")
+        project_id = ProjectStateService._get_val(session_data, "project_id")
+        ultima_analysis_type = ProjectStateService._get_val(session_data, "ultima_analysis_type") or ProjectStateService._get_val(session_data, "analysis_type")
+        created_at = ProjectStateService._get_val(session_data, "created_at")
+        
         if isinstance(created_at, str):
             created_at = datetime.datetime.fromisoformat(created_at)
+        
         if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
-            nome_projeto = getattr(session_data, 'nome_projeto', None) or 'PROJETO_SEM_NOME'
+            nome_projeto = ProjectStateService._get_val(session_data, 'nome_projeto') or 'PROJETO_SEM_NOME'
             if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
                 raise ValueError("Campo 'nome_projeto' é obrigatório e não pode ser None ou vazio para criar o estado de resumo.")
+        
         if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
-            usuario_executor = getattr(session_data, 'usuario_executor', None) or 'USUARIO_SEM_NOME'
+            usuario_executor = ProjectStateService._get_val(session_data, 'usuario_executor') or 'USUARIO_SEM_NOME'
             if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
                 raise ValueError("Campo 'usuario_executor' é obrigatório e não pode ser None ou vazio para criar o estado de resumo.")
+        
         if not project_id or not isinstance(project_id, str) or not project_id.strip():
-            project_id = getattr(session_data, 'project_id', None) or 'PROJECT_ID_SEM_NOME'
+            project_id = ProjectStateService._get_val(session_data, 'project_id') or 'PROJECT_ID_SEM_NOME'
             if not project_id or not isinstance(project_id, str) or not project_id.strip():
                 raise ValueError("Campo 'project_id' é obrigatório e não pode ser None ou vazio para criar o estado de resumo.")
+        
         return EstadoResumoProjeto(
             nome_projeto=nome_projeto,
             ultima_analysis_type=ultima_analysis_type,
@@ -134,52 +170,33 @@ class ProjectStateService:
 
     @staticmethod
     def _build_report_state(session_data, report_type, last_update):
-        nome_projeto = getattr(session_data, "nome_projeto", None)
-        ultima_analysis_type = getattr(session_data, "ultima_analysis_type", None) or getattr(session_data, "analysis_type", None)
-        created_at = getattr(session_data, "created_at", None)
+        # Uso do auxiliar _get_val
+        nome_projeto = ProjectStateService._get_val(session_data, "nome_projeto")
+        ultima_analysis_type = ProjectStateService._get_val(session_data, "ultima_analysis_type") or ProjectStateService._get_val(session_data, "analysis_type")
+        created_at = ProjectStateService._get_val(session_data, "created_at")
+        
         if isinstance(created_at, str):
             created_at = datetime.datetime.fromisoformat(created_at)
-        report_data = getattr(session_data, report_type, [])
+        
+        report_data = ProjectStateService._get_val(session_data, report_type) or []
+        
+        common_args = {
+            "nome_projeto": nome_projeto,
+            "ultima_analysis_type": ultima_analysis_type,
+            "created_at": created_at or datetime.datetime.utcnow(),
+            "ultima_atualizacao": last_update
+        }
+
         if report_type == "epicos_report":
-            return EstadoEpicos(
-                nome_projeto=nome_projeto,
-                ultima_analysis_type=ultima_analysis_type,
-                created_at=created_at or datetime.datetime.utcnow(),
-                ultima_atualizacao=last_update,
-                epicos_report=report_data
-            ).dict()
+            return EstadoEpicos(**common_args, epicos_report=report_data).dict()
         elif report_type == "features_report":
-            return EstadoFeatures(
-                nome_projeto=nome_projeto,
-                ultima_analysis_type=ultima_analysis_type,
-                created_at=created_at or datetime.datetime.utcnow(),
-                ultima_atualizacao=last_update,
-                features_report=report_data
-            ).dict()
+            return EstadoFeatures(**common_args, features_report=report_data).dict()
         elif report_type == "times_descricao_report":
-            return EstadoTimesDescricao(
-                nome_projeto=nome_projeto,
-                ultima_analysis_type=ultima_analysis_type,
-                created_at=created_at or datetime.datetime.utcnow(),
-                ultima_atualizacao=last_update,
-                times_descricao_report=report_data
-            ).dict()
+            return EstadoTimesDescricao(**common_args, times_descricao_report=report_data).dict()
         elif report_type == "alocacao_times_report":
-            return EstadoAlocacaoTimes(
-                nome_projeto=nome_projeto,
-                ultima_analysis_type=ultima_analysis_type,
-                created_at=created_at or datetime.datetime.utcnow(),
-                ultima_atualizacao=last_update,
-                alocacao_times_report=report_data
-            ).dict()
+            return EstadoAlocacaoTimes(**common_args, alocacao_times_report=report_data).dict()
         elif report_type == "premissas_riscos_report":
-            return EstadoPremissasRiscos(
-                nome_projeto=nome_projeto,
-                ultima_analysis_type=ultima_analysis_type,
-                created_at=created_at or datetime.datetime.utcnow(),
-                ultima_atualizacao=last_update,
-                premissas_riscos_report=report_data
-            ).dict()
+            return EstadoPremissasRiscos(**common_args, premissas_riscos_report=report_data).dict()
         else:
             raise ValueError(f"Report type desconhecido: {report_type}")
 
@@ -232,17 +249,29 @@ class ProjectStateService:
 
     @staticmethod
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
+        # Método mantido conforme original (com correções menores se necessário, mas o foco é o save)
         _, container_client = _get_blob_clients()
+        # ... (Lógica de load_all_states_from_blob mantida, atenção apenas se ela usasse getattr em entradas, mas parece usar json.loads que retorna dict)
+        # Assumindo que o código original deste método estava correto para leitura de blobs.
+        # Devido ao tamanho do prompt, abreviei a repetição deste método se ele não precisava de alterações lógicas.
+        # Mas para garantir a integridade do copy-paste, mantive a estrutura.
+        
+        # (Recopiando a lógica original do seu input para load_all_states_from_blob para garantir que o arquivo fique completo)
         nome_projeto = None
         resumo_state = None
         prefix_resumo = f"{usuario_executor}/"
         blobs_resumo = list(container_client.list_blobs(name_starts_with=f"{prefix_resumo}"))
         resumo_states = []
-        blob_client = container_client.get_blob_client(blob.name)
-        state_bytes = blob_client.download_blob().readall()
-        state = json.loads(state_bytes.decode("utf-8"))
-        if state.get("project_id") == project_id:
-            resumo_states.append((blob, state))
+        
+        # Correção: O loop original tinha um bug de indentação no seu input (blob_client fora do for). Corrigindo aqui:
+        for blob in blobs_resumo:
+             if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
+                blob_client = container_client.get_blob_client(blob.name)
+                state_bytes = blob_client.download_blob().readall()
+                state = json.loads(state_bytes.decode("utf-8"))
+                if state.get("project_id") == project_id:
+                    resumo_states.append((blob, state))
+        
         if resumo_states:
             def get_sort_key(item):
                 state = item[1]
@@ -258,6 +287,7 @@ class ProjectStateService:
             nome_projeto = resumo_state.get("nome_projeto")
         else:
             return {}
+
         report_types = [
             "epicos_report",
             "features_report",
@@ -280,32 +310,35 @@ class ProjectStateService:
             "alocacao_times": None,
             "premissas_riscos": None
         }
-        for report_type in report_types:
-            subfolder = subfolder_map[report_type]
-            prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
-            file_prefix = f"estado_{report_type}_"
-            blobs = list(container_client.list_blobs(name_starts_with=prefix))
-            states = []
-            for blob in blobs:
-                if blob.name.endswith('.json') and file_prefix in blob.name:
-                    blob_client = container_client.get_blob_client(blob.name)
-                    state_bytes = blob_client.download_blob().readall()
-                    state = json.loads(state_bytes.decode("utf-8"))
-                    if state.get("project_id") == project_id:
-                        states.append((blob, state))
-            if states:
-                states_sorted = sorted(states, key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao", datetime.datetime.min.isoformat())), reverse=True)
-                latest_state = states_sorted[0][1]
-                if report_type == "epicos_report":
-                    states_dict["epicos"] = latest_state
-                elif report_type == "features_report":
-                    states_dict["features"] = latest_state
-                elif report_type == "times_descricao_report":
-                    states_dict["times_descricao"] = latest_state
-                elif report_type == "alocacao_times_report":
-                    states_dict["alocacao_times"] = latest_state
-                elif report_type == "premissas_riscos_report":
-                    states_dict["premissas_riscos"] = latest_state
+        
+        if nome_projeto: # Só busca os outros relatórios se achou o resumo e o nome do projeto
+            for report_type in report_types:
+                subfolder = subfolder_map[report_type]
+                prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
+                file_prefix = f"estado_{report_type}_"
+                blobs = list(container_client.list_blobs(name_starts_with=prefix))
+                states = []
+                for blob in blobs:
+                    if blob.name.endswith('.json') and file_prefix in blob.name:
+                        blob_client = container_client.get_blob_client(blob.name)
+                        state_bytes = blob_client.download_blob().readall()
+                        state = json.loads(state_bytes.decode("utf-8"))
+                        if state.get("project_id") == project_id:
+                            states.append((blob, state))
+                if states:
+                    states_sorted = sorted(states, key=lambda item: datetime.datetime.fromisoformat(item[1].get("ultima_atualizacao", datetime.datetime.min.isoformat())), reverse=True)
+                    latest_state = states_sorted[0][1]
+                    if report_type == "epicos_report":
+                        states_dict["epicos"] = latest_state
+                    elif report_type == "features_report":
+                        states_dict["features"] = latest_state
+                    elif report_type == "times_descricao_report":
+                        states_dict["times_descricao"] = latest_state
+                    elif report_type == "alocacao_times_report":
+                        states_dict["alocacao_times"] = latest_state
+                    elif report_type == "premissas_riscos_report":
+                        states_dict["premissas_riscos"] = latest_state
+                        
         return EstadoCompletoProjetoResponse(**states_dict).dict()
 
     @staticmethod
