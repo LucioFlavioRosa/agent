@@ -65,7 +65,9 @@ class RedisSessionService:
         key = f"project:{project_id}:resumo"
         session_json = self.redis_client.get(key)
         if session_json:
+            self.logger.info(f"Resumo do projeto {project_id} encontrado no Redis.")
             return self._deserialize_session(session_json)
+        self.logger.info(f"Resumo do projeto {project_id} não encontrado no Redis.")
         return None
 
     def restore_session_from_state(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_state: Dict[str, Any]) -> str:
