@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional
 
 class MCPStartAnalysisPayload(BaseModel):
-    projeto: str = Field(..., description="Nome do projeto.")
+    nome_projeto: str = Field(..., description="Nome do projeto.")
     analysis_type: str = Field(..., description="Tipo de análise a ser realizada pelo MCP.")
     arquivo_docx: Optional[str] = Field(None, description="Texto extraído do arquivo docx com a transcrição da reunião. NÃO é a URL do Blob Storage.")
     comentario_usuario: Optional[str] = Field(None, description="Comentário adicional enviado pelo usuário.")
