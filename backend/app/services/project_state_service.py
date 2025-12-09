@@ -15,26 +15,9 @@ from backend.app.models.project_state_models import (
 )
 from backend.app.config.analysis_type_to_report_mapping import analysis_type_to_report_mapping
 import uuid
-from backend.app.utils.project_id_validator import ensure_project_id
+from backend.app.utils.project_id_validator import ensure_project_id, validate_and_fix_project_id
 
 logger = logging.getLogger("ProjectStateService")
-
-def validate_and_fix_project_id(state: dict, usuario_executor: str, nome_projeto: str) -> str:
-    project_id = state.get("project_id")
-    if project_id and isinstance(project_id, str) and project_id.strip():
-        return project_id
-    try:
-        pid = ensure_project_id(state, usuario_executor, nome_projeto)
-        if pid and isinstance(pid, str) and pid.strip():
-            logger.warning(f"[VALIDACAO] project_id ausente, recuperado via ensure_project_id: {pid}")
-            state["project_id"] = pid
-            return pid
-    except Exception as e:
-        logger.error(f"[VALIDACAO] Falha ao recuperar project_id: {e}")
-    novo_id = str(uuid.uuid4())
-    state["project_id"] = novo_id
-    logger.critical(f"[VALIDACAO] project_id ausente, gerado novo UUID: {novo_id}")
-    return novo_id
 
 class ProjectStateService:
     _project_id_cache = {}
