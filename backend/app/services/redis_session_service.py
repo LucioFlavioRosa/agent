@@ -9,6 +9,27 @@ import logging
 import asyncio
 from backend.app.services.project_state_service import ProjectStateService
 
+def ensure_project_id(session_data: dict, usuario_executor: str = None, nome_projeto: str = None) -> str:
+    project_id = session_data.get("project_id")
+    if project_id and isinstance(project_id, str) and project_id.strip():
+        return project_id
+    try:
+        estado_blob = None
+        if usuario_executor and nome_projeto:
+            try:
+                estado_blob = asyncio.run(ProjectStateService.load_latest_state_from_blob(usuario_executor, nome_projeto=nome_projeto))
+            except Exception as e:
+                logging.getLogger("RedisSessionService").error(f"Erro ao buscar estado do Blob Storage para preencher project_id: {str(e)}")
+        if estado_blob and estado_blob.get("project_id"):
+            session_data["project_id"] = estado_blob["project_id"]
+            return estado_blob["project_id"]
+    except Exception as e:
+        logging.getLogger("RedisSessionService").error(f"Erro inesperado ao tentar garantir project_id: {str(e)}")
+    novo_id = str(uuid.uuid4())
+    session_data["project_id"] = novo_id
+    logging.getLogger("RedisSessionService").critical(f"project_id ausente, gerado novo UUID: {novo_id}")
+    return novo_id
+
 class RedisSessionService:
     def __init__(self):
         self.redis_client = redis.Redis(
@@ -30,6 +51,7 @@ class RedisSessionService:
         return json.loads(session_json)
 
     def create_session(self, usuario_executor: str, nome_projeto: str, analysis_type: str, project_id: str, extracted_text: Optional[str] = None, initial_state: Optional[Dict[str, Any]] = None) -> str:
+        # --- Garantia de campos obrigatórios, especialmente project_id ---
         if not usuario_executor or not isinstance(usuario_executor, str) or not usuario_executor.strip():
             blob_state = None
             try:
@@ -58,20 +80,14 @@ class RedisSessionService:
                 nome_projeto = blob_state.get("nome_projeto")
             if not nome_projeto or not isinstance(nome_projeto, str) or not nome_projeto.strip():
                 raise ValueError("Campo obrigatorio ausente: nome_projeto")
+        # --- NOVA GARANTIA project_id ---
         if not project_id or not isinstance(project_id, str) or not project_id.strip():
-            blob_state = None
-            try:
-                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
-                    usuario_executor or "",
-                    project_id=project_id,
-                    nome_projeto=nome_projeto
-                ))
-            except Exception as e:
-                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher project_id: {str(e)}")
-            if blob_state:
-                project_id = blob_state.get("project_id")
-            if not project_id or not isinstance(project_id, str) or not project_id.strip():
-                raise ValueError("Campo obrigatorio ausente: project_id")
+            # Tenta recuperar do Blob Storage ou gera novo UUID
+            session_data = initial_state if initial_state else {}
+            session_data["usuario_executor"] = usuario_executor
+            session_data["nome_projeto"] = nome_projeto
+            pid = ensure_project_id(session_data, usuario_executor, nome_projeto)
+            project_id = pid
         key = f"project:{project_id}:resumo"
         created_at = datetime.utcnow().isoformat()
         last_saved_to_blob = datetime.utcnow().isoformat()
@@ -88,25 +104,20 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
-    # --- NOVO MÉTODO ADICIONADO AQUI ---
     def add_docx_file(self, project_id: str, blob_url: str):
-        """Adiciona a URL do arquivo DOCX à sessão do projeto no Redis."""
         key = f"project:{project_id}:resumo"
         session_json = self.redis_client.get(key)
-        
         if session_json:
             try:
                 session_data = self._deserialize_session(session_json)
                 session_data["docx_url"] = blob_url
                 session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
-                
                 self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
                 self.logger.info(f"DOCX vinculado com sucesso ao projeto {project_id}")
             except Exception as e:
                 self.logger.error(f"Erro ao atualizar sessão com DOCX no Redis: {e}")
         else:
             self.logger.warning(f"Tentativa de adicionar DOCX a uma sessão inexistente: {project_id}")
-    # -----------------------------------
 
     def create_report_state(self, project_id: str, report_type: str, state_data: Dict[str, Any]):
         key = f"project:{project_id}:report:{report_type}"
@@ -136,6 +147,13 @@ class RedisSessionService:
         project_id = project_state.get("project_id")
         nome_projeto_val = project_state.get("nome_projeto")
         usuario_executor_val = project_state.get("usuario_executor")
+        # --- NOVA GARANTIA project_id ---
+        if not project_id or not isinstance(project_id, str) or not project_id.strip():
+            session_data = dict(project_state)
+            session_data["usuario_executor"] = usuario_executor or usuario_executor_val
+            session_data["nome_projeto"] = nome_projeto or nome_projeto_val
+            pid = ensure_project_id(session_data, session_data["usuario_executor"], session_data["nome_projeto"])
+            project_id = pid
         if not nome_projeto_val or not isinstance(nome_projeto_val, str) or not nome_projeto_val.strip():
             blob_state = None
             try:
@@ -160,18 +178,6 @@ class RedisSessionService:
                 self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
             if blob_state:
                 usuario_executor_val = blob_state.get("usuario_executor")
-        if not project_id or not isinstance(project_id, str) or not project_id.strip():
-            blob_state = None
-            try:
-                blob_state = asyncio.run(ProjectStateService.load_latest_state_from_blob(
-                    usuario_executor or "",
-                    project_id=project_id,
-                    nome_projeto=nome_projeto
-                ))
-            except Exception as e:
-                self.logger.error(f"Erro ao buscar estado do Blob Storage para preencher campos obrigatórios: {str(e)}")
-            if blob_state:
-                project_id = blob_state.get("project_id")
         if not nome_projeto_val or not usuario_executor_val or not project_id:
             raise ValueError("Campos obrigatórios ausentes ao restaurar sessão: usuario_executor, nome_projeto, project_id")
         key = f"project:{project_id}:resumo"
@@ -181,5 +187,6 @@ class RedisSessionService:
         session_data["analysis_type"] = analysis_type
         session_data["ultima_analysis_type"] = analysis_type
         session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
+        session_data["project_id"] = project_id
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
