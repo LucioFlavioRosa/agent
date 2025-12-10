@@ -15,7 +15,11 @@ from services.response_cleaner import clean_llm_response
 from services.project_tracker import ProjectTracker
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.WARNING)
 logger = logging.getLogger("MockMCP")
+
+
 
 app = FastAPI(title="MCP Mock Service", version="2.3.0 - MCP Dinâmico")
 router = APIRouter()
