@@ -63,7 +63,7 @@ Este documento descreve o fluxo completo do MCP dinâmico, desde a recepção da
 
 ## Diagrama de Sequência (Opcional)
 
-mermaid
+```mermaid
 sequenceDiagram
     participant Backend
     participant MCP
@@ -87,4 +87,4 @@ sequenceDiagram
     MCP->>Backend: POST webhook (project_id, status, report_data, analysis_type)
     Backend->>MCP: GET /status/{project_id}
     MCP-->>Backend: status/result
-
+```
