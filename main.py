@@ -66,6 +66,9 @@ async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTa
         task_config,
         instrucoes_padrao
     )
+    # --- ADICIONE ESTA LINHA AQUI ---
+    logger.info(f"🚀 [REQ. PROCESSADA PARA O MCP]: {llm_request_params}")
+    # --------------------------------
     project_id = mcp_request.project_id
     project_tracker.set_status(project_id, 'processing')
     background_tasks.add_task(
