@@ -7,7 +7,7 @@ from domain.interfaces.llm_provider_interface import ILLMProvider
 from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
-class OpenAILLMProvider(ILLMProviderComplete):
+class OpenAILLMProvider(ILLMProvider):
     def __init__(self):
         
         self.secret_manager = AzureSecretManager(vault_type=VaultType.LLM)
