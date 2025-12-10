@@ -10,9 +10,6 @@ handler.setFormatter(formatter)
 if not logger.hasHandlers():
     logger.addHandler(handler)
 
-def init_logger():
-    pass
-
 def log_custom_data(
     job_id: Optional[str] = None,
     projeto: Optional[str] = None,
