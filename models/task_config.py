@@ -6,3 +6,4 @@ class TaskConfig(BaseModel):
     model_name: str
     agent_type: str
     instrucoes_extras: str
+    provider: Optional[str] = None
