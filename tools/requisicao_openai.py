@@ -4,14 +4,13 @@ from datetime import datetime
 from openai import AzureOpenAI
 from typing import Optional, Dict, Any
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
-from domain.interfaces.secret_manager_interface import ISecretManager
 from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
 class OpenAILLMProvider(ILLMProviderComplete):
-    def __init__(self, secret_manager: ISecretManager = None):
+    def __init__(self):
         
-        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
+        self.secret_manager = AzureSecretManager(vault_type=VaultType.LLM)
         try:
             self.azure_endpoint = os.environ["AZURE_OPENAI_MODELS"]
             api_key = self.secret_manager.get_secret("azure-openai-modelos")
