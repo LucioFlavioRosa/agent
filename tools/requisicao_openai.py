@@ -4,14 +4,13 @@ from datetime import datetime
 from openai import AzureOpenAI
 from typing import Optional, Dict, Any
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
-from domain.interfaces.rag_retriever_interface import IRAGRetriever
 from domain.interfaces.secret_manager_interface import ISecretManager
 from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
 class OpenAILLMProvider(ILLMProviderComplete):
-    def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
-        self.rag_retriever = rag_retriever
+    def __init__(self, secret_manager: ISecretManager = None):
+        
         self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
         try:
             self.azure_endpoint = os.environ["AZURE_OPENAI_MODELS"]
@@ -42,15 +41,7 @@ class OpenAILLMProvider(ILLMProviderComplete):
         timestamp = datetime.utcnow().isoformat()
         prompt_sistema_base = carregar_prompt(tipo_tarefa)
         prompt_sistema_final = prompt_sistema_base
-        if usar_rag and self.rag_retriever:
-            politicas_relevantes = self.rag_retriever.buscar_politicas(
-                query=f"políticas de {tipo_tarefa} para desenvolvimento de software"
-            )
-            prompt_sistema_final = (
-                f"{prompt_sistema_base}\n\n"
-                "--- POLÍTICAS RELEVANTES DA EMPRESA (CONTEXTO RAG) ---\n"
-                f"{politicas_relevantes}"
-            )
+        
         try:
             mensagens = [
                 {"role": "system", "content": prompt_sistema_final},
@@ -79,25 +70,7 @@ class OpenAILLMProvider(ILLMProviderComplete):
         except Exception as e:
             print(f"ERRO: Falha na chamada à API da OpenAI para o modelo '{modelo_final}'. Causa: {e}")
             raise RuntimeError(f"Erro ao comunicar com a OpenAI: {e}") from e
-    
-    def executar_prompt_com_rag(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        usar_rag: bool = False,
-        max_token_out: int = 15000,
-        job_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        return self.executar_prompt(
-            tipo_tarefa=tipo_tarefa,
-            prompt_principal=prompt_principal,
-            instrucoes_extras=instrucoes_extras,
-            usar_rag=usar_rag,
-            max_token_out=max_token_out,
-            job_id=job_id
-        )
-    
+        
     def executar_prompt_com_modelo(
         self,
         tipo_tarefa: str,
