@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     def __init__(self, **values):
         super().__init__(**values)
         self._load_env_vars()
+        self.validate_vault_configuration()
 
     def _load_env_vars(self):
         self.AZURE_KV_URL = os.environ.get("AZURE_KV_URL", self.AZURE_KV_URL)
@@ -84,6 +85,19 @@ class Settings(BaseSettings):
         for name, url in vault_env_vars:
             if not url.startswith("https://"):
                 raise EnvironmentError(f"A URL do Key Vault '{name}' é inválida: {url}")
+        # Fail-fast: tenta conectar em cada cofre e faz uma chamada básica
+        for name, url in vault_env_vars:
+            try:
+                vt = VaultType(name.replace('_KV_URL', '').lower())
+                manager = AzureSecretManager(vault_type=vt)
+                # Testa a conexão buscando um segredo fictício (não deve existir, mas valida acesso)
+                try:
+                    manager._get_secret_client()
+                except Exception as e:
+                    logger.warning(f"[Settings] Não foi possível conectar ao Key Vault '{name}': {e}")
+            except Exception as e:
+                logger.error(f"[Settings] Falha ao inicializar o Key Vault '{name}': {e}")
+                raise EnvironmentError(f"Falha ao inicializar o Key Vault '{name}': {e}")
 
     def load_secrets_from_vault(self, vault_type: VaultType):
         manager = AzureSecretManager(vault_type=vault_type)
