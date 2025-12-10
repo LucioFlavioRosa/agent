@@ -26,22 +26,6 @@ class ILLMProvider(ABC):
        
         pass
 
-class ILLMProviderWithRAG(ILLMProvider):
-  
-    @abstractmethod
-    def executar_prompt_com_rag(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        usar_rag: bool = False,
-        model_name: Optional[str] = None,
-        job_id: Optional[str] = None,
-        max_token_out: int = 15000
-    ) -> Dict[str, Any]:
-       
-        pass
-
 class ILLMProviderWithModelSelection(ILLMProvider):
     
     
@@ -56,21 +40,4 @@ class ILLMProviderWithModelSelection(ILLMProvider):
         max_token_out: int = 15000
     ) -> Dict[str, Any]:
        
-        pass
-
-class ILLMProviderComplete(ILLMProviderWithRAG, ILLMProviderWithModelSelection):
-    
-    
-    @abstractmethod
-    def executar_prompt(
-        self,
-        tipo_tarefa: str,          
-        prompt_principal: str,   
-        instrucoes_extras: str = "",
-        usar_rag: bool = False,
-        model_name: Optional[str] = None,
-        job_id: Optional[str] = None,
-        max_token_out: int = 15000
-    ) -> Dict[str, Any]:
-        
         pass
