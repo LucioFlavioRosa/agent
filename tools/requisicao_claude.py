@@ -4,14 +4,13 @@ import anthropic
 from datetime import datetime
 from typing import Optional, Dict, Any
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
-from domain.interfaces.secret_manager_interface import ISecretManager
 from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
 class AnthropicClaudeProvider(ILLMProviderComplete):
-    def __init__(self, secret_manager: ISecretManager = None):
+    def __init__(self):
    
-        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
+        self.secret_manager = AzureSecretManager(vault_type=VaultType.LLM)
         print("Configurando o cliente da Anthropic (Claude)...")
         try:
             anthropic_api_key = self.secret_manager.get_secret("ANTHROPICAPIKEY")
