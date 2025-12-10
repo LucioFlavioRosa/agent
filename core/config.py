@@ -1,14 +1,12 @@
-from pydantic_settings import BaseSettings
-from typing import Dict, Optional
-from services.azure_secret_manager import AzureSecretManager, VaultType
-import logging
 import os
+import logging
+from typing import Optional
+from pydantic_settings import BaseSettings
+from services.azure_secret_manager import AzureSecretManager, VaultType
 
 logger = logging.getLogger("Settings")
 
 class Settings(BaseSettings):
-
-    # --- Redis ---
     REDIS_HOST: Optional[str] = None
     REDIS_PORT: Optional[int] = None
     REDIS_PASSWORD: Optional[str] = None
@@ -17,19 +15,34 @@ class Settings(BaseSettings):
     REDIS_USE_SSL: Optional[bool] = None
     REDIS_SSL_CERT_REQS: Optional[str] = None
 
-    # --- MCP Config Registry dinâmico ---
-    mcp_config_registry: Optional[MCPConfigRegistry] = None
-    
+    AZURE_KV_URL: Optional[str] = None
+    DEVOPS_KV_URL: Optional[str] = None
+    GITHUB_KV_URL: Optional[str] = None
+    LLM_KV_URL: Optional[str] = None
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-        extra = "ignore"  # Permite variáveis extras no .env sem dar erro
+        extra = "ignore"
 
     def __init__(self, **values):
         super().__init__(**values)
-    
+        self._load_env_vars()
+
+    def _load_env_vars(self):
+        self.AZURE_KV_URL = os.environ.get("AZURE_KV_URL", self.AZURE_KV_URL)
+        self.DEVOPS_KV_URL = os.environ.get("DEVOPS_KV_URL", self.DEVOPS_KV_URL)
+        self.GITHUB_KV_URL = os.environ.get("GITHUB_KV_URL", self.GITHUB_KV_URL)
+        self.LLM_KV_URL = os.environ.get("LLM_KV_URL", self.LLM_KV_URL)
+        self.REDIS_HOST = os.environ.get("REDIS_HOST", self.REDIS_HOST)
+        self.REDIS_PORT = int(os.environ.get("REDIS_PORT", self.REDIS_PORT or 6379))
+        self.REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", self.REDIS_PASSWORD)
+        self.REDIS_DB = int(os.environ.get("REDIS_DB", self.REDIS_DB or 0))
+        self.REDIS_SESSION_TTL = int(os.environ.get("REDIS_SESSION_TTL", self.REDIS_SESSION_TTL or 86400))
+        self.REDIS_USE_SSL = os.environ.get("REDIS_USE_SSL", str(self.REDIS_USE_SSL)).lower() in ("1", "true", "yes")
+        self.REDIS_SSL_CERT_REQS = os.environ.get("REDIS_SSL_CERT_REQS", self.REDIS_SSL_CERT_REQS)
+
     def _log_missing_sensitive_fields(self):
-        logger = logging.getLogger("Settings")
         sensitive_fields = [
             "REDIS_HOST",
             "REDIS_PORT",
@@ -38,7 +51,6 @@ class Settings(BaseSettings):
             "REDIS_USE_SSL",
             "REDIS_SSL_CERT_REQS"
         ]
-
         for field in sensitive_fields:
             value = getattr(self, field, None)
             if not value:
@@ -58,7 +70,29 @@ class Settings(BaseSettings):
         missing = [field for field in required_fields if getattr(self, field, None) in (None, "")]
         if missing:
             raise ValueError(f"Os seguintes campos obrigatórios estão vazios após o carregamento dos segredos: {', '.join(missing)}")
-            
+
+    def validate_vault_configuration(self):
+        vault_env_vars = [
+            ("AZURE_KV_URL", self.AZURE_KV_URL),
+            ("DEVOPS_KV_URL", self.DEVOPS_KV_URL),
+            ("GITHUB_KV_URL", self.GITHUB_KV_URL),
+            ("LLM_KV_URL", self.LLM_KV_URL)
+        ]
+        missing = [name for name, val in vault_env_vars if not val]
+        if missing:
+            raise EnvironmentError(f"As seguintes variáveis de ambiente de URL de Key Vault estão ausentes: {', '.join(missing)}")
+        for name, url in vault_env_vars:
+            if not url.startswith("https://"):
+                raise EnvironmentError(f"A URL do Key Vault '{name}' é inválida: {url}")
+
+    def load_secrets_from_vault(self, vault_type: VaultType):
+        manager = AzureSecretManager(vault_type=vault_type)
+        if vault_type == VaultType.LLM:
+            anthropic_key = manager.get_secret("ANTHROPICAPIKEY")
+            openai_modelos = manager.get_secret("azure-openai-modelos")
+            return {"ANTHROPICAPIKEY": anthropic_key, "azure-openai-modelos": openai_modelos}
+        return {}
+
     def get_secret_manager(self, vault_type: str) -> AzureSecretManager:
         try:
             vt_enum = VaultType(vault_type)
