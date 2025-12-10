@@ -17,17 +17,11 @@ from services.project_tracker import ProjectTracker
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="2.3.0 - MCP Dinâmico")
+app = FastAPI(title="MCP Mock Service", version="2.3.0 - Fixed Webhook Spec")
 router = APIRouter()
 
 BACKEND_BASE_URL = os.environ.get("TARGET_BACKEND_URL", "http://localhost:8000")
 project_tracker = ProjectTracker()
-
-DATA_EPICOS =  {"epicos_report": [
-        { "id": 1, "titulo": "Autenticação e Segurança", "descricao": "Implementar login via Azure AD.", "prioridade": "Alta" },
-        { "id": 2, "titulo": "Processamento de Documentos", "descricao": "Upload e extração de texto.", "prioridade": "Alta" }
-    ]
-               }
 
 @router.get("/")
 def home():
@@ -41,36 +35,35 @@ async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTa
     try:
         mcp_request = MCPRequest(**payload)
     except Exception as e:
+        logger.error(f"Payload inválido: {e}")
         raise HTTPException(status_code=400, detail=f"Payload inválido: {e}")
 
+    project_id = mcp_request.project_id
+    analysis_type = mcp_request.analysis_type
     try:
-        task_config = load_task_config(mcp_request.analysis_type)
+        task_config = load_task_config(analysis_type)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Configuração não encontrada para analysis_type: {e}")
+        logger.error(f"Configuração de tarefa não encontrada: {e}")
+        raise HTTPException(status_code=400, detail=f"Configuração de tarefa não encontrada: {e}")
 
     try:
-        instrucoes_padrao = load_prompt_instructions(f"{task_config.instrucoes_extras}.md")
+        instrucoes_padrao = load_prompt_instructions(task_config.instrucoes_extras + ".md")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Prompt markdown não encontrado: {e}")
+        logger.error(f"Prompt padrão não encontrado: {e}")
+        raise HTTPException(status_code=400, detail=f"Prompt padrão não encontrado: {e}")
 
     llm_request_params = LLMRequestBuilder.build_request(
-        mcp_request,
-        task_config,
-        instrucoes_padrao
+        mcp_request=mcp_request,
+        task_config=task_config,
+        instrucoes_padrao=instrucoes_padrao
     )
 
-    project_id = mcp_request.project_id
-    project_tracker.set_status(project_id, 'processing')
-
-    background_tasks.add_task(
-        process_analysis_task,
-        project_id,
-        llm_request_params
-    )
-
+    project_tracker.set_status(project_id, "processing")
+    background_tasks.add_task(process_analysis_task, project_id, llm_request_params)
     return {
-        "message": "Análise solicitada com sucesso ao agente MCP dinâmico.",
+        "message": "Análise solicitada com sucesso ao agente MCP.",
         "project_id": project_id,
+        "nome_projeto": mcp_request.nome_projeto or "Projeto Sem Nome",
         "status": "processing"
     }
 
@@ -79,7 +72,7 @@ async def process_analysis_task(project_id: str, llm_request_params: Dict[str, A
         orchestrator = LLMOrchestrator()
         agent_result = orchestrator.execute_analysis(llm_request_params)
         cleaned_result = clean_llm_response(agent_result)
-        project_tracker.set_status(project_id, 'done')
+        project_tracker.set_status(project_id, "done")
         project_tracker.set_result(project_id, cleaned_result)
         webhook_payload = {
             "project_id": project_id,
@@ -108,22 +101,9 @@ async def process_analysis_task(project_id: str, llm_request_params: Dict[str, A
             except Exception as e:
                 logger.error(f"❌ [ERRO FALLBACK] {e}")
     except Exception as e:
-        logger.error(f"❌ [ERRO MCP FLOW] {e}")
-        project_tracker.set_status(project_id, 'error')
+        logger.error(f"[process_analysis_task] Erro fatal: {e}")
+        project_tracker.set_status(project_id, "error")
         project_tracker.set_result(project_id, str(e))
-        webhook_payload = {
-            "project_id": project_id,
-            "status": "error",
-            "error_message": str(e),
-            "analysis_type": llm_request_params.get("analysis_type")
-        }
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            base_url = BACKEND_BASE_URL.rstrip('/')
-            webhook_url = f"{base_url}/webhooks/mcp"
-            try:
-                await client.post(webhook_url, json=webhook_payload)
-            except Exception as e2:
-                logger.error(f"❌ [ERRO CONEXÃO ERROR WEBHOOK] {e2}")
 
 @router.get("/status/{project_id}")
 def get_project_status(project_id: str):
