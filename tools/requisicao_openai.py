@@ -3,11 +3,11 @@ import uuid
 from datetime import datetime
 from openai import AzureOpenAI
 from typing import Optional, Dict, Any
-
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 from domain.interfaces.secret_manager_interface import ISecretManager
 from services.azure_secret_manager import AzureSecretManager, VaultType
+from tools.prompt_utils import carregar_prompt
 
 class OpenAILLMProvider(ILLMProviderComplete):
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
@@ -27,14 +27,6 @@ class OpenAILLMProvider(ILLMProviderComplete):
             print(f"ERRO CRÍTICO ao configurar o cliente do Azure OpenAI: {e}")
             raise
 
-    def carregar_prompt(self, tipo_tarefa: str) -> str:
-        caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_tarefa}.md')
-        try:
-            with open(caminho_prompt, 'r', encoding='utf-8') as f:
-                return f.read()
-        except FileNotFoundError:
-            raise ValueError(f"Arquivo de prompt para '{tipo_tarefa}' não encontrado: {caminho_prompt}")
-    
     def executar_prompt(
         self,
         tipo_tarefa: str,
@@ -48,7 +40,7 @@ class OpenAILLMProvider(ILLMProviderComplete):
         modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
         job_id_final = job_id or str(uuid.uuid4())
         timestamp = datetime.utcnow().isoformat()
-        prompt_sistema_base = self.carregar_prompt(tipo_tarefa)
+        prompt_sistema_base = carregar_prompt(tipo_tarefa)
         prompt_sistema_final = prompt_sistema_base
         if usar_rag and self.rag_retriever:
             politicas_relevantes = self.rag_retriever.buscar_politicas(
