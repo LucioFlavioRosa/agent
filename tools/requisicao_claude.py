@@ -7,13 +7,12 @@ from typing import Optional, Dict, Any
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from domain.interfaces.rag_retriever_interface import IRAGRetriever
 from domain.interfaces.secret_manager_interface import ISecretManager
-from tools.azure_secret_manager import AzureSecretManager
+from services.azure_secret_manager import AzureSecretManager, VaultType
 
 class AnthropicClaudeProvider(ILLMProviderComplete):
     def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
         self.rag_retriever = rag_retriever
-        self.secret_manager = secret_manager or AzureSecretManager()
-        
+        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
         print("Configurando o cliente da Anthropic (Claude)...")
         try:
             anthropic_api_key = self.secret_manager.get_secret("ANTHROPICAPIKEY")
@@ -43,25 +42,20 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
     ) -> Dict[str, Any]:
         modelo_final = model_name or "claude-3-opus-20240229"
         job_id_final = job_id or str(uuid.uuid4())
-        
         prompt_sistema = self.carregar_prompt(tipo_tarefa)
-
         if usar_rag and self.rag_retriever:
             print("[Claude Handler] Usando o RAG retriever injetado...")
             politicas_relevantes = self.rag_retriever.buscar_politicas(
                 query=f"políticas de {tipo_tarefa} para desenvolvimento de software"
             )
             prompt_sistema = f"{prompt_sistema}\n\n--- CONTEXTO ADICIONAL ---\n{politicas_relevantes}"
-
         mensagens = [
             {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{prompt_principal}"},
         ]
         if instrucoes_extras.strip():
             mensagens.append({"role": "user", "content": f"--- INSTRUÇÕES EXTRAS ---\n{instrucoes_extras}"})
-
         try:
             print(f"[Claude Handler] Chamando o modelo: '{modelo_final}'")
-            
             response = self.anthropic_client.messages.create(
                 model=modelo_final,
                 system=prompt_sistema,  
@@ -70,21 +64,17 @@ class AnthropicClaudeProvider(ILLMProviderComplete):
                 temperature=0.3,
                 timeout=900.0
             )
-            
             conteudo_resposta = response.content[0].text
             tokens_entrada = response.usage.input_tokens
             tokens_saida = response.usage.output_tokens
-            
             projeto = model_name or "claude"
             data_atual = datetime.utcnow().strftime("%Y-%m-%d")
             hora_atual = datetime.utcnow().strftime("%H:%M:%S")
-            
             return {
                 'reposta_final': conteudo_resposta,
                 'tokens_entrada': tokens_entrada,
                 'tokens_saida': tokens_saida
             }
-            
         except Exception as e:
             print(f"ERRO: Falha na chamada à API da Anthropic para análise '{tipo_tarefa}'. Causa: {e}")
             raise RuntimeError(f"Erro ao comunicar com a API da Anthropic: {e}") from e
