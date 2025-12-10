@@ -8,12 +8,15 @@ from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
 class OpenAILLMProvider(ILLMProvider):
-    def __init__(self):
+    def __init__(self, secret_manager: Optional[AzureSecretManager] = None):
         
-        self.secret_manager = AzureSecretManager(vault_type=VaultType.LLM)
+        # Se recebeu de fora (da Factory), usa ele. Se não, cria um novo.
+        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
+        
         try:
             self.azure_endpoint = os.environ["AZURE_OPENAI_MODELS"]
             api_key = self.secret_manager.get_secret("azure-openai-modelos")
+            
             self.openai_client = AzureOpenAI(
                 azure_endpoint=self.azure_endpoint,
                 api_version="2025-03-01-preview",
