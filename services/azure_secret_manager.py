@@ -4,6 +4,13 @@ from enum import Enum
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 
+def _validate_env_var(var_name, var_value):
+    if not var_value:
+        return False, f"[Settings] Campo sensível '{var_name}' está vazio após inicialização. Ele será preenchido após o carregamento dos segredos."
+    if '_' in var_name:
+        return True, f"[Settings] Atenção: O nome do segredo '{var_name}' contém underscores. No Azure Key Vault, utilize hífens: '{var_name.lower().replace('_', '-')}'."
+    return True, None
+
 class VaultType(str, Enum):
     AZURE = 'azure'
     DEVOPS = 'devops'

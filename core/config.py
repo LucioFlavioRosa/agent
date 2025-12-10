@@ -2,7 +2,7 @@ import os
 import logging
 from typing import Optional
 from pydantic_settings import BaseSettings
-from services.azure_secret_manager import AzureSecretManager, VaultType
+from services.azure_secret_manager import AzureSecretManager, VaultType, _validate_env_var
 
 logger = logging.getLogger("Settings")
 
@@ -54,10 +54,11 @@ class Settings(BaseSettings):
         ]
         for field in sensitive_fields:
             value = getattr(self, field, None)
-            if not value:
-                logger.warning(f"[Settings] Campo sensível '{field}' está vazio após inicialização. Ele será preenchido após o carregamento dos segredos.")
-            if '_' in field:
-                logger.warning(f"[Settings] Atenção: O nome do segredo '{field}' contém underscores. No Azure Key Vault, utilize hífens: '{field.lower().replace('_', '-')}'.")
+            valid, msg = _validate_env_var(field, value)
+            if not valid:
+                logger.warning(msg)
+            elif msg:
+                logger.warning(msg)
 
     def validate_required_fields(self):
         required_fields = [
@@ -68,7 +69,12 @@ class Settings(BaseSettings):
             "REDIS_USE_SSL",
             "REDIS_SSL_CERT_REQS"
         ]
-        missing = [field for field in required_fields if getattr(self, field, None) in (None, "")]
+        missing = []
+        for field in required_fields:
+            value = getattr(self, field, None)
+            valid, _ = _validate_env_var(field, value)
+            if not valid:
+                missing.append(field)
         if missing:
             raise ValueError(f"Os seguintes campos obrigatórios estão vazios após o carregamento dos segredos: {', '.join(missing)}")
 
@@ -85,19 +91,6 @@ class Settings(BaseSettings):
         for name, url in vault_env_vars:
             if not url.startswith("https://"):
                 raise EnvironmentError(f"A URL do Key Vault '{name}' é inválida: {url}")
-        # Fail-fast: tenta conectar em cada cofre e faz uma chamada básica
-        for name, url in vault_env_vars:
-            try:
-                vt = VaultType(name.replace('_KV_URL', '').lower())
-                manager = AzureSecretManager(vault_type=vt)
-                # Testa a conexão buscando um segredo fictício (não deve existir, mas valida acesso)
-                try:
-                    manager._get_secret_client()
-                except Exception as e:
-                    logger.warning(f"[Settings] Não foi possível conectar ao Key Vault '{name}': {e}")
-            except Exception as e:
-                logger.error(f"[Settings] Falha ao inicializar o Key Vault '{name}': {e}")
-                raise EnvironmentError(f"Falha ao inicializar o Key Vault '{name}': {e}")
 
     def load_secrets_from_vault(self, vault_type: VaultType):
         manager = AzureSecretManager(vault_type=vault_type)
