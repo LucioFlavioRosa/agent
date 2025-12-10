@@ -1,10 +1,8 @@
 from pydantic_settings import BaseSettings
 from typing import Dict, Optional
-from backend.app.services.azure_secret_manager import AzureSecretManager, VaultType
+from services.azure_secret_manager import AzureSecretManager, VaultType
 import logging
 import os
-from backend.app.models.mcp_config_models import MCPConfigRegistry
-from backend.app.services.mcp_config_service import MCPConfigService
 
 logger = logging.getLogger("Settings")
 
