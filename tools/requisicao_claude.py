@@ -8,9 +8,13 @@ from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
 class AnthropicClaudeProvider(ILLMProvider):
-    def __init__(self):
-   
-        self.secret_manager = AzureSecretManager(vault_type=VaultType.LLM)
+    # --- CORREÇÃO AQUI ---
+    # Adicionamos o argumento secret_manager para receber a injeção da Factory
+    def __init__(self, secret_manager: Optional[AzureSecretManager] = None):
+        
+        # Se recebeu da factory, usa. Se não, cria um novo.
+        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
+        
         print("Configurando o cliente da Anthropic (Claude)...")
         try:
             anthropic_api_key = self.secret_manager.get_secret("ANTHROPICAPIKEY")
@@ -31,9 +35,10 @@ class AnthropicClaudeProvider(ILLMProvider):
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         modelo_final = model_name or "claude-3-opus-20240229"
+        # ... resto do código continua igual ...
         job_id_final = job_id or str(uuid.uuid4())
         prompt_sistema = carregar_prompt(tipo_tarefa)
-       
+        
         mensagens = [
             {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{prompt_principal}"},
         ]
