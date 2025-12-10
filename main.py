@@ -42,6 +42,13 @@ def home():
 
 @router.post("/start")
 async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTasks):
+    logger.info(f"📥 [PAYLOAD RECEBIDO]: {payload}")
+
+    try:
+        mcp_request = MCPRequest(**payload)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Payload inválido: {e}")
+            
     try:
         mcp_request = MCPRequest(**payload)
     except Exception as e:
