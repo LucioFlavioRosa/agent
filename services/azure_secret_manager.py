@@ -24,6 +24,8 @@ class AzureSecretManager:
         if not self._key_vault_url:
             logging.error(f"URL do Key Vault para '{self.vault_type}' não encontrada nas variáveis de ambiente.")
             raise EnvironmentError(f"A URL do Key Vault para o tipo '{self.vault_type}' não foi configurada na variável de ambiente.")
+        if not self._key_vault_url.startswith("https://"):
+            raise EnvironmentError(f"A URL do Key Vault para o tipo '{self.vault_type}' é inválida: {self._key_vault_url}")
 
     def _get_secret_client(self) -> SecretClient:
         if self._secret_client is None:
@@ -46,4 +48,5 @@ class AzureSecretManager:
                 raise ValueError(f"Segredo '{secret_name}' está vazio no Key Vault '{self._key_vault_url}'.")
             return secret.value
         except Exception as e:
-            raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}': {e}") from e
+            logger.error(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}': {e}")
+            raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}'.")
