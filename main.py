@@ -42,32 +42,26 @@ async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTa
         mcp_request = MCPRequest(**payload)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Payload inválido: {e}")
-
     try:
         task_config = load_task_config(mcp_request.analysis_type)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Configuração não encontrada para analysis_type: {e}")
-
     try:
         instrucoes_padrao = load_prompt_instructions(f"{task_config.instrucoes_extras}.md")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Prompt markdown não encontrado: {e}")
-
     llm_request_params = LLMRequestBuilder.build_request(
         mcp_request,
         task_config,
         instrucoes_padrao
     )
-
     project_id = mcp_request.project_id
     project_tracker.set_status(project_id, 'processing')
-
     background_tasks.add_task(
         process_analysis_task,
         project_id,
         llm_request_params
     )
-
     return {
         "message": "Análise solicitada com sucesso ao agente MCP dinâmico.",
         "project_id": project_id,
