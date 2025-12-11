@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Body, Depends
+from fastapi import APIRouter, HTTPException, Body, Depends, Query, status
 from pydantic import BaseModel
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
 from backend.app.middleware.auth_middleware import get_current_user, _extract_usuario_executor
@@ -12,9 +12,28 @@ class UpdateReportRequest(BaseModel):
     report_data: Dict[str, Any]
 
 @router.get("/project/{project_id}/reports")
-async def get_project_reports(project_id: str, current_user: dict = Depends(get_current_user)):
+async def get_project_reports(
+    project_id: str,
+    job_id: Optional[str] = Query(None, description="ID do job para acompanhamento de status do processamento"),
+    current_user: dict = Depends(get_current_user)
+):
     usuario_executor = _extract_usuario_executor(current_user)
     logger = logging.getLogger("session_api")
+    redis_service = RedisSessionService()
+    if job_id:
+        job = redis_service.get_job(job_id)
+        if not job or job.project_id != project_id:
+            raise HTTPException(status_code=404, detail="Job não encontrado para este projeto.")
+        if job.status in ("pending", "in_progress"):
+            return {
+                "status": "processing",
+                "message": "O processamento está em andamento.",
+                "job_id": job_id,
+                "project_id": project_id
+            }, status.HTTP_202_ACCEPTED
+        if job.status == "error":
+            raise HTTPException(status_code=400, detail="O processamento do job falhou. Consulte o log do job.")
+        # status == done: prossegue para retornar os reports normalmente
     try:
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
         report_fields = [
