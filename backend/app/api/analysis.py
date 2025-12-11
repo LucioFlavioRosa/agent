@@ -121,7 +121,11 @@ async def start_analysis(
     instrucoes_extras = comentario_extra
     try:
         instrucoes_extras_enriquecidas = await ContextEnrichmentService.enrich_instructions(
-            project_id_final, analysis_type, instrucoes_extras
+            usuario_executor=usuario_executor,
+            nome_projeto=nome_projeto,
+            project_id=project_id_final,
+            analysis_type=analysis_type,
+            instrucoes_extras=instrucoes_extras
         )
         logger.debug(f"[ANALYSIS] instrucoes_extras_enriquecidas para MCP: '{instrucoes_extras_enriquecidas}'")
         logger.debug(f"[ANALYSIS] Tamanho instrucoes_extras_enriquecidas: {len(instrucoes_extras_enriquecidas) if instrucoes_extras_enriquecidas else 0}")
