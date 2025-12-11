@@ -38,6 +38,7 @@ O frontend deve sempre enviar apenas o campo `nome_projeto` para criação ou in
 - Se o projeto já existe, o backend recupera o mesmo `project_id` do estado salvo.
 - Se o projeto é novo, o backend gera um novo `project_id` (UUID) e associa ao nome do projeto.
 - O `project_id` é retornado na resposta do backend para uso em operações subsequentes.
+- O enriquecimento de contexto agora exige usuario_executor e nome_projeto como parâmetros obrigatórios.
 
 Diagrama de Fluxo Atualizado:
 
@@ -48,6 +49,7 @@ sequenceDiagram
     participant MCP as MCP Server
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, ...)
     BE->>BE: Converte nome_projeto para project_id (recupera existente ou gera novo)
+    BE->>BE: Enriquecimento de contexto (passando usuario_executor, nome_projeto, project_id)
     BE->>MCP: Envia payload (project_id, analysis_type, ...)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
@@ -81,8 +83,9 @@ Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epic
 3. O conteúdo do report é serializado em string (usando JSON ou formatação legível).
 4. Todos os textos extraídos são concatenados junto com o texto original de `instrucoes_extras` enviado pelo frontend.
 5. O texto enriquecido é enviado no campo `comentario_extra` do payload para o MCP.
+6. O método de enriquecimento agora exige usuario_executor e nome_projeto como argumentos obrigatórios e repassa corretamente para o serviço de estado.
 
-Diagrama Mermaid:
+Diagrama Mermaid atualizado:
 
 mermaid
 sequenceDiagram
@@ -93,7 +96,7 @@ sequenceDiagram
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras)
     BE->>BE: Consulta ANALYSIS_CONTEXT_CONFIG para analysis_type
     loop Para cada estado/report
-        BE->>Blob: Busca estado e extrai report
+        BE->>Blob: Busca estado e extrai report (usando usuario_executor, nome_projeto, project_id)
         BE->>BE: Serializa report como texto
     end
     BE->>BE: Concatena textos dos reports + instrucoes_extras
