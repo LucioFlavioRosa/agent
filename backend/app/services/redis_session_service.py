@@ -211,7 +211,9 @@ class RedisSessionService:
             analysis_type=analysis_type,
             status='pending',
             created_at=now,
-            updated_at=now
+            updated_at=now,
+            request_timestamp=now,
+            response_timestamp=None
         )
         key = f"job:{job_id}"
         self.redis_client.setex(key, self.session_ttl, job.json())
@@ -239,6 +241,8 @@ class RedisSessionService:
             data = json.loads(job_json)
             data['status'] = status
             data['updated_at'] = datetime.utcnow().isoformat()
+            if status == 'done':
+                data['response_timestamp'] = datetime.utcnow().isoformat()
             self.redis_client.setex(key, self.session_ttl, json.dumps(data))
         except Exception as e:
             self.logger.error(f"Erro ao atualizar status do job {job_id}: {e}")
