@@ -19,11 +19,11 @@ def clean_llm_response(raw_response):
         # Nota: Ajustei o replace abaixo pois no seu snippet estava replace('', ''), 
         # assumindo que você queria remover blocos de código markdown.
         cleaned = resultado.replace('```json', '').replace('```', '').strip()
-        
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+
+        match = re.search(r"```json\s*([\s\S]*?)\s*```", resultado)
         if match:
-            cleaned = match.group(0)
-            
+            cleaned_string = match.group(1).strip()
+        
         # Validação do JSON
         json.loads(cleaned)
         
