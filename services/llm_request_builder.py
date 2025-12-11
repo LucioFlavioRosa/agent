@@ -13,11 +13,6 @@ class LLMRequestBuilder:
             'nome_projeto': mcp_request.nome_projeto,
             'usuario_executor': mcp_request.usuario_executor,
             'model_name': task_config.model_name,
-            
-            # --- NOVA LINHA ADICIONADA ---
-            # Usa getattr para evitar erro se 'provider' não existir no objeto
             'provider': getattr(task_config, 'provider', None), 
-            # -----------------------------
-            
             'instrucoes_padrao': instrucoes_padrao
         }
