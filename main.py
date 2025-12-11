@@ -112,7 +112,7 @@ async def process_analysis_task(project_id: str, llm_request_params: Dict[str, A
         project_tracker.set_result(project_id, cleaned_result)
         webhook_payload = {
             "project_id": project_id,
-            "job_id": project_id,
+            "job_id": mcp_request.job_id,
             "status": "done",
             "report_data": cleaned_result,
             "analysis_type": llm_request_params.get("analysis_type")
