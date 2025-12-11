@@ -6,9 +6,12 @@ from backend.app.services.project_state_service import ProjectStateService
 
 class ContextEnrichmentService:
     @staticmethod
-    async def enrich_instructions(project_id: str, analysis_type: str, instrucoes_extras: Optional[str]) -> str:
+    async def enrich_instructions(usuario_executor: str, nome_projeto: str, project_id: str, analysis_type: str, instrucoes_extras: Optional[str]) -> str:
         logger = logging.getLogger("ContextEnrichmentService")
-        logger.debug(f"[ENRICH] analysis_type={analysis_type}, project_id={project_id}, instrucoes_extras (orig): '{instrucoes_extras}'")
+        logger.debug(f"[ENRICH] analysis_type={analysis_type}, usuario_executor={usuario_executor}, nome_projeto={nome_projeto}, project_id={project_id}, instrucoes_extras (orig): '{instrucoes_extras}'")
+        if not usuario_executor or not nome_projeto:
+            logger.error("usuario_executor e nome_projeto são obrigatórios para enriquecimento de contexto.")
+            return instrucoes_extras or ""
         config_entries = ANALYSIS_CONTEXT_CONFIG.get(analysis_type)
         logger.debug(f"[ENRICH] config_entries: {config_entries}")
         if not config_entries:
@@ -24,11 +27,11 @@ class ContextEnrichmentService:
                 logger.warning(f"Configuração inválida para analysis_type={analysis_type}: {entry}")
                 continue
             try:
-                logger.debug(f"[ENRICH] Chamando ProjectStateService.load_latest_state_from_blob(project_id={project_id}, report_type={report_para_ler})")
+                logger.debug(f"[ENRICH] Chamando ProjectStateService.load_latest_state_from_blob(usuario_executor={usuario_executor}, nome_projeto={nome_projeto}, project_id={project_id}, report_type={report_para_ler})")
                 state = await ProjectStateService.load_latest_state_from_blob(
-                    usuario_executor=None,
+                    usuario_executor=usuario_executor,
                     project_id=project_id,
-                    nome_projeto=None,
+                    nome_projeto=nome_projeto,
                     report_type=report_para_ler
                 )
                 logger.debug(f"[ENRICH] Estado retornado: tipo={type(state)}, chaves={list(state.keys()) if isinstance(state, dict) else 'N/A'}")
