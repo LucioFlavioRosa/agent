@@ -1,6 +1,6 @@
 import os
-import logging
 import json
+import logging
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, Request, status
@@ -11,16 +11,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend.app.services.config_loader_service import ConfigLoaderService
 from backend.app.core.config import settings
 from backend.app.services.startup_validator import StartupValidator
-
 from backend.app.api.auth import router as auth_router
 from backend.app.api.analysis import router as analysis_router
 from backend.app.api.projects import router as projects_router
 from backend.app.api.session import router as session_router
 from backend.app.api.webhooks import router as webhooks_router
-
 from backend.app.middleware.auth_middleware import get_current_user
 
 load_dotenv(override=False)
+
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.WARNING)
 
 app = FastAPI(
     title="Peers CodeAI Backend", 
