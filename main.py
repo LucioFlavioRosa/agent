@@ -80,19 +80,22 @@ async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTa
     logger.info(f"🚀 [REQ. PROCESSADA PARA O MCP]: {llm_request_params}")
     # --------------------------------
     project_id = mcp_request.project_id
+    job_id = mcp_request.job_id
     project_tracker.set_status(project_id, 'processing')
     background_tasks.add_task(
         process_analysis_task,
         project_id,
+            job_id,
         llm_request_params
     )
     return {
         "message": "Análise solicitada com sucesso ao agente MCP dinâmico.",
         "project_id": project_id,
+         "job_id": job_id,   
         "status": "processing"
     }
 
-async def process_analysis_task(project_id: str, llm_request_params: Dict[str, Any]):
+async def process_analysis_task(project_id: str, job_id: str, llm_request_params: Dict[str, Any]):
     try:
         orchestrator = LLMOrchestrator()
         agent_result = orchestrator.execute_analysis(llm_request_params)
@@ -112,7 +115,7 @@ async def process_analysis_task(project_id: str, llm_request_params: Dict[str, A
         project_tracker.set_result(project_id, cleaned_result)
         webhook_payload = {
             "project_id": project_id,
-            "job_id": mcp_request.job_id,
+            "job_id": job_id,
             "status": "done",
             "report_data": cleaned_result,
             "analysis_type": llm_request_params.get("analysis_type")
