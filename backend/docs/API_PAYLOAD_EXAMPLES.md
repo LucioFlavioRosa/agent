@@ -175,6 +175,10 @@ Authorization: Bearer <token>
 
 O frontend deve enviar apenas o campo `nome_projeto` (e nunca `project_id`). O backend irá internamente converter `nome_projeto` para `project_id` usando o serviço ProjectStateService. Se o projeto já existir, o mesmo `project_id` será utilizado. Se for um novo projeto, o backend irá gerar um novo `project_id` e retornar na resposta.
 
+**Novo fluxo:**
+- Antes de enviar a requisição ao MCP, o backend gera um `job_id` exclusivo e associa ao projeto/analise.
+- O `job_id` é incluído no payload enviado ao MCP e também retornado ao frontend.
+
 Exemplo de requisição:
 POST /analysis/start HTTP/1.1
 Authorization: Bearer <token>
@@ -189,10 +193,11 @@ Exemplo de resposta de sucesso:
 {
   "message": "Análise solicitada com sucesso ao agente.",
   "project_id": "projeto-uuid-123",
+  "job_id": "job-uuid-456",
   "nome_projeto": "ProjetoNovo"
 }
 
-Observação: O campo `project_id` nunca deve ser enviado pelo frontend. O backend retorna o `project_id` na resposta para uso em operações subsequentes.
+Observação: O campo `project_id` nunca deve ser enviado pelo frontend. O backend retorna o `project_id` e o `job_id` na resposta para uso em operações subsequentes.
 
 ---
 
@@ -200,9 +205,18 @@ Observação: O campo `project_id` nunca deve ser enviado pelo frontend. O backe
 
 ## 5.1 Consultar Relatórios do Projeto (GET /session/project/{project_id}/reports)
 
-GET /session/project/projeto-uuid-123/reports HTTP/1.1
+GET /session/project/projeto-uuid-123/reports?job_id=job-uuid-456 HTTP/1.1
 Authorization: Bearer <token>
 
+- Se o `job_id` estiver em status 'pending' ou 'in_progress', retorna status 202 (Accepted):
+{
+  "status": "processing",
+  "message": "O processamento está em andamento.",
+  "job_id": "job-uuid-456",
+  "project_id": "projeto-uuid-123"
+}
+
+- Se o `job_id` estiver em status 'done', retorna os reports normalmente (status 200):
 {
   "resumo": {
     "usuario_executor": "user@example.com",
@@ -212,152 +226,12 @@ Authorization: Bearer <token>
     "ultima_atualizacao": "2024-06-01T12:30:00Z",
     "project_id": "projeto-uuid-123"
   },
-  "epicos": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_epicos_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }]
-  },
-  "features": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_features_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "features_report": [{ "id": 101, "nome": "Login" }]
-  },
-  "times_descricao": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_times_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "times_descricao_report": []
-  },
-  "alocacao_times": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_alocacao_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "alocacao_times_report": []
-  },
-  "premissas_riscos": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_premissas_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "premissas_riscos_report": []
-  }
+  ...
 }
 
----
-
-## 5.2 Atualizar Relatório Individual (PUT /session/project/{project_id}/report)
-
-PUT /session/project/projeto-uuid-123/report HTTP/1.1
-Authorization: Bearer <token>
-Content-Type: application/json
-
+- Se o `job_id` não existir ou estiver em status 'error', retorna erro:
 {
-  "report_data": {
-    "features_report": [
-      { "id": 101, "nome": "Configurar App Registration Azure", "descricao": "Criar app no entra ID" }
-    ]
-  }
-}
-
-{
-  "status": "ok",
-  "project_id": "projeto-uuid-123",
-  "nome_projeto": "ProjetoNovo"
-}
-
----
-
-## 5.3 Salvar Estado do Projeto (POST /session/project/{project_id}/save-state)
-
-POST /session/project/projeto-uuid-123/save-state HTTP/1.1
-Authorization: Bearer <token>
-
-{
-  "blob_url": "https://.../estado_resumo_20240601T123000Z.json",
-  "project_id": "projeto-uuid-123",
-  "nome_projeto": "ProjetoNovo"
-}
-
----
-
-## 5.4 Listar Arquivos DOCX do Projeto (GET /session/project/{project_id}/docx-files)
-
-GET /session/project/projeto-uuid-123/docx-files HTTP/1.1
-Authorization: Bearer <token>
-
-{
-  "docx_files": ["https://.../arquivo1.docx", "https://.../arquivo2.docx"],
-  "project_id": "projeto-uuid-123",
-  "nome_projeto": "ProjetoNovo"
-}
-
----
-
-## 5.5 Consultar Estado Individual de Report (GET /session/project/{project_id}/report/{report_type})
-
-GET /session/project/projeto-uuid-123/report/epicos_report HTTP/1.1
-Authorization: Bearer <token>
-
-{
-  "nome_projeto": "ProjetoNovo",
-  "ultima_analysis_type": "criacao_epicos_azure_devops",
-  "created_at": "2024-06-01T12:00:00Z",
-  "ultima_atualizacao": "2024-06-01T12:30:00Z",
-  "epicos_report": [
-    { "id": 1, "titulo": "Como usuário..." }
-  ]
-}
-
-GET /session/project/projeto-uuid-123/report/features_report HTTP/1.1
-Authorization: Bearer <token>
-
-{
-  "nome_projeto": "ProjetoNovo",
-  "ultima_analysis_type": "criacao_features_azure_devops",
-  "created_at": "2024-06-01T12:00:00Z",
-  "ultima_atualizacao": "2024-06-01T12:30:00Z",
-  "features_report": [
-    { "id": 101, "nome": "Configurar App Registration Azure", "descricao": "Criar app no entra ID" }
-  ]
-}
-
-GET /session/project/projeto-uuid-123/report/times_descricao_report HTTP/1.1
-Authorization: Bearer <token>
-
-{
-  "nome_projeto": "ProjetoNovo",
-  "ultima_analysis_type": "criacao_times_azure_devops",
-  "created_at": "2024-06-01T12:00:00Z",
-  "ultima_atualizacao": "2024-06-01T12:30:00Z",
-  "times_descricao_report": []
-}
-
-GET /session/project/projeto-uuid-123/report/alocacao_times_report HTTP/1.1
-Authorization: Bearer <token>
-
-{
-  "nome_projeto": "ProjetoNovo",
-  "ultima_analysis_type": "criacao_alocacao_azure_devops",
-  "created_at": "2024-06-01T12:00:00Z",
-  "ultima_atualizacao": "2024-06-01T12:30:00Z",
-  "alocacao_times_report": []
-}
-
-GET /session/project/projeto-uuid-123/report/premissas_riscos_report HTTP/1.1
-Authorization: Bearer <token>
-
-{
-  "nome_projeto": "ProjetoNovo",
-  "ultima_analysis_type": "criacao_premissas_azure_devops",
-  "created_at": "2024-06-01T12:00:00Z",
-  "ultima_atualizacao": "2024-06-01T12:30:00Z",
-  "premissas_riscos_report": []
+  "detail": "Job não encontrado para este projeto."
 }
 
 ---
@@ -370,7 +244,7 @@ POST /webhooks/mcp HTTP/1.1
 Content-Type: application/json
 
 {
-  "job_id": "123456",
+  "job_id": "job-uuid-456",
   "project_id": "projeto-uuid-123",
   "status": "done",
   "report_data": {
@@ -411,9 +285,10 @@ sequenceDiagram
     BE-->>FE: Lista de projetos (resumo: nome_projeto, ultima_analysis_type, created_at, ultima_atualizacao, project_id)
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras, arquivo_docx)
     BE->>BE: Converte nome_projeto para project_id (gera novo se não existir)
-    BE->>MCP: Envia payload (project_id, analysis_type, instrucoes_extras, texto extraído)
-    MCP-->>BE: job_id, project_id
-    BE-->>FE: message, project_id, nome_projeto
+    BE->>BE: Gera job_id e associa ao projeto/analise
+    BE->>MCP: Envia payload (project_id, job_id, analysis_type, instrucoes_extras, texto extraído)
+    MCP-->>BE: Confirmação de recebimento
+    BE-->>FE: message, project_id, job_id, nome_projeto
 
 ## 8.2 Projeto Existente
 
@@ -423,9 +298,10 @@ sequenceDiagram
     BE-->>FE: exists: true, state (resumo + todos os estados disponíveis)
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, ...)
     BE->>BE: Converte nome_projeto para project_id (recupera existente)
+    BE->>BE: Gera job_id e associa ao projeto/analise
     BE->>MCP: Envia payload
-    MCP-->>BE: job_id, project_id
-    BE-->>FE: message, project_id, nome_projeto
+    MCP-->>BE: Confirmação de recebimento
+    BE-->>FE: message, project_id, job_id, nome_projeto
 
 ## 8.3 Atualização de Relatório via Webhook
 
@@ -435,6 +311,7 @@ sequenceDiagram
     BE->>BE: Usa analysis_type para determinar report_type
     BE->>RS: Atualiza estado individual do report (ex: features_report)
     BE->>BS: Salva estado individual do report no Blob Storage (pasta específica)
+    BE->>BE: Atualiza status do job no Redis conforme status recebido
     BE-->>FE: status ok
 
 ## 8.4 Consulta de Estado Individual de Report
@@ -445,21 +322,28 @@ sequenceDiagram
     BE->>RS: Busca estado individual do report
     BE-->>FE: Estado individual do report (campos: nome_projeto, ultima_analysis_type, created_at, ultima_atualizacao, <report_field>)
 
-## 8.5 Consulta de Estado Completo do Projeto
+## 8.5 Consulta de Estado Completo do Projeto com job_id
 
 mermaid
 sequenceDiagram
-    FE->>BE: GET /session/project/{project_id}/reports
-    BE->>BS: Busca todos os estados salvos no Blob Storage
-    BE-->>FE: Retorna todos os estados (resumo + reports disponíveis)
+    FE->>BE: GET /session/project/{project_id}/reports?job_id=job-uuid-456
+    BE->>RS: Busca status do job no Redis
+    alt Job 'pending' ou 'in_progress'
+        BE-->>FE: status 202 (processing)
+    else Job 'done'
+        BE->>BS: Busca todos os estados salvos no Blob Storage
+        BE-->>FE: Retorna todos os estados (resumo + reports disponíveis)
+    else Job não existe ou erro
+        BE-->>FE: status 404 ou 400
+    end
 
 ---
 
 # 9. Boas Práticas de Integração
 
-- Sempre utilize o campo `project_id` para identificar projetos em todas as requisições subsequentes.
-- Para obter o estado completo do projeto, utilize o endpoint `GET /session/project/{project_id}/reports` ou `GET /projects/check`.
+- Sempre utilize o campo `project_id` e o `job_id` retornados pelo backend para identificar projetos e jobs em todas as requisições subsequentes.
+- Para obter o estado completo do projeto, utilize o endpoint `GET /session/project/{project_id}/reports?job_id=<job_id>`.
 - O backend mantém um estado de resumo do projeto e estados individuais para cada report, cada um salvo em sua pasta específica no Blob Storage.
 - O campo `ultima_analysis_type` indica qual foi a última análise executada no projeto ou report.
 - O backend atualiza apenas o estado do report correspondente ao `analysis_type` recebido no webhook.
-- O frontend deve fazer polling periódico para consultar estados de reports enquanto o MCP processa a análise.
+- O frontend deve fazer polling periódico para consultar estados de reports enquanto o MCP processa a análise, sempre usando o `job_id` correto.
