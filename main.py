@@ -88,10 +88,21 @@ async def process_analysis_task(project_id: str, llm_request_params: Dict[str, A
         agent_result = orchestrator.execute_analysis(llm_request_params)
         json_string=agent_result['resultado']['reposta_final']['reposta_final']
         cleaned_result = clean_llm_response(json_string)
+       
+        if isinstance(cleaned_result, str):
+            try:
+                final_report_data = json.loads(cleaned_result)
+            except:
+                # Se falhar o parse, enviamos um dict de erro para não quebrar o backend
+                final_report_data = {"error": "Falha no parse JSON", "raw": cleaned_result}
+        else:
+            final_report_data = cleaned_result
+                
         project_tracker.set_status(project_id, 'done')
         project_tracker.set_result(project_id, cleaned_result)
         webhook_payload = {
             "project_id": project_id,
+            "job_id": project_id,
             "status": "done",
             "report_data": cleaned_result,
             "analysis_type": llm_request_params.get("analysis_type")
