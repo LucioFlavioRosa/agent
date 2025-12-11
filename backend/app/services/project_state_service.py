@@ -130,33 +130,21 @@ class ProjectStateService:
 
     @staticmethod
     async def save_state_to_blob(state_data: Any) -> str:
-        """
-        Salva o estado atual do projeto no Blob Storage.
-        Identifica automaticamente se é um resumo ou um relatório específico (épicos, features, etc)
-        baseado nas chaves presentes no dicionário.
-        """
         logger = logging.getLogger("ProjectStateService")
-        
-        # 1. Converter para dicionário (suporta Pydantic v1/v2, Dict ou Objeto genérico)
         if hasattr(state_data, "dict"):
             data = state_data.dict()
-        elif hasattr(state_data, "model_dump"): # Suporte a Pydantic v2
+        elif hasattr(state_data, "model_dump"):
             data = state_data.model_dump()
         elif isinstance(state_data, dict):
             data = state_data
         else:
             data = state_data.__dict__
-
-        # 2. Extrair metadados obrigatórios para montar o caminho
         usuario_executor = data.get("usuario_executor")
         nome_projeto = data.get("nome_projeto")
-
         if not usuario_executor or not nome_projeto:
             error_msg = f"Não é possível salvar estado: 'usuario_executor' ({usuario_executor}) ou 'nome_projeto' ({nome_projeto}) ausentes."
             logger.error(error_msg)
             raise ValueError(error_msg)
-
-        # 3. Determinar o tipo de relatório e a subpasta correta
         subfolder_map = {
             "epicos_report": "epicos",
             "features_report": "features",
@@ -164,38 +152,24 @@ class ProjectStateService:
             "alocacao_times_report": "alocacao_times",
             "premissas_riscos_report": "premissas_riscos"
         }
-
         report_type = "resumo"
         subfolder = "resumo"
-
-        # Verifica se existe alguma das chaves de relatório no dicionário
         for key, folder in subfolder_map.items():
-            if key in data and data[key]: # Verifica se a chave existe e não é vazia/None
+            if key in data and data[key]:
                 report_type = key
                 subfolder = folder
                 break
-        
-        # 4. Gerar nome do arquivo com Timestamp UTC
         timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         filename = f"estado_{report_type}_{timestamp}.json"
-        
-        # Estrutura: usuario/projeto/estados/subpasta/arquivo
         blob_path = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/{filename}"
-
-        # 5. Realizar o Upload
         try:
             _, container_client = _get_blob_clients()
             blob_client = container_client.get_blob_client(blob_path)
-            
-            # Serializa para JSON (default=str lida com objetos datetime)
             json_data = json.dumps(data, default=str, ensure_ascii=False)
-            
             logger.info(f"Iniciando upload de estado para: {blob_path}")
             blob_client.upload_blob(json_data, overwrite=True)
             logger.info(f"Upload concluído com sucesso: {blob_path}")
-            
             return blob_client.url
-            
         except Exception as e:
             logger.error(f"Erro ao salvar estado no blob: {str(e)}")
             raise e
@@ -235,6 +209,17 @@ class ProjectStateService:
                     if not pid or not isinstance(pid, str) or not pid.strip():
                         logger.warning(f"Estado ignorado por ausência de project_id: {blob.name}")
                         continue
+                logger.debug(f"[PROJECT_STATE_SERVICE] Chaves do estado carregado: {list(state.keys())}")
+                if report_type in state:
+                    report_content = state[report_type]
+                    if isinstance(report_content, str):
+                        logger.debug(f"[PROJECT_STATE_SERVICE] Tamanho de '{report_type}' (str): {len(report_content)}")
+                    elif isinstance(report_content, dict) or isinstance(report_content, list):
+                        try:
+                            serialized = json.dumps(report_content, ensure_ascii=False)
+                            logger.debug(f"[PROJECT_STATE_SERVICE] Tamanho de '{report_type}' (json): {len(serialized)}")
+                        except Exception:
+                            logger.debug(f"[PROJECT_STATE_SERVICE] Não foi possível serializar '{report_type}' para json.")
                 if project_id and pid == project_id:
                     logger.info(f"[DEBUG] Estado encontrado por project_id: {pid} no blob: {blob.name}")
                     return state
@@ -261,54 +246,36 @@ class ProjectStateService:
 
     @staticmethod
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
-        """
-        Carrega todos os estados mais recentes, ordenando explicitamente pelo timestamp extraído do nome do arquivo.
-        """
         logger.info(f"Carregando todos os estados para usuario={usuario_executor}, project_id={project_id}")
         _, container_client = _get_blob_clients()
         nome_projeto = None
         resumo_state = None
-        
-        # --- FUNÇÃO AUXILIAR DE ORDENAÇÃO ---
         def extract_timestamp_from_filename(blob_name: str) -> datetime.datetime:
             try:
-                # Esperado: .../estado_TIPO_20251209T184457Z.json
-                # Pega a parte final: 20251209T184457Z
                 ts_str = blob_name.split("_")[-1].replace(".json", "")
                 return datetime.datetime.strptime(ts_str, "%Y%m%dT%H%M%SZ")
             except Exception:
                 return datetime.datetime.min
-
         prefix_resumo = f"{usuario_executor}/"
         blobs_resumo = list(container_client.list_blobs(name_starts_with=prefix_resumo))
-        
-        # --- 1. BUSCA DO RESUMO ---
         candidatos_resumo = []
         for blob in blobs_resumo:
             if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
                 blob_client = container_client.get_blob_client(blob.name)
                 state_bytes = blob_client.download_blob().readall()
                 state = json.loads(state_bytes.decode("utf-8"))
-                
-                # Validação de ID
                 pid = state.get("project_id")
                 if not pid: 
-                     # Fallback
                      pid = validate_and_fix_project_id(state, usuario_executor, state.get("nome_projeto", ""))
-
                 if pid == project_id:
                     candidatos_resumo.append((blob, state))
-        
         if candidatos_resumo:
-            # Ordena usando a função auxiliar
             candidatos_resumo.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
             resumo_state = candidatos_resumo[0][1]
             nome_projeto = resumo_state.get("nome_projeto")
             logger.info(f"[RESUMO] Selecionado arquivo mais recente: {candidatos_resumo[0][0].name}")
         else:
             return {}
-
-        # --- 2. BUSCA DOS RELATÓRIOS ---
         states_dict = {
             "resumo": resumo_state,
             "epicos": None,
@@ -317,7 +284,6 @@ class ProjectStateService:
             "alocacao_times": None,
             "premissas_riscos": None
         }
-
         if nome_projeto:
             report_types = ["epicos_report", "features_report", "times_descricao_report", "alocacao_times_report", "premissas_riscos_report"]
             subfolder_map = {
@@ -334,15 +300,12 @@ class ProjectStateService:
                 "alocacao_times_report": "alocacao_times",
                 "premissas_riscos_report": "premissas_riscos"
             }
-
             for report_type in report_types:
                 subfolder = subfolder_map[report_type]
                 prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
                 file_prefix = f"estado_{report_type}_"
-                
                 blobs = list(container_client.list_blobs(name_starts_with=prefix))
                 candidatos_report = []
-                
                 for blob in blobs:
                     if blob.name.endswith('.json') and file_prefix in blob.name:
                         blob_client = container_client.get_blob_client(blob.name)
@@ -350,15 +313,10 @@ class ProjectStateService:
                         state = json.loads(state_bytes.decode("utf-8"))
                         if state.get("project_id") == project_id:
                             candidatos_report.append((blob, state))
-                
                 if candidatos_report:
-                    # Ordena usando a função auxiliar
                     candidatos_report.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
-                    
                     latest_state = candidatos_report[0][1]
                     logger.info(f"[{report_type}] Selecionado arquivo mais recente: {candidatos_report[0][0].name}")
-                    
-                    # Coding Defensivo (Datas)
                     agora_iso = datetime.datetime.utcnow().isoformat()
                     if "ultima_atualizacao" not in latest_state:
                         latest_state["ultima_atualizacao"] = latest_state.get("created_at") or agora_iso
@@ -368,9 +326,7 @@ class ProjectStateService:
                         latest_state["nome_projeto"] = nome_projeto
                     if "project_id" not in latest_state:
                         latest_state["project_id"] = project_id
-
                     chave_destino = key_map.get(report_type)
                     if chave_destino:
                         states_dict[chave_destino] = latest_state
-        
         return EstadoCompletoProjetoResponse(**states_dict).dict()
