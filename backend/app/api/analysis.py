@@ -124,12 +124,16 @@ async def start_analysis(
             project_id_final, analysis_type, instrucoes_extras
         )
         logger.debug(f"[ANALYSIS] instrucoes_extras_enriquecidas para MCP: '{instrucoes_extras_enriquecidas}'")
-        logger.info(f"Contexto enriquecido para analysis_type={analysis_type} (project_id={project_id_final}).")
+        logger.debug(f"[ANALYSIS] Tamanho instrucoes_extras_enriquecidas: {len(instrucoes_extras_enriquecidas) if instrucoes_extras_enriquecidas else 0}")
+        logger.debug(f"[ANALYSIS] Preview instrucoes_extras_enriquecidas: '{instrucoes_extras_enriquecidas[:500] if instrucoes_extras_enriquecidas else ''}'")
+        logger.debug(f"[ANALYSIS] Preview comentario_extra original: '{comentario_extra[:500] if comentario_extra else ''}'")
     except Exception as e:
         logger.error(f"Erro ao enriquecer instrucoes_extras: {e}")
         if analysis_type.startswith("refinamento_"):
             raise HTTPException(status_code=500, detail=f"Erro ao enriquecer contexto/refinamento: {str(e)}")
         instrucoes_extras_enriquecidas = instrucoes_extras
+
+    logger.debug(f"[ANALYSIS] MCP PAYLOAD instrucoes_extras_enriquecidas: '{instrucoes_extras_enriquecidas}'")
 
     mcp_payload = {
         "project_id": project_id_final,
