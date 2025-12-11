@@ -72,4 +72,33 @@ sequenceDiagram
 
 ---
 
-# As demais seções permanecem inalteradas.
+## 5. Enriquecimento de Contexto para Refinamento
+
+Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epicos_azure_devops`), o backend executa um processo de enriquecimento de contexto antes de enviar o payload ao MCP:
+
+1. O backend consulta uma configuração (`ANALYSIS_CONTEXT_CONFIG`) que mapeia o `analysis_type` para uma lista de estados/reports a serem lidos do Blob Storage.
+2. Para cada entrada, o backend recupera o estado correspondente usando `ProjectStateService.load_latest_state_from_blob()` e extrai o campo de report relevante (ex: `epicos_report`).
+3. O conteúdo do report é serializado em string (usando JSON ou formatação legível).
+4. Todos os textos extraídos são concatenados junto com o texto original de `instrucoes_extras` enviado pelo frontend.
+5. O texto enriquecido é enviado no campo `comentario_extra` do payload para o MCP.
+
+Diagrama Mermaid:
+
+mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant BE as Backend
+    participant Blob as Blob Storage
+    participant MCP as MCP Server
+    FE->>BE: POST /analysis/start (nome_projeto, analysis_type, instrucoes_extras)
+    BE->>BE: Consulta ANALYSIS_CONTEXT_CONFIG para analysis_type
+    loop Para cada estado/report
+        BE->>Blob: Busca estado e extrai report
+        BE->>BE: Serializa report como texto
+    end
+    BE->>BE: Concatena textos dos reports + instrucoes_extras
+    BE->>MCP: Envia payload enriquecido (comentario_extra)
+    MCP-->>BE: job_id, project_id
+    BE-->>FE: message, project_id, nome_projeto
+
+---
