@@ -12,3 +12,4 @@ refinamento_epicos_azure_devops:
   model_name: "claude-sonnet-4-5"
   agent_type: "processador"
   instrucoes_extras: "refinamento_epicos_azure_devops"
+  provider: "anthropic"
