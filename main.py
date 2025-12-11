@@ -3,6 +3,7 @@ import uuid
 import os
 import asyncio
 import httpx
+import json # Importação necessária para o json.loads
 from fastapi import FastAPI, APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -13,113 +14,155 @@ from services.llm_request_builder import LLMRequestBuilder
 from services.llm_orchestrator import LLMOrchestrator
 from services.response_cleaner import clean_llm_response
 from services.project_tracker import ProjectTracker
+# Importe o enriquecimento se estiver usando
+from config.analysis_context_enrichment import ContextEnrichmentService # Ajuste o caminho se necessário
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
 logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.WARNING)
 logger = logging.getLogger("MockMCP")
 
-
-
-app = FastAPI(title="MCP Mock Service", version="2.3.0 - MCP Dinâmico")
+app = FastAPI(title="MCP Mock Service", version="2.3.1 - Bugfix Scope")
 router = APIRouter()
 
 BACKEND_BASE_URL = os.environ.get("TARGET_BACKEND_URL", "http://localhost:8000")
 project_tracker = ProjectTracker()
 
-DATA_EPICOS =  {"epicos_report": [
-        { "id": 1, "titulo": "Autenticação e Segurança", "descricao": "Implementar login via Azure AD.", "prioridade": "Alta" },
-        { "id": 2, "titulo": "Processamento de Documentos", "descricao": "Upload e extração de texto.", "prioridade": "Alta" }
-    ]
-               }
-
 @router.get("/")
 def home():
     return {
-        "status": "Mock MCP Online v2.3", 
+        "status": "Mock MCP Online v2.3.1", 
         "target_backend": BACKEND_BASE_URL
     }
 
 @router.post("/start")
 async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTasks):
-    # --- CORREÇÃO DE INCONSISTÊNCIA DE CHAVES ---
-    # Verifica se veio 'comentario_extra' ou 'instrucoes_extras' e unifica tudo em 'instrucoes_extras'
-    
+    # 1. Correção de Chaves (Retrocompatibilidade)
     instrucoes = payload.get("instrucoes_extras") or payload.get("comentario_extra")
-    
-    # Força a atualização do payload para o padrão que o sistema usa
     if instrucoes:
         payload["instrucoes_extras"] = instrucoes
-        payload["comentario_extra"] = instrucoes # Mantém compatibilidade retroativa
-    # --------------------------------------------
+        payload["comentario_extra"] = instrucoes
+    
     logger.info(f"📥 [PAYLOAD RECEBIDO]: {payload}")
 
+    # 2. Parsing do Modelo (Sem duplicidade)
     try:
         mcp_request = MCPRequest(**payload)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Payload inválido: {e}")
-            
-    try:
-        mcp_request = MCPRequest(**payload)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Payload inválido: {e}")
+    
+    # 3. Carregar Configuração
     try:
         task_config = load_task_config(mcp_request.analysis_type)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Configuração não encontrada para analysis_type: {e}")
+        raise HTTPException(status_code=400, detail=f"Configuração não encontrada: {e}")
+
+    # 4. Enriquecimento de Contexto (Opcional - mas recomendado se estiver usando refinamento)
+    if getattr(task_config, 'context_enrichment', False):
+        try:
+            # Importante: Passar usuario e nome_projeto para achar o blob correto
+            enriched_text = await ContextEnrichmentService.enrich_instructions(
+                project_id=mcp_request.project_id,
+                analysis_type=mcp_request.analysis_type,
+                instrucoes_extras=mcp_request.instrucoes_extras,
+                usuario_executor=mcp_request.usuario_executor,
+                nome_projeto=mcp_request.nome_projeto
+            )
+            mcp_request.instrucoes_extras = enriched_text
+        except Exception as e:
+            logger.warning(f"⚠️ Falha no enriquecimento de contexto: {e}")
+
+    # 5. Carregar Prompt
     try:
         instrucoes_padrao = load_prompt_instructions(f"{task_config.instrucoes_extras}.md")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Prompt markdown não encontrado: {e}")
+
     llm_request_params = LLMRequestBuilder.build_request(
         mcp_request,
         task_config,
         instrucoes_padrao
     )
-    # --- ADICIONE ESTA LINHA AQUI ---
+
     logger.info(f"🚀 [REQ. PROCESSADA PARA O MCP]: {llm_request_params}")
-    # --------------------------------
+    
+    # 6. Definição segura de Variáveis para Background Task
     project_id = mcp_request.project_id
-    job_id = mcp_request.job_id
+    
+    # Tenta pegar job_id do request, se não existir, usa o project_id
+    # Isso evita o erro caso seu modelo MCPRequest não tenha o campo job_id
+    job_id = getattr(mcp_request, 'job_id', project_id)
+
     project_tracker.set_status(project_id, 'processing')
+    
+    # Passamos APENAS tipos primitivos ou dicts para a task, nunca o objeto mcp_request complexo
     background_tasks.add_task(
         process_analysis_task,
         project_id,
-            job_id,
+        job_id,
         llm_request_params
     )
+
     return {
-        "message": "Análise solicitada com sucesso ao agente MCP dinâmico.",
+        "message": "Análise solicitada com sucesso.",
         "project_id": project_id,
-         "job_id": job_id,   
+        "job_id": job_id,   
         "status": "processing"
     }
 
 async def process_analysis_task(project_id: str, job_id: str, llm_request_params: Dict[str, Any]):
+    # ATENÇÃO: A variável 'mcp_request' NÃO EXISTE aqui dentro. 
+    # Use apenas 'project_id', 'job_id' ou 'llm_request_params'.
+    
     try:
         orchestrator = LLMOrchestrator()
         agent_result = orchestrator.execute_analysis(llm_request_params)
-        json_string=agent_result['resultado']['reposta_final']['reposta_final']
-        cleaned_result = clean_llm_response(json_string)
-       
+        
+        # Extração segura da resposta da LLM
+        # Dependendo do seu Orchestrator, a estrutura pode variar. Ajuste se necessário.
+        if isinstance(agent_result, dict) and 'resultado' in agent_result:
+             # Tenta navegar na estrutura comum do seu orchestrator
+             raw_content = agent_result.get('resultado', {}).get('reposta_final', agent_result)
+             if isinstance(raw_content, dict) and 'reposta_final' in raw_content:
+                 raw_content = raw_content['reposta_final']
+        else:
+             raw_content = agent_result
+
+        # Limpeza
+        cleaned_result = clean_llm_response(raw_content)
+        
+        # Garantia de Dicionário
+        final_report_data = {}
         if isinstance(cleaned_result, str):
             try:
                 final_report_data = json.loads(cleaned_result)
             except:
-                # Se falhar o parse, enviamos um dict de erro para não quebrar o backend
-                final_report_data = {"error": "Falha no parse JSON", "raw": cleaned_result}
-        else:
+                final_report_data = {"error": "Falha no parse JSON", "raw": str(cleaned_result)[:200]}
+        elif isinstance(cleaned_result, dict):
             final_report_data = cleaned_result
-                
+        else:
+             final_report_data = {"error": "Tipo de retorno desconhecido"}
+
+        # Correção para Erro 422 (Chave Única)
+        if len(final_report_data.keys()) > 1:
+            final_report_data = {"relatorio_consolidado": final_report_data}
+        elif len(final_report_data.keys()) == 0:
+            final_report_data = {"error": "JSON vazio retornado pela LLM"}
+
+        # Atualiza Tracker
         project_tracker.set_status(project_id, 'done')
-        project_tracker.set_result(project_id, cleaned_result)
+        project_tracker.set_result(project_id, final_report_data)
+
+        # Prepara Webhook
         webhook_payload = {
             "project_id": project_id,
-            "job_id": job_id,
+            "job_id": job_id, # Usa a variável local job_id
             "status": "done",
-            "report_data": cleaned_result,
+            "report_data": final_report_data,
             "analysis_type": llm_request_params.get("analysis_type")
         }
+
+        # Envio
         async with httpx.AsyncClient(timeout=30.0) as client:
             base_url = BACKEND_BASE_URL.rstrip('/')
             webhook_url = f"{base_url}/webhooks/mcp"
@@ -131,25 +174,27 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
                 logger.warning(f"⚠️ [FALHA WEBHOOK] Status: {resp.status_code} - Body: {resp.text}")
             except Exception as e:
                 logger.error(f"❌ [ERRO CONEXÃO] {e}")
+            
+            # Fallback PUT
             fallback_url = f"{base_url}/session/project/{project_id}/report"
             try:
-                resp = await client.put(fallback_url, json={"report_data": cleaned_result})
-                if resp.status_code == 200:
-                    logger.info("✅ [SALVO VIA PUT] Fallback funcionou.")
-                else:
-                    logger.error(f"❌ [FALHA FALLBACK] Status: {resp.status_code}")
+                await client.put(fallback_url, json={"report_data": final_report_data})
             except Exception as e:
                 logger.error(f"❌ [ERRO FALLBACK] {e}")
+
     except Exception as e:
         logger.error(f"❌ [ERRO MCP FLOW] {e}")
         project_tracker.set_status(project_id, 'error')
         project_tracker.set_result(project_id, str(e))
+        
         webhook_payload = {
             "project_id": project_id,
+            "job_id": job_id,
             "status": "error",
             "error_message": str(e),
             "analysis_type": llm_request_params.get("analysis_type")
         }
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             base_url = BACKEND_BASE_URL.rstrip('/')
             webhook_url = f"{base_url}/webhooks/mcp"
@@ -157,16 +202,6 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
                 await client.post(webhook_url, json=webhook_payload)
             except Exception as e2:
                 logger.error(f"❌ [ERRO CONEXÃO ERROR WEBHOOK] {e2}")
-
-@router.get("/status/{project_id}")
-def get_project_status(project_id: str):
-    status = project_tracker.get_status(project_id)
-    result = project_tracker.get_result(project_id)
-    return {
-        "project_id": project_id,
-        "status": status,
-        "result": result
-    }
 
 app.include_router(router, prefix="/api/v1/analysis")
 app.include_router(router, prefix="")
