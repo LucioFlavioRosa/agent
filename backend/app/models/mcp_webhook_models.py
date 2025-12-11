@@ -10,6 +10,12 @@ class MCPWebhookPayload(BaseModel):
     error_message: Optional[str] = Field(None)
     project_id: Optional[str] = Field(None)
 
+    @validator('job_id')
+    def job_id_must_not_be_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('job_id deve ser uma string não vazia')
+        return v
+
     @validator('status')
     def status_must_be_valid(cls, v):
         allowed = {'in_progress', 'done', 'error'}
