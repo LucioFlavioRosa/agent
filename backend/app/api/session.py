@@ -5,6 +5,7 @@ from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.project_state_service import ProjectStateService
 from backend.app.middleware.auth_middleware import get_current_user, _extract_usuario_executor
 import logging
+from datetime import datetime
 
 router = APIRouter()
 
@@ -20,20 +21,67 @@ async def get_project_reports(
     usuario_executor = _extract_usuario_executor(current_user)
     logger = logging.getLogger("session_api")
     redis_service = RedisSessionService()
-    if job_id:
-        job = redis_service.get_job(job_id)
-        if not job or job.project_id != project_id:
-            raise HTTPException(status_code=404, detail="Job não encontrado para este projeto.")
-        if job.status in ("pending", "in_progress"):
+
+    # NOVO: Busca o job ativo mais recente para o projeto
+    active_job = redis_service.get_active_job_for_project(project_id)
+    resumo_state = redis_service.get_session_by_project_id(project_id)
+    resumo_state_dict = resumo_state.dict() if resumo_state else None
+    resumo_ultima_atualizacao = None
+    if resumo_state_dict:
+        resumo_ultima_atualizacao = resumo_state_dict.get("ultima_atualizacao") or resumo_state_dict.get("last_saved_to_blob")
+        if resumo_ultima_atualizacao:
+            try:
+                resumo_ultima_atualizacao = datetime.fromisoformat(resumo_ultima_atualizacao)
+            except Exception:
+                resumo_ultima_atualizacao = None
+    # Se há job ativo (pending ou in_progress) e o estado de resumo é mais antigo que o request_timestamp do job, retorna 202
+    if active_job:
+        job_request_ts = active_job.request_timestamp if hasattr(active_job, "request_timestamp") else None
+        if job_request_ts and resumo_ultima_atualizacao and resumo_ultima_atualizacao < job_request_ts:
             return {
                 "status": "processing",
                 "message": "O processamento está em andamento.",
-                "job_id": job_id,
+                "job_id": active_job.job_id,
                 "project_id": project_id
             }, status.HTTP_202_ACCEPTED
-        if job.status == "error":
-            raise HTTPException(status_code=400, detail="O processamento do job falhou. Consulte o log do job.")
-        # status == done: prossegue para retornar os reports normalmente
+        if job_request_ts and not resumo_ultima_atualizacao:
+            return {
+                "status": "processing",
+                "message": "O processamento está em andamento.",
+                "job_id": active_job.job_id,
+                "project_id": project_id
+            }, status.HTTP_202_ACCEPTED
+    # Se há job concluído (done) e o response_timestamp do job é mais recente que o estado de resumo, busca estado atualizado do Blob Storage
+    latest_done_job = redis_service.get_latest_done_job_for_project(project_id)
+    if latest_done_job:
+        response_ts = latest_done_job.response_timestamp if hasattr(latest_done_job, "response_timestamp") else None
+        if response_ts:
+            if isinstance(response_ts, str):
+                try:
+                    response_ts = datetime.fromisoformat(response_ts)
+                except Exception:
+                    response_ts = None
+            if resumo_ultima_atualizacao and response_ts and response_ts > resumo_ultima_atualizacao:
+                try:
+                    state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
+                    report_fields = [
+                        "epicos",
+                        "features",
+                        "times_descricao",
+                        "alocacao_times",
+                        "premissas_riscos"
+                    ]
+                    for field in report_fields:
+                        if state.get(field) is None:
+                            state[field] = None
+                        else:
+                            report_key = field + "_report"
+                            if report_key in state[field] and (state[field][report_key] is None or not isinstance(state[field][report_key], list)):
+                                state[field][report_key] = []
+                    return state
+                except Exception as e:
+                    raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
+    # Caso padrão: retorna o estado atual (como antes)
     try:
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
         report_fields = [
