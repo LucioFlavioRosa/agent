@@ -2,7 +2,7 @@ import redis
 import uuid
 import json
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData
 import logging
@@ -246,3 +246,41 @@ class RedisSessionService:
             self.redis_client.setex(key, self.session_ttl, json.dumps(data))
         except Exception as e:
             self.logger.error(f"Erro ao atualizar status do job {job_id}: {e}")
+
+    def get_active_job_for_project(self, project_id: str) -> Optional[JobData]:
+        pattern = f"job:*"
+        job_keys = self.redis_client.keys(pattern)
+        jobs: List[JobData] = []
+        for key in job_keys:
+            job_json = self.redis_client.get(key)
+            if not job_json:
+                continue
+            try:
+                data = json.loads(job_json)
+                if data.get('project_id') == project_id and data.get('status') in ('pending', 'in_progress'):
+                    jobs.append(JobData(**data))
+            except Exception:
+                continue
+        if not jobs:
+            return None
+        jobs.sort(key=lambda j: j.request_timestamp if hasattr(j, 'request_timestamp') and j.request_timestamp else datetime.min, reverse=True)
+        return jobs[0]
+
+    def get_latest_done_job_for_project(self, project_id: str) -> Optional[JobData]:
+        pattern = f"job:*"
+        job_keys = self.redis_client.keys(pattern)
+        jobs: List[JobData] = []
+        for key in job_keys:
+            job_json = self.redis_client.get(key)
+            if not job_json:
+                continue
+            try:
+                data = json.loads(job_json)
+                if data.get('project_id') == project_id and data.get('status') == 'done':
+                    jobs.append(JobData(**data))
+            except Exception:
+                continue
+        if not jobs:
+            return None
+        jobs.sort(key=lambda j: j.response_timestamp if hasattr(j, 'response_timestamp') and j.response_timestamp else datetime.min, reverse=True)
+        return jobs[0]
