@@ -16,7 +16,6 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
         if not getattr(payload, 'project_id', None):
             logger.error(f"Webhook recebido sem project_id. Payload inválido.")
             raise HTTPException(status_code=400, detail="project_id é obrigatório no webhook MCP.")
-        # Atualiza status do job conforme status do webhook
         if not payload.job_id or not isinstance(payload.job_id, str) or not payload.job_id.strip():
             logger.error("Webhook recebido sem job_id válido.")
             raise HTTPException(status_code=400, detail="job_id é obrigatório e deve ser uma string não vazia.")
@@ -26,7 +25,6 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             redis_service.update_job_status(payload.job_id, "done")
         elif payload.status == "error":
             redis_service.update_job_status(payload.job_id, "error")
-        # 1. Recupera a sessão (Isso aqui é o "Enrichment" - traz o nome_projeto do Redis)
         session = redis_service.get_session_by_project_id(payload.project_id)
         if not session:
             logger.error(f"Webhook recebido para project_id não encontrado: {payload.project_id}. Estado do Redis pode estar inconsistente.")
