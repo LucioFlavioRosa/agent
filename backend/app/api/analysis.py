@@ -118,15 +118,17 @@ async def start_analysis(
     if blob_url:
         redis_service.add_docx_file(project_id_final, blob_url)
 
-    # ===== ENRIQUECIMENTO DE CONTEXTO =====
     instrucoes_extras = comentario_extra
     try:
         instrucoes_extras_enriquecidas = await ContextEnrichmentService.enrich_instructions(
             project_id_final, analysis_type, instrucoes_extras
         )
+        logger.debug(f"[ANALYSIS] instrucoes_extras_enriquecidas para MCP: '{instrucoes_extras_enriquecidas}'")
         logger.info(f"Contexto enriquecido para analysis_type={analysis_type} (project_id={project_id_final}).")
     except Exception as e:
         logger.error(f"Erro ao enriquecer instrucoes_extras: {e}")
+        if analysis_type.startswith("refinamento_"):
+            raise HTTPException(status_code=500, detail=f"Erro ao enriquecer contexto/refinamento: {str(e)}")
         instrucoes_extras_enriquecidas = instrucoes_extras
 
     mcp_payload = {
@@ -135,6 +137,7 @@ async def start_analysis(
         "comentario_extra": instrucoes_extras_enriquecidas,
         "analysis_type": analysis_type
     }
+    logger.debug(f"[ANALYSIS] Payload enviado ao MCP: {mcp_payload}")
 
     mcp_client = MCPClientService()
     try:
