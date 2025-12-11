@@ -7,7 +7,7 @@ logger = logging.getLogger("ResponseCleaner")
 
 def clean_llm_response(raw_response):
     try:
-        cleaned = raw_response.replace('```json', '').replace('```', '').strip()
+        cleaned = raw_response.replace('```json', '').replace('```', '').replace('\n', '').replace('\', '').strip()
 
         # Validação do JSON
         json.loads(cleaned)
