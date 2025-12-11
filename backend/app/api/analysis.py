@@ -20,6 +20,7 @@ logger = logging.getLogger("analysis_api")
 class StartAnalysisResponse(BaseModel):
     message: str
     project_id: str
+    job_id: str
     nome_projeto: Optional[str] = None
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
@@ -139,11 +140,15 @@ async def start_analysis(
 
     logger.debug(f"[ANALYSIS] MCP PAYLOAD instrucoes_extras_enriquecidas: '{instrucoes_extras_enriquecidas}'")
 
+    # Gera job_id e salva job no Redis antes de enviar ao MCP
+    job_id = redis_service.create_job(project_id_final, analysis_type)
+
     mcp_payload = {
         "project_id": project_id_final,
         "texto_extraido_do_docx": texto_extraido,
         "comentario_extra": instrucoes_extras_enriquecidas,
-        "analysis_type": analysis_type
+        "analysis_type": analysis_type,
+        "job_id": job_id
     }
     logger.debug(f"[ANALYSIS] Payload enviado ao MCP: {mcp_payload}")
 
@@ -157,5 +162,6 @@ async def start_analysis(
     return StartAnalysisResponse(
         message="Análise solicitada com sucesso ao agente.",
         project_id=project_id_final,
+        job_id=job_id,
         nome_projeto=nome_projeto
     )
