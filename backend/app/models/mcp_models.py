@@ -9,6 +9,7 @@ class MCPStartAnalysisPayload(BaseModel):
     usuario_executor: str = Field(..., description="Usuário executor extraído do token JWT.")
     project_id: str = Field(..., description="Identificador único do projeto.")
     nome_projeto: Optional[str] = Field(None, description="Nome legível do projeto (apenas para log/debug).")
+    job_id: str = Field(..., description="Identificador único do job.")
 
     @validator('analysis_type')
     def analysis_type_must_not_be_empty(cls, v):
@@ -20,6 +21,12 @@ class MCPStartAnalysisPayload(BaseModel):
     def project_id_must_not_be_empty(cls, v):
         if not v or not isinstance(v, str) or not v.strip():
             raise ValueError('project_id deve ser uma string não vazia')
+        return v
+
+    @validator('job_id')
+    def job_id_must_not_be_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('job_id deve ser uma string não vazia')
         return v
 
 class MCPStartAnalysisResponse(BaseModel):
