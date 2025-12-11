@@ -86,8 +86,9 @@ async def process_analysis_task(project_id: str, llm_request_params: Dict[str, A
     try:
         orchestrator = LLMOrchestrator()
         agent_result = orchestrator.execute_analysis(llm_request_params)
-        logger.info(f"🤖 [RAW LLM RESPONSE - ANTES DA LIMPEZA]: {agent_result}")
-        cleaned_result = clean_llm_response(agent_result)
+        json_string=agent_result['resultado']['reposta_final']['reposta_final']
+        logger.info(f"🤖 [RAW LLM RESPONSE - ANTES DA LIMPEZA]: {json_string}")
+        cleaned_result = clean_llm_response(json_string)
         project_tracker.set_status(project_id, 'done')
         project_tracker.set_result(project_id, cleaned_result)
         webhook_payload = {
