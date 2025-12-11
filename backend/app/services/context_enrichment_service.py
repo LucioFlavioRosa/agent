@@ -31,13 +31,13 @@ class ContextEnrichmentService:
                     nome_projeto=None,
                     report_type=report_para_ler
                 )
-                logger.debug(f"[ENRICH] Estado retornado: {state}")
+                logger.debug(f"[ENRICH] Estado retornado: tipo={type(state)}, chaves={list(state.keys()) if isinstance(state, dict) else 'N/A'}")
                 if not state:
                     logger.warning(f"Estado '{estado_para_ler}' não encontrado para project_id={project_id}")
                     continue
                 report_content = state.get(report_para_ler)
-                if report_content is None:
-                    logger.warning(f"Campo '{report_para_ler}' ausente no estado '{estado_para_ler}' para project_id={project_id}")
+                if report_content is None or (isinstance(report_content, str) and not report_content.strip()) or (isinstance(report_content, dict) and not report_content):
+                    logger.warning(f"Campo '{report_para_ler}' ausente ou vazio no estado '{estado_para_ler}' para project_id={project_id}")
                     continue
                 try:
                     report_str = json.dumps(report_content, ensure_ascii=False, indent=2)
@@ -54,7 +54,6 @@ class ContextEnrichmentService:
         enriched_text = "\n\n".join(enriched_parts)
         logger.debug(f"[ENRICH] instrucoes_extras ENRIQUECIDO: '{enriched_text}'")
         if config_entries and estados_lidos > 0:
-            # Validação: o texto enriquecido deve conter o conteúdo do report
             algum_report = False
             for entry in config_entries:
                 report_para_ler = entry.get("report_para_ler")
