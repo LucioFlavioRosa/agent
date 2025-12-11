@@ -203,50 +203,51 @@ Observação: O campo `project_id` nunca deve ser enviado pelo frontend. O backe
 GET /session/project/projeto-uuid-123/reports HTTP/1.1
 Authorization: Bearer <token>
 
+### Novo comportamento (a partir de 2024-06):
+
+- O endpoint agora verifica se existe um job ativo (status 'pending' ou 'in_progress') para o `project_id`.
+- Se houver um job ativo e o campo `request_timestamp` do job for mais recente que o campo `ultima_atualizacao` do estado de resumo no Redis, o endpoint retorna HTTP 202 (Accepted) com mensagem indicando que o processamento está em andamento. Nenhum dado antigo é retornado.
+- Se o job ativo tiver status 'done' e o campo `response_timestamp` for mais recente que o campo `ultima_atualizacao` do estado no Redis, o backend busca o estado atualizado do Blob Storage antes de retornar a resposta ao frontend.
+- Isso garante que o frontend só recebe o estado correspondente à última requisição enviada ao MCP, evitando inconsistências.
+
+#### Exemplo de resposta quando há processamento em andamento (HTTP 202):
+
+Status: 202 Accepted
+
+{
+  "status": "processing",
+  "message": "O processamento da última requisição está em andamento. Aguarde a conclusão do MCP para obter o resultado atualizado.",
+  "project_id": "projeto-uuid-123"
+}
+
+#### Exemplo de resposta quando o processamento foi concluído e o estado está atualizado:
+
+Status: 200 OK
+
 {
   "resumo": {
     "usuario_executor": "user@example.com",
     "nome_projeto": "ProjetoNovo",
     "ultima_analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "ultima_atualizacao": "2024-06-01T12:31:00Z",
     "project_id": "projeto-uuid-123"
   },
   "epicos": {
     "nome_projeto": "ProjetoNovo",
     "ultima_analysis_type": "criacao_epicos_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "ultima_atualizacao": "2024-06-01T12:31:00Z",
     "epicos_report": [{ "id": 1, "titulo": "Como usuário..." }]
   },
   "features": {
     "nome_projeto": "ProjetoNovo",
     "ultima_analysis_type": "criacao_features_azure_devops",
     "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
+    "ultima_atualizacao": "2024-06-01T12:31:00Z",
     "features_report": [{ "id": 101, "nome": "Login" }]
   },
-  "times_descricao": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_times_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "times_descricao_report": []
-  },
-  "alocacao_times": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_alocacao_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "alocacao_times_report": []
-  },
-  "premissas_riscos": {
-    "nome_projeto": "ProjetoNovo",
-    "ultima_analysis_type": "criacao_premissas_azure_devops",
-    "created_at": "2024-06-01T12:00:00Z",
-    "ultima_atualizacao": "2024-06-01T12:30:00Z",
-    "premissas_riscos_report": []
-  }
+  ...
 }
 
 ---
