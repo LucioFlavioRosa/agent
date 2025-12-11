@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from typing import Literal
+from typing import Literal, Optional
 from datetime import datetime
 
 class JobData(BaseModel):
@@ -9,6 +9,8 @@ class JobData(BaseModel):
     status: Literal['pending', 'in_progress', 'done', 'error'] = Field(...)
     created_at: datetime = Field(...)
     updated_at: datetime = Field(...)
+    request_timestamp: datetime = Field(...)
+    response_timestamp: Optional[datetime] = Field(default=None)
 
     @validator('job_id', 'project_id', 'analysis_type')
     def not_empty(cls, v):
