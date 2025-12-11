@@ -42,6 +42,16 @@ def home():
 
 @router.post("/start")
 async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTasks):
+    # --- CORREÇÃO DE INCONSISTÊNCIA DE CHAVES ---
+    # Verifica se veio 'comentario_extra' ou 'instrucoes_extras' e unifica tudo em 'instrucoes_extras'
+    
+    instrucoes = payload.get("instrucoes_extras") or payload.get("comentario_extra")
+    
+    # Força a atualização do payload para o padrão que o sistema usa
+    if instrucoes:
+        payload["instrucoes_extras"] = instrucoes
+        payload["comentario_extra"] = instrucoes # Mantém compatibilidade retroativa
+    # --------------------------------------------
     logger.info(f"📥 [PAYLOAD RECEBIDO]: {payload}")
 
     try:
