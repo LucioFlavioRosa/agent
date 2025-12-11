@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Body, Depends, Query, status
-from fastapi.responses import JSONResponse # <--- IMPORTANTE: Adicionado este import
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Any, Dict, Optional
 from backend.app.services.redis_session_service import RedisSessionService
@@ -23,8 +23,23 @@ async def get_project_reports(
     logger = logging.getLogger("session_api")
     redis_service = RedisSessionService()
 
-    # NOVO: Busca o job ativo mais recente para o projeto
+    # 1. Busca os estados no Redis
     active_job = redis_service.get_active_job_for_project(project_id)
+    latest_done_job = redis_service.get_latest_done_job_for_project(project_id)
+    
+    # --- CORREÇÃO DO "ZUMBI 202" ---
+    # Verifica se o job que consta como ativo na verdade já terminou (está no latest_done_job)
+    is_active_actually_done = False
+    if active_job and latest_done_job:
+        if active_job.job_id == latest_done_job.job_id:
+            is_active_actually_done = True
+            logger.info(f"Job {active_job.job_id} consta como ativo mas já foi finalizado. Ignorando status processing.")
+
+    # Se descobrimos que ele já acabou, anulamos a variável active_job para pular o bloco do 202
+    if is_active_actually_done:
+        active_job = None
+    # -------------------------------
+
     resumo_state = redis_service.get_session_by_project_id(project_id)
     resumo_state_dict = resumo_state.dict() if resumo_state else None
     resumo_ultima_atualizacao = None
@@ -37,19 +52,21 @@ async def get_project_reports(
             except Exception:
                 resumo_ultima_atualizacao = None
     
-    # Se há job ativo (pending ou in_progress) e o estado de resumo é mais antigo que o request_timestamp do job, retorna 202
+    # 2. Bloco que retorna 202 (Processing)
     if active_job:
         job_request_ts = active_job.request_timestamp if hasattr(active_job, "request_timestamp") else None
         
-        # Lógica de verificação de timestamp
         should_return_processing = False
+        
+        # Cenário A: Temos um resumo, mas o job é mais novo que o resumo (dados desatualizados)
         if job_request_ts and resumo_ultima_atualizacao and resumo_ultima_atualizacao < job_request_ts:
             should_return_processing = True
+        
+        # Cenário B: Não temos resumo nenhum ainda
         elif job_request_ts and not resumo_ultima_atualizacao:
             should_return_processing = True
 
         if should_return_processing:
-            # --- CORREÇÃO AQUI: Usando JSONResponse para evitar retorno de tupla/lista ---
             return JSONResponse(
                 content={
                     "status": "processing",
@@ -59,10 +76,11 @@ async def get_project_reports(
                 },
                 status_code=status.HTTP_202_ACCEPTED
             )
-            # -----------------------------------------------------------------------------
 
-    # Se há job concluído (done) e o response_timestamp do job é mais recente que o estado de resumo, busca estado atualizado do Blob Storage
-    latest_done_job = redis_service.get_latest_done_job_for_project(project_id)
+    # 3. Bloco que retorna 200 (Done) - Recuperação Inteligente
+    # Se chegamos aqui, ou não tem job ativo, ou o job ativo já terminou.
+    
+    # Vamos verificar se precisamos forçar uma leitura do Blob (caso o cache local esteja velho)
     if latest_done_job:
         response_ts = latest_done_job.response_timestamp if hasattr(latest_done_job, "response_timestamp") else None
         if response_ts:
@@ -72,13 +90,12 @@ async def get_project_reports(
                 except Exception:
                     response_ts = None
             
+            # Se a resposta do job é mais nova que o que temos salvo no estado do projeto -> Reload do Blob
             if resumo_ultima_atualizacao and response_ts and response_ts > resumo_ultima_atualizacao:
                 try:
                     state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
-                    report_fields = [
-                        "epicos", "features", "times_descricao", 
-                        "alocacao_times", "premissas_riscos"
-                    ]
+                    # Garante estrutura mínima
+                    report_fields = ["epicos", "features", "times_descricao", "alocacao_times", "premissas_riscos"]
                     for field in report_fields:
                         if state.get(field) is None:
                             state[field] = None
@@ -88,15 +105,14 @@ async def get_project_reports(
                                 state[field][report_key] = []
                     return state
                 except Exception as e:
-                    raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
+                    # Se falhar no blob, cai para o retorno padrão abaixo
+                    logger.error(f"Erro ao recarregar do blob: {e}")
+                    pass 
 
-    # Caso padrão: retorna o estado atual (como antes)
+    # 4. Caso padrão: Retorna o que tem no estado atual
     try:
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
-        report_fields = [
-            "epicos", "features", "times_descricao", 
-            "alocacao_times", "premissas_riscos"
-        ]
+        report_fields = ["epicos", "features", "times_descricao", "alocacao_times", "premissas_riscos"]
         for field in report_fields:
             if state.get(field) is None:
                 state[field] = None
@@ -108,6 +124,7 @@ async def get_project_reports(
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
 
+# ... (Resto dos endpoints mantidos iguais) ...
 @router.get("/project/{project_id}/report/{report_type}")
 async def get_project_report_state(project_id: str, report_type: str, current_user: dict = Depends(get_current_user)):
     try:
