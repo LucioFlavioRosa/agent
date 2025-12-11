@@ -32,12 +32,14 @@ sequenceDiagram
 
 ---
 
-## 2. Criação de Projeto e Conversão nome_projeto → project_id
+## 2. Criação de Projeto, Geração de job_id e Conversão nome_projeto → project_id
 
 O frontend deve sempre enviar apenas o campo `nome_projeto` para criação ou início de análise. O backend é responsável por converter internamente o `nome_projeto` para `project_id`:
 - Se o projeto já existe, o backend recupera o mesmo `project_id` do estado salvo.
 - Se o projeto é novo, o backend gera um novo `project_id` (UUID) e associa ao nome do projeto.
-- O `project_id` é retornado na resposta do backend para uso em operações subsequentes.
+- Antes de enviar o payload ao MCP, o backend gera um `job_id` (UUID) exclusivo e associa ao projeto/analise.
+- O `job_id` é incluído no payload enviado ao MCP e também retornado ao frontend.
+- O `project_id` e o `job_id` são retornados na resposta do backend para uso em operações subsequentes.
 - O enriquecimento de contexto agora exige usuario_executor e nome_projeto como parâmetros obrigatórios.
 
 Diagrama de Fluxo Atualizado:
@@ -49,10 +51,11 @@ sequenceDiagram
     participant MCP as MCP Server
     FE->>BE: POST /analysis/start (nome_projeto, analysis_type, ...)
     BE->>BE: Converte nome_projeto para project_id (recupera existente ou gera novo)
+    BE->>BE: Gera job_id e associa ao projeto/analise
     BE->>BE: Enriquecimento de contexto (passando usuario_executor, nome_projeto, project_id)
-    BE->>MCP: Envia payload (project_id, analysis_type, ...)
-    MCP-->>BE: job_id, project_id
-    BE-->>FE: message, project_id, nome_projeto
+    BE->>MCP: Envia payload (project_id, job_id, analysis_type, ...)
+    MCP-->>BE: Confirmação de recebimento
+    BE-->>FE: message, project_id, job_id, nome_projeto
 
 ---
 
@@ -66,15 +69,58 @@ sequenceDiagram
 
 ---
 
-## 4. Observações Importantes
+## 4. Consulta de Reports com job_id
 
-- O campo `project_id` nunca deve ser enviado pelo frontend. O backend faz toda a conversão e retorna o `project_id` correto.
-- Toda comunicação interna e com MCP utiliza o `project_id` gerado ou recuperado pelo backend.
-- O frontend deve usar o `project_id` retornado para todas operações subsequentes (consultas, atualizações, etc).
+- O frontend deve consultar o endpoint de reports usando o parâmetro `job_id` para acompanhar o status do processamento.
+- O backend verifica o status do job no Redis:
+    - Se o job estiver 'pending' ou 'in_progress', retorna status 202 (Accepted) e mensagem de processamento.
+    - Se o job estiver 'done', retorna os reports normalmente (status 200).
+    - Se o job não existir ou estiver em erro, retorna status 404 ou 400.
+
+mermaid
+sequenceDiagram
+    FE->>BE: GET /session/project/{project_id}/reports?job_id=job-uuid-456
+    BE->>RS: Busca status do job no Redis
+    alt Job 'pending' ou 'in_progress'
+        BE-->>FE: status 202 (processing)
+    else Job 'done'
+        BE->>BS: Busca todos os estados salvos no Blob Storage
+        BE-->>FE: Retorna todos os estados (resumo + reports disponíveis)
+    else Job não existe ou erro
+        BE-->>FE: status 404 ou 400
+    end
 
 ---
 
-## 5. Enriquecimento de Contexto para Refinamento
+## 5. Atualização de Relatório via Webhook e Status do Job
+
+- O MCP envia webhooks para o backend informando status do job e dados do relatório.
+- O backend atualiza o status do job no Redis conforme o status recebido ('in_progress', 'done', 'error').
+- O backend atualiza o estado do report correspondente ao analysis_type recebido.
+
+mermaid
+sequenceDiagram
+    MCP->>BE: Webhook (job_id, project_id, status, report_data, analysis_type)
+    BE->>BE: Usa analysis_type para determinar report_type
+    BE->>RS: Atualiza estado individual do report (ex: features_report)
+    BE->>BS: Salva estado individual do report no Blob Storage (pasta específica)
+    BE->>BE: Atualiza status do job no Redis conforme status recebido
+    BE-->>FE: status ok
+
+---
+
+## 6. Observações Importantes
+
+- O campo `project_id` nunca deve ser enviado pelo frontend. O backend faz toda a conversão e retorna o `project_id` correto.
+- Toda comunicação interna e com MCP utiliza o `project_id` e o `job_id` gerados ou recuperados pelo backend.
+- O frontend deve usar o `project_id` e o `job_id` retornados para todas operações subsequentes (consultas, atualizações, etc).
+- O endpoint de consulta de reports agora exige o parâmetro `job_id` para acompanhamento do processamento.
+- O backend retorna status HTTP 202 (Accepted) para jobs em andamento, 200 para jobs concluídos, e 404/400 para jobs inexistentes ou com erro.
+- O frontend deve fazer polling periódico usando o `job_id` para verificar o status do processamento.
+
+---
+
+## 7. Enriquecimento de Contexto para Refinamento
 
 Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epicos_azure_devops`), o backend executa um processo de enriquecimento de contexto antes de enviar o payload ao MCP:
 
@@ -102,6 +148,6 @@ sequenceDiagram
     BE->>BE: Concatena textos dos reports + instrucoes_extras
     BE->>MCP: Envia payload enriquecido (comentario_extra)
     MCP-->>BE: job_id, project_id
-    BE-->>FE: message, project_id, nome_projeto
+    BE-->>FE: message, project_id, job_id, nome_projeto
 
 ---
