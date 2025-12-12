@@ -46,7 +46,7 @@ Sua saída deve ter exatamente esta estrutura, inferindo os profissionais necess
 
 ```json
 {
-  "alocacao_report": {
+  "alocacao_times_report": {
     "Arquiteto de Soluções - Sênior": [
       {
         "semana": 1,
