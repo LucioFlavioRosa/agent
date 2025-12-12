@@ -165,6 +165,7 @@ class ProjectStateService:
         try:
             _, container_client = _get_blob_clients()
             blob_client = container_client.get_blob_client(blob_path)
+            # O campo job_id presente em data será serializado normalmente junto com os demais campos
             json_data = json.dumps(data, default=str, ensure_ascii=False)
             logger.info(f"Iniciando upload de estado para: {blob_path}")
             blob_client.upload_blob(json_data, overwrite=True)
