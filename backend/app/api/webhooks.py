@@ -41,15 +41,30 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             redis_service.update_report(payload.project_id, report_data)
             
             # C. Atualiza Blob Storage (Persistência)
+            # C. Atualiza Blob Storage (Persistência)
             session = redis_service.get_session_by_project_id(payload.project_id)
             if session:
-                # Garante atualização do timestamp da sessão
-                session.ultima_atualizacao = datetime.utcnow().isoformat()
-                if not session.project_id: session.project_id = payload.project_id
+                # --- MUDANÇA AQUI: Use o objeto datetime, não a string ---
+                agora_dt = datetime.utcnow() 
+                # ---------------------------------------------------------
+                
+                # Verifica e atribui
+                if hasattr(session, "last_saved_to_blob"):
+                    session.last_saved_to_blob = agora_dt # Atribui objeto datetime
+                
+                if hasattr(session, "ultima_atualizacao"):
+                    session.ultima_atualizacao = agora_dt # Atribui objeto datetime
+                
+                # Fallback para dict
+                if isinstance(session, dict):
+                    session["last_saved_to_blob"] = agora_dt.isoformat()
+                    session["ultima_atualizacao"] = agora_dt.isoformat()
+
+                if hasattr(session, "project_id") and not session.project_id:
+                    session.project_id = payload.project_id
                 
                 # Salva no Blob
                 await ProjectStateService.save_state_to_blob(session)
-                logger.info("Estado salvo no Blob Storage com sucesso.")
 
             # D. FINALMENTE: Marca o Job como DONE no Redis (Controle de Fluxo)
             # Isso é a última coisa a fazer para evitar condição de corrida
