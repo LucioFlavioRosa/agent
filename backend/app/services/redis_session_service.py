@@ -64,13 +64,27 @@ class RedisSessionService:
     def update_report(self, project_id: str, report_data: Dict[str, Any]):
         key = f"project:{project_id}:resumo"
         session_json = self.redis_client.get(key)
+        
         if session_json:
             try:
                 session_data = self._deserialize_session(session_json)
                 session_data.update(report_data)
-                session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
+                
+                # --- MUDANÇA AQUI: Captura o tempo exato agora ---
+                agora = datetime.utcnow().isoformat()
+                
+                # 1. Atualiza o campo principal
+                session_data["ultima_atualizacao"] = agora
+                
+                # 2. Atualiza também o campo secundário (backup) que a API verifica
+                # Isso garante que a API veja este dado como "fresco"
+                session_data["last_saved_to_blob"] = agora 
+                
                 self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-                self.logger.info(f"Relatório merged e atualizado no Redis para projeto {project_id}")
+                
+                # Log com o timestamp para facilitar seu debug no futuro
+                self.logger.info(f"Relatório merged e timestamps atualizados no Redis. Project: {project_id} | TS: {agora}")
+                
             except Exception as e:
                 self.logger.error(f"Erro ao atualizar report no Redis: {e}")
                 raise e
