@@ -54,6 +54,8 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 session["ultima_atualizacao"] = agora.isoformat()
             if hasattr(session, "project_id") and not session.project_id:
                 session.project_id = payload.project_id
+            # Garantia extra: update_job_status já preenche completed_at, mas reforçamos aqui caso necessário
+            redis_service.update_job_status(payload.job_id, "done")
             await ProjectStateService.save_state_to_blob(session)
             state = session.to_project_state() if hasattr(session, "to_project_state") else session
             return {
