@@ -60,6 +60,8 @@ async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTa
     )
     project_id = mcp_request.project_id
     job_id = mcp_request.job_id if mcp_request.job_id else str(uuid.uuid4())
+    if job_id == project_id:
+        job_id = str(uuid.uuid4())
     project_tracker.set_status(project_id, 'processing')
     background_tasks.add_task(
         process_analysis_task,
