@@ -121,7 +121,10 @@ class RedisSessionService:
             "last_saved_to_blob": last_saved_to_blob,
             "project_id": project_id,
             "ultima_analysis_type": analysis_type,
-            "ultima_atualizacao": last_saved_to_blob
+            "ultima_atualizacao": last_saved_to_blob,
+            # --- INSTRUÇÃO 5: Inicializa last_job_id como None ---
+            "last_job_id": None 
+            # -----------------------------------------------------
         }
         if extracted_text:
              session_data["extracted_text"] = extracted_text
@@ -201,6 +204,11 @@ class RedisSessionService:
         session_data["ultima_analysis_type"] = analysis_type
         session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
         session_data["project_id"] = project_id
+        
+        # --- INSTRUÇÃO 6: Restaura last_job_id do estado ou define como None ---
+        session_data["last_job_id"] = project_state.get("last_job_id", None)
+        # -----------------------------------------------------------------------
+        
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
@@ -265,7 +273,6 @@ class RedisSessionService:
                 continue
             try:
                 data = json.loads(job_json)
-                # Ignora jobs com status 'done' e response_timestamp preenchido
                 if (
                     data.get('project_id') == project_id and
                     data.get('status') in ('pending', 'in_progress')
