@@ -70,7 +70,7 @@ class SessionData(BaseModel):
             created_at=created_at_val,
             last_saved_to_blob=last_saved_val,
             ultima_atualizacao=ultima_atualizacao_val,
-            last_job_id=state.get("last_job_id")
+            last_job_id=state.get("last_job_id"),
             docx_files=state.get("docx_files", []),
             project_id=state.get("project_id"),
             epicos_report=state.get("epicos_report"),
