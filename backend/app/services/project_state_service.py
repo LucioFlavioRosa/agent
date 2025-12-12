@@ -242,14 +242,16 @@ class ProjectStateService:
             except Exception:
                 return datetime.datetime.min
 
-        # 1. Carregar Resumo (Onde está o last_job_id)
+        # Variável auxiliar para capturar o ID de onde quer que ele venha
+        captured_last_job_id = None
+
+        # 1. Carregar Resumo
         prefix_resumo = f"{usuario_executor}/"
         blobs_resumo = list(container_client.list_blobs(name_starts_with=prefix_resumo))
         candidatos_resumo = []
         
         for blob in blobs_resumo:
             if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
-                # Otimização: ler project_id sem baixar tudo seria ideal, mas baixamos por segurança
                 blob_client = container_client.get_blob_client(blob.name)
                 try:
                     state_bytes = blob_client.download_blob().readall()
@@ -269,6 +271,11 @@ class ProjectStateService:
             candidatos_resumo.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
             resumo_state = candidatos_resumo[0][1]
             nome_projeto = resumo_state.get("nome_projeto")
+            
+            # Tenta capturar do resumo
+            if resumo_state.get("last_job_id"):
+                captured_last_job_id = resumo_state.get("last_job_id")
+                
             logger.info(f"[RESUMO] Selecionado arquivo mais recente: {candidatos_resumo[0][0].name}")
         else:
             return {}
@@ -291,7 +298,6 @@ class ProjectStateService:
                 "alocacao_times_report": "alocacao_times",
                 "premissas_riscos_report": "premissas_riscos"
             }
-            # Mapeia nome do report para chave no EstadoCompleto
             key_map = {
                 "epicos_report": "epicos",
                 "features_report": "features",
@@ -319,7 +325,10 @@ class ProjectStateService:
                     candidatos_report.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
                     latest_state = candidatos_report[0][1]
                     
-                    # Preenche campos faltantes para validação Pydantic
+                    # Tenta capturar do relatório específico (O mais provável!)
+                    if latest_state.get("last_job_id"):
+                        captured_last_job_id = latest_state.get("last_job_id")
+
                     agora_iso = datetime.datetime.utcnow().isoformat()
                     if "ultima_atualizacao" not in latest_state: latest_state["ultima_atualizacao"] = agora_iso
                     if "created_at" not in latest_state: latest_state["created_at"] = agora_iso
@@ -329,19 +338,17 @@ class ProjectStateService:
                     if chave_destino:
                         states_dict[chave_destino] = latest_state
 
-        # 3. CONSTRUÇÃO FINAL DA RESPOSTA (CORRIGIDA)
+        # 3. CONSTRUÇÃO FINAL DA RESPOSTA
         try:
-            # Tenta usar o Pydantic para validar a estrutura
             response_obj = EstadoCompletoProjetoResponse(**states_dict)
             final_dict = response_obj.dict()
         except Exception as e:
             logger.error(f"Erro na validação Pydantic em load_all_states: {e}. Retornando dict bruto.")
             final_dict = states_dict
 
-        # 4. INJEÇÃO CRÍTICA DO LAST_JOB_ID
-        # Se o Pydantic removeu (porque o modelo não tem o campo), nós colocamos de volta.
-        if resumo_state and "last_job_id" in resumo_state:
-            final_dict["last_job_id"] = resumo_state["last_job_id"]
-            logger.info(f"✅ last_job_id preservado na resposta: {final_dict['last_job_id']}")
+        # 4. INJEÇÃO CRÍTICA DO LAST_JOB_ID (Usando a variável capturada)
+        if captured_last_job_id:
+            final_dict["last_job_id"] = captured_last_job_id
+            logger.info(f"✅ last_job_id ({captured_last_job_id}) preservado e injetado na resposta.")
         
         return final_dict
