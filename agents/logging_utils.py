@@ -1,6 +1,6 @@
 import logging
 import json
-from typing import Optional, List
+from typing import Optional
 
 logger = logging.getLogger("agente_logger")
 logger.setLevel(logging.INFO)
@@ -15,46 +15,20 @@ def init_logger():
 
 def log_custom_data(
     job_id: Optional[str] = None,
-    projeto: Optional[str] = None,
+    project_id: Optional[str] = None,
     data_hora: Optional[str] = None,
-    status: Optional[str] = None,
-    tipo_repositorio: Optional[str] = None,
-    nome_repositorio: Optional[str] = None,
     tipo_analise: Optional[str] = None,
     model_name: Optional[str] = None,
     tokens_in: Optional[int] = None,
-    tokens_out: Optional[int] = None,
-    modo_adicao_incremental: Optional[bool] = None,
-    usuario_executor: Optional[str] = None,
-    analysis_type: Optional[str] = None,
-    branch_name: Optional[str] = None,
-    analysis_name: Optional[str] = None,
-    arquivos_especificos: Optional[List[str]] = None,
-    pr_url: Optional[str] = None,
-    arquivos_modificados: Optional[List[str]] = None,
-    retornar_lista_arquivos: Optional[bool] = None,
-    blob_filename: Optional[str] = None
+    tokens_out: Optional[int] = None
 ):
     log_entry = {
         "job_id": job_id,
-        "projeto": projeto,
+        "project_id": project_id,
         "data_hora": data_hora,
-        "status": status,
-        "tipo_repositorio": tipo_repositorio,
-        "nome_repositorio": nome_repositorio,
         "tipo_analise": tipo_analise,
         "model_name": model_name,
         "tokens_entrada": tokens_in,
-        "tokens_saida": tokens_out,
-        "modo_adicao_incremental": modo_adicao_incremental,
-        "usuario_executor": usuario_executor,
-        "analysis_type": analysis_type,
-        "branch_name": branch_name,
-        "analysis_name": analysis_name,
-        "arquivos_especificos": arquivos_especificos,
-        "pr_url": pr_url,
-        "arquivos_modificados": arquivos_modificados,
-        "retornar_lista_arquivos": retornar_lista_arquivos,
-        "blob_filename": blob_filename
+        "tokens_saida": tokens_out
     }
     logger.info(json.dumps(log_entry))
