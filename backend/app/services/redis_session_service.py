@@ -213,7 +213,8 @@ class RedisSessionService:
             created_at=now,
             updated_at=now,
             request_timestamp=now,
-            response_timestamp=None
+            response_timestamp=None,
+            completed_at=None
         )
         key = f"job:{job_id}"
         self.redis_client.setex(key, self.session_ttl, job.json())
@@ -239,10 +240,15 @@ class RedisSessionService:
             return
         try:
             data = json.loads(job_json)
+            previous_status = data.get('status')
             data['status'] = status
             data['updated_at'] = datetime.utcnow().isoformat()
             if status == 'done':
-                data['response_timestamp'] = datetime.utcnow().isoformat()
+                now_iso = datetime.utcnow().isoformat()
+                data['response_timestamp'] = now_iso
+                # Preencher completed_at SOMENTE na primeira transição para 'done'
+                if not data.get('completed_at'):
+                    data['completed_at'] = now_iso
             self.redis_client.setex(key, self.session_ttl, json.dumps(data))
         except Exception as e:
             self.logger.error(f"Erro ao atualizar status do job {job_id}: {e}")
@@ -283,4 +289,36 @@ class RedisSessionService:
         if not jobs:
             return None
         jobs.sort(key=lambda j: j.response_timestamp if hasattr(j, 'response_timestamp') and j.response_timestamp else datetime.min, reverse=True)
+        return jobs[0]
+
+    def get_latest_completed_job_for_project(self, project_id: str) -> Optional[JobData]:
+        pattern = f"job:*"
+        job_keys = self.redis_client.keys(pattern)
+        jobs: List[JobData] = []
+        for key in job_keys:
+            job_json = self.redis_client.get(key)
+            if not job_json:
+                continue
+            try:
+                data = json.loads(job_json)
+                if data.get('project_id') == project_id and data.get('status') == 'done':
+                    jobs.append(JobData(**data))
+            except Exception:
+                continue
+        if not jobs:
+            return None
+        # Ordena por completed_at (se existir), senão por response_timestamp, senão datetime.min
+        def sort_key(j):
+            if hasattr(j, 'completed_at') and j.completed_at:
+                try:
+                    return j.completed_at if isinstance(j.completed_at, datetime) else datetime.fromisoformat(str(j.completed_at))
+                except Exception:
+                    return datetime.min
+            elif hasattr(j, 'response_timestamp') and j.response_timestamp:
+                try:
+                    return j.response_timestamp if isinstance(j.response_timestamp, datetime) else datetime.fromisoformat(str(j.response_timestamp))
+                except Exception:
+                    return datetime.min
+            return datetime.min
+        jobs.sort(key=sort_key, reverse=True)
         return jobs[0]
