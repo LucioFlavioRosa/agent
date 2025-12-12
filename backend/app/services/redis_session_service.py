@@ -307,7 +307,6 @@ class RedisSessionService:
                 continue
         if not jobs:
             return None
-        # Ordena por completed_at (se existir), senão por response_timestamp, senão datetime.min
         def sort_key(j):
             if hasattr(j, 'completed_at') and j.completed_at:
                 try:
