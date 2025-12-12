@@ -24,6 +24,7 @@ async def get_project_reports(
     redis_service = RedisSessionService()
     active_job = redis_service.get_active_job_for_project(project_id)
     latest_done_job = redis_service.get_latest_done_job_for_project(project_id)
+    redis_state = redis_service.get_resumo_state(project_id)
     blob_state = None
     try:
         blob_state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
@@ -49,14 +50,40 @@ async def get_project_reports(
             done_job_response_ts = datetime.fromisoformat(str(latest_done_job.response_timestamp))
         except:
             pass
-    if done_job_response_ts and blob_timestamp and blob_timestamp >= done_job_response_ts:
-        logger.info("✅ Dados do Blob são mais recentes que o último job DONE. Retornando 200 OK.")
-        return _format_state_response(blob_state)
+    # NOVA LÓGICA: Se houver job 'done' e response_timestamp, comparar com blob/redis
+    if done_job_response_ts:
+        # Se blob é mais recente que response_timestamp, retorna blob
+        if blob_timestamp and blob_timestamp >= done_job_response_ts:
+            logger.info("✅ Dados do Blob são mais recentes que o último job DONE. Retornando 200 OK.")
+            return _format_state_response(blob_state)
+        # Se redis é mais recente que response_timestamp, retorna redis
+        redis_timestamp = None
+        if redis_state:
+            redis_ts_str = redis_state.get("ultima_atualizacao") or redis_state.get("last_saved_to_blob") or redis_state.get("updated_at")
+            if redis_ts_str:
+                try:
+                    redis_timestamp = datetime.fromisoformat(str(redis_ts_str))
+                except:
+                    pass
+        if redis_timestamp and redis_timestamp >= done_job_response_ts:
+            logger.info("✅ Dados do Redis são mais recentes que o último job DONE. Retornando 200 OK.")
+            return _format_state_response(redis_state)
+        # Se response_timestamp é mais recente, força leitura do blob
+        if blob_state:
+            logger.info("✅ Retornando blob pois job está DONE e blob disponível.")
+            return _format_state_response(blob_state)
+        if redis_state:
+            logger.info("✅ Retornando redis pois job está DONE e blob não disponível.")
+            return _format_state_response(redis_state)
+        raise HTTPException(status_code=404, detail="Projeto não encontrado ou ainda não iniciado.")
+    # Se job ativo (pending/in_progress)
     if active_job:
         if job_start_time and (datetime.utcnow() - job_start_time).total_seconds() > 600:
             logger.warning("⚠️ Job travado (>10min). Ignorando status processing.")
             if blob_state:
                 return _format_state_response(blob_state)
+            if redis_state:
+                return _format_state_response(redis_state)
         return JSONResponse(
             content={
                 "status": "processing",
@@ -66,8 +93,11 @@ async def get_project_reports(
             },
             status_code=status.HTTP_202_ACCEPTED
         )
+    # Se não há job ativo, retorna blob ou redis
     if blob_state:
         return _format_state_response(blob_state)
+    if redis_state:
+        return _format_state_response(redis_state)
     raise HTTPException(status_code=404, detail="Projeto não encontrado ou ainda não iniciado.")
 
 def _format_state_response(state: dict):
