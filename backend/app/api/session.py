@@ -23,64 +23,64 @@ async def get_project_reports(
     logger = logging.getLogger("session_api")
     redis_service = RedisSessionService()
 
-    # 1. Recupera o Job Ativo do Redis (Apenas para referência de data)
+    # 1. Recupera informações do Job (apenas para comparar datas)
     active_job = redis_service.get_active_job_for_project(project_id)
     
-    # 2. ESTRATÉGIA OTIMISTA: Tenta carregar o Estado Final do Blob PRIMEIRO
-    # Em vez de confiar cegamente no status "processing" do Redis, vamos ver se o dado já existe.
+    # ====================================================================
+    # MUDANÇA CRÍTICA: ESTRATÉGIA DE LEITURA OTIMISTA (BLOB PRIMEIRO)
+    # ====================================================================
+    # Em vez de confiar no status "processing" do Redis, vamos checar 
+    # se o arquivo final já existe no Blob Storage.
+    
     blob_state = None
-    blob_timestamp = None
-    
     try:
-        # Carrega o estado consolidado direto da fonte de verdade (Blob Storage)
+        # Carrega o estado consolidado direto da fonte de verdade (Blob)
         blob_state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
-        
-        # Tenta descobrir a data deste arquivo blob para comparação
-        if blob_state:
-            # Procura por campos de data comuns que o seu sistema usa
-            ts_str = blob_state.get("ultima_atualizacao") or blob_state.get("last_saved_to_blob") or blob_state.get("updated_at")
-            if ts_str:
-                try:
-                    blob_timestamp = datetime.fromisoformat(str(ts_str))
-                except:
-                    pass
     except Exception as e:
-        logger.warning(f"Não foi possível carregar estado do blob para verificação antecipada: {e}")
+        logger.warning(f"Aviso: Não foi possível carregar blob para verificação antecipada: {e}")
 
-    # 3. Lógica de Decisão: 200 (Pronto) vs 202 (Processando)
-    should_return_processing = False
-    
-    if active_job:
-        job_request_ts = None
-        if hasattr(active_job, "request_timestamp") and active_job.request_timestamp:
+    # Se conseguimos carregar o estado, vamos verificar se ele é "fresco"
+    if blob_state:
+        # Tenta descobrir a data deste arquivo blob
+        ts_str = blob_state.get("ultima_atualizacao") or blob_state.get("last_saved_to_blob") or blob_state.get("updated_at")
+        blob_timestamp = None
+        
+        if ts_str:
             try:
-                job_request_ts = datetime.fromisoformat(str(active_job.request_timestamp))
+                blob_timestamp = datetime.fromisoformat(str(ts_str))
             except:
                 pass
         
-        # Se temos data do job e data do blob
-        if job_request_ts:
-            if blob_timestamp:
-                # O X DA QUESTÃO (Solução do Erro):
-                # Se o Blob é MAIS NOVO ou IGUAL ao Job -> O Job terminou e salvou!
-                # Entregamos o resultado (200 OK) e ignoramos o status processing.
-                if blob_timestamp >= job_request_ts:
-                    should_return_processing = False 
-                    logger.info(f"✅ Blob (ts={blob_timestamp}) é mais novo que Active Job (ts={job_request_ts}). Retornando sucesso imediato.")
-                else:
-                    should_return_processing = True # Blob é velho, realmente está processando.
-            else:
-                # Temos job mas não temos data no blob -> Provavelmente processando
-                should_return_processing = True
-                
-                # Anti-Travamento (Failsafe): 
-                # Se o job já tem mais de 5 minutos, assume que o Redis travou e entrega o que tem.
-                if (datetime.utcnow() - job_request_ts).total_seconds() > 300:
-                     logger.warning("⚠️ Job ativo há muito tempo (>5min). Ignorando status processing e retornando estado atual.")
-                     should_return_processing = False
+        # Data de inicio do job ativo (se houver)
+        job_start_time = None
+        if active_job and hasattr(active_job, "request_timestamp"):
+            try:
+                job_start_time = datetime.fromisoformat(str(active_job.request_timestamp))
+            except:
+                pass
 
-    # Retorno 202 (Apenas se confirmamos que está processando E os dados no blob são velhos)
-    if should_return_processing and active_job:
+        # LÓGICA DE DECISÃO:
+        # Se temos um job rodando, mas o arquivo no blob é MAIS NOVO que o início do job...
+        # ...então o job acabou e já salvou! Ignoramos o status 'active' do Redis.
+        if job_start_time and blob_timestamp:
+            if blob_timestamp >= job_start_time:
+                logger.info("✅ Dados do Blob são mais recentes que o Job Ativo. Retornando 200 OK.")
+                return _format_state_response(blob_state)
+        
+        # Se não tem job ativo, mas tem blob, retorna o blob (sucesso óbvio)
+        if not active_job:
+             return _format_state_response(blob_state)
+
+    # ====================================================================
+    # 2. Se chegamos aqui, o Blob é velho ou não existe.
+    # Agora sim, retornamos 202 se houver job ativo.
+    # ====================================================================
+    if active_job:
+        # Failsafe: Se o job está rodando há mais de 10 minutos, assume que travou e retorna o que tem
+        if job_start_time and (datetime.utcnow() - job_start_time).total_seconds() > 600:
+             logger.warning("⚠️ Job travado (>10min). Ignorando status processing.")
+             if blob_state: return _format_state_response(blob_state)
+
         return JSONResponse(
             content={
                 "status": "processing",
@@ -91,24 +91,25 @@ async def get_project_reports(
             status_code=status.HTTP_202_ACCEPTED
         )
 
-    # 4. Retorno 200 (Estado Final)
-    if blob_state:
-        # Garante estrutura mínima para o frontend não quebrar
-        report_fields = ["epicos", "features", "times_descricao", "alocacao_times", "premissas_riscos"]
-        for field in report_fields:
-            if blob_state.get(field) is None:
-                blob_state[field] = {} 
-            
-            report_key = field + "_report"
-            if blob_state.get(report_key) is None:
-                 blob_state[report_key] = [] # Garante lista vazia em vez de None
-
-        return blob_state
-
-    # Se chegou aqui, não tem job ativo e não tem estado no blob
+    # 3. Caso final: Sem job, sem blob -> 404
     raise HTTPException(status_code=404, detail="Projeto não encontrado ou ainda não iniciado.")
 
-# ... (Mantenha os outros endpoints inalterados abaixo: get_report_state, update, save, etc.) ...
+def _format_state_response(state: dict):
+    """Garante que a resposta tenha os campos de lista vazios em vez de None"""
+    report_fields = ["epicos", "features", "times_descricao", "alocacao_times", "premissas_riscos"]
+    for field in report_fields:
+        # Garante dict pai
+        if state.get(field) is None:
+            state[field] = {} 
+        
+        # Garante lista filha
+        report_key = field + "_report"
+        if state.get(report_key) is None: # Tenta na raiz
+             if state[field].get(report_key) is None: # Tenta dentro do dict
+                 state[field][report_key] = []
+    return state
+
+# ... (Mantenha os outros endpoints abaixo: get_report_state, update, save, docx) ...
 @router.get("/project/{project_id}/report/{report_type}")
 async def get_project_report_state(project_id: str, report_type: str, current_user: dict = Depends(get_current_user)):
     try:
