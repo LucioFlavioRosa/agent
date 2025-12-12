@@ -11,6 +11,7 @@ class JobData(BaseModel):
     updated_at: datetime = Field(...)
     request_timestamp: datetime = Field(...)
     response_timestamp: Optional[datetime] = Field(default=None)
+    completed_at: Optional[datetime] = Field(default=None)
 
     @validator('job_id', 'project_id', 'analysis_type')
     def not_empty(cls, v):
