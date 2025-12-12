@@ -1,74 +1,143 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 import os
-from backend.app.core.config import settings
-from backend.app.middleware.auth_middleware import get_current_user, _extract_usuario_executor
-from backend.app.services.project_state_service import ProjectStateService
-from backend.app.services.redis_session_service import RedisSessionService
+import json
 import logging
+from dotenv import load_dotenv
 
-router = APIRouter()
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-class AuthConfigResponse(BaseModel):
-    client_id: str
-    tenant_id: str
-    authority: str
-    redirect_uri: str
-    scope: str
+from backend.app.services.config_loader_service import ConfigLoaderService
+from backend.app.core.config import settings
+from backend.app.services.startup_validator import StartupValidator
+from backend.app.api.auth import router as auth_router
+from backend.app.api.analysis import router as analysis_router
+from backend.app.api.projects import router as projects_router
+from backend.app.api.session import router as session_router
+from backend.app.api.webhooks import router as webhooks_router
+from backend.app.middleware.auth_middleware import get_current_user
 
-class AuthLoginResponse(BaseModel):
-    user_info: dict
-    projects: list
+load_dotenv(override=False)
 
-@router.get("/config", response_model=AuthConfigResponse, tags=["Auth"])
-def get_auth_config():
-    client_id = os.environ.get("AZURE_AD_CLIENT_ID", getattr(settings, "AZURE_AD_CLIENT_ID", ""))
-    tenant_id = os.environ.get("AZURE_AD_TENANT_ID", getattr(settings, "AZURE_AD_TENANT_ID", ""))
-    redirect_uri = os.environ.get("AZURE_AD_REDIRECT_URI", getattr(settings, "AZURE_AD_REDIRECT_URI", "http://localhost:3000/auth/callback"))
-    scope = os.environ.get("AZURE_SCOPE", "User.Read")
-    authority = f"https://login.microsoftonline.com/{tenant_id}"
-    return AuthConfigResponse(
-        client_id=client_id,
-        tenant_id=tenant_id,
-        authority=authority,
-        redirect_uri=redirect_uri,
-        scope=scope
-    )
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.WARNING)
 
-@router.post("/login", response_model=AuthLoginResponse, tags=["Auth"])
-async def auth_login(current_user: dict = Depends(get_current_user)):
-    logger = logging.getLogger("auth_api")
-    usuario_executor = _extract_usuario_executor(current_user)
-    
-    if not usuario_executor:
-        logger.error("Usuário não autenticado: usuario_executor ausente no token.")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não autenticado.")
-    
-    projetos = await ProjectStateService._fetch_and_sanitize_projects(usuario_executor)
-    
-    # --- CORREÇÃO CRÍTICA (Evita crash se vier None) ---
-    if projetos is None:
-        logger.warning(f"ProjectStateService retornou None para usuario {usuario_executor}. Assumindo lista vazia.")
-        projetos = []
-    # ---------------------------------------------------
+app = FastAPI(
+    title="Peers CodeAI Backend", 
+    description="Backend para orquestração de Agentes AI e Azure", 
+    version="1.0.0"
+)
 
-    # Validação extra: loga duplicatas se existirem antes da sanitização (para debug)
-    ids = [p.get("project_id") for p in projetos]
-    nomes = [p.get("nome_projeto") for p in projetos]
-    
-    if len(ids) != len(set(ids)):
-        logger.warning(f"Projetos duplicados detectados por project_id antes da sanitização: {ids}")
-    if len(nomes) != len(set(nomes)):
-        logger.warning(f"Projetos duplicados detectados por nome_projeto antes da sanitização: {nomes}")
-    
-    # Garante que a lista final não contém duplicatas
-    projetos_unicos = {}
-    for p in projetos:
-        key = p.get("project_id") or p.get("nome_projeto")
-        if key and key not in projetos_unicos:
-            projetos_unicos[key] = p
-            
-    resumo_list = list(projetos_unicos.values())
-    logger.info(f"Login bem-sucedido para usuario_executor={usuario_executor}. Projetos únicos retornados: {len(resumo_list)}")
-    
-    return AuthLoginResponse(user_info=current_user, projects=resumo_list)
+SKIP_AUTH_FOR_TESTING = True
+
+def _create_mock_user(request: Request) -> dict:
+    test_user_header = request.headers.get("X-Test-User-Json")
+    if test_user_header:
+        try:
+            user_data = json.loads(test_user_header)
+            logging.info(f"🧪 [MOCK AUTH] Usando usuário dinâmico: {user_data.get('email')}")
+            return user_data
+        except json.JSONDecodeError:
+            logging.error("Erro ao decodificar X-Test-User-Json")
+    return {
+        "sub": "user-teste-id-123",
+        "usuario_executor": "dev_tester_local",
+        "name": "Desenvolvedor Teste",
+        "email": "dev@peers.com.br",
+        "roles": ["admin"]
+    }
+
+if SKIP_AUTH_FOR_TESTING:
+    async def mock_get_current_user(request: Request):
+        return _create_mock_user(request)
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+    logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação via Header habilitada.")
+
+def _extract_client_ip(request: Request) -> str:
+    client_ip = request.client.host
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    if ":" in client_ip and "." in client_ip:
+        client_ip = client_ip.split(":")[0]
+    return client_ip
+
+ALLOWED_IPS = ["127.0.0.1", "localhost", "::1"]
+env_ips_str = os.environ.get("ALLOWED_IPS", "")
+if env_ips_str:
+    extra_ips = [ip.strip() for ip in env_ips_str.split(",") if ip.strip()]
+    ALLOWED_IPS.extend(extra_ips)
+    logging.info(f"IPs adicionais permitidos: {extra_ips}")
+
+@app.middleware("http")
+async def ip_restriction_middleware(request: Request, call_next):
+    client_ip = _extract_client_ip(request)
+    if "*" not in ALLOWED_IPS and client_ip not in ALLOWED_IPS:
+        if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
+            logging.warning(f"⛔ Acesso negado: IP {client_ip}")
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": f"Acesso negado. IP {client_ip} não autorizado."}
+            )
+    response = await call_next(request)
+    return response
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+app.include_router(auth_router, prefix="/auth")
+app.include_router(analysis_router, prefix="/analysis")
+app.include_router(projects_router, prefix="/projects")
+app.include_router(session_router, prefix="/session")
+app.include_router(webhooks_router, prefix="/webhooks")
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logging.error(f"Erro não tratado: {exc}", exc_info=True)
+    return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
+
+def setup_logging():
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+    if logger.hasHandlers(): logger.handlers.clear()
+    class JsonFormatter(logging.Formatter):
+        def format(self, record):
+            log_record = {
+                "timestamp": self.formatTime(record, self.datefmt),
+                "level": record.levelname,
+                "msg": record.getMessage(),
+                "func": record.funcName
+            }
+            return json.dumps(log_record)
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    logger.addHandler(handler)
+
+@app.on_event("startup")
+def on_startup():
+    setup_logging()
+    logging.info("🚀 Iniciando Backend Peers CodeAI...")
+    try:
+        ConfigLoaderService().load_secrets_from_key_vault()
+        conn_string = getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None)
+        if not conn_string:
+            logging.warning("⚠️ AZURE_STORAGE_CONNECTION_STRING não encontrado. O Upload vai falhar se tentado.")
+        else:
+            logging.info("✅ Segredos carregados com sucesso.")
+        validator = StartupValidator()
+        validator.validate_redis_connection()
+        if validator.status_report.get('redis', {}).get('status') != 'ok':
+            logging.critical(f"Erro crítico Redis: {validator.status_report['redis']['detail']}")
+    except Exception as e:
+        logging.error(f"⚠️ Aviso de Startup: {str(e)}")
