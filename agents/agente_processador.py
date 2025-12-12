@@ -63,16 +63,12 @@ class AgenteProcessador:
 
         log_custom_data(
             job_id=job_id,
-            projeto=projeto,
+            project_id=project_id,
             data_hora=datetime.now(timezone.utc).isoformat(),
-            tokens_in=resultado_da_ia['tokens_entrada'],
-            tokens_out=resultado_da_ia['tokens_saida'],
-            tipo_repositorio=repository_type,
-            nome_repositorio=repositorio,
             tipo_analise=tipo_analise,
             model_name=model_name,
-            modo_adicao_incremental=modo_adicao_incremental,
-            usuario_executor=usuario_executor
+            tokens_in=resultado_da_ia.get('tokens_entrada'),
+            tokens_out=resultado_da_ia.get('tokens_saida')
         )
 
         return {"resultado": {"reposta_final": resultado_da_ia}}
