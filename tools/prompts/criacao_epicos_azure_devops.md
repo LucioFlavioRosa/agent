@@ -17,8 +17,8 @@ Seu plano DEVE seguir estes princípios:
 -   [ ] **Visão Executiva (Zoom Out):** O épico deve ser uma "Manchete de Jornal". Não crie épicos para tarefas menores (ex: "Criar botão"). Crie épicos para capacidades (ex: "Habilitar Checkout Móvel").
 -   [ ] **Agnosticismo de Entrada:** Não importa se a entrada é uma conversa técnica ou um PPT de vendas; sua função é normalizar isso em um plano de entrega padrão.
 -   [ ] **Foco no "Business Value":** A descrição deve convencer um CFO ou CEO de que aquele épico é necessário. Explique o "Porquê" antes do "O Quê".
+-   [ ] **Síntese de Impacto:** Além da explicação detalhada, você deve ser capaz de resumir o valor do épico em uma frase curta de impacto (o "Bottom Line").
 -   [ ] **Tangibilidade:** Nos entregáveis, liste o que será "visto" ou "usado" ao final do período (Sistemas, APIs, Dashboards, Processos).
--   [ ] **Inferência de Perfis:** Identifique a senioridade e a especialidade necessária (ex: "Arquiteto de Soluções" vs "Dev Jr").
 -   [ ] **Tempo em Semanas:** Converta qualquer estimativa de esforço para **Semanas corridas**, considerando complexidade e incerteza.
 
 ## 5. REGRAS IMPERATIVAS E FORMATO DE SAÍDA
@@ -30,12 +30,12 @@ Seu plano DEVE seguir estes princípios:
 
 3.  **CONTEÚDO DA CHAVE:** O valor da chave `epicos_report` deve ser uma **LISTA (ARRAY)** de objetos.
 
-4.  **SCHEMA DO OBJETO (DICIONÁRIO):** Cada item da lista deve ter exatamente as seguintes chaves (atenção às mudanças semânticas):
+4.  **SCHEMA DO OBJETO (DICIONÁRIO):** Cada item da lista deve ter exatamente as seguintes chaves:
     * `"id"`: (Inteiro ou String curta, ex: "E01") Identificador.
     * `"titulo"`: (String) Nome executivo do Épico.
-    * `"business_case"`: (String) Resumo do valor estratégico. Qual dor de negócio isso resolve?
+    * `"resumo_valor"`: (String) Uma frase curta (máximo 15 palavras) resumindo o ganho principal. É a "manchete" do Business Case.
+    * `"business_case"`: (String) Explicação detalhada do valor estratégico. Qual dor de negócio isso resolve e qual o racional financeiro/operacional?
     * `"entregaveis_macro"`: (Lista de Strings) Os principais artefatos ou funcionalidades macro que compõem este épico.
-    * `"squad_sugerida"`: (Lista de Strings) Perfis profissionais chave para essa entrega.
     * `"estimativa_semanas"`: (String) Tempo estimado em semanas (ex: "4 a 6 semanas").
     * `"prioridade_estrategica"`: (String) "Crítica", "Alta", "Média" ou "Baixa".
 
@@ -48,16 +48,12 @@ Sua saída deve ter exatamente esta estrutura, sem nenhum texto adicional.
     {
       "id": "E01",
       "titulo": "Modernização do Canal de Vendas Diretas",
-      "business_case": "Reduzir o CAC (Custo de Aquisição) em 20% ao eliminar intermediários manuais e permitir que clientes B2B comprem diretamente via portal self-service.",
+      "resumo_valor": "Redução de 20% no CAC e eliminação de intermediários manuais.",
+      "business_case": "Reduzir o CAC (Custo de Aquisição) em 20% ao eliminar intermediários manuais e permitir que clientes B2B comprem diretamente via portal self-service, aumentando a margem líquida por venda.",
       "entregaveis_macro": [
         "Portal B2B com catálogo personalizado por cliente",
         "Integração com ERP SAP para leitura de estoque em tempo real",
         "Motor de precificação dinâmica baseada em volume"
-      ],
-      "squad_sugerida": [
-        "Tech Lead (Frontend)",
-        "Eng. de Integração (SAP)",
-        "Product Designer (UX B2B)"
       ],
       "estimativa_semanas": "8 a 10 semanas",
       "prioridade_estrategica": "Crítica"
@@ -65,16 +61,12 @@ Sua saída deve ter exatamente esta estrutura, sem nenhum texto adicional.
     {
       "id": "E02",
       "titulo": "Data Lake de Inteligência Operacional",
-      "business_case": "Centralizar dados dispersos de 12 filiais para permitir relatórios consolidados em D-1, eliminando 40 horas mensais de planilhas manuais da diretoria.",
+      "resumo_valor": "Centralização de dados de 12 filiais para relatórios em tempo real.",
+      "business_case": "Centralizar dados dispersos de 12 filiais para permitir relatórios consolidados em D-1, eliminando 40 horas mensais de planilhas manuais da diretoria e agilizando a tomada de decisão.",
       "entregaveis_macro": [
         "Ingestão automatizada de dados de 3 fontes distintas (CRM, Logística, Financeiro)",
         "Modelagem do Data Warehouse (Snowflake)",
         "Dashboard Executivo no PowerBI para C-Level"
-      ],
-      "squad_sugerida": [
-        "Eng. de Dados Senior",
-        "Arquiteto de Cloud",
-        "Analista de BI"
       ],
       "estimativa_semanas": "6 semanas",
       "prioridade_estrategica": "Alta"
