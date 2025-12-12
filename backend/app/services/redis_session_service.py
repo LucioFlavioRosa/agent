@@ -64,27 +64,15 @@ class RedisSessionService:
     def update_report(self, project_id: str, report_data: Dict[str, Any]):
         key = f"project:{project_id}:resumo"
         session_json = self.redis_client.get(key)
-        
         if session_json:
             try:
                 session_data = self._deserialize_session(session_json)
                 session_data.update(report_data)
-                
-                # --- MUDANÇA AQUI: Captura o tempo exato agora ---
                 agora = datetime.utcnow().isoformat()
-                
-                # 1. Atualiza o campo principal
                 session_data["ultima_atualizacao"] = agora
-                
-                # 2. Atualiza também o campo secundário (backup) que a API verifica
-                # Isso garante que a API veja este dado como "fresco"
-                session_data["last_saved_to_blob"] = agora 
-                
+                session_data["last_saved_to_blob"] = agora
                 self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-                
-                # Log com o timestamp para facilitar seu debug no futuro
                 self.logger.info(f"Relatório merged e timestamps atualizados no Redis. Project: {project_id} | TS: {agora}")
-                
             except Exception as e:
                 self.logger.error(f"Erro ao atualizar report no Redis: {e}")
                 raise e
@@ -260,7 +248,6 @@ class RedisSessionService:
             if status == 'done':
                 now_iso = datetime.utcnow().isoformat()
                 data['response_timestamp'] = now_iso
-                # Preencher completed_at SOMENTE na primeira transição para 'done'
                 if not data.get('completed_at'):
                     data['completed_at'] = now_iso
             self.redis_client.setex(key, self.session_ttl, json.dumps(data))
@@ -271,48 +258,31 @@ class RedisSessionService:
         pattern = f"job:*"
         job_keys = self.redis_client.keys(pattern)
         jobs: List[JobData] = []
-        
-        # Limite de tolerância para considerar um job travado (ex: 10 minutos)
-        # Se um job não for atualizado nesse tempo, ele é ignorado.
-        TOLERANCIA_MINUTOS = 10 
-        
+        TOLERANCIA_MINUTOS = 10
         for key in job_keys:
             job_json = self.redis_client.get(key)
             if not job_json:
                 continue
             try:
                 data = json.loads(job_json)
-                
-                # Filtra pelo projeto e status
+                # Ignora jobs com status 'done' e response_timestamp preenchido
                 if data.get('project_id') == project_id and data.get('status') in ('pending', 'in_progress'):
                     job = JobData(**data)
-                    
-                    # --- LÓGICA DE LIMPEZA DE ZUMBIS ---
                     updated_at = job.updated_at
                     if isinstance(updated_at, str):
                         updated_at = datetime.fromisoformat(updated_at)
-                    
-                    # Calcula há quanto tempo o job não é tocado
                     tempo_ocioso = (datetime.utcnow() - updated_at).total_seconds() / 60
-                    
                     if tempo_ocioso > TOLERANCIA_MINUTOS:
                         self.logger.warning(f"Ignorando Job Zumbi {job.job_id}: Ativo há {tempo_ocioso:.1f} min sem atualização.")
-                        # Opcional: Auto-corrigir no Redis para não checar de novo
-                        # self.update_job_status(job.job_id, "error") 
-                        continue 
-                    # -----------------------------------
-
+                        continue
                     jobs.append(job)
             except Exception:
                 continue
-        
         if not jobs:
             return None
-            
-        # Retorna o job ativo mais recente (caso haja múltiplos válidos)
         jobs.sort(key=lambda j: j.request_timestamp if hasattr(j, 'request_timestamp') and j.request_timestamp else datetime.min, reverse=True)
         return jobs[0]
-        
+
     def get_latest_done_job_for_project(self, project_id: str) -> Optional[JobData]:
         pattern = f"job:*"
         job_keys = self.redis_client.keys(pattern)
