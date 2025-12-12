@@ -8,3 +8,4 @@ class MCPRequest(BaseModel):
     nome_projeto: Optional[str] = None
     usuario_executor: Optional[str] = None
     texto_extraido_do_docx: Optional[str] = None
+    job_id: Optional[str] = None

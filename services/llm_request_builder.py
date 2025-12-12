@@ -13,6 +13,7 @@ class LLMRequestBuilder:
             'nome_projeto': mcp_request.nome_projeto,
             'usuario_executor': mcp_request.usuario_executor,
             'model_name': task_config.model_name,
-            'provider': getattr(task_config, 'provider', None), 
-            'instrucoes_padrao': instrucoes_padrao
+            'provider': getattr(task_config, 'provider', None),
+            'instrucoes_padrao': instrucoes_padrao,
+            'job_id': mcp_request.job_id
         }
