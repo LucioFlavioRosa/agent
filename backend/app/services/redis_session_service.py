@@ -266,7 +266,10 @@ class RedisSessionService:
             try:
                 data = json.loads(job_json)
                 # Ignora jobs com status 'done' e response_timestamp preenchido
-                if data.get('project_id') == project_id and data.get('status') in ('pending', 'in_progress'):
+                if (
+                    data.get('project_id') == project_id and
+                    data.get('status') in ('pending', 'in_progress')
+                ):
                     job = JobData(**data)
                     updated_at = job.updated_at
                     if isinstance(updated_at, str):
