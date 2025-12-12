@@ -46,7 +46,8 @@ class MCPClientService:
             "project_id": payload["project_id"],
             "texto_extraido_do_docx": payload.get("texto_extraido_do_docx"),
             "comentario_extra": payload.get("comentario_extra"),
-            "analysis_type": payload["analysis_type"]
+            "analysis_type": payload["analysis_type"],
+            "job_id": payload.get("job_id")
         }
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
