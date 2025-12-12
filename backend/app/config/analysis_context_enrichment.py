@@ -10,6 +10,9 @@ ANALYSIS_CONTEXT_CONFIG = {
     "refinamento_times_azure_devops": [
         {"estado_para_ler": "times_descricao", "report_para_ler": "times_descricao_report"}
     ],
+    "criacao_alocacao_azure_devops": [
+        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
+    ],
     "refinamento_alocacao_azure_devops": [
         {"estado_para_ler": "alocacao_times", "report_para_ler": "alocacao_times_report"},
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
