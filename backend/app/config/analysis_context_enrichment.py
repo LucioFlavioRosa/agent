@@ -11,7 +11,8 @@ ANALYSIS_CONTEXT_CONFIG = {
         {"estado_para_ler": "times_descricao", "report_para_ler": "times_descricao_report"}
     ],
     "refinamento_alocacao_azure_devops": [
-        {"estado_para_ler": "alocacao_times", "report_para_ler": "alocacao_times_report"}
+        {"estado_para_ler": "alocacao_times", "report_para_ler": "alocacao_times_report"},
+        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
     ],
     "refinamento_premissas_azure_devops": [
         {"estado_para_ler": "premissas_riscos", "report_para_ler": "premissas_riscos_report"}
