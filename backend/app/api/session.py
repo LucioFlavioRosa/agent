@@ -23,52 +23,59 @@ async def get_project_reports(
     logger = logging.getLogger("session_api")
     redis_service = RedisSessionService()
 
-    # 1. Busca estados no Redis
     active_job = redis_service.get_active_job_for_project(project_id)
-    latest_done_job = redis_service.get_latest_done_job_for_project(project_id)
-    
-    # ==============================================================================
-    # LÓGICA ANTI-ZUMBI (CORREÇÃO CRÍTICA)
-    # ==============================================================================
+    latest_done_job = redis_service.get_latest_completed_job_for_project(project_id)
+
+    logger.info(f"[ANTI-ZUMBI] active_job: {getattr(active_job, 'job_id', None)}, completed_at: {getattr(active_job, 'completed_at', None)}")
+    logger.info(f"[ANTI-ZUMBI] latest_done_job: {getattr(latest_done_job, 'job_id', None)}, completed_at: {getattr(latest_done_job, 'completed_at', None)}")
+
     if active_job:
         is_zombie = False
-        
-        # Regra 1: Se o ID do ativo é o mesmo do último concluído, ele já acabou.
         if latest_done_job and active_job.job_id == latest_done_job.job_id:
             is_zombie = True
             logger.info(f"👻 Job {active_job.job_id} é ZUMBI (ID igual ao último done). Ignorando status processing.")
-
-        # Regra 2: Se o timestamp do 'done' é mais recente que o 'active', o active é velho.
         elif latest_done_job and hasattr(latest_done_job, 'request_timestamp') and hasattr(active_job, 'request_timestamp'):
             try:
                 ts_done = str(latest_done_job.request_timestamp)
                 ts_active = str(active_job.request_timestamp)
-                if ts_done >= ts_active: # Se o done é mais novo ou igual
+                if ts_done >= ts_active:
                     is_zombie = True
                     logger.info(f"👻 Job {active_job.job_id} é ZUMBI (Timestamp antigo). Ignorando.")
             except Exception as e:
                 logger.warning(f"Erro ao comparar timestamps: {e}")
-
-        # Se é zumbi, anulamos o active_job para forçar o código a pular para o bloco de leitura (Passo 3)
+        # Nova regra: completed_at
+        elif latest_done_job and hasattr(active_job, 'completed_at') and hasattr(latest_done_job, 'completed_at'):
+            try:
+                active_completed = active_job.completed_at
+                latest_completed = latest_done_job.completed_at
+                if active_completed and latest_completed:
+                    if isinstance(active_completed, str):
+                        active_completed_dt = datetime.fromisoformat(active_completed)
+                    else:
+                        active_completed_dt = active_completed
+                    if isinstance(latest_completed, str):
+                        latest_completed_dt = datetime.fromisoformat(latest_completed)
+                    else:
+                        latest_completed_dt = latest_completed
+                    if active_completed_dt < latest_completed_dt:
+                        is_zombie = True
+                        logger.info(f"👻 Job {active_job.job_id} é ZUMBI (completed_at mais antigo que latest_done_job). Ignorando.")
+            except Exception as e:
+                logger.warning(f"Erro ao comparar completed_at: {e}")
+        logger.info(f"[ANTI-ZUMBI] is_zombie: {is_zombie}")
         if is_zombie:
             active_job = None
-    # ==============================================================================
 
     resumo_state = redis_service.get_session_by_project_id(project_id)
     resumo_state_dict = resumo_state.dict() if resumo_state else None
     resumo_ultima_atualizacao = None
-    
     if resumo_state_dict:
-        # Tenta pegar a data de atualização mais recente possível
         candidato = resumo_state_dict.get("ultima_atualizacao") or resumo_state_dict.get("last_saved_to_blob")
         if candidato:
             try:
                 resumo_ultima_atualizacao = datetime.fromisoformat(str(candidato))
             except Exception:
                 resumo_ultima_atualizacao = None
-    
-    # 2. Bloco que retorna 202 (Processing)
-    # Só entra aqui se active_job NÃO for None (ou seja, não é zumbi)
     if active_job:
         job_request_ts = None
         if hasattr(active_job, "request_timestamp") and active_job.request_timestamp:
@@ -76,17 +83,11 @@ async def get_project_reports(
                 job_request_ts = datetime.fromisoformat(str(active_job.request_timestamp))
             except:
                 pass
-        
         should_return_processing = False
-        
-        # Se o job ativo é mais novo que a última atualização que temos salva -> Realmente está processando
         if job_request_ts and resumo_ultima_atualizacao and job_request_ts > resumo_ultima_atualizacao:
             should_return_processing = True
-        
-        # Se não tem dados salvos ainda -> Está processando o primeiro
         elif not resumo_ultima_atualizacao:
             should_return_processing = True
-
         if should_return_processing:
             return JSONResponse(
                 content={
@@ -97,33 +98,22 @@ async def get_project_reports(
                 },
                 status_code=status.HTTP_202_ACCEPTED
             )
-
-    # 3. Bloco de Sucesso (200 OK)
-    # Se chegou aqui, ou não tem job ativo, ou era um zumbi que ignoramos.
     try:
-        # Carrega direto do Blob para garantir o dado mais fresco
         state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
-        
-        # Inicializa campos vazios para não quebrar o frontend
         report_fields = ["epicos", "features", "times_descricao", "alocacao_times", "premissas_riscos"]
         for field in report_fields:
             if state.get(field) is None:
                 state[field] = {} 
-            
             report_key = field + "_report"
             if state.get(report_key) is None:
                  state[report_key] = []
-
         return state
-
     except Exception as e:
         logger.error(f"Erro ao carregar estado final: {e}")
-        # Fallback: Se der erro no blob, tenta devolver o que tem no Redis
         if resumo_state_dict:
             return resumo_state_dict
         raise HTTPException(status_code=404, detail=f"Projeto não encontrado. Erro: {e}")
 
-# ... (Mantenha os outros endpoints abaixo iguais) ...
 @router.get("/project/{project_id}/report/{report_type}")
 async def get_project_report_state(project_id: str, report_type: str, current_user: dict = Depends(get_current_user)):
     try:
