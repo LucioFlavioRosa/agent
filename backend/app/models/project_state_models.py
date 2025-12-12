@@ -2,15 +2,13 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Any
 from datetime import datetime
 
-# ✅ Adicionei o project_id em todas as classes abaixo
-
 class EstadoResumoProjeto(BaseModel):
-    project_id: Optional[str] = Field(None)  # <--- CAMPO QUE FALTAVA
+    project_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
     ultima_analysis_type: Optional[str] = Field(None)
     created_at: datetime = Field(...)
     ultima_atualizacao: datetime = Field(...)
-    usuario_executor: Optional[str] = Field(None) # Recomendo adicionar este também, pois vi no seu JSON
+    usuario_executor: Optional[str] = Field(None)
 
     @validator('nome_projeto')
     def nome_projeto_must_not_be_empty(cls, v):
@@ -19,44 +17,49 @@ class EstadoResumoProjeto(BaseModel):
         return v
 
 class EstadoEpicos(BaseModel):
-    project_id: Optional[str] = Field(None) # <--- Adicionado
+    project_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
     ultima_analysis_type: Optional[str] = Field(None)
     created_at: datetime = Field(...)
     ultima_atualizacao: datetime = Field(...)
     epicos_report: List[Any] = Field(default_factory=list)
+    job_id: Optional[str] = Field(None)
 
 class EstadoFeatures(BaseModel):
-    project_id: Optional[str] = Field(None) # <--- Adicionado
+    project_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
     ultima_analysis_type: Optional[str] = Field(None)
     created_at: datetime = Field(...)
     ultima_atualizacao: datetime = Field(...)
     features_report: List[Any] = Field(default_factory=list)
+    job_id: Optional[str] = Field(None)
 
 class EstadoTimesDescricao(BaseModel):
-    project_id: Optional[str] = Field(None) # <--- Adicionado
+    project_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
     ultima_analysis_type: Optional[str] = Field(None)
     created_at: datetime = Field(...)
     ultima_atualizacao: datetime = Field(...)
     times_descricao_report: List[Any] = Field(default_factory=list)
+    job_id: Optional[str] = Field(None)
 
 class EstadoAlocacaoTimes(BaseModel):
-    project_id: Optional[str] = Field(None) # <--- Adicionado
+    project_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
     ultima_analysis_type: Optional[str] = Field(None)
     created_at: datetime = Field(...)
     ultima_atualizacao: datetime = Field(...)
     alocacao_times_report: List[Any] = Field(default_factory=list)
+    job_id: Optional[str] = Field(None)
 
 class EstadoPremissasRiscos(BaseModel):
-    project_id: Optional[str] = Field(None) # <--- Adicionado
+    project_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
     ultima_analysis_type: Optional[str] = Field(None)
     created_at: datetime = Field(...)
     ultima_atualizacao: datetime = Field(...)
     premissas_riscos_report: List[Any] = Field(default_factory=list)
+    job_id: Optional[str] = Field(None)
 
 class EstadoCompletoProjetoResponse(BaseModel):
     resumo: Optional[EstadoResumoProjeto] = None
