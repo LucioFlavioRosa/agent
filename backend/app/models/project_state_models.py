@@ -4,6 +4,7 @@ from datetime import datetime
 
 class EstadoResumoProjeto(BaseModel):
     project_id: Optional[str] = Field(None)
+    last_job_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
     ultima_analysis_type: Optional[str] = Field(None)
     created_at: datetime = Field(...)
