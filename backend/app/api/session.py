@@ -68,7 +68,7 @@ def _format_state_response(state: dict):
     report_fields = ["epicos", "features", "times_descricao", "alocacao_times", "premissas_riscos"]
     for field in report_fields:
         if state.get(field) is None:
-            state[field] = {} 
+            state[field] = {}
         report_key = field + "_report"
         if state.get(report_key) is None:
             if state[field].get(report_key) is None:
@@ -79,12 +79,12 @@ def _format_state_response(state: dict):
 
 @router.get("/project/{project_id}/report/{report_type}")
 async def get_project_report_state(project_id: str, report_type: str, current_user: dict = Depends(get_current_user)):
+    logger = logging.getLogger("session_api")
     try:
         state = await ProjectStateService.get_report_state(project_id, report_type)
         if not state:
             raise HTTPException(status_code=404, detail=f"Estado do report '{report_type}' não encontrado para project_id '{project_id}'")
         if "job_id" not in state:
-            logger = logging.getLogger("session_api")
             logger.warning(f"Report '{report_type}' não possui job_id (estado legado ou erro).")
             state["job_id"] = None
         return state
