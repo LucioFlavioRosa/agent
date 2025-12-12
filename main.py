@@ -17,15 +17,13 @@ from services.llm_orchestrator import LLMOrchestrator
 from services.response_cleaner import clean_llm_response
 from services.project_tracker import ProjectTracker
 
-# REMOVIDO: from config.analysis_context_enrichment ... (Tarefa do Backend)
-
 # Configuração de Logs
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
 logging.getLogger("azure.monitor.opentelemetry.exporter").setLevel(logging.WARNING)
 logger = logging.getLogger("MockMCP")
 
-app = FastAPI(title="MCP Mock Service", version="2.4.0 - Lean Version")
+app = FastAPI(title="MCP Mock Service", version="2.4.1 - Debug Logging")
 router = APIRouter()
 
 BACKEND_BASE_URL = os.environ.get("TARGET_BACKEND_URL", "http://localhost:8000")
@@ -34,57 +32,53 @@ project_tracker = ProjectTracker()
 @router.get("/")
 def home():
     return {
-        "status": "Mock MCP Online v2.4.0", 
+        "status": "Mock MCP Online v2.4.1", 
         "target_backend": BACKEND_BASE_URL
     }
 
 @router.post("/start")
 async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTasks):
-    # 1. Correção de Chaves (Retrocompatibilidade)
+    # 1. Correção de Chaves
     instrucoes = payload.get("instrucoes_extras") or payload.get("comentario_extra")
     if instrucoes:
         payload["instrucoes_extras"] = instrucoes
         payload["comentario_extra"] = instrucoes
     
-    logger.info(f"📥 [PAYLOAD RECEBIDO]: {payload}")
+    # Log de entrada mantido (importante para debug inicial)
+    logger.info(f"📥 [START] Recebido para Project ID: {payload.get('project_id')} | Job ID: {payload.get('job_id')}")
 
-    # 2. Parsing do Modelo
+    # 2. Parsing
     try:
         mcp_request = MCPRequest(**payload)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Payload inválido: {e}")
     
-    # 3. Carregar Configuração da Tarefa
+    # 3. Configuração
     try:
         task_config = load_task_config(mcp_request.analysis_type)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Configuração não encontrada: {e}")
 
-    # 4. (REMOVIDO) Enriquecimento de Contexto -> Agora é responsabilidade do Backend enviar pronto.
-
-    # 5. Carregar Prompt Markdown
+    # 5. Prompt
     try:
         instrucoes_padrao = load_prompt_instructions(f"{task_config.instrucoes_extras}.md")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Prompt markdown não encontrado: {e}")
 
-    # 6. Construir Parâmetros para LLM
+    # 6. Builder
     llm_request_params = LLMRequestBuilder.build_request(
         mcp_request,
         task_config,
         instrucoes_padrao
     )
 
-    logger.info(f"🚀 [REQ. PROCESSADA PARA O MCP]: {llm_request_params}")
-    
-    # 7. Preparação para Background Task
+    # 7. Background Task
     project_id = mcp_request.project_id
-    # Garante que job_id existe (usa project_id como fallback)
+    # Garante que job_id existe (usa project_id como fallback se vier vazio)
     job_id = getattr(mcp_request, 'job_id', project_id)
 
     project_tracker.set_status(project_id, 'processing')
     
-    # Dispara processamento assíncrono
     background_tasks.add_task(
         process_analysis_task,
         project_id,
@@ -107,8 +101,7 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
         orchestrator = LLMOrchestrator()
         agent_result = orchestrator.execute_analysis(llm_request_params)
         
-        # Lógica para extrair o texto cru da resposta da LLM
-        # Ajuste conforme a estrutura que seu Orchestrator retorna
+        # Extração de resposta
         if isinstance(agent_result, dict) and 'resultado' in agent_result:
              raw_content = agent_result.get('resultado', {}).get('reposta_final', agent_result)
              if isinstance(raw_content, dict) and 'reposta_final' in raw_content:
@@ -116,10 +109,10 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
         else:
              raw_content = agent_result
 
-        # Limpeza e conversão para JSON
+        # Limpeza
         cleaned_result = clean_llm_response(raw_content)
         
-        # Garantia de que final_report_data é um dicionário válido
+        # Garantia de JSON
         final_report_data = {}
         if isinstance(cleaned_result, str):
             try:
@@ -131,17 +124,17 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
         else:
              final_report_data = {"error": "Tipo de retorno desconhecido"}
 
-        # Correção para Erro 422 do Backend (Chave Única Obrigatória)
+        # Correção Erro 422
         if len(final_report_data.keys()) > 1:
             final_report_data = {"relatorio_consolidado": final_report_data}
         elif len(final_report_data.keys()) == 0:
             final_report_data = {"error": "JSON vazio retornado pela LLM"}
 
-        # Atualiza Tracker Local
+        # Atualiza Tracker
         project_tracker.set_status(project_id, 'done')
         project_tracker.set_result(project_id, final_report_data)
 
-        # Monta Payload do Webhook
+        # Monta Payload
         webhook_payload = {
             "project_id": project_id,
             "job_id": job_id,
@@ -150,7 +143,12 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
             "analysis_type": llm_request_params.get("analysis_type")
         }
 
-        # Envia Webhook (Push)
+        # --- LOG DETALHADO DO QUE ESTÁ SENDO ENVIADO ---
+        # Aqui você verá exatamente se o job_id está correto antes de sair
+        logger.info(f"📤 [ENVIANDO WEBHOOK] Payload:\n{json.dumps(webhook_payload, indent=2, default=str)}")
+        # -----------------------------------------------
+
+        # Envia Webhook
         async with httpx.AsyncClient(timeout=30.0) as client:
             base_url = BACKEND_BASE_URL.rstrip('/')
             webhook_url = f"{base_url}/webhooks/mcp"
@@ -158,13 +156,13 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
             try:
                 resp = await client.post(webhook_url, json=webhook_payload)
                 if resp.status_code == 200:
-                    logger.info(f"✅ [SUCESSO] Webhook aceito! (Project: {project_id})")
+                    logger.info(f"✅ [SUCESSO] Webhook aceito pelo Backend! (Job: {job_id})")
                     return
                 logger.warning(f"⚠️ [FALHA WEBHOOK] Status: {resp.status_code} - Body: {resp.text}")
             except Exception as e:
                 logger.error(f"❌ [ERRO CONEXÃO] {e}")
             
-            # Fallback (PUT)
+            # Fallback
             fallback_url = f"{base_url}/session/project/{project_id}/report"
             try:
                 await client.put(fallback_url, json={"report_data": final_report_data})
