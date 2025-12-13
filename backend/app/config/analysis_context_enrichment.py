@@ -2,7 +2,7 @@ ANALYSIS_CONTEXT_CONFIG = {
     "refinamento_epicos_azure_devops": [
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
     ],
-     "epicos_timelime": [
+     "criacao_epicos_timeline": [
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
     ],
     "refinamento_features_azure_devops": [
