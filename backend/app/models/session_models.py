@@ -14,6 +14,7 @@ class SessionData(BaseModel):
     docx_files: List[str] = Field(default_factory=list, description="Lista de URLs de todos os arquivos DOCX enviados pelo usuário")
     project_id: str = Field(...)
     epicos_report: Optional[Any] = Field(default=None)
+    epicos_timeline_report: Optional[Any] = Field(default=None)
     features_report: Optional[Any] = Field(default=None)
     times_descricao_report: Optional[Any] = Field(default=None)
     alocacao_times_report: Optional[Any] = Field(default=None)
@@ -32,6 +33,7 @@ class SessionData(BaseModel):
             "docx_files": self.docx_files,
             "project_id": self.project_id,
             "epicos_report": self.epicos_report,
+            "epicos_timeline_report": self.epicos_timeline_report,
             "features_report": self.features_report,
             "times_descricao_report": self.times_descricao_report,
             "alocacao_times_report": self.alocacao_times_report,
@@ -74,6 +76,7 @@ class SessionData(BaseModel):
             docx_files=state.get("docx_files", []),
             project_id=state.get("project_id"),
             epicos_report=state.get("epicos_report"),
+            epicos_timeline_report=state.get("epicos_timeline_report),
             features_report=state.get("features_report"),
             times_descricao_report=state.get("times_descricao_report"),
             alocacao_times_report=state.get("alocacao_times_report"),
