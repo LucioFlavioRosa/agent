@@ -1,9 +1,10 @@
 ANALYSIS_CONTEXT_CONFIG = {
-    # Exemplo: para refinamento de épicos, buscar o último estado de 'epicos' e extrair 'epicos_report'
     "refinamento_epicos_azure_devops": [
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
     ],
-    # Exemplo de configuração para outros tipos de refinamento (pode ser expandido futuramente)
+     "epicos_timelime": [
+        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
+    ],
     "refinamento_features_azure_devops": [
         {"estado_para_ler": "features", "report_para_ler": "features_report"}
     ],
