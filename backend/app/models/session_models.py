@@ -76,7 +76,7 @@ class SessionData(BaseModel):
             docx_files=state.get("docx_files", []),
             project_id=state.get("project_id"),
             epicos_report=state.get("epicos_report"),
-            epicos_timeline_report=state.get("epicos_timeline_report),
+            epicos_timeline_report=state.get("epicos_timeline_report"),
             features_report=state.get("features_report"),
             times_descricao_report=state.get("times_descricao_report"),
             alocacao_times_report=state.get("alocacao_times_report"),
