@@ -46,7 +46,8 @@ Sua saída deve ter exatamente esta estrutura, inferindo os profissionais necess
 
 ```json
 {
-  "alocacao_times_report": {
+  "alocacao_times_report": [
+{
     "Arquiteto de Soluções - Sênior": [
       {
         "semana": 1,
@@ -58,8 +59,8 @@ Sua saída deve ter exatamente esta estrutura, inferindo os profissionais necess
         "atividades": "Revisão de PRs críticos e apoio técnico ao time.",
         "alocacao": "50%"
       }
-    ],
-    "Desenvolvedor Backend - Pleno": [
+    ]},
+   { "Desenvolvedor Backend - Pleno": [
       {
         "semana": 1,
         "atividades": "Setup de ambiente e criação de boilerplates.",
@@ -75,8 +76,8 @@ Sua saída deve ter exatamente esta estrutura, inferindo os profissionais necess
         "atividades": "Integração com banco de dados e testes unitários.",
         "alocacao": "100%"
       }
-    ],
-    "Engenheiro de Dados - Sênior": [
+    ]},
+    {"Engenheiro de Dados - Sênior": [
       {
         "semana": 2,
         "atividades": "Modelagem do Data Lake e pipelines de ingestão.",
@@ -87,13 +88,13 @@ Sua saída deve ter exatamente esta estrutura, inferindo os profissionais necess
         "atividades": "Criação de views analíticas no Snowflake.",
         "alocacao": "100%"
       }
-    ],
-    "Designer UX/UI - Pleno": [
+    ]},
+   { "Designer UX/UI - Pleno": [
       {
         "semana": 1,
         "atividades": "Prototipação de telas de login e dashboard.",
         "alocacao": "100%"
       }
-    ]
-  }
+    ]}
+  ]
 }
