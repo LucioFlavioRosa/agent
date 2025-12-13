@@ -40,6 +40,11 @@ async def start_analysis(payload: Dict[str, Any], background_tasks: BackgroundTa
     if instrucoes:
         payload["instrucoes_extras"] = instrucoes
         payload["comentario_extra"] = instrucoes
+
+    logger.info("=" * 50)
+    logger.info(f"📥 [PAYLOAD RECEBIDO]:\n{json.dumps(payload, indent=2, default=str)}")
+    logger.info("=" * 50)
+    
     logger.info(f"📥 [START] Recebido para Project ID: {payload.get('project_id')} | Job ID: {payload.get('job_id')}")
     try:
         mcp_request = MCPRequest(**payload)
