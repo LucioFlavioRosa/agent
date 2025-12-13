@@ -22,8 +22,8 @@ Seu plano DEVE seguir estes princípios:
     -   *Júnior:* Para tarefas repetitivas, telas simples, documentação ou apoio.
 -   [ ] **Sequenciamento Lógico:** O trabalho de Design e Arquitetura (Backend) geralmente começa antes do Frontend. QA entra mais forte no final dos ciclos.
 -   [ ] **Granularidade Semanal:** Quebre o trabalho semana a semana. Se um épico dura 4 semanas, descreva a evolução da atividade (Semana 1: Setup -> Semana 4: Deploy).
--   [ ] **Alocação Realista:** Indique a porcentagem de dedicação (`alocacao`). Geralmente 100% (full-time) ou 50% (part-time/compartilhado).
--   [ ] **Síntese de Atividade:** A descrição da atividade deve ser um resumo técnico de 5 a 10 palavras (ex: "Criação de API Gateway e Auth").
+-   [ ] **Alocação Realista:** Indique a porcentagem de dedicação (`alocacao`). Geralmente 100% (full-time), 50% (part-time/compartilhado), 25% (part-time, quando é um trabalho especializado).
+-   [ ] **Síntese de Atividade:** A descrição da atividade deve ser um resumo técnico de 15 a 25 palavras (ex: "Criação de API Gateway e Auth").
 
 ## 5. REGRAS IMPERATIVAS E FORMATO DE SAÍDA
 **SUA RESPOSTA DEVE SEGUIR ESTAS REGRAS DE FORMA ESTRITA E LITERAL.**
