@@ -26,6 +26,15 @@ class EstadoEpicos(BaseModel):
     epicos_report: List[Any] = Field(default_factory=list)
     job_id: Optional[str] = Field(None)
 
+class EstadoEpicosTimeline(BaseModel):
+    project_id: Optional[str] = Field(None)
+    nome_projeto: str = Field(...)
+    ultima_analysis_type: Optional[str] = Field(None)
+    created_at: datetime = Field(...)
+    ultima_atualizacao: datetime = Field(...)
+    epicos_report: List[Any] = Field(default_factory=list)
+    job_id: Optional[str] = Field(None)
+
 class EstadoFeatures(BaseModel):
     project_id: Optional[str] = Field(None)
     nome_projeto: str = Field(...)
@@ -66,6 +75,7 @@ class EstadoCompletoProjetoResponse(BaseModel):
     last_job_id: Optional[str] = Field(None)
     resumo: Optional[EstadoResumoProjeto] = None
     epicos: Optional[EstadoEpicos] = None
+    epicos_timeline: Optional[EstadoEpicosTimeline] = None
     features: Optional[EstadoFeatures] = None
     times_descricao: Optional[EstadoTimesDescricao] = None
     alocacao_times: Optional[EstadoAlocacaoTimes] = None
