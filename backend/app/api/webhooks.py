@@ -44,7 +44,7 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             agora_dt = datetime.utcnow()
             agora_iso = agora_dt.isoformat()
             
-            # D. Recupera Sessão Completa para Salvar o Relatório (Epicos/Features/etc)
+            # D. Recupera Sessão Completa para Salvar o Relatório
             session = redis_service.get_session_by_project_id(payload.project_id)
             
             if session:
@@ -62,30 +62,40 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
                 if hasattr(session, "project_id") and not session.project_id:
                     session.project_id = payload.project_id
                 
-                # 1º SAVE: Salva o Relatório Específico (ex: Epicos)
-                # O ProjectStateService detecta que tem 'epicos_report' e salva na pasta /epicos/
+                # 1º SAVE: Salva o Relatório Específico (ex: Epicos, Alocação)
                 await ProjectStateService.save_state_to_blob(session)
                 logger.info("Relatório específico salvo no Blob Storage.")
-
-                # ==============================================================================
-                # E. NOVO PASSO: FORÇAR ATUALIZAÇÃO DO ARQUIVO DE RESUMO
-                # ==============================================================================
-                # Criamos um objeto enxuto SÓ com metadados. 
-                # Como não tem chaves de relatório (ex: epicos_report), 
-                # o ProjectStateService vai salvar automaticamente na pasta /resumo/
                 
+                # ==============================================================================
+                # E. NOVO PASSO: PREPARAÇÃO SEGURA DO RESUMO
+                # ==============================================================================
+                
+                # --- LÓGICA DE SEGURANÇA PARA ANALYSIS_TYPE ---
+                # Pega o tipo de análise da SESSÃO (Redis), que é garantido,
+                # em vez de pegar do payload (que pode falhar).
+                analise_tipo_seguro = getattr(session, "analysis_type", None)
+                
+                # Se for dict, tenta pegar pelas chaves
+                if not analise_tipo_seguro and isinstance(session, dict):
+                    analise_tipo_seguro = session.get("analysis_type") or session.get("ultima_analysis_type")
+                
+                # Último recurso: string padrão para não quebrar
+                if not analise_tipo_seguro:
+                    analise_tipo_seguro = "analise_desconhecida"
+                # -----------------------------------------------
+
                 resumo_update = {
                     "usuario_executor": getattr(session, "usuario_executor", "") or session.get("usuario_executor"),
                     "nome_projeto": getattr(session, "nome_projeto", "") or session.get("nome_projeto"),
                     "project_id": payload.project_id,
-                    "last_job_id": payload.job_id,  # <--- O REI DA FESTA ESTÁ AQUI
-                    "ultima_analysis_type": payload.analysis_type,
+                    "last_job_id": payload.job_id,
+                    "ultima_analysis_type": analise_tipo_seguro, # <--- AQUI ESTÁ A CORREÇÃO
                     "ultima_atualizacao": agora_iso,
                     "last_saved_to_blob": agora_iso,
                     "created_at": getattr(session, "created_at", agora_iso) if hasattr(session, "created_at") else session.get("created_at", agora_iso)
                 }
                 
-                # Conversão de datetime para string se necessário para o dict
+                # Conversão de datetime para string se necessário
                 if isinstance(resumo_update["created_at"], datetime):
                     resumo_update["created_at"] = resumo_update["created_at"].isoformat()
 
