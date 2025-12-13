@@ -10,6 +10,11 @@
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
       "report_fields": ["epicos_report"]
     },
+    "epicos_timeline": {
+      "agent_name": "Planejamento",
+      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "report_fields": ["epicos_timeline_report"]
+    },
     "criacao_features_azure_devops": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
