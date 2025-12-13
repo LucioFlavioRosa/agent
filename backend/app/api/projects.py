@@ -47,6 +47,7 @@ async def check_project(
             state["resumo"]["nome_projeto"] = nome_projeto
         report_fields = [
             "epicos",
+            "epicos_timeline",
             "features",
             "times_descricao",
             "alocacao_times",
