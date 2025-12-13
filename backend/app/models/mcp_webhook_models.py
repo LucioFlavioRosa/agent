@@ -29,6 +29,7 @@ class MCPWebhookPayload(BaseModel):
         report_data = values.get('report_data')
         valid_report_fields = [
             "epicos_report",
+            "epicos_timeline_report",
             "features_report",
             "times_descricao_report",
             "alocacao_times_report",
