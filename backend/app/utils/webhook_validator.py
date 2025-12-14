@@ -5,6 +5,7 @@ def validate_report_data_structure(report_data: dict, analysis_type: str) -> boo
     logger = logging.getLogger("webhook_validator")
     valid_report_fields = [
         "epicos_report",
+        "epicos_timeline_report",
         "features_report",
         "times_descricao_report",
         "alocacao_times_report",
