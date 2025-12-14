@@ -7,6 +7,7 @@ import logging
 from backend.app.models.project_state_models import (
     EstadoResumoProjeto,
     EstadoEpicos,
+    EstadoEpicosTimeline,
     EstadoFeatures,
     EstadoTimesDescricao,
     EstadoAlocacaoTimes,
@@ -135,6 +136,7 @@ class ProjectStateService:
         
         subfolder_map = {
             "epicos_report": "epicos",
+            "epicos_timeline_report": "epicos_timeline",
             "features_report": "features",
             "times_descricao_report": "times_descricao",
             "alocacao_times_report": "alocacao_times",
@@ -168,6 +170,7 @@ class ProjectStateService:
         if report_type:
             subfolder_map = {
                 "epicos_report": "epicos",
+                "epicos_timeline_report": "epicos_timeline",
                 "features_report": "features",
                 "times_descricao_report": "times_descricao",
                 "alocacao_times_report": "alocacao_times",
@@ -312,6 +315,7 @@ class ProjectStateService:
         states_dict = {
             "resumo": resumo_state,
             "epicos": None,
+            "epicos_timeline": None,
             "features": None,
             "times_descricao": None,
             "alocacao_times": None,
@@ -322,6 +326,7 @@ class ProjectStateService:
         if nome_projeto:
             subfolder_map = {
                 "epicos_report": "epicos",
+                "epicos_timeline_report": "epicos_timeline",
                 "features_report": "features",
                 "times_descricao_report": "times_descricao",
                 "alocacao_times_report": "alocacao_times",
@@ -329,6 +334,7 @@ class ProjectStateService:
             }
             key_map = {
                 "epicos_report": "epicos",
+                "epicos_timeline_report": "epicos_timeline",
                 "features_report": "features",
                 "times_descricao_report": "times_descricao",
                 "alocacao_times_report": "alocacao_times",
