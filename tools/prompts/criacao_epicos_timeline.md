@@ -30,7 +30,7 @@ Seu plano DEVE seguir estes princípios:
 
 1.  **SAÍDA EXCLUSIVAMENTE EM JSON:** Sua resposta final **DEVE** ser um único e válido bloco de código JSON.
 
-2.  **ESTRUTURA DO JSON:** O objeto JSON deve conter **UMA ÚNICA CHAVE** no nível raiz chamada `cronograma_epicos_report`.
+2.  **ESTRUTURA DO JSON:** O objeto JSON deve conter **UMA ÚNICA CHAVE** no nível raiz chamada `epicos_timeline_report`.
 
 3.  **CONTEÚDO DA LISTA:** O valor deve ser uma **LISTA (ARRAY)** de objetos. Cada objeto representa um Épico.
 
