@@ -91,6 +91,7 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
         else:
              raw_content = agent_result
         cleaned_result = clean_llm_response(raw_content)
+        logger.info(f"📤 [RESPOSTA lIMPA] Payload:\n{json.dumps(cleaned_result, indent=2, default=str)}")
         final_report_data = {}
         if isinstance(cleaned_result, str):
             try:
