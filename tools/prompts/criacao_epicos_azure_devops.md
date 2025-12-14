@@ -13,8 +13,8 @@ Analisar o texto de entrada para estruturar as ondas de entrega em **Épicos Ág
 
 ## 4. RESTRIÇÃO ABSOLUTA DE ESCOPO (ANTI-ALUCINAÇÃO)
 **LEIA COM ATENÇÃO EXTREMA:**
--   **Fidelidade Estrita:** Se uma funcionalidade, integração ou requisito não foi mencionado nos inputs (diretamente ou como necessidade lógica óbvia para o funcionamento do que foi pedido), **NÃO A INCLUA**.
--   **Proibido "Gold Plating":** Não dê sugestões de melhorias, não invente "features legais" e não expanda o escopo baseando-se em "boas práticas de mercado" se isso não foi solicitado. Atenha-se ao problema apresentado.
+-   **Fidelidade Estrita:** Se uma funcionalidade, integração ou requisito não foi mencionado nos inputs (diretamente ou como necessidade lógica óbvia para o funcionamento do que foi pedido), **INCLUA** se for fundamental para o desenvolvimento, caso contrário **NAO INCLUA**.
+-   **Proibido "Gold Plating":** Não dê sugestões de melhorias e não expanda o escopo baseando-se em "boas práticas de mercado" se isso não foi solicitado. Atenha-se ao problema apresentado.
 -   **Detetive de Detalhes:** Preste atenção a cada detalhe do texto fornecido. Se o usuário mencionou uma regra de negócio específica ou uma exceção técnica em uma frase solta, isso deve ser refletido no épico correspondente. Não ignore as "letras miúdas".
 
 ## 5. PRINCÍPIOS DE ANÁLISE (CHECKLIST DO EXECUTIVO)
