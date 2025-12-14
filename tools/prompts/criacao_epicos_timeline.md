@@ -28,7 +28,7 @@ Ao desenhar o cronograma, aplique a lógica de **"Suavização de Recursos" (Res
 ## 4. FORMATO DE SAÍDA (ESTRITO - JSON)
 **SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
 
-1. **ESTRUTURA DO JSON:** O objeto JSON deve conter **UMA ÚNICA CHAVE** no nível raiz chamada `epicos_timeline_report`.
+1. **ESTRUTURA DO JSON:** O objeto JSON deve conter **UMA ÚNICA CHAVE** no nível raiz chamada `epicos_timeline_report` que é uma (Lista de objetos)..
 
 ## 5. EXEMPLO DE LÓGICA ESPERADA (Escalonamento)
 *Note como o E02 só começa na Semana 3, quando o E01 já está avançado.*
