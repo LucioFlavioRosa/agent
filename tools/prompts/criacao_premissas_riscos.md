@@ -29,10 +29,7 @@ Para gerar o relatório, cruze as informações seguindo estas lógicas:
 ## 5. FORMATO DE SAÍDA (ESTRITO - JSON)
 **SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
 
-1.  **Raiz:** `premissas_riscos_report` (Objeto único).
-2.  **Chaves Obrigatórias:**
-    * `premissas`: Lista de objetos (Coisas que precisam ser verdade).
-    * `riscos`: Lista de objetos (Coisas que podem dar errado).
+1.   **tem que ter uma única chave** que é `premissas_riscos_report` (Lista de objetos).
 
 3.  **SCHEMA - PREMISSA:**
     * `id`: (String, ex: "P01")
@@ -50,7 +47,7 @@ Para gerar o relatório, cruze as informações seguindo estas lógicas:
 
 ```json
 {
-  "premissas_riscos_report": [
+  "premissas_riscos_report": [{
     "premissas": [
       {
         "id": "P01",
@@ -78,6 +75,6 @@ Para gerar o relatório, cruze as informações seguindo estas lógicas:
         "impacto": "Médio",
         "plano_mitigacao": "Negociar congelamento de escopo do Épico 3 ou adicionar recurso pontual de QA."
       }
-    ]
+    ]}
   ]
 }
