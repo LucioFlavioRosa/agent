@@ -50,7 +50,7 @@ Para gerar o relatório, cruze as informações seguindo estas lógicas:
 
 ```json
 {
-  "premissas_riscos_report": {
+  "premissas_riscos_report": [
     "premissas": [
       {
         "id": "P01",
@@ -79,5 +79,5 @@ Para gerar o relatório, cruze as informações seguindo estas lógicas:
         "plano_mitigacao": "Negociar congelamento de escopo do Épico 3 ou adicionar recurso pontual de QA."
       }
     ]
-  }
+  ]
 }
