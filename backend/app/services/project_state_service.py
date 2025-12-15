@@ -9,7 +9,6 @@ from backend.app.models.project_state_models import (
     EstadoEpicos,
     EstadoEpicosTimeline,
     EstadoFeatures,
-    EstadoTimesDescricao,
     EstadoAlocacaoTimes,
     EstadoPremissasRiscos,
     EstadoCompletoProjetoResponse
@@ -138,7 +137,6 @@ class ProjectStateService:
             "epicos_report": "epicos",
             "epicos_timeline_report": "epicos_timeline",
             "features_report": "features",
-            "times_descricao_report": "times_descricao",
             "alocacao_times_report": "alocacao_times",
             "premissas_riscos_report": "premissas_riscos"
         }
@@ -172,7 +170,6 @@ class ProjectStateService:
                 "epicos_report": "epicos",
                 "epicos_timeline_report": "epicos_timeline",
                 "features_report": "features",
-                "times_descricao_report": "times_descricao",
                 "alocacao_times_report": "alocacao_times",
                 "premissas_riscos_report": "premissas_riscos"
             }
@@ -317,7 +314,6 @@ class ProjectStateService:
             "epicos": None,
             "epicos_timeline": None,
             "features": None,
-            "times_descricao": None,
             "alocacao_times": None,
             "premissas_riscos": None
         }
@@ -328,7 +324,6 @@ class ProjectStateService:
                 "epicos_report": "epicos",
                 "epicos_timeline_report": "epicos_timeline",
                 "features_report": "features",
-                "times_descricao_report": "times_descricao",
                 "alocacao_times_report": "alocacao_times",
                 "premissas_riscos_report": "premissas_riscos"
             }
@@ -336,7 +331,6 @@ class ProjectStateService:
                 "epicos_report": "epicos",
                 "epicos_timeline_report": "epicos_timeline",
                 "features_report": "features",
-                "times_descricao_report": "times_descricao",
                 "alocacao_times_report": "alocacao_times",
                 "premissas_riscos_report": "premissas_riscos"
             }
