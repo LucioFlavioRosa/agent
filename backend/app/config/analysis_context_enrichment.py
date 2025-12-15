@@ -27,7 +27,6 @@ ANALYSIS_CONTEXT_CONFIG = {
     "criacao_premissas_riscos": [
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"},
         {"estado_para_ler": "epicos_timeline", "report_para_ler": "epicos_timeline_report"},
-        {"estado_para_ler": "features", "report_para_ler": "features_report"}
     ],
     "refinamento_premissas_riscos": [
         {"estado_para_ler": "premissas_riscos", "report_para_ler": "premissas_riscos_report"}
