@@ -16,7 +16,6 @@ class SessionData(BaseModel):
     epicos_report: Optional[Any] = Field(default=None)
     epicos_timeline_report: Optional[Any] = Field(default=None)
     features_report: Optional[Any] = Field(default=None)
-    times_descricao_report: Optional[Any] = Field(default=None)
     alocacao_times_report: Optional[Any] = Field(default=None)
     premissas_riscos_report: Optional[Any] = Field(default=None)
 
@@ -35,14 +34,10 @@ class SessionData(BaseModel):
             "epicos_report": self.epicos_report,
             "epicos_timeline_report": self.epicos_timeline_report,
             "features_report": self.features_report,
-            "times_descricao_report": self.times_descricao_report,
             "alocacao_times_report": self.alocacao_times_report,
             "premissas_riscos_report": self.premissas_riscos_report
         }
-        state.pop("projeto", None)
-        state.pop("comentario_usuario", None)
-        state.pop("docx_blob_url", None)
-        state.pop("extracted_text", None)
+        
         return state
 
     @classmethod
@@ -78,7 +73,6 @@ class SessionData(BaseModel):
             epicos_report=state.get("epicos_report"),
             epicos_timeline_report=state.get("epicos_timeline_report"),
             features_report=state.get("features_report"),
-            times_descricao_report=state.get("times_descricao_report"),
             alocacao_times_report=state.get("alocacao_times_report"),
             premissas_riscos_report=state.get("premissas_riscos_report")
         )
