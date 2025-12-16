@@ -13,7 +13,7 @@ Gerar uma **Timeline de Execução (JSON)** baseada no `epicos_report`, respeita
 Ao desenhar o cronograma, você deve obedecer estas limitações físicas:
 
 1.  **LIMITE DE 2 RECURSOS POR DISCIPLINA:**
-    * Considere que a fábrica possui, no máximo, **2 profissionais** para cada especialidade (ex: 2 Backends, 2 Frontends, 2 QAs). Geralmente 1 Sênior e 1 Júnior.
+    * Considere que a fábrica possui, no máximo, **2 profissionais** para cada especialidade (ex: 2 Backends, 2 Frontends, 2 QAs). Geralmente 1 Sênior e 1 Júnior. Somente quando o usuário pedir explicitamente essa regra pode ser quebrada para atender a demanda
     * **Consequência Lógica:** Você **NÃO PODE** agendar 3 Épicos que exijam "Desenvolvimento Backend Pesado" na mesma semana. Você é obrigado a adiar um deles.
     * *Regra de Ouro:* Se o Épico A e o Épico B são intensivos em código, eles devem ser feitos sequencialmente (um após o outro) ou com apenas um leve overlap (início de um no fim do outro).
 
