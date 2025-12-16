@@ -22,20 +22,20 @@ criacao_epicos_timeline:
   instrucoes_extras: "criacao_epicos_timeline"
   provider: "anthropic"
 
+refinamento_epicos_timeline:
+  description: "criação de epicos a partir de transcrição de reunião"
+  status_update: "analisando a transcrição"
+  provider: "anthropic"
+  model_name: "claude-sonnet-4-5"
+  agent_type: "processador"
+  instrucoes_extras: "refinamento_epicos_timeline"
+  
 criacao_features_azure_devops:
   description: "criação de epicos a partir de transcrição de reunião"
   status_update: "analisando a transcrição"
   model_name: "claude-sonnet-4-5"
   agent_type: "processador"
   instrucoes_extras: "criacao_features_azure_devops"
-  provider: "anthropic"
-
-criacao_alocacao_azure_devops:
-  description: "criação de epicos a partir de transcrição de reunião"
-  status_update: "analisando o histórico"
-  model_name: "claude-sonnet-4-5"
-  agent_type: "processador"
-  instrucoes_extras: "criacao_alocacao_azure_devops"
   provider: "anthropic"
 
 criacao_premissas_riscos:
