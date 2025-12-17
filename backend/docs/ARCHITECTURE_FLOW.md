@@ -24,9 +24,9 @@ flowchart TD
         Webhooks[webhooks.py]
     end
 
-    FE -- Token JWT --> Auth
+    FE -- "1. Token JWT" --> Auth
     Auth -- Validação --> AD
-    FE -- Requisições REST --> BE
+    FE -- "3. Requisições REST" --> BE
     BE -- Rotas --> Auth
     BE -- Rotas --> Analysis
     BE -- Rotas --> Projects
@@ -43,11 +43,12 @@ flowchart TD
     Session -- Persistência/Consulta Estado --> Blob
     Webhooks -- Persistência Estado --> Blob
 
-    Analysis -- Payload Assíncrono --> MCP
-    MCP -- Webhook Resultado --> Webhooks
+    Analysis -- "6. Payload Assíncrono" --> MCP
+    MCP -- "7. Webhook Resultado" --> Webhooks
 
     FE -- Consulta Relatórios/Projetos --> BE
     BE -- Resposta Dados/Status --> FE
+```
 
     note over FE,BE: 1. Usuário autentica via Azure AD (JWT)
     note over BE,AD: 2. Backend valida token e extrai usuario_executor
