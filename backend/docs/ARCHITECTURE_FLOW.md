@@ -12,6 +12,9 @@ Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebim
 4. Consulta de Projeto Existente
 5. Observações Importantes
 6. Enriquecimento de Contexto para Refinamento
+7. Comunicação via Webhooks (MCP → Backend)
+8. Gerenciamento de Sessão e Relatórios
+9. Resumo dos Endpoints por Rota
 
 ---
 
@@ -31,8 +34,8 @@ sequenceDiagram
     participant FE as Frontend
     participant BE as Backend (API)
     participant MCP as MCP Server
-    FE->>BE: Requisições HTTP (login, análise, projetos, etc)
-    BE->>MCP: Payloads de análise (via rotas /analysis)
+    FE->>BE: Requisições HTTP (rotas em backend/app/api)
+    BE->>MCP: Payloads de análise (via /analysis)
     MCP-->>BE: Webhooks de resultado (/webhooks/mcp)
     BE-->>FE: Respostas HTTP (dados, status, relatórios)
 
@@ -67,6 +70,7 @@ sequenceDiagram
     BE->>Redis: Busca estados de resumo no cache
     BE-->>FE: Retorna user_info + lista de projetos de resumo
 
+
 ---
 
 ## 3. Criação de Projeto e Conversão nome_projeto → project_id
@@ -93,6 +97,7 @@ sequenceDiagram
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
 
+
 ---
 
 ## 4. Consulta de Projeto Existente
@@ -106,6 +111,7 @@ sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
     BE->>BE: Busca project_id associado ao nome_projeto
     BE-->>FE: exists: true, state (inclui project_id)
+
 
 ---
 
@@ -130,8 +136,6 @@ Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epic
 
 **Nota:** Este fluxo é orquestrado pela rota `/analysis/start` em [`backend/app/api/analysis.py`] e pelo serviço `ContextEnrichmentService`, garantindo que o contexto enviado ao MCP seja o mais completo possível.
 
-Diagrama Mermaid atualizado:
-
 mermaid
 sequenceDiagram
     participant FE as Frontend
@@ -149,4 +153,76 @@ sequenceDiagram
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
 
+
 ---
+
+## 7. Comunicação via Webhooks (MCP → Backend)
+
+Esta seção detalha o fluxo de recebimento de webhooks do MCP pela rota `backend/app/api/webhooks.py`. Quando o MCP finaliza um processamento, ele envia um webhook para o backend, que atualiza o estado do projeto no Redis e Blob Storage.
+
+Fluxo:
+1. MCP envia webhook para `/webhooks/mcp` com payload contendo `project_id`, `job_id`, `status` e `report_data`.
+2. O backend valida o payload e atualiza o status do job no Redis.
+3. Se o status for "done", o backend atualiza os relatórios e salva o estado atualizado no Blob Storage.
+4. O backend atualiza o resumo do projeto, garantindo que o campo `ultima_analysis_type` seja consistente.
+5. O job é marcado como finalizado no Redis.
+
+mermaid
+sequenceDiagram
+    participant MCP as MCP Server
+    participant BE as Backend
+    participant Redis as Redis
+    participant Blob as Blob Storage
+    MCP->>BE: POST /webhooks/mcp (payload)
+    BE->>Redis: Atualiza status do job
+    BE->>Blob: Salva relatório e resumo atualizado
+    BE->>Redis: Marca job como done
+    BE-->>MCP: Confirma recebimento
+
+
+---
+
+## 8. Gerenciamento de Sessão e Relatórios
+
+A rota `backend/app/api/session.py` é responsável pela consulta e atualização de relatórios dos projetos, além do gerenciamento da sessão do usuário.
+
+Fluxo:
+1. O frontend consulta relatórios específicos usando endpoints como `/session/project/{project_id}/{job_id}/reports`.
+2. O backend busca o estado do projeto no Blob Storage e Redis, validando o job_id e retornando o relatório correspondente.
+3. Para atualização de relatórios, o frontend envia dados via PUT para `/session/project/{project_id}/report`, e o backend atualiza o Redis e salva o novo estado no Blob Storage.
+4. O backend também permite consultar arquivos docx associados ao projeto e salvar o estado manualmente.
+
+mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant BE as Backend
+    participant Redis as Redis
+    participant Blob as Blob Storage
+    FE->>BE: GET /session/project/{project_id}/{job_id}/reports
+    BE->>Blob: Busca estado do projeto
+    BE->>Redis: Valida job ativo
+    BE-->>FE: Retorna relatório ou status de processamento
+    FE->>BE: PUT /session/project/{project_id}/report
+    BE->>Redis: Atualiza relatório
+    BE->>Blob: Salva novo estado
+    BE-->>FE: Confirma atualização
+
+
+---
+
+## 9. Resumo dos Endpoints por Rota
+
+| Arquivo                      | Endpoint(s)                                 | Descrição                                                                 |
+|-----------------------------|---------------------------------------------|---------------------------------------------------------------------------|
+| `auth.py`                   | `/auth/login`, `/auth/config`               | Autenticação e configuração Azure AD                                      |
+| `analysis.py`               | `/analysis/start`                           | Início de análise, conversão nome_projeto → project_id, enriquecimento de contexto |
+| `projects.py`               | `/projects/check`, `/projects/list`         | Consulta e listagem de projetos existentes                                |
+| `session.py`                | `/session/project/{project_id}/{job_id}/reports`, `/session/project/{project_id}/report`, `/session/project/{project_id}/save-state`, `/session/project/{project_id}/docx-files` | Consulta, atualização e gerenciamento de relatórios e arquivos de sessão   |
+| `webhooks.py`               | `/webhooks/mcp`                             | Recebimento de webhooks do MCP, atualização de estado e relatórios        |
+
+---
+
+**Notas:**
+- Todos os diagramas Mermaid estão sintaticamente corretos e podem ser renderizados em ferramentas compatíveis.
+- Os fluxos descritos refletem a arquitetura atual do backend, com integração segura entre Frontend, Backend e MCP Server.
+- Para dúvidas técnicas complexas, consulte as observações e notas de rodapé ao longo do documento.
