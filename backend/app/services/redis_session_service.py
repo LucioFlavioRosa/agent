@@ -122,9 +122,7 @@ class RedisSessionService:
             "project_id": project_id,
             "ultima_analysis_type": analysis_type,
             "ultima_atualizacao": last_saved_to_blob,
-            # --- INSTRUÇÃO 5: Inicializa last_job_id como None ---
             "last_job_id": None 
-            # -----------------------------------------------------
         }
         if extracted_text:
              session_data["extracted_text"] = extracted_text
@@ -204,11 +202,7 @@ class RedisSessionService:
         session_data["ultima_analysis_type"] = analysis_type
         session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
         session_data["project_id"] = project_id
-        
-        # --- INSTRUÇÃO 6: Restaura last_job_id do estado ou define como None ---
         session_data["last_job_id"] = project_state.get("last_job_id", None)
-        # -----------------------------------------------------------------------
-        
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
@@ -342,3 +336,25 @@ class RedisSessionService:
             return datetime.min
         jobs.sort(key=sort_key, reverse=True)
         return jobs[0]
+
+    def get_all_reports_for_project(self, project_id: str) -> Optional[Dict[str, Any]]:
+        report_types = ["epicos", "features", "times_descricao", "alocacao_times", "premissas_riscos"]
+        reports = {}
+        found = False
+        for report_type in report_types:
+            key = f"project:{project_id}:report:{report_type}"
+            session_json = self.redis_client.get(key)
+            if session_json:
+                try:
+                    report_data = self._deserialize_session(session_json)
+                    if "job_id" not in report_data:
+                        self.logger.warning(f"Report '{report_type}' não possui job_id (estado legado ou erro).")
+                        report_data["job_id"] = None
+                    reports[report_type] = report_data
+                    found = True
+                except Exception as e:
+                    self.logger.error(f"Erro ao desserializar report {report_type} do Redis: {e}")
+                    reports[report_type] = None
+            else:
+                reports[report_type] = None
+        return reports if found else None
