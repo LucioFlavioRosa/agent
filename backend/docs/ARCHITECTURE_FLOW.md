@@ -7,7 +7,7 @@ Abaixo está uma visão macro geral da arquitetura da aplicação Peers CodeAI, 
 ```mermaid
 flowchart TD
     subgraph Usuário
-        FE[Frontend (React/Next.js)]
+        FE["Frontend (React/Next.js)"]
     end
     subgraph Infraestrutura
         AD[Azure AD]
