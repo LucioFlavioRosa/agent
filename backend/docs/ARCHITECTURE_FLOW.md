@@ -169,6 +169,7 @@ Fluxo:
 
 **Nota explicativa:**
 - O campo `last_job_id` do resumo é priorizado sobre os job_ids dos relatórios individuais. Isso garante consistência e evita divergências entre estados legados ou relatórios processados fora de ordem. Toda consulta e atualização de relatórios utiliza o job_id mestre do resumo como referência principal.
+- Ao receber um webhook de sucesso, o backend injeta o `last_job_id` do resumo nos relatórios individuais, tornando o resumo a autoridade máxima para o job_id do projeto.
 
 **Diagrama Mermaid atualizado:**
 
@@ -250,11 +251,17 @@ flowchart TD
 | `auth.py`                   | `/auth/login`, `/auth/config`               | Autenticação e configuração Azure AD                                      |
 | `analysis.py`               | `/analysis/start`                           | Início de análise, conversão nome_projeto → project_id, enriquecimento de contexto |
 | `projects.py`               | `/projects/check`, `/projects/list`         | Consulta e listagem de projetos existentes                                |
-| `session.py`                | `/session/project/{project_id}/{job_id}/reports`, `/session/project/{project_id}/report`, `/session/project/{project_id}/save-state`, `/session/project/{project_id}/docx-files` | Consulta, atualização e gerenciamento de relatórios e arquivos de sessão   |
+| `session.py`                | `/session/project/{project_id}/{job_id}/reports`, `/session/project/{project_id}/report`, `/session/project/{project_id}/save-state`, `/session/project/{project_id}/docx-files` | Consulta, atualização e gerenciamento de relatórios e arquivos de sessão. Inclui validação de job_id mestre (last_job_id do resumo) nos endpoints de consulta de relatórios. |
 | `webhooks.py`               | `/webhooks/mcp`                             | Recebimento de webhooks do MCP, atualização de estado e relatórios. Prioriza o last_job_id do resumo como referência para todos relatórios. |
 
 ---
 
 ## 10. Tratamento de Estados Legados e Migração
 
-*(Seção a ser implementada conforme plano de ação, não incluída nesta entrega)*
+Esta seção documenta o comportamento do sistema ao encontrar estados legados, especialmente arquivos de resumo ou relatório que estejam sem `job_id` ou `project_id`.
+
+- Ao ler estados do Blob Storage, o backend utiliza o método `validate_and_fix_project_id` para corrigir automaticamente estados que estejam sem `project_id`, gerando um novo UUID quando necessário e logando um warning.
+- Quando um relatório ou resumo está sem `job_id`, o backend injeta o valor do `last_job_id` do resumo como referência principal, garantindo consistência entre todos os relatórios do projeto.
+- Logs de warning são emitidos sempre que um estado legado é corrigido automaticamente, permitindo rastreabilidade e facilitando a migração futura para o novo padrão.
+- Estratégia de fallback: estados sem os campos obrigatórios são ignorados nas operações críticas, e o sistema tenta recuperar informações válidas de outros blobs ou gera identificadores novos conforme necessário.
+- A lógica de correção automática é implementada nos métodos de leitura e sanitização de estados em `backend/app/services/project_state_service.py` e `backend/app/services/redis_session_service.py`.
