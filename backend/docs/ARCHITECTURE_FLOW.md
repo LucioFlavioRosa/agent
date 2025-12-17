@@ -7,50 +7,69 @@ Abaixo está uma visão macro geral da arquitetura da aplicação Peers CodeAI, 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Usuário (Frontend)
-    participant AD as Azure AD
-    participant API as Backend (FastAPI)
-    participant DB as Redis/Blob
-    participant MCP as MCP Server
+    participant BE as Backend (Caller)
+    
+    box "MCP Service (Python/FastAPI)" #f0f8ff
+        participant Router as API Router (/start)
+        participant Tracker as ProjectTracker
+        participant BgTask as Background Worker
+        participant Orch as LLMOrchestrator
+    end
+    
+    participant LLM as External AI Provider
 
+    %% FASE 1: INÍCIO SÍNCRONO
     rect rgb(240, 248, 255)
-        note right of User: 1. Autenticação e Carga Inicial
-        User->>AD: Login Interativo
-        AD-->>User: Retorna Token JWT
+        note right of BE: 1. Requisição Inicial
+        BE->>Router: POST /api/v1/analysis/start<br/>{project_id, instrucoes...}
         
-        User->>API: GET /projects (Header: Bearer Token)
-        API->>AD: Valida Assinatura do Token
-        AD-->>API: Token Válido
+        Router->>Router: Valida Payload (Pydantic)
+        Router->>Router: Carrega Config & Prompts
         
-        API->>DB: Consulta Lista de Projetos
-        DB-->>API: Dados dos Projetos
-        API-->>User: JSON: Lista de Projetos
+        Router->>Tracker: set_status(project_id, 'processing')
+        Router->>BgTask: add_task(process_analysis_task)
+        
+        Router-->>BE: 200 OK<br/>{status: "processing", job_id: "..."}
+        note left of Router: Resposta imediata p/ Backend<br/>não travar
     end
 
+    %% FASE 2: PROCESSAMENTO ASSÍNCRONO
     rect rgb(255, 250, 240)
-        note right of User: 2. Solicitação de Análise (Async)
-        User->>API: POST /analyze (Payload do Projeto)
+        note right of BgTask: 2. Execução em Background
+        BgTask->>Orch: execute_analysis(params)
         
-        API->>DB: Cria Sessão/Job (Status: PROCESSING)
-        API->>MCP: Envia Payload para Análise (Disparo)
+        Orch->>LLM: Envia Prompt
+        LLM-->>Orch: Retorna Resposta Raw
         
-        note right of MCP: MCP processa...
+        Orch->>Orch: clean_llm_response()
+        Orch-->>BgTask: JSON Limpo (Relatório)
         
-        API-->>User: 202 Accepted (Retorna JobID)
-        
-        note over User, API: Frontend fica aguardando ou fazendo Polling
+        BgTask->>Tracker: set_status('done')
+        BgTask->>Tracker: set_result(final_report)
     end
 
+    %% FASE 3: CALLBACK (WEBHOOK)
     rect rgb(240, 255, 240)
-        note right of User: 3. Processamento e Retorno
-        MCP->>API: Webhook: POST /webhook/result (Resultado)
-        API->>DB: Atualiza Job (Status: DONE, Resultado Salvo)
-        API-->>MCP: 200 OK (Confirmado)
+        note right of BgTask: 3. Entrega do Resultado
+        BgTask->>BE: POST /webhooks/mcp<br/>{status: "done", report_data: ...}
         
-        User->>API: GET /jobs/{JobID} (Polling)
-        API->>DB: Consulta Status
-        DB-->>API: Status: DONE + Resultado
-        API-->>User: JSON: Resultado da Análise
+        alt Sucesso (200 OK)
+            BE-->>BgTask: 200 OK
+            note left of BgTask: Log: ✅ Webhook aceito
+        else Falha (Erro de Conexão/500)
+            BE--xBgTask: Erro / Timeout
+            note left of BgTask: Log: ⚠️ Falha Webhook, tentando Fallback
+            BgTask->>BE: PUT /session/project/{id}/report
+        end
+    end
+    
+    %% FASE 4: POLLING (OPCIONAL)
+    rect rgb(245, 245, 245)
+        note right of BE: 4. Verificação de Status (Polling)
+        BE->>Router: GET /status/{project_id}
+        Router->>Tracker: get_status() + get_result()
+        Tracker-->>Router: Dados em Memória
+        Router-->>BE: {status: "done", result: {...}}
     end
 ```
 
