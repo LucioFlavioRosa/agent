@@ -227,19 +227,19 @@ Esta subseção detalha o algoritmo utilizado para selecionar o estado mais rece
 
 ```mermaid
 flowchart TD
-    A[Início: Lista de blobs candidatos] --> B{Para cada blob}
-    B --> C1[Extrai timestamp do nome do arquivo]
-    C1 --> D1{Timestamp válido?}
-    D1 -- Sim --> E1[Usa timestamp do nome]
-    D1 -- Não --> C2[Tenta campo created_at do JSON]
-    C2 --> D2{created_at válido?}
-    D2 -- Sim --> E2[Usa created_at]
-    D2 -- Não --> C3[Tenta campo ultima_atualizacao do JSON]
-    C3 --> D3{ultima_atualizacao válido?}
-    D3 -- Sim --> E3[Usa ultima_atualizacao]
-    D3 -- Não --> E4[Usa data mínima]
-    E1 & E2 & E3 & E4 --> F[Ordena blobs por data (desc)]
-    F --> G[Seleciona blob mais recente]
+    A["Início: Lista de blobs candidatos"] --> B{"Para cada blob"}
+    B --> C1["Extrai timestamp do nome do arquivo"]
+    C1 --> D1{"Timestamp válido?"}
+    D1 -- Sim --> E1["Usa timestamp do nome"]
+    D1 -- Não --> C2["Tenta campo created_at do JSON"]
+    C2 --> D2{"created_at válido?"}
+    D2 -- Sim --> E2["Usa created_at"]
+    D2 -- Não --> C3["Tenta campo ultima_atualizacao do JSON"]
+    C3 --> D3{"ultima_atualizacao válido?"}
+    D3 -- Sim --> E3["Usa ultima_atualizacao"]
+    D3 -- Não --> E4["Usa data mínima"]
+    E1 & E2 & E3 & E4 --> F["Ordena blobs por data (desc)"]
+    F --> G["Seleciona blob mais recente"]
 ```
 
 ---
