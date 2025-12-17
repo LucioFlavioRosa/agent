@@ -16,7 +16,7 @@ flowchart TD
         MCP[MCP Server]
     end
     subgraph Backend
-        BE[Backend API (FastAPI)]
+        BE["Backend API (FastAPI)"]
         Auth[auth.py]
         Analysis[analysis.py]
         Projects[projects.py]
