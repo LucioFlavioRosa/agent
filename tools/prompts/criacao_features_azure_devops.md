@@ -37,8 +37,7 @@ Para cada Épico, crie features seguindo estas regras:
     * `"tipo"`: (String) "Backend", "Frontend", "Infra", "Dados", "Design".
     * `"complexidade"`: (String) "Baixa", "Média", "Alta".
 
-## 6. EXEMPLO DE SAÍDA ESPERADA
-*(Considere que o Épico E01 é "Portal de Onboarding")*
+## 6. EXEMPLO DE SAÍDA MANDATÓRIA
 
 ```json
 {
