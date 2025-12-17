@@ -1,26 +1,89 @@
 # Arquitetura e Fluxos do Backend Peers CodeAI
 
-Este documento detalha o fluxo completo do backend Peers CodeAI, desde o recebimento da requisição do frontend até o envio da resposta, incluindo integrações com Azure Key Vault (múltiplos cofres), Blob Storage, Redis, MCP Server e o mecanismo de configuração dinâmica de agentes. Cada etapa está explicada, com referência ao arquivo de código responsável e diagramas ilustrativos.
+## 0. Visão Macro da Aplicação
+
+Abaixo está uma visão macro geral da arquitetura da aplicação Peers CodeAI, ilustrando os principais componentes e os fluxos de dados entre eles. Este diagrama serve como ponto de entrada para o entendimento do sistema, mostrando como o Frontend, Backend API, Redis, Blob Storage, MCP Server e Azure AD interagem para autenticação, processamento de análises, persistência de estados e gerenciamento de sessões e relatórios.
+
+mermaid
+flowchart TD
+    subgraph Usuário
+        FE[Frontend (React/Next.js)]
+    end
+    subgraph Infraestrutura
+        AD[Azure AD]
+        Redis[(Redis)]
+        Blob[(Blob Storage)]
+        MCP[MCP Server]
+    end
+    subgraph Backend
+        BE[Backend API (FastAPI)]
+        Auth[auth.py]
+        Analysis[analysis.py]
+        Projects[projects.py]
+        Session[session.py]
+        Webhooks[webhooks.py]
+    end
+
+    FE -- Token JWT --> Auth
+    Auth -- Validação --> AD
+    FE -- Requisições REST --> BE
+    BE -- Rotas --> Auth
+    BE -- Rotas --> Analysis
+    BE -- Rotas --> Projects
+    BE -- Rotas --> Session
+    BE -- Rotas --> Webhooks
+
+    Analysis -- Criação/Consulta Sessão --> Redis
+    Projects -- Consulta Sessão/Projetos --> Redis
+    Session -- Consulta/Atualização Relatórios --> Redis
+    Webhooks -- Atualização Job/Relatório --> Redis
+
+    Analysis -- Persistência Estado --> Blob
+    Projects -- Consulta Estado --> Blob
+    Session -- Persistência/Consulta Estado --> Blob
+    Webhooks -- Persistência Estado --> Blob
+
+    Analysis -- Payload Assíncrono --> MCP
+    MCP -- Webhook Resultado --> Webhooks
+
+    FE -- Consulta Relatórios/Projetos --> BE
+    BE -- Resposta Dados/Status --> FE
+
+    note over FE,BE: 1. Usuário autentica via Azure AD (JWT)
+    note over BE,AD: 2. Backend valida token e extrai usuario_executor
+    note over FE,BE: 3. Frontend envia requisições para rotas da API
+    note over BE,Redis: 4. Sessão, jobs e relatórios são armazenados no Redis
+    note over BE,Blob: 5. Estados persistentes são salvos/consultados no Blob Storage
+    note over BE,MCP: 6. Backend envia payloads de análise ao MCP Server
+    note over MCP,BE: 7. MCP retorna resultados via webhooks para o backend
+
 
 ---
 
 ## Índice
 
-1. Visão Geral da Comunicação entre Grandes Blocos
-2. Login e Autenticação via Azure AD
-3. Criação de Projeto e Conversão nome_projeto → project_id
-4. Consulta de Projeto Existente
-5. Observações Importantes
-6. Enriquecimento de Contexto para Refinamento
-7. Comunicação via Webhooks (MCP → Backend)
-8. Gerenciamento de Sessão e Relatórios
-8.1. Lógica de Seleção de Estado Mais Recente
-9. Resumo dos Endpoints por Rota
-10. Tratamento de Estados Legados e Migração
+1. Visão Macro da Aplicação
+2. Visão Geral da Comunicação entre Grandes Blocos
+3. Login e Autenticação via Azure AD
+4. Criação de Projeto e Conversão nome_projeto → project_id
+5. Consulta de Projeto Existente
+6. Observações Importantes
+7. Enriquecimento de Contexto para Refinamento
+8. Comunicação via Webhooks (MCP → Backend)
+9. Gerenciamento de Sessão e Relatórios
+9.1. Lógica de Seleção de Estado Mais Recente
+10. Resumo dos Endpoints por Rota
+11. Tratamento de Estados Legados e Migração
 
 ---
 
-## 1. Visão Geral da Comunicação entre Grandes Blocos
+## 1. Visão Macro da Aplicação
+
+A visão macro está detalhada na seção acima, com o diagrama Mermaid representando os principais fluxos e componentes do sistema.
+
+---
+
+## 2. Visão Geral da Comunicação entre Grandes Blocos
 
 Esta seção apresenta uma visão de alto nível da comunicação entre os principais blocos do sistema: Frontend, Backend (rotas em `backend/app/api`) e MCP Server. O Backend orquestra as requisições recebidas do Frontend, processa dados, integra serviços internos e se comunica com o MCP Server para processamento de inteligência.
 
@@ -31,7 +94,7 @@ Esta seção apresenta uma visão de alto nível da comunicação entre os princ
 
 **Diagrama Mermaid:**
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend (API)
@@ -40,11 +103,11 @@ sequenceDiagram
     BE->>MCP: Payloads de análise (via /analysis)
     MCP-->>BE: Webhooks de resultado (/webhooks/mcp)
     BE-->>FE: Respostas HTTP (dados, status, relatórios)
-```
+
 
 ---
 
-## 2. Login e Autenticação via Azure AD
+## 3. Login e Autenticação via Azure AD
 
 Fluxo:
 1. O frontend envia o token JWT via header Authorization para o endpoint POST `/auth/login` (implementado em [`backend/app/api/auth.py`]).
@@ -55,7 +118,7 @@ Fluxo:
 
 **Nota:** O fluxo de validação do token JWT é orquestrado pela rota `/auth/login` em [`backend/app/api/auth.py`], que utiliza o serviço `AzureADService` para garantir autenticidade e extração segura do usuário.
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -69,11 +132,11 @@ sequenceDiagram
     BE->>Blob: Busca projetos de resumo do usuario_executor
     BE->>Redis: Busca estados de resumo no cache
     BE-->>FE: Retorna user_info + lista de projetos de resumo
-```
+
 
 ---
 
-## 3. Criação de Projeto e Conversão nome_projeto → project_id
+## 4. Criação de Projeto e Conversão nome_projeto → project_id
 
 O frontend deve sempre enviar apenas o campo `nome_projeto` para criação ou início de análise. O backend é responsável por converter internamente o `nome_projeto` para `project_id`:
 - Se o projeto já existe, o backend recupera o mesmo `project_id` do estado salvo.
@@ -84,7 +147,7 @@ O frontend deve sempre enviar apenas o campo `nome_projeto` para criação ou in
 
 **Nota:** Este fluxo é implementado pela rota `/analysis/start` em [`backend/app/api/analysis.py`], que utiliza o serviço `ProjectStateService` para conversão e persistência do identificador do projeto.
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -95,26 +158,26 @@ sequenceDiagram
     BE->>MCP: Envia payload (project_id, analysis_type, ...)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-```
+
 
 ---
 
-## 4. Consulta de Projeto Existente
+## 5. Consulta de Projeto Existente
 
 O Backend permite ao frontend consultar a existência de um projeto pelo nome, retornando o estado associado se encontrado.
 
 **Nota:** Este fluxo é implementado pela rota `/projects/check` em [`backend/app/api/projects.py`], que utiliza o serviço `ProjectStateService` para buscar e validar projetos existentes.
 
-```mermaid
+mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
     BE->>BE: Busca project_id associado ao nome_projeto
     BE-->>FE: exists: true, state (inclui project_id)
-```
+
 
 ---
 
-## 5. Observações Importantes
+## 6. Observações Importantes
 
 - O campo `project_id` nunca deve ser enviado pelo frontend. O backend faz toda a conversão e retorna o `project_id` correto.
 - Toda comunicação interna e com MCP utiliza o `project_id` gerado ou recuperado pelo backend.
@@ -122,7 +185,7 @@ sequenceDiagram
 
 ---
 
-## 6. Enriquecimento de Contexto para Refinamento
+## 7. Enriquecimento de Contexto para Refinamento
 
 Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epicos_azure_devops`), o backend executa um processo de enriquecimento de contexto antes de enviar o payload ao MCP:
 
@@ -135,7 +198,7 @@ Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epic
 
 **Nota:** Este fluxo é orquestrado pela rota `/analysis/start` em [`backend/app/api/analysis.py`] e pelo serviço `ContextEnrichmentService`, garantindo que o contexto enviado ao MCP seja o mais completo possível.
 
-```mermaid
+mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -151,11 +214,11 @@ sequenceDiagram
     BE->>MCP: Envia payload enriquecido (comentario_extra)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-```
+
 
 ---
 
-## 7. Comunicação via Webhooks (MCP → Backend)
+## 8. Comunicação via Webhooks (MCP → Backend)
 
 Esta seção detalha o fluxo de recebimento de webhooks do MCP pela rota `backend/app/api/webhooks.py`. Quando o MCP finaliza um processamento, ele envia um webhook para o backend, que atualiza o estado do projeto no Redis e Blob Storage.
 
@@ -173,7 +236,7 @@ Fluxo:
 
 **Diagrama Mermaid atualizado:**
 
-```mermaid
+mermaid
 sequenceDiagram
     participant MCP as MCP Server
     participant BE as Backend
@@ -185,11 +248,11 @@ sequenceDiagram
     BE->>BE: Injeta last_job_id do resumo nos relatórios individuais
     BE->>Redis: Marca job como done
     BE-->>MCP: Confirma recebimento
-```
+
 
 ---
 
-## 8. Gerenciamento de Sessão e Relatórios
+## 9. Gerenciamento de Sessão e Relatórios
 
 A rota `backend/app/api/session.py` é responsável pela consulta e atualização de relatórios dos projetos, além do gerenciamento da sessão do usuário.
 
@@ -209,7 +272,7 @@ Fluxo:
 
 ---
 
-## 8.1. Lógica de Seleção de Estado Mais Recente
+## 9.1. Lógica de Seleção de Estado Mais Recente
 
 Esta subseção detalha o algoritmo utilizado para selecionar o estado mais recente de um projeto, conforme implementado em `backend/app/services/project_state_service.py` (método `load_latest_state_from_blob`).
 
@@ -225,7 +288,7 @@ Esta subseção detalha o algoritmo utilizado para selecionar o estado mais rece
 
 **Exemplo de código Mermaid ilustrando o fluxo de decisão:**
 
-```mermaid
+mermaid
 flowchart TD
     A["Início: Lista de blobs candidatos"] --> B{"Para cada blob"}
     B --> C1["Extrai timestamp do nome do arquivo"]
@@ -240,11 +303,11 @@ flowchart TD
     D3 -- Não --> E4["Usa data mínima"]
     E1 & E2 & E3 & E4 --> F["Ordena blobs por data (desc)"]
     F --> G["Seleciona blob mais recente"]
-```
+
 
 ---
 
-## 9. Resumo dos Endpoints por Rota
+## 10. Resumo dos Endpoints por Rota
 
 | Arquivo                      | Endpoint(s)                                 | Descrição                                                                 |
 |-----------------------------|---------------------------------------------|---------------------------------------------------------------------------|
@@ -256,7 +319,7 @@ flowchart TD
 
 ---
 
-## 10. Tratamento de Estados Legados e Migração
+## 11. Tratamento de Estados Legados e Migração
 
 Esta seção documenta o comportamento do sistema ao encontrar estados legados, especialmente arquivos de resumo ou relatório que estejam sem `job_id` ou `project_id`.
 
