@@ -31,7 +31,7 @@ Esta seção apresenta uma visão de alto nível da comunicação entre os princ
 
 **Diagrama Mermaid:**
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend (API)
@@ -40,7 +40,7 @@ sequenceDiagram
     BE->>MCP: Payloads de análise (via /analysis)
     MCP-->>BE: Webhooks de resultado (/webhooks/mcp)
     BE-->>FE: Respostas HTTP (dados, status, relatórios)
-
+```
 
 ---
 
@@ -55,7 +55,7 @@ Fluxo:
 
 **Nota:** O fluxo de validação do token JWT é orquestrado pela rota `/auth/login` em [`backend/app/api/auth.py`], que utiliza o serviço `AzureADService` para garantir autenticidade e extração segura do usuário.
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -69,7 +69,7 @@ sequenceDiagram
     BE->>Blob: Busca projetos de resumo do usuario_executor
     BE->>Redis: Busca estados de resumo no cache
     BE-->>FE: Retorna user_info + lista de projetos de resumo
-
+```
 
 ---
 
@@ -84,7 +84,7 @@ O frontend deve sempre enviar apenas o campo `nome_projeto` para criação ou in
 
 **Nota:** Este fluxo é implementado pela rota `/analysis/start` em [`backend/app/api/analysis.py`], que utiliza o serviço `ProjectStateService` para conversão e persistência do identificador do projeto.
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -95,7 +95,7 @@ sequenceDiagram
     BE->>MCP: Envia payload (project_id, analysis_type, ...)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-
+```
 
 ---
 
@@ -105,12 +105,12 @@ O Backend permite ao frontend consultar a existência de um projeto pelo nome, r
 
 **Nota:** Este fluxo é implementado pela rota `/projects/check` em [`backend/app/api/projects.py`], que utiliza o serviço `ProjectStateService` para buscar e validar projetos existentes.
 
-mermaid
+```mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
     BE->>BE: Busca project_id associado ao nome_projeto
     BE-->>FE: exists: true, state (inclui project_id)
-
+```
 
 ---
 
@@ -135,7 +135,7 @@ Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epic
 
 **Nota:** Este fluxo é orquestrado pela rota `/analysis/start` em [`backend/app/api/analysis.py`] e pelo serviço `ContextEnrichmentService`, garantindo que o contexto enviado ao MCP seja o mais completo possível.
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -151,7 +151,7 @@ sequenceDiagram
     BE->>MCP: Envia payload enriquecido (comentario_extra)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-
+```
 
 ---
 
@@ -173,7 +173,7 @@ Fluxo:
 
 **Diagrama Mermaid atualizado:**
 
-mermaid
+```mermaid
 sequenceDiagram
     participant MCP as MCP Server
     participant BE as Backend
@@ -185,7 +185,7 @@ sequenceDiagram
     BE->>BE: Injeta last_job_id do resumo nos relatórios individuais
     BE->>Redis: Marca job como done
     BE-->>MCP: Confirma recebimento
-
+```
 
 ---
 
@@ -225,7 +225,7 @@ Esta subseção detalha o algoritmo utilizado para selecionar o estado mais rece
 
 **Exemplo de código Mermaid ilustrando o fluxo de decisão:**
 
-mermaid
+```mermaid
 flowchart TD
     A[Início: Lista de blobs candidatos] --> B{Para cada blob}
     B --> C1[Extrai timestamp do nome do arquivo]
@@ -240,7 +240,7 @@ flowchart TD
     D3 -- Não --> E4[Usa data mínima]
     E1 & E2 & E3 & E4 --> F[Ordena blobs por data (desc)]
     F --> G[Seleciona blob mais recente]
-
+```
 
 ---
 
