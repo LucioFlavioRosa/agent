@@ -3,8 +3,7 @@ ANALYSIS_CONTEXT_CONFIG = {
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
     ],
      "criacao_epicos_timeline": [
-        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"},
-        {"estado_para_ler": "features", "report_para_ler": "features_report"}
+        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
     ],
     "refinamento_epicos_timeline": [
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"},
