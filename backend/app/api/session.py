@@ -21,22 +21,22 @@ async def get_project_reports(
     usuario_executor = _extract_usuario_executor(current_user)
     logger = logging.getLogger("session_api")
     redis_service = RedisSessionService()
+    redis_reports = redis_service.get_all_reports_for_project(project_id)
+    if redis_reports:
+        all_match = True
+        for report_key, report in redis_reports.items():
+            if report is not None:
+                if "job_id" not in report:
+                    logger.warning(f"Report '{report_key}' não possui job_id (estado legado ou erro).")
+                    report["job_id"] = None
+                if report["job_id"] != job_id:
+                    all_match = False
+                    logger.warning(f"Divergência de job_id no report '{report_key}': esperado '{job_id}', encontrado '{report['job_id']}'")
+                    break
+        if all_match:
+            logger.info(f"✅ Relatórios encontrados no Redis com job_id correspondente ({job_id}). Retornando 200.")
+            return redis_reports
     try:
-        redis_reports = redis_service.get_all_reports_for_project(project_id)
-        if redis_reports:
-            all_match = True
-            for report_key, report in redis_reports.items():
-                if report is not None:
-                    if "job_id" not in report:
-                        logger.warning(f"Report '{report_key}' não possui job_id (estado legado ou erro).")
-                        report["job_id"] = None
-                    if report["job_id"] != job_id:
-                        all_match = False
-                        logger.warning(f"Divergência de job_id no report '{report_key}': esperado '{job_id}', encontrado '{report['job_id']}'")
-                        break
-            if all_match:
-                logger.info(f"✅ Relatórios encontrados no Redis com job_id correspondente ({job_id}). Retornando 200.")
-                return redis_reports
         blob_state = await ProjectStateService.load_all_states_from_blob(usuario_executor, project_id)
         if blob_state:
             tem_conteudo = _check_content(blob_state)
