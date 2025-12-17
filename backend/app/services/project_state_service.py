@@ -261,7 +261,7 @@ class ProjectStateService:
 
     @staticmethod
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
-        logger.info(f"Carregando todos os estados para usuario={usuario_executor}, project_id={project_id}")
+        logger.info(f"Carregando estados para usuario={usuario_executor}, project_id={project_id}")
         _, container_client = _get_blob_clients()
         
         def extract_timestamp_from_filename(blob_name: str) -> datetime.datetime:
@@ -271,8 +271,8 @@ class ProjectStateService:
             except Exception:
                 return datetime.datetime.min
 
-        # Variável auxiliar para capturar o ID de onde quer que ele venha
-        captured_last_job_id = None
+        # --- MUDANÇA 1: Prioridade para o ID do Resumo ---
+        job_id_master = None 
 
         # 1. Carregar Resumo
         prefix_resumo = f"{usuario_executor}/"
@@ -301,11 +301,10 @@ class ProjectStateService:
             resumo_state = candidatos_resumo[0][1]
             nome_projeto = resumo_state.get("nome_projeto")
             
-            # Tenta capturar do resumo
-            if resumo_state.get("last_job_id"):
-                captured_last_job_id = resumo_state.get("last_job_id")
-                
-            logger.info(f"[RESUMO] Selecionado arquivo mais recente: {candidatos_resumo[0][0].name}")
+            # O Resumo é a autoridade máxima sobre qual é o Job atual
+            job_id_master = resumo_state.get("last_job_id") or resumo_state.get("job_id")
+            
+            logger.info(f"[RESUMO] Arquivo recente: {candidatos_resumo[0][0].name} | Job ID Mestre: {job_id_master}")
         else:
             return {}
 
@@ -354,30 +353,30 @@ class ProjectStateService:
                     candidatos_report.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
                     latest_state = candidatos_report[0][1]
                     
-                    # Tenta capturar do relatório específico (O mais provável!)
-                    if latest_state.get("last_job_id"):
-                        captured_last_job_id = latest_state.get("last_job_id")
+                    # --- MUDANÇA 2: NÃO SOBRESCREVER O MESTRE COM LIXO VELHO ---
+                    # Só pegamos o ID daqui se ainda não tivermos achado nada no resumo
+                    id_local = latest_state.get("last_job_id") or latest_state.get("job_id")
+                    if not job_id_master and id_local:
+                        job_id_master = id_local
 
                     agora_iso = datetime.datetime.utcnow().isoformat()
                     if "ultima_atualizacao" not in latest_state: latest_state["ultima_atualizacao"] = agora_iso
-                    if "created_at" not in latest_state: latest_state["created_at"] = agora_iso
-                    if "nome_projeto" not in latest_state: latest_state["nome_projeto"] = nome_projeto
                     
                     chave_destino = key_map.get(report_type)
                     if chave_destino:
                         states_dict[chave_destino] = latest_state
 
-        # 3. CONSTRUÇÃO FINAL DA RESPOSTA
+        # 3. CONSTRUÇÃO FINAL
         try:
             response_obj = EstadoCompletoProjetoResponse(**states_dict)
             final_dict = response_obj.dict()
         except Exception as e:
-            logger.error(f"Erro na validação Pydantic em load_all_states: {e}. Retornando dict bruto.")
+            logger.error(f"Erro Pydantic: {e}")
             final_dict = states_dict
 
-        # 4. INJEÇÃO CRÍTICA DO LAST_JOB_ID (Usando a variável capturada)
-        if captured_last_job_id:
-            final_dict["last_job_id"] = captured_last_job_id
-            logger.info(f"✅ last_job_id ({captured_last_job_id}) preservado e injetado na resposta.")
+        # 4. INJEÇÃO SEGURA
+        if job_id_master:
+            final_dict["last_job_id"] = job_id_master
+            logger.info(f"✅ last_job_id ({job_id_master}) injetado com sucesso.")
         
         return final_dict
