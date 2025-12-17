@@ -31,7 +31,7 @@ class AnthropicClaudeProvider(ILLMProvider):
         instrucoes_extras: str = "",
         usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000,
+        max_token_out: int = 20000,
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         modelo_final = model_name or "claude-3-opus-20240229"
