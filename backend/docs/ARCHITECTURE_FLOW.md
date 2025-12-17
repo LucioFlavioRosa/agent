@@ -15,7 +15,7 @@ Fluxo:
 
 Diagrama Mermaid:
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -29,7 +29,7 @@ sequenceDiagram
     BE->>Blob: Busca projetos de resumo do usuario_executor
     BE->>Redis: Busca estados de resumo no cache
     BE-->>FE: Retorna user_info + lista de projetos de resumo
-
+```
 ---
 
 ## 2. Criação de Projeto e Conversão nome_projeto → project_id
@@ -42,7 +42,7 @@ O frontend deve sempre enviar apenas o campo `nome_projeto` para criação ou in
 
 Diagrama de Fluxo Atualizado:
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -53,17 +53,17 @@ sequenceDiagram
     BE->>MCP: Envia payload (project_id, analysis_type, ...)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-
+```
 ---
 
 ## 3. Consulta de Projeto Existente
 
-mermaid
+```mermaid
 sequenceDiagram
     FE->>BE: GET /projects/check (nome_projeto)
     BE->>BE: Busca project_id associado ao nome_projeto
     BE-->>FE: exists: true, state (inclui project_id)
-
+```
 ---
 
 ## 4. Observações Importantes
@@ -87,7 +87,7 @@ Quando o frontend envia um `analysis_type` de refinamento (ex: `refinamento_epic
 
 Diagrama Mermaid atualizado:
 
-mermaid
+```mermaid
 sequenceDiagram
     participant FE as Frontend
     participant BE as Backend
@@ -103,5 +103,5 @@ sequenceDiagram
     BE->>MCP: Envia payload enriquecido (comentario_extra)
     MCP-->>BE: job_id, project_id
     BE-->>FE: message, project_id, nome_projeto
-
+```
 ---
