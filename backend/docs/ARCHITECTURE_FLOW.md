@@ -4,7 +4,7 @@
 
 Abaixo está uma visão macro geral da arquitetura da aplicação Peers CodeAI, ilustrando os principais componentes e os fluxos de dados entre eles. Este diagrama serve como ponto de entrada para o entendimento do sistema, mostrando como o Frontend, Backend API, Redis, Blob Storage, MCP Server e Azure AD interagem para autenticação, processamento de análises, persistência de estados e gerenciamento de sessões e relatórios.
 
-mermaid
+```mermaid
 flowchart TD
     subgraph Usuário
         FE[Frontend (React/Next.js)]
@@ -56,7 +56,7 @@ flowchart TD
     note over BE,Blob: 5. Estados persistentes são salvos/consultados no Blob Storage
     note over BE,MCP: 6. Backend envia payloads de análise ao MCP Server
     note over MCP,BE: 7. MCP retorna resultados via webhooks para o backend
-
+```
 
 ---
 
