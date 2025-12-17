@@ -27,7 +27,7 @@ Para cada Épico, crie features seguindo estas regras:
 ## 5. FORMATO DE SAÍDA (ESTRITO - JSON)
 **SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
 
-1.  **Raiz:** `features_report` (Lista de objetos).
+1.   É mandatório que tenha apenas uma chave que é `features_report` (Lista de objetos). É TOTALMENTE PROIBIDO TER OUTRA OUTRA CHAVE.
 2.  **Campos Obrigatórios por Item:**
     * `"id"`: (String, ex: "F01") Sequencial único.
     * `"epic_id"`: (String, ex: "E01") **CRUCIAL:** O ID do Épico pai a que esta feature pertence.
