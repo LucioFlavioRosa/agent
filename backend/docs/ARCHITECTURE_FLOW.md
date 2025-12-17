@@ -53,8 +53,6 @@ Fluxo:
 
 **Nota:** O fluxo de validação do token JWT é orquestrado pela rota `/auth/login` em [`backend/app/api/auth.py`], que utiliza o serviço `AzureADService` para garantir autenticidade e extração segura do usuário.
 
-Diagrama Mermaid:
-
 mermaid
 sequenceDiagram
     participant FE as Frontend
@@ -82,8 +80,6 @@ O frontend deve sempre enviar apenas o campo `nome_projeto` para criação ou in
 - O enriquecimento de contexto agora exige usuario_executor e nome_projeto como parâmetros obrigatórios.
 
 **Nota:** Este fluxo é implementado pela rota `/analysis/start` em [`backend/app/api/analysis.py`], que utiliza o serviço `ProjectStateService` para conversão e persistência do identificador do projeto.
-
-Diagrama de Fluxo Atualizado:
 
 mermaid
 sequenceDiagram
