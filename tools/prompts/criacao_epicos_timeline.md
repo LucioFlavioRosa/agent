@@ -45,7 +45,7 @@ Use o ciclo SDLC para encaixar as peças no limite de 2 pessoas:
     * `"progresso_estimado"`: (String) %.
     * `"justificativa_agendamento"`: (String) **NOVO CAMPO:** Explique brevemente por que agendou aqui (ex: "Iniciado apenas na semana 5 para liberar a dupla de Backend que estava no Épico 1").
 
-## 6. EXEMPLO DE LÓGICA ESPERADA (Sequenciamento por Restrição)
+## 6. EXEMPLO DE LÓGICA OBRIGATÓRIA (Sequenciamento por Restrição)
 
 ```json
 {
