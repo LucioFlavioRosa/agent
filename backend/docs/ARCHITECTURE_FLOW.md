@@ -5,58 +5,53 @@
 Abaixo está uma visão macro geral da arquitetura da aplicação Peers CodeAI, ilustrando os principais componentes e os fluxos de dados entre eles. Este diagrama serve como ponto de entrada para o entendimento do sistema, mostrando como o Frontend, Backend API, Redis, Blob Storage, MCP Server e Azure AD interagem para autenticação, processamento de análises, persistência de estados e gerenciamento de sessões e relatórios.
 
 ```mermaid
-flowchart TD
-    subgraph Usuário
-        FE["Frontend (React/Next.js)"]
+sequenceDiagram
+    autonumber
+    actor User as Usuário (Frontend)
+    participant AD as Azure AD
+    participant API as Backend (FastAPI)
+    participant DB as Redis/Blob
+    participant MCP as MCP Server
+
+    rect rgb(240, 248, 255)
+        note right of User: 1. Autenticação e Carga Inicial
+        User->>AD: Login Interativo
+        AD-->>User: Retorna Token JWT
+        
+        User->>API: GET /projects (Header: Bearer Token)
+        API->>AD: Valida Assinatura do Token
+        AD-->>API: Token Válido
+        
+        API->>DB: Consulta Lista de Projetos
+        DB-->>API: Dados dos Projetos
+        API-->>User: JSON: Lista de Projetos
     end
-    subgraph Infraestrutura
-        AD[Azure AD]
-        Redis[(Redis)]
-        Blob[(Blob Storage)]
-        MCP[MCP Server]
+
+    rect rgb(255, 250, 240)
+        note right of User: 2. Solicitação de Análise (Async)
+        User->>API: POST /analyze (Payload do Projeto)
+        
+        API->>DB: Cria Sessão/Job (Status: PROCESSING)
+        API->>MCP: Envia Payload para Análise (Disparo)
+        
+        note right of MCP: MCP processa...
+        
+        API-->>User: 202 Accepted (Retorna JobID)
+        
+        note over User, API: Frontend fica aguardando ou fazendo Polling
     end
-    subgraph Backend
-        BE["Backend API (FastAPI)"]
-        Auth[auth.py]
-        Analysis[analysis.py]
-        Projects[projects.py]
-        Session[session.py]
-        Webhooks[webhooks.py]
+
+    rect rgb(240, 255, 240)
+        note right of User: 3. Processamento e Retorno
+        MCP->>API: Webhook: POST /webhook/result (Resultado)
+        API->>DB: Atualiza Job (Status: DONE, Resultado Salvo)
+        API-->>MCP: 200 OK (Confirmado)
+        
+        User->>API: GET /jobs/{JobID} (Polling)
+        API->>DB: Consulta Status
+        DB-->>API: Status: DONE + Resultado
+        API-->>User: JSON: Resultado da Análise
     end
-
-    FE -- "1. Token JWT" --> Auth
-    Auth -- Validação --> AD
-    FE -- "3. Requisições REST" --> BE
-    BE -- Rotas --> Auth
-    BE -- Rotas --> Analysis
-    BE -- Rotas --> Projects
-    BE -- Rotas --> Session
-    BE -- Rotas --> Webhooks
-
-    Analysis -- Criação/Consulta Sessão --> Redis
-    Projects -- Consulta Sessão/Projetos --> Redis
-    Session -- Consulta/Atualização Relatórios --> Redis
-    Webhooks -- Atualização Job/Relatório --> Redis
-
-    Analysis -- Persistência Estado --> Blob
-    Projects -- Consulta Estado --> Blob
-    Session -- Persistência/Consulta Estado --> Blob
-    Webhooks -- Persistência Estado --> Blob
-
-    Analysis -- "6. Payload Assíncrono" --> MCP
-    MCP -- "7. Webhook Resultado" --> Webhooks
-
-    FE -- Consulta Relatórios/Projetos --> BE
-    BE -- Resposta Dados/Status --> FE
-```
-
-    note over FE,BE: 1. Usuário autentica via Azure AD (JWT)
-    note over BE,AD: 2. Backend valida token e extrai usuario_executor
-    note over FE,BE: 3. Frontend envia requisições para rotas da API
-    note over BE,Redis: 4. Sessão, jobs e relatórios são armazenados no Redis
-    note over BE,Blob: 5. Estados persistentes são salvos/consultados no Blob Storage
-    note over BE,MCP: 6. Backend envia payloads de análise ao MCP Server
-    note over MCP,BE: 7. MCP retorna resultados via webhooks para o backend
 ```
 
 ---
