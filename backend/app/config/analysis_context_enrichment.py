@@ -3,14 +3,15 @@ ANALYSIS_CONTEXT_CONFIG = {
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
     ],
      "criacao_epicos_timeline": [
-        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
+        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"},
+        {"estado_para_ler": "features", "report_para_ler": "features_report"}
     ],
     "refinamento_epicos_timeline": [
         {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"},
         {"estado_para_ler": "epicos_timeline", "report_para_ler": "epicos_timeline_report"}
     ],
     "criacao_features_azure_devops": [
-        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"}
+        {"estado_para_ler": "epicos", "report_para_ler": "epicos_report"},
     ],
     "refinamento_features_azure_devops": [
         {"estado_para_ler": "features", "report_para_ler": "features_report"}
