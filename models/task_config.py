@@ -8,3 +8,4 @@ class TaskConfig(BaseModel):
     agent_type: str
     instrucoes_extras: str
     provider: Optional[str] = None
+    bedrock_enabled: Optional[bool] = False
