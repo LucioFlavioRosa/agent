@@ -5,6 +5,7 @@ criacao_epicos_azure_devops:
   agent_type: "processador"
   instrucoes_extras: "criacao_epicos_azure_devops"
   provider: "anthropic"
+  bedrock_enabled: true
 
 refinamento_epicos_azure_devops:
   description: "criação de epicos a partir de transcrição de reunião"
