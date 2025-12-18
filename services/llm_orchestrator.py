@@ -9,10 +9,12 @@ class LLMOrchestrator:
         model_name = llm_request_params.get('model_name')
         agent_type = llm_request_params.get('agent_type', 'processador')
         provider = llm_request_params.get('provider')
+        bedrock_enabled = llm_request_params.get('bedrock_enabled', False)
         llm_provider = LLMProviderFactory.create_provider(
             model_name, 
             self.rag_retriever, 
-            provider_hint=provider
+            provider_hint=provider,
+            bedrock_enabled=bedrock_enabled
         )
         job_id = llm_request_params.get('job_id')
         agente = AgentFactory.create_agent(agent_type, llm_provider=llm_provider)
