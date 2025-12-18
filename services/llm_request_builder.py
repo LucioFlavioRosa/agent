@@ -15,5 +15,6 @@ class LLMRequestBuilder:
             'model_name': task_config.model_name,
             'provider': getattr(task_config, 'provider', None),
             'instrucoes_padrao': instrucoes_padrao,
-            'job_id': mcp_request.job_id
+            'job_id': mcp_request.job_id,
+            'bedrock_enabled': getattr(task_config, 'bedrock_enabled', False)
         }
