@@ -85,7 +85,7 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
         orchestrator = LLMOrchestrator()
         llm_request_params["job_id"] = job_id
         agent_result = orchestrator.execute_analysis(llm_request_params)
-        raw_content = extrair_conteudo_json(agent_result)
+        raw_content = report_extraction.extrair_conteudo_json(agent_result)
         cleaned_result = clean_llm_response(raw_content)
         logger.info(f"📤 [RESPOSTA lIMPA] Payload:\n{json.dumps(cleaned_result, indent=2, default=str)}")
         final_report_data = {}
