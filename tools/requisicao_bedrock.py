@@ -53,8 +53,7 @@ class AmazonBedrockProvider(ILLMProvider):
             ],
             "system": prompt_sistema,
             "max_tokens": max_token_out,
-            "temperature": 0.3,
-            "top_p": 0.9
+            "temperature": 0.2,
         }
         
         try:
