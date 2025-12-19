@@ -15,7 +15,6 @@ from services.llm_request_builder import LLMRequestBuilder
 from services.llm_orchestrator import LLMOrchestrator
 from services.response_cleaner import clean_llm_response
 from services.project_tracker import ProjectTracker
-from utils import report_extraction
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
@@ -27,6 +26,53 @@ router = APIRouter()
 
 BACKEND_BASE_URL = os.environ.get("TARGET_BACKEND_URL", "http://localhost:8000")
 project_tracker = ProjectTracker()
+
+import re
+import json
+
+def extrair_conteudo_json(dados):
+    """
+    1. Varre recursivamente o dicionário/lista buscando uma string que contenha ```json
+    2. Extrai o conteúdo dentro do bloco de código
+    3. Retorna o objeto JSON (dict) pronto
+    """
+    
+    # Função interna para encontrar a string crua (o texto do LLM)
+    def encontrar_string_com_markdown(obj):
+        if isinstance(obj, str):
+            if "```json" in obj:
+                return obj
+        elif isinstance(obj, dict):
+            for value in obj.values():
+                resultado = encontrar_string_com_markdown(value)
+                if resultado: return resultado
+        elif isinstance(obj, list):
+            for item in obj:
+                resultado = encontrar_string_com_markdown(item)
+                if resultado: return resultado
+        return None
+
+    # 1. Acha a string que tem o markdown
+    texto_bruto = encontrar_string_com_markdown(dados)
+    
+    if not texto_bruto:
+        # Se não achou markdown, tenta ver se o próprio input já é o dict alvo
+        # ou retorna erro/vazio dependendo da sua regra de negócio
+        return dados 
+
+    # 2. Usa Regex para pegar TUDO que está entre ```json e ```
+    # O re.DOTALL faz o ponto (.) pegar quebras de linha também
+    match = re.search(r"```json\s*(.*?)\s*```", texto_bruto, re.DOTALL | re.IGNORECASE)
+    
+    if match:
+        json_str = match.group(1)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            print(f"Erro ao decodificar JSON extraído: {e}")
+            return None
+    
+    return None
 
 @router.get("/")
 def home():
@@ -85,7 +131,7 @@ async def process_analysis_task(project_id: str, job_id: str, llm_request_params
         orchestrator = LLMOrchestrator()
         llm_request_params["job_id"] = job_id
         agent_result = orchestrator.execute_analysis(llm_request_params)
-        raw_content = report_extraction.extrair_conteudo_json(agent_result)
+        raw_content = extrair_conteudo_json(agent_result)
         cleaned_result = clean_llm_response(raw_content)
         logger.info(f"📤 [RESPOSTA lIMPA] Payload:\n{json.dumps(cleaned_result, indent=2, default=str)}")
         final_report_data = {}
