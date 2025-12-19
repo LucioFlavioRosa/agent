@@ -38,7 +38,7 @@ Identifique problemas espalhados no tempo. Se no começo falam de "lentidão" e 
 
 ## 4. FORMATO DE SAÍDA (ESTRITO - JSON)
 **SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
-* **Raiz:** É mandatório que tenha apenas uma chave que é `epicos_timeline_report` que é uma Lista de objetos. É TOTALMENTE PROIBIDO TER OUTRA OUTRA CHAVE  e ou outro formato
+* **Raiz:** É mandatório que tenha apenas uma chave que é `epicos_report` que é uma Lista de objetos. É TOTALMENTE PROIBIDO TER OUTRA OUTRA CHAVE  e ou outro formato
 * **Campos Obrigatórios por Item:**
     * `"id"`: (String, ex: "E01")
     * `"titulo"`: (String) Nome executivo do Épico (ex: "Módulo Financeiro").
