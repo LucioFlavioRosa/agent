@@ -45,6 +45,7 @@ Identifique problemas espalhados no tempo. Se no começo falam de "lentidão" e 
     * `"resumo_valor"`: (String) O benefício claro para o negócio.
     * `"business_case"`: (String) Quem pediu? Qual dor resolve? (Cite trechos ou cargos da transcrição).
     * `"entregaveis_macro"`: (Lista de Strings) Liste TUDO que compõe a entrega (Telas, APIs, Integrações e Banco). Mostre que é uma solução completa.
+    * `"squad_sugerida"`:(Lista de Strings) lista de perfis para executarem a tarefas
     * `"estimativa_semanas"`: (String) Estimativa para a entrega completa (Full Stack).
     * `"prioridade_estrategica"`: (String) "Crítica", "Alta", "Média".
 
@@ -64,6 +65,11 @@ Identifique problemas espalhados no tempo. Se no começo falam de "lentidão" e 
         "Integração: Conexão com Receita Federal para validação de CNPJ",
         "Banco de Dados: Modelagem das tabelas de Parceiros e Contratos"
       ],
+"squad_sugerida": [
+      "Backend Developer",
+      "Frontend Developer",
+      "Analista de BI"
+    ]
       "estimativa_semanas": "8 semanas",
       "prioridade_estrategica": "Alta"
     }
