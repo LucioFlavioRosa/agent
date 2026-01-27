@@ -43,6 +43,15 @@ criacao_features_azure_devops:
   provider: "anthropic"
   bedrock_enabled: true
 
+refinamento_features_azure_devops:
+  description: "criação de epicos a partir de transcrição de reunião"
+  status_update: "analisando a transcrição"
+  model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  agent_type: "processador"
+  instrucoes_extras: "refinamento_features_azure_devops"
+  provider: "anthropic"
+  bedrock_enabled: true
+
 criacao_premissas_riscos:
   description: "criação de epicos a partir de transcrição de reunião"
   status_update: "analisando o histórico"
