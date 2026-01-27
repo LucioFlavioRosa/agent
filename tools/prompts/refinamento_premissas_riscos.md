@@ -38,16 +38,37 @@ Cruze o feedback com as seguintes lógicas:
 3.  Esse objeto deve conter as chaves `premissas` e `riscos` (ambas listas).
 
 **SCHEMA:**
+
 ```json
 {
-  "premissas_riscos_report": [
-    {
-      "premissas": [
-        { "id": "P01", "descricao": "...", "impacto_se_falhar": "..." }
-      ],
-      "riscos": [
-        { "id": "R01", "descricao": "...", "probabilidade": "...", "impacto": "...", "plano_mitigacao": "..." }
-      ]
-    }
+  "premissas_riscos_report": [{
+    "premissas": [
+      {
+        "id": "P01",
+        "descricao": "Disponibilização de VPN e acessos ao Banco de Dados Legado até o Dia 2 da Semana 1.",
+        "impacto_se_falhar": "Atraso imediato no início do Épico E02 (Integração) e ociosidade da equipe técnica."
+      },
+      {
+        "id": "P02",
+        "descricao": "Product Owner do cliente disponível para homologação das telas em até 24h após entrega.",
+        "impacto_se_falhar": "Acúmulo de refação e estouro do cronograma na fase de QA."
+      }
+    ],
+    "riscos": [
+      {
+        "id": "R01",
+        "descricao": "Desenvolvedor Pleno alocado sozinho para integração complexa com SAP (Épico E01).",
+        "probabilidade": "Alta",
+        "impacto": "Alto",
+        "plano_mitigacao": "Garantir acompanhamento diário do Tech Lead (P01) ou pair programming nas duas primeiras semanas."
+      },
+      {
+        "id": "R02",
+        "descricao": "Sobreposição de Go-Live do Épico 1 com início do Épico 3 na Semana 4.",
+        "probabilidade": "Média",
+        "impacto": "Médio",
+        "plano_mitigacao": "Negociar congelamento de escopo do Épico 3 ou adicionar recurso pontual de QA."
+      }
+    ]}
   ]
 }
