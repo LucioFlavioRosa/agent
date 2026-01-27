@@ -8,7 +8,7 @@ criacao_epicos_azure_devops:
   bedrock_enabled: true
 
 refinamento_epicos_azure_devops:
-  description: "criação de epicos a partir de transcrição de reunião"
+  description: "refinamento de epicos a criados"
   status_update: "analisando o histórico"
   model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
   agent_type: "processador"
@@ -17,7 +17,7 @@ refinamento_epicos_azure_devops:
   bedrock_enabled: true
 
 criacao_epicos_timeline:
-  description: "criação de epicos a partir de transcrição de reunião"
+  description: "criação do timelime de epicos a partir do epicos"
   status_update: "analisando a transcrição"
   model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
   agent_type: "processador"
@@ -26,7 +26,7 @@ criacao_epicos_timeline:
   bedrock_enabled: true
 
 refinamento_epicos_timeline:
-  description: "criação de epicos a partir de transcrição de reunião"
+  description: "refinamento da timeline de desenvolvimento de epicos"
   status_update: "analisando a transcrição"
   provider: "anthropic"
   model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
@@ -35,7 +35,7 @@ refinamento_epicos_timeline:
   bedrock_enabled: true
   
 criacao_features_azure_devops:
-  description: "criação de epicos a partir de transcrição de reunião"
+  description: "criação de features a partir de epicos"
   status_update: "analisando a transcrição"
   model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
   agent_type: "processador"
@@ -44,7 +44,7 @@ criacao_features_azure_devops:
   bedrock_enabled: true
 
 refinamento_features_azure_devops:
-  description: "criação de epicos a partir de transcrição de reunião"
+  description: "refinamento das features geradas"
   status_update: "analisando a transcrição"
   model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
   agent_type: "processador"
@@ -53,10 +53,19 @@ refinamento_features_azure_devops:
   bedrock_enabled: true
 
 criacao_premissas_riscos:
-  description: "criação de epicos a partir de transcrição de reunião"
+  description: "criação de premissas e riscos para entrega dos epicos considerando as feaures e timeline"
   status_update: "analisando o histórico"
   model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
   agent_type: "processador"
   instrucoes_extras: "criacao_premissas_riscos"
+  provider: "anthropic"
+  bedrock_enabled: true
+
+refinamento_premissas_riscos:
+  description: "refinamento das premissas e riscos"
+  status_update: "analisando o histórico"
+  model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  agent_type: "processador"
+  instrucoes_extras: "refinamento_premissas_riscos"
   provider: "anthropic"
   bedrock_enabled: true
