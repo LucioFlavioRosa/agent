@@ -1,7 +1,0 @@
-fastapi
-pydantic
-redis
-azure-storage-blob
-azure-search-documents
-openai
-anthropic
