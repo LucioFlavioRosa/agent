@@ -1,48 +1,20 @@
-relatorio_cleancode:
-  description: "Análise de código limpo e boas práticas."
+review:
+  description: Revisão de código utilizando agente especializado.
   steps:
-    - name: "Gerar relatório de Clean Code"
-      agent: "agente_revisor"
-      prompt: "relatorio_cleancode"
-      requires_approval: true
-      status_update: "pending_approval"
-    - name: "Aplicar melhorias sugeridas"
-      agent: "agente_processador"
-      prompt: "aplicacao_de_mudancas"
-      status_update: "processing"
-relatorio_owasp:
-  description: "Análise de segurança baseada nas recomendações OWASP."
+    - name: Revisar código
+      agent_type: review
+      requires_repository: true
+      status_update: processing
+      params:
+        arquivos_especificos: null
+        instrucoes_extras: null
+improve:
+  description: Melhoria de código utilizando agente especializado.
   steps:
-    - name: "Gerar relatório OWASP"
-      agent: "agente_revisor"
-      prompt: "relatorio_owasp"
-      requires_approval: true
-      status_update: "pending_approval"
-    - name: "Aplicar correções de segurança"
-      agent: "agente_processador"
-      prompt: "aplicacao_de_mudancas"
-      status_update: "processing"
-relatorio_performance_eficiencia:
-  description: "Análise de performance e eficiência do código."
-  steps:
-    - name: "Gerar relatório de performance"
-      agent: "agente_revisor"
-      prompt: "relatorio_performance_eficiencia"
-      requires_approval: true
-      status_update: "pending_approval"
-    - name: "Aplicar melhorias de performance"
-      agent: "agente_processador"
-      prompt: "aplicacao_de_mudancas"
-      status_update: "processing"
-relatorio_teste_unitario:
-  description: "Análise e sugestão de testes unitários."
-  steps:
-    - name: "Gerar relatório de testes unitários"
-      agent: "agente_revisor"
-      prompt: "relatorio_teste_unitario"
-      requires_approval: true
-      status_update: "pending_approval"
-    - name: "Aplicar e criar testes sugeridos"
-      agent: "agente_processador"
-      prompt: "aplicacao_de_mudancas"
-      status_update: "processing"
+    - name: Melhorar código
+      agent_type: improve
+      requires_repository: true
+      status_update: processing
+      params:
+        arquivos_especificos: null
+        instrucoes_extras: null
