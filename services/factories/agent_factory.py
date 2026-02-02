@@ -1,24 +1,14 @@
-from services.agent_validator_service import AgentValidatorService
+from agents.agente_revisor import AgenteRevisor
+from agents.agente_comparador import AgenteComparador
 
 class AgentFactory:
     @staticmethod
-    def create_agent(agent_type, repo_reader, llm_provider):
-        # Validação: agentes de análise de código sempre exigem repo_reader
-        if AgentValidatorService.validate_agent_requires_repository(agent_type):
-            if repo_reader is None:
-                raise ValueError(f"O agente '{agent_type}' requer um repositório válido (repo_reader não pode ser None).")
-        # Instanciação do agente (exemplo, adapte conforme implementação real)
-        if agent_type == "review":
-            from agents.agente_revisor import AgenteRevisor
+    def create_agent(agent_type: str, repo_reader, llm_provider):
+        if agent_type == "revisor":
             return AgenteRevisor(repo_reader, llm_provider)
-        elif agent_type == "improve":
-            from agents.agente_processador import AgenteProcessador
-            return AgenteProcessador(repo_reader, llm_provider)
-        elif agent_type == "revisor":
-            from agents.agente_revisor_codigo import AgenteRevisorCodigo
-            return AgenteRevisorCodigo(repo_reader, llm_provider)
         elif agent_type == "comparador":
-            from agents.agente_comparador import AgenteComparador
             return AgenteComparador(repo_reader, llm_provider)
         else:
-            raise ValueError(f"Tipo de agente '{agent_type}' não suportado ou não requer repositório.")
+            raise ValueError(f"Tipo de agente não suportado: {agent_type}")
+
+# Todas as referências e lógica de criação para AgenteProcessador e AgenteRevisorCodigo foram removidas.
