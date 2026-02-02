@@ -5,6 +5,7 @@ from tools.azure_secret_manager import AzureSecretManager
 
 class BaseConector:
     _cached_repos: Dict[str, Union[object]] = {}
+    _TOKEN_MASK = '***'
     
     def __init__(self, repository_provider: IRepositoryProvider, secret_manager: ISecretManager = None):
         self.repository_provider = repository_provider
@@ -42,7 +43,8 @@ class BaseConector:
             return self._cached_repos[cache_key]
         
         token = self._get_token_for_org(org_name, platform)
-        print(f"[{platform} Conector] Token obtido: {'***' + token[-4:] if len(token) > 4 else '***'}")
+        masked_token = self._TOKEN_MASK + token[-4:] if len(token) > 4 else self._TOKEN_MASK
+        print(f"[{platform} Conector] Token obtido: {masked_token}")
         
         try:
             print(f"[{platform} Conector] Tentando acessar repositório '{normalized_repo}' via {type(self.repository_provider).__name__}...")
