@@ -1,28 +1,47 @@
-# workflows.yaml
-# Apenas workflows de revisão e melhoria de código permanecem ativos.
-# Todos os workflows/steps que utilizam AgenteProcessador ou AgenteRevisorCodigo foram removidos ou comentados.
+relatorio_performance_eficiencia:
+  description: "Analisar o código-fonte fornecido, independentemente da linguagem, para identificar gargalos de performance e ineficiências computacionais"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_performance_eficiencia"
+      requires_approval: true
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
+        
+relatorio_sast:
+  description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido, simulando a mentalidade de um atacante"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_sast"
+      requires_approval: true
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
 
-workflows:
-  revisao_codigo:
-    description: Revisão de código genérica
-    steps:
-      - name: Revisar Código
-        agent: agente_revisor
-        status_update: processing
-        params:
-          tipo_analise: review
-  melhoria_codigo:
-    description: Melhoria de código genérica
-    steps:
-      - name: Melhorar Código
-        agent: agente_revisor
-        status_update: processing
-        params:
-          tipo_analise: improve
-# Os workflows abaixo foram removidos/comentados por dependerem de agentes excluídos:
-# processador_workflow:
-#   description: Workflow removido (usava AgenteProcessador)
-#   steps: []
-# agente_revisor_codigo_workflow:
-#   description: Workflow removido (usava AgenteRevisorCodigo)
-#   steps: []
+relatorio_simplicacao:
+  description: "Analisar o código-fonte fornecido com o objetivo exclusivo de identificar violações dos princípios DRY (Don't Repeat Yourself), YAGNI (You Ain't Gonna Need It) e KISS (Keep It Simple, Stupid)"
+  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
+  steps:
+    - status_update: "analisando o repositório"
+      model_name: "claude-sonnet-4-5"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "relatorio_simplicacao"
+      requires_approval: true
+    - status_update: "aplicando_as_mudancas_apontadas"
+      model_name: "gpt-4.1"
+      agent_type: "revisor"
+      params:
+        tipo_analise: "aplicacao_de_mudancas"
