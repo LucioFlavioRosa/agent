@@ -1,21 +1,14 @@
-from typing import Optional
-from domain.interfaces.secret_manager_interface import ISecretManager
-import os
-
-def get_blob_connection_string(secret_manager: Optional[ISecretManager] = None) -> str:
+def get_blob_connection_string(secret_manager):
     """
-    Obtém a connection string do Azure Blob Storage, tentando primeiro o Key Vault via secret_manager,
-    e depois a variável de ambiente AZURE_STORAGE_CONNECTION_STRING.
+    Obtém a connection string do Azure Blob Storage usando o secret_manager já instanciado.
+    O secret_manager deve estar configurado para acessar o cofre dedicado ao Blob Storage.
     """
-    secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-    connection_string = None
-    if secret_manager is not None and secret_name:
-        try:
-            connection_string = secret_manager.get_secret(secret_name)
-        except Exception as e:
-            print(f"[blob_storage_utils] Warning: Failed to get connection string from Key Vault: {e}")
-    if not connection_string:
-        connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-    if not connection_string:
-        raise RuntimeError('Azure Blob Storage connection string not found in Key Vault or environment variables.')
-    return connection_string
+    secret_name = 'azure-storage-connection-string'
+    try:
+        connection_string = secret_manager.get_secret(secret_name)
+        if not connection_string:
+            raise ValueError(f"Connection string '{secret_name}' não encontrada no Key Vault de Blob Storage.")
+        return connection_string
+    except Exception as e:
+        print(f"[get_blob_connection_string] Erro ao buscar connection string: {e}")
+        raise
