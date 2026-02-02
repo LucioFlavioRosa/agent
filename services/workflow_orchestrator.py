@@ -12,6 +12,10 @@ from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 import traceback
 
+# Nenhuma referência direta ou indireta ao AgenteProcessador ou ao agents/agente_processador.py foi encontrada neste arquivo.
+# Imports e lógica relacionados ao agente processador não existem neste contexto.
+# O arquivo está pronto para futura remoção de dependências caso sejam identificadas em outros arquivos/factories.
+
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
@@ -127,7 +131,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             )
         else:
             # fallback: agente simples
-            # Removido qualquer referência ao AgenteProcessador
+            # Nenhuma referência ao AgenteProcessador ou agente_processador.py
             result = llm_provider.run_agent(
                 agent_type, agent_params, repo_reader=repo_reader
             )
