@@ -8,12 +8,14 @@ class VaultType(Enum):
     LLM = 'llm'
     REPOSITORY = 'repository'
     DEFAULT = 'default'
+    BLOB_STORAGE = 'blob_storage'
 
 class AzureSecretManager:
     _VAULT_URLS = {
         VaultType.LLM: os.getenv('AZURE_KEY_VAULT_LLM_URL'),
         VaultType.REPOSITORY: os.getenv('AZURE_KEY_VAULT_REPOSITORY_URL'),
-        VaultType.DEFAULT: os.getenv('AZURE_KEY_VAULT_URL')
+        VaultType.DEFAULT: os.getenv('AZURE_KEY_VAULT_URL'),
+        VaultType.BLOB_STORAGE: os.getenv('AZURE_KEY_VAULT_BLOB_STORAGE_URL')
     }
 
     def __init__(self, vault_type: VaultType = VaultType.DEFAULT):
