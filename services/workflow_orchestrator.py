@@ -12,10 +12,6 @@ from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 import traceback
 
-# Nenhuma referência direta ou indireta ao AgenteProcessador ou ao agents/agente_processador.py foi encontrada neste arquivo.
-# Imports e lógica relacionados ao agente processador não existem neste contexto.
-# O arquivo está pronto para futura remoção de dependências caso sejam identificadas em outros arquivos/factories.
-
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], rag_retriever=None, 
@@ -28,6 +24,24 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service)
         self.secret_manager = secret_manager
         self.dependency_container = dependency_container
+
+    def _extract_job_data(self, job_info: Dict[str, Any]) -> Dict[str, Any]:
+        data = job_info.get('data', {})
+        return {
+            'projeto': data.get('projeto'),
+            'repository_type': data.get('repository_type'),
+            'repo_name': data.get('repo_name'),
+            'repo_name_modernizado': data.get('repo_name_modernizado'),
+            'branch_name': data.get('branch_name_modernizado'),
+            'analysis_name': data.get('analysis_name'),
+            'original_analysis_type': data.get('original_analysis_type'),
+            'model_name': data.get('model_name'),
+            'instrucoes_extras': data.get('instrucoes_extras'),
+            'usar_rag': data.get('usar_rag', False),
+            'retornar_lista_arquivos': data.get('retornar_lista_arquivos', False),
+            'usuario_executor': data.get('usuario_executor'),
+            'arquivos_especificos': data.get('arquivos_especificos')
+        }
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para step {current_step_index}.")
@@ -53,20 +67,20 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
-        repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
-        analysis_type = job_info['data'].get('original_analysis_type', '')
+        job_data = self._extract_job_data(job_info)
+        repo_name_modernizado = job_data.get('repo_name_modernizado')
+        analysis_type = job_data.get('original_analysis_type', '')
         if not repo_name_modernizado:
             raise ValueError("O campo 'repo_name_modernizado' é obrigatório em job_info['data'] para execução do workflow.")
-        workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
+        workflow = self.workflow_registry.get(job_data['original_analysis_type'])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
         try:
-            projeto = job_info['data'].get('projeto')
-            repository_type = job_info['data'].get('repository_type')
-            repo_name = job_info['data'].get('repo_name')
-            branch_name = job_info['data'].get('branch_name_modernizado')
-            analysis_name = job_info['data'].get('analysis_name')
-            # Sempre lê do repositório antes de rodar análise
+            projeto = job_data.get('projeto')
+            repository_type = job_data.get('repository_type')
+            repo_name = job_data.get('repo_name')
+            branch_name = job_data.get('branch_name')
+            analysis_name = job_data.get('analysis_name')
             repository_provider = get_repository_provider_explicit(repository_type)
             cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
             repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service)
@@ -101,23 +115,24 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     repo_reader: ReaderGeral, step_iteration: int, 
                                     start_from_step: int, batch_steps: Optional[list] = None, 
                                     agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
-        model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
+        job_data = self._extract_job_data(job_info)
+        model_para_etapa = step.get('model_name', job_data.get('model_name'))
         llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
-        analysis_type = job_info['data'].get('original_analysis_type')
-        agent_params['instrucoes_extras'] = job_info['data'].get('instrucoes_extras', '')
-        repo_name = job_info['data'].get('repo_name_modernizado')
-        branch_name = job_info['data'].get('branch_name_modernizado')
+        analysis_type = job_data.get('original_analysis_type')
+        agent_params['instrucoes_extras'] = job_data.get('instrucoes_extras', '')
+        repo_name = job_data.get('repo_name_modernizado')
+        branch_name = job_data.get('branch_name')
         if branch_name:
             agent_params['nome_branch'] = branch_name
         agent_params['repositorio'] = repo_name
         agent_params.update({
-            'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
+            'usar_rag': job_data.get("usar_rag", False), 
             'model_name': model_para_etapa,
-            'repository_type': job_info['data']['repository_type'],
-            'retornar_lista_arquivos': job_info.get('data', {}).get('retornar_lista_arquivos', False),
-            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
+            'repository_type': job_data['repository_type'],
+            'retornar_lista_arquivos': job_data.get('retornar_lista_arquivos', False),
+            'usuario_executor': job_data.get('usuario_executor')
         })
         agent_params['job_id'] = job_id
         if agent_params_override:
@@ -130,8 +145,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 previous_step_result, repo_reader, llm_provider, agent_params
             )
         else:
-            # fallback: agente simples
-            # Nenhuma referência ao AgenteProcessador ou agente_processador.py
             result = llm_provider.run_agent(
                 agent_type, agent_params, repo_reader=repo_reader
             )

@@ -7,7 +7,6 @@ from domain.interfaces.llm_provider_interface import ILLMProvider
 from agents.logging_utils import init_logger, log_custom_data
 
 class AgenteRevisor:
-
     def __init__(
         self,
         repository_reader: IRepositoryReader,
@@ -16,6 +15,12 @@ class AgenteRevisor:
         self.repository_reader = repository_reader
         self.llm_provider = llm_provider
         init_logger()
+
+    def _validate_common_params(self, params: Dict[str, Any]) -> None:
+        required_keys = ['job_id', 'projeto', 'repository_type', 'repo_name', 'branch_name', 'analysis_name']
+        missing = [key for key in required_keys if key not in params or params[key] is None]
+        if missing:
+            raise ValueError(f"Parâmetros obrigatórios ausentes: {', '.join(missing)}")
 
     def _get_code(
         self,
@@ -26,6 +31,15 @@ class AgenteRevisor:
         arquivos_especificos: Optional[List[str]] = None,
         retornar_lista_arquivos: bool = False
     ) -> Dict[str, Any]:
+        params = {
+            'job_id': None,
+            'projeto': None,
+            'repository_type': repository_type,
+            'repo_name': repositorio,
+            'branch_name': nome_branch,
+            'analysis_name': tipo_analise
+        }
+        self._validate_common_params(params)
         try:
             resultado = self.repository_reader.read_repository(
                 nome_repo=repositorio,
@@ -66,6 +80,15 @@ class AgenteRevisor:
         current_batch: Optional[List[Dict[str, Any]]] = None,
         **kwargs
     ) -> Dict[str, Any]:
+        params = {
+            'job_id': job_id,
+            'projeto': projeto,
+            'repository_type': repository_type,
+            'repo_name': repositorio,
+            'branch_name': nome_branch,
+            'analysis_name': tipo_analise
+        }
+        self._validate_common_params(params)
         resultado_leitura = self._get_code(
             repositorio=repositorio,
             nome_branch=nome_branch,

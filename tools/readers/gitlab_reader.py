@@ -30,7 +30,8 @@ class GitLabReader(BaseReader):
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         arquivos_lidos = {}
-        for file_path in arquivos_especificos:
+        for i, file_path in enumerate(arquivos_especificos):
+            self._log_file_read_progress(i, len(arquivos_especificos), file_path)
             try:
                 content = self.read_single_file(repositorio, file_path, branch_a_ler)
                 if content is not None:
@@ -47,86 +48,53 @@ class GitLabReader(BaseReader):
         # Mantido para compatibilidade, mas agora não é usado diretamente em leitura de arquivos específicos
         return self.read_single_file(repositorio, caminho_arquivo, branch_a_ler)
 
+    def _build_gitlab_error_message(self, error_code: str, context: dict) -> str:
+        """Constrói mensagem de erro simplificada para o tratamento de erros do GitLabReader."""
+        error_messages = {
+            'branch_not_found': f"Branch '{context.get('branch')}' não encontrada no repositório GitLab '{context.get('repo')}'. Verifique se a branch existe.",
+            'repo_not_found': f"Repositório GitLab '{context.get('repo')}' não encontrado ou sem permissão de acesso.",
+            'permission_denied': f"Sem permissão para acessar a árvore do repositório GitLab '{context.get('repo')}'. Verifique as permissões do token.",
+            'unexpected': f"Erro inesperado ao obter árvore do repositório GitLab '{context.get('repo')}': {context.get('error')}"
+        }
+        return error_messages.get(error_code, f"Erro desconhecido: {context.get('error')}")
+
     def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
+        repo_name = getattr(repositorio, 'path_with_namespace', 'desconhecido')
+        print(f"Obtendo lista completa de arquivos GitLab da branch '{branch_a_ler}' do repositório '{repo_name}'...")
         try:
-            print(f"Obtendo lista completa de arquivos GitLab da branch '{branch_a_ler}' do repositório '{getattr(repositorio, 'path_with_namespace', 'desconhecido')}'...")
-            try:
-                tree_items = repositorio.repository_tree(ref=branch_a_ler, recursive=True, all=True)
-            except Exception as e:
-                msg = str(e).lower()
-                if "404" in msg or "not found" in msg:
-                    if "branch" in msg or "ref" in msg:
-                        raise ValueError(
-                            f"Branch '{branch_a_ler}' não encontrada no repositório GitLab "
-                            f"'{getattr(repositorio, 'path_with_namespace', 'desconhecido')}'. Verifique se a branch existe."
-                        ) from e
-                    else:
-                        raise ValueError(
-                            f"Repositório GitLab '{getattr(repositorio, 'path_with_namespace', 'desconhecido')}' não encontrado "
-                            f"ou sem permissão de acesso."
-                        ) from e
-                elif "403" in msg or "forbidden" in msg:
-                    raise PermissionError(
-                        f"Sem permissão para acessar a árvore do repositório GitLab "
-                        f"'{getattr(repositorio, 'path_with_namespace', 'desconhecido')}'. Verifique as permissões do token."
-                    ) from e
-                else:
-                    raise RuntimeError(
-                        f"Erro inesperado ao obter árvore do repositório GitLab "
-                        f"'{getattr(repositorio, 'path_with_namespace', 'desconhecido')}': {e}"
-                    ) from e
-            lista_arquivos = [
-                item['path'] for item in tree_items
-                if item['type'] == 'blob'
-            ]
-            print(f"Lista completa GitLab obtida: {len(lista_arquivos)} arquivos encontrados.")
-            return lista_arquivos
-        except (ValueError, PermissionError, RuntimeError):
-            raise
+            tree_items = repositorio.repository_tree(ref=branch_a_ler, recursive=True, all=True)
         except Exception as e:
-            raise RuntimeError(
-                f"ERRO CRÍTICO ao obter lista completa de arquivos GitLab "
-                f"para o repositório '{getattr(repositorio, 'path_with_namespace', 'desconhecido')}': {e}"
-            ) from e
+            msg = str(e).lower()
+            context = {'branch': branch_a_ler, 'repo': repo_name, 'error': e}
+            error_map = {
+                'branch_not_found': lambda m: "branch" in m or "ref" in m,
+                'repo_not_found': lambda m: "404" in m or "not found" in m,
+                'permission_denied': lambda m: "403" in m or "forbidden" in m,
+            }
+            for code, check in error_map.items():
+                if check(msg):
+                    raise ValueError(self._build_gitlab_error_message(code, context)) from e
+            raise RuntimeError(self._build_gitlab_error_message('unexpected', context)) from e
+        lista_arquivos = [
+            item['path'] for item in tree_items
+            if item['type'] == 'blob'
+        ]
+        print(f"Lista completa GitLab obtida: {len(lista_arquivos)} arquivos encontrados.")
+        return lista_arquivos
 
     def _ler_repositorio_completo(self, repositorio, branch_a_ler: str, tipo_analise: str, extensoes_alvo: List[str]) -> Dict[str, str]:
         arquivos_do_repo = {}
         try:
             print(f"Obtendo árvore de arquivos GitLab da branch '{branch_a_ler}' do repositório '{getattr(repositorio, 'path_with_namespace', 'desconhecido')}'...")
-            try:
-                tree_items = repositorio.repository_tree(ref=branch_a_ler, recursive=True, all=True)
-                print(f"Árvore GitLab obtida. {len(tree_items)} itens totais encontrados.")
-            except Exception as e:
-                msg = str(e).lower()
-                if "404" in msg or "not found" in msg:
-                    if "branch" in msg or "ref" in msg:
-                        raise ValueError(
-                            f"Branch '{branch_a_ler}' não encontrada no repositório GitLab "
-                            f"'{getattr(repositorio, 'path_with_namespace', 'desconhecido')}'. Verifique se a branch existe."
-                        ) from e
-                    else:
-                        raise ValueError(
-                            f"Repositório GitLab '{getattr(repositorio, 'path_with_namespace', 'desconhecido')}' não encontrado "
-                            f"ou sem permissão de acesso."
-                        ) from e
-                elif "403" in msg or "forbidden" in msg:
-                    raise PermissionError(
-                        f"Sem permissão para acessar a árvore do repositório GitLab "
-                        f"'{getattr(repositorio, 'path_with_namespace', 'desconhecido')}'. Verifique as permissões do token."
-                    ) from e
-                else:
-                    raise RuntimeError(
-                        f"Erro inesperado ao obter árvore do repositório GitLab "
-                        f"'{getattr(repositorio, 'path_with_namespace', 'desconhecido')}': {e}"
-                    ) from e
+            tree_items = repositorio.repository_tree(ref=branch_a_ler, recursive=True, all=True)
+            print(f"Árvore GitLab obtida. {len(tree_items)} itens totais encontrados.")
             arquivos_para_ler = [
                 item for item in tree_items
                 if item['type'] == 'blob' and any(item['path'].endswith(ext) for ext in extensoes_alvo)
             ]
             print(f"Filtragem GitLab concluída. {len(arquivos_para_ler)} arquivos com as extensões {extensoes_alvo} serão lidos.")
             for i, item in enumerate(arquivos_para_ler):
-                if (i + 1) % 50 == 0:
-                    print(f"  ...lendo arquivo {i + 1} de {len(arquivos_para_ler)} ({item['path']})")
+                self._log_file_read_progress(i, len(arquivos_para_ler), item['path'])
                 try:
                     file_content = repositorio.files.get(file_path=item['path'], ref=branch_a_ler)
                     decoded_content = base64.b64decode(file_content.content).decode('utf-8')
@@ -139,13 +107,18 @@ class GitLabReader(BaseReader):
                         print(f"AVISO: Sem permissão para ler o arquivo '{item['path']}'. Pulando.")
                     else:
                         print(f"AVISO: Falha ao ler ou decodificar o conteúdo do arquivo '{item['path']}'. Pulando. Erro: {e}")
-        except (ValueError, PermissionError, RuntimeError):
-            raise
         except Exception as e:
-            raise RuntimeError(
-                f"ERRO CRÍTICO durante a comunicação com a API GitLab "
-                f"para o repositório '{getattr(repositorio, 'path_with_namespace', 'desconhecido')}': {e}"
-            ) from e
+            msg = str(e).lower()
+            context = {'branch': branch_a_ler, 'repo': getattr(repositorio, 'path_with_namespace', 'desconhecido'), 'error': e}
+            error_map = {
+                'branch_not_found': lambda m: "branch" in m or "ref" in m,
+                'repo_not_found': lambda m: "404" in m or "not found" in m,
+                'permission_denied': lambda m: "403" in m or "forbidden" in m,
+            }
+            for code, check in error_map.items():
+                if check(msg):
+                    raise ValueError(self._build_gitlab_error_message(code, context)) from e
+            raise RuntimeError(self._build_gitlab_error_message('unexpected', context)) from e
         return arquivos_do_repo
 
     def read_repository_internal(

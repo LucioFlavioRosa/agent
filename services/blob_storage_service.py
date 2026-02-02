@@ -4,6 +4,7 @@ from azure.storage.blob import BlobServiceClient, ContentSettings
 from tools.blob_job_tracker import BlobJobTracker
 from tools.azure_secret_manager import AzureSecretManager
 from tools.blob_report_path_builder import build_report_blob_path
+from tools.blob_storage_utils import get_blob_connection_string
 
 class BlobStorageService:
     def __init__(self):
@@ -15,18 +16,8 @@ class BlobStorageService:
         container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
         if not container_name:
             raise RuntimeError('Azure Blob Storage container name missing.')
-        
-        connection_string = None
-        secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        try:
-            secret_manager = AzureSecretManager()
-            connection_string = secret_manager.get_secret(secret_name)
-        except Exception as e:
-            print(f"Warning: Failed to get connection string from Key Vault: {e}")
-            connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        if not connection_string:
-            raise RuntimeError('Azure Blob Storage connection string not found.')
-
+        secret_manager = AzureSecretManager()
+        connection_string = get_blob_connection_string(secret_manager)
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
 
@@ -51,10 +42,7 @@ class BlobStorageService:
 
     def update_job_tracker(self, report_blob_url: str, job_id: str) -> None:
         try:
-            # Extrai o caminho do blob da URL
-            from urllib.parse import urlparse
             path = urlparse(report_blob_url).path
-            # Remove o / inicial e o nome do container
             path_parts = path.lstrip('/').split('/', 1)
             if len(path_parts) != 2:
                 print(f"[BlobStorageService] Warning: Could not parse blob path from URL: {report_blob_url}")
@@ -67,7 +55,6 @@ class BlobStorageService:
 
     def get_jobs_for_report(self, report_blob_url: str):
         try:
-            from urllib.parse import urlparse
             path = urlparse(report_blob_url).path
             path_parts = path.lstrip('/').split('/', 1)
             if len(path_parts) != 2:

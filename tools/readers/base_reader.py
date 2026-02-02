@@ -59,6 +59,11 @@ class BaseReader(ABC):
         print(f"Leitura de arquivos específicos {provider_name} concluída. {len(arquivos_lidos)} de {len(arquivos_especificos)} arquivos lidos com sucesso.")
         return arquivos_lidos
 
+    def _log_file_read_progress(self, current: int, total: int, file_path: str, interval: int = 50):
+        """Exibe log de progresso da leitura de arquivos em intervalos definidos."""
+        if (current + 1) % interval == 0:
+            print(f"  ...lendo arquivo {current + 1} de {total} ({file_path})")
+
     @abstractmethod
     def _obter_lista_todos_arquivos(self, repositorio, branch_a_ler: str) -> List[str]:
         pass

@@ -37,7 +37,8 @@ class GitHubReader(BaseReader):
 
     def _ler_arquivos_especificos(self, repositorio, branch_a_ler: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         arquivos_lidos = {}
-        for file_path in arquivos_especificos:
+        for i, file_path in enumerate(arquivos_especificos):
+            self._log_file_read_progress(i, len(arquivos_especificos), file_path)
             try:
                 content = self.read_single_file(repositorio, file_path, branch_a_ler)
                 if content is not None:
@@ -94,8 +95,7 @@ class GitHubReader(BaseReader):
             ]
             print(f"Filtragem GitHub concluída. {len(arquivos_para_ler)} arquivos com as extensões {extensoes_alvo} serão lidos.")
             for i, element in enumerate(arquivos_para_ler):
-                if (i + 1) % 50 == 0:
-                    print(f"  ...lendo arquivo {i + 1} de {len(arquivos_para_ler)} ({element.path})")
+                self._log_file_read_progress(i, len(arquivos_para_ler), element.path)
                 try:
                     blob_content = repositorio.get_git_blob(element.sha).content
                     decoded_content = base64.b64decode(blob_content).decode('utf-8')
