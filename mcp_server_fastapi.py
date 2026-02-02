@@ -1,8 +1,7 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Literal
 from services.simplified_workflow_service import SimplifiedWorkflowService
-from services.agent_validator_service import AgentValidatorService
 
 app = FastAPI(
     title="Code Review & Improvement Server",
@@ -12,13 +11,21 @@ app = FastAPI(
 
 workflow_service = SimplifiedWorkflowService()
 
-class AnalysisRequest(BaseModel):
+VALID_AGENT_TYPES = ['processador']
+
+class StartAnalysisPayload(BaseModel):
     repository_type: Literal['github', 'gitlab', 'azure']
     repo_name: str = Field(..., description="Nome do repositório (ex: org/projeto/repo)")
     branch_name: str = Field(..., description="Nome da branch para análise")
-    agent_type: Literal['review', 'improve'] = Field(..., description="Tipo de agente a ser executado")
+    agent_type: Literal['processador'] = Field(..., description="Tipo de agente a ser executado (apenas 'processador' permitido)")
     arquivos_especificos: Optional[List[str]] = None
     instrucoes_extras: Optional[str] = None
+
+    @validator('agent_type')
+    def validate_agent_type(cls, v):
+        if v not in VALID_AGENT_TYPES:
+            raise ValueError(f"Tipo de agente inválido: {v}. Apenas 'processador' é permitido.")
+        return v
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
@@ -30,13 +37,7 @@ class StatusResponse(BaseModel):
     analysis_report: Optional[str] = None
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse)
-def start_analysis(payload: AnalysisRequest, background_tasks: BackgroundTasks):
-    # Validação: agente deve requerer repositório
-    if not AgentValidatorService.validate_agent_requires_repository(payload.agent_type):
-        raise HTTPException(
-            status_code=400,
-            detail=f"O agente '{payload.agent_type}' não é válido para análise de código. Apenas agentes que requerem repositório são permitidos."
-        )
+def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
     job_id = workflow_service.start_analysis(payload)
     background_tasks.add_task(workflow_service.run_analysis, job_id)
     return StartAnalysisResponse(job_id=job_id)
