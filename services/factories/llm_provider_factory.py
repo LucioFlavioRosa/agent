@@ -1,26 +1,10 @@
-from typing import Optional, Dict, Type
-from domain.interfaces.llm_provider_interface import ILLMProvider
-from tools.requisicao_openai import OpenAILLMProvider
-from tools.requisicao_claude import AnthropicClaudeProvider
-from tools.rag_retriever import AzureAISearchRAGRetriever
+from tools.requisicao_claude import AmazonBedrockProvider
+from services.azure_secret_manager import AzureSecretManager, VaultType
 
-class LLMProviderFactory:
-    _providers: Dict[str, Type[ILLMProvider]] = {
-        'openai': OpenAILLMProvider,
-        'claude': AnthropicClaudeProvider
-    }
-    
-    @classmethod
-    def create_provider(cls, model_name: Optional[str], rag_retriever: AzureAISearchRAGRetriever) -> ILLMProvider:
-        model_lower = (model_name or "").lower()
-        
-        if "claude" in model_lower:
-            provider_class = cls._providers.get('claude', OpenAILLMProvider)
-        else:
-            provider_class = cls._providers.get('openai', OpenAILLMProvider)
-        
-        return provider_class(rag_retriever=rag_retriever)
-    
-    @classmethod
-    def register_provider(cls, key: str, provider_class: Type[ILLMProvider]) -> None:
-        cls._providers[key] = provider_class
+def create_provider(model_name=None, rag_retriever=None, secret_manager=None):
+    # O secret_manager pode ser passado ou será criado com vault_type LLM
+    secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
+    # Instancia o AmazonBedrockProvider
+    provider = AmazonBedrockProvider(secret_manager=secret_manager)
+    # O rag_retriever não é utilizado diretamente no BedrockProvider, mas pode ser passado para futuras extensões
+    return provider
