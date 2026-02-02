@@ -1,126 +1,38 @@
-# Documentação do Workflow Principal - MCP Server
+# Workflow Simplificado de Análise de Código
 
-## Visão Geral
+## Objetivo
+Descrever o fluxo de trabalho para análise, revisão e melhoria de código utilizando agentes especializados.
 
-O MCP Server utiliza um sistema de orquestração de workflows para automatizar e controlar o processamento de jobs de análise e geração de código por agentes de IA. O componente central desse fluxo é o `WorkflowOrchestrator`, responsável por executar etapas (steps) definidas em arquivos de workflow YAML, gerenciar o estado dos jobs, lidar com relatórios e aprovações, e acionar serviços auxiliares.
+## Etapas do Workflow
+1. **Configuração da Análise**
+   - Defina o tipo de análise desejada (ex: limpeza de código, refatoração, sugestão de melhorias).
+   - Informe o repositório alvo (GitHub, Azure DevOps ou GitLab).
 
-Esta documentação detalha o funcionamento do workflow principal, ilustrando o fluxo de execução, os pontos de decisão e os principais componentes envolvidos.
+2. **Leitura do Código**
+   - O sistema acessa o repositório e lê os arquivos necessários para análise.
 
----
+3. **Execução dos Agentes de Análise**
+   - Agentes especializados processam o código, identificando problemas e sugerindo melhorias.
+   - O processamento pode ser incremental, permitindo rodadas seguras e rastreáveis de simplificação.
 
-## Componentes Envolvidos
+4. **Geração de Relatórios**
+   - Para cada rodada de análise, é gerado um relatório detalhado.
+   - Os relatórios podem ser consultados via API ou interface.
 
-- **WorkflowOrchestrator**: Classe principal que executa o workflow de acordo com o tipo de análise solicitado.
-- **WorkflowRegistryService/Loader**: Carrega e disponibiliza os workflows definidos em YAML.
-- **JobHandler**: Gerencia o estado e os dados dos jobs.
-- **ReportHandler**: Lê, valida e armazena relatórios de análise.
-- **CommitHandler**: Realiza commits das alterações geradas.
-- **StepStrategyFactory**: Cria estratégias para execução de cada etapa do workflow.
-- **Repository Providers/Readers**: Abstraem o acesso aos repositórios GitHub, GitLab ou Azure.
+## Como Consultar Relatórios
+- Utilize o endpoint de consulta para obter o relatório da análise desejada.
+- Os relatórios incluem histórico das mudanças, problemas encontrados e sugestões aplicadas.
 
----
+## Observações Importantes
+- Funcionalidades de commit, PR, build .NET, Azure Boards e comparação de código foram removidas.
+- O foco está em análise e melhoria incremental do código.
+- Recomenda-se executar múltiplas rodadas de análise para simplificação segura.
 
-## Fluxo Geral do Workflow
+## Exemplos de Tipos de Análise
+- Limpeza de código
+- Detecção de duplicidade
+- Refatoração incremental
+- Sugestão de boas práticas
 
-1. **Recebimento do Job**: O usuário inicia uma análise via API (`/start-analysis`), informando o tipo de análise, repositório, branch, etc.
-2. **Registro e Normalização**: O job é registrado, os nomes de repositório são normalizados e um identificador único é gerado.
-3. **Execução do Workflow**: O `WorkflowOrchestrator` é chamado para executar o workflow correspondente ao tipo de análise.
-4. **Execução dos Steps**: Cada etapa (step) do workflow é executada sequencialmente. Para cada step:
-   - O status do job é atualizado.
-   - Parâmetros específicos do step e do job são preparados.
-   - O agente apropriado é chamado (ex: processador, revisor, comparador).
-   - O resultado do step é salvo.
-   - Se for o primeiro step e houver relatório existente, ele pode ser lido do Blob Storage.
-   - Se o step exigir aprovação, o workflow é pausado até a aprovação manual.
-   - Se o workflow estiver em modo "gerar_relatorio_apenas", pode ser finalizado após o relatório.
-5. **Finalização**: Após todos os steps, o workflow pode:
-   - Salvar o relatório final no Blob Storage.
-   - Realizar commits das alterações no repositório.
-   - Atualizar o status do job para "completed".
-6. **Erros**: Qualquer exceção é capturada e o status do job é atualizado para "failed".
-
----
-
-## Diagrama de Fluxo (Mermaid)
-
-```mermaid
-flowchart TD
-    %% Etapa 1: Definição de todos os Nós
-    A[Início: Recebimento do Job via API]
-    B[Registro do Job e Normalização]
-    C[Carregamento do Workflow YAML]
-    D{Step Atual < Steps Totais?}
-    E[Executa Step Atual]
-    F{Step exige aprovação?}
-    G[Pausa workflow e aguarda aprovação]
-    H[Recebe aprovação]
-    I{Modo gerar_relatorio_apenas?}
-    J{Relatório válido?}
-    K[Finaliza workflow: completed]
-    L[Finaliza workflow: Salva relatório, realiza commits, status completed]
-    M[Fim]
-    N[Atualiza status para failed]
-
-    %% Etapa 2: Definição de todas as Conexões
-    A --> B
-    B --> C
-    C --> D
-    D -- Sim --> E
-    D -- Não --> L
-    D -- Erro --> N
-    E --> F
-    F -- Sim --> G
-    F -- Não --> I
-    G --> H
-    H --> D
-    I -- Sim --> J
-    I -- Não --> D
-    J -- Sim --> K
-    J -- Não --> E
-    L --> M
-    N --> M
-```
-
----
-
-## Pontos de Decisão Importantes
-
-- **Aprovação Manual**: Alguns steps podem exigir aprovação manual para prosseguir. O workflow é pausado e só continua após aprovação via API.
-- **Modo "gerar_relatorio_apenas"**: Se ativado, o workflow finaliza após a geração e validação do relatório, sem executar etapas de commit.
-- **Leitura de Relatório Existente**: O sistema tenta reutilizar relatórios já gerados, evitando processamento desnecessário.
-
----
-
-## Exemplos de Payloads
-
-### Início de Análise (`/start-analysis`)
-```json
-{
-  "repo_name_modernizado": "org/projeto",
-  "branch_name_modernizado": "main",
-  "projeto": "MeuProjeto",
-  "analysis_type": "modernizacao",
-  "repository_type": "github"
-}
-```
-
-### Resposta
-```json
-{
-  "job_id": "uuid-gerado"
-}
-```
-
----
-
-## Observações
-
-- O fluxo é altamente configurável via arquivos de workflow YAML, permitindo adicionar, remover ou modificar steps sem alterar o código-fonte.
-- O uso de estratégias e handlers especializados torna o sistema modular e fácil de estender.
-- O diagrama acima representa o fluxo padrão; workflows customizados podem adicionar etapas ou decisões adicionais.
-
----
-
-## Referências
-- Código-fonte: `services/workflow_orchestrator.py`, `services/workflow_registry_loader.py`, `services/workflow_registry_service.py`
-- Definições de workflow: `workflows.yaml`
+## Dependências
+Consulte o arquivo `requirements.txt` para as dependências mínimas necessárias.
