@@ -25,34 +25,6 @@ class JobDataService:
         data = {}
         data[JobFields.REPO_NAME] = normalized_repo_name
         analysis_type = payload_dict.get('analysis_type')
-        if analysis_type == 'criacao_epicos_azure_devops':
-            organization, project = self._parse_repository_name(normalized_repo_name)
-            data[JobFields.AZURE_ORGANIZATION] = organization
-            data[JobFields.AZURE_PROJECT] = project
-        if analysis_type == 'criacao_epicos_azure_devops_eurofarma':
-            organization, project = self._parse_repository_name(normalized_repo_name)
-            data[JobFields.AZURE_ORGANIZATION] = organization
-            data[JobFields.AZURE_PROJECT] = project
-        if analysis_type == 'criacao_tarefas_azure_devops':
-            feature_id = payload_dict.get('feature_id')
-            organization, project = self._parse_repository_name(normalized_repo_name)
-            data[JobFields.FEATURE_ID] = feature_id
-            data[JobFields.ORGANIZATION] = organization
-            data[JobFields.PROJECT] = project
-        if analysis_type == 'criacao_features_azure_devops':
-            epic_id = payload_dict.get('epic_id')
-            organization, project = self._parse_repository_name(normalized_repo_name)
-            data[JobFields.EPIC_ID] = epic_id
-            data[JobFields.ORGANIZATION] = organization
-            data[JobFields.PROJECT] = project
-        if analysis_type == 'revisor_tarefas':
-            task_id = payload_dict.get('task_id')
-            epic_id = payload_dict.get('epic_id')
-            organization, project = self._parse_repository_name(normalized_repo_name)
-            data[JobFields.EPIC_ID] = epic_id
-            data[JobFields.TASK_ID] = task_id
-            data[JobFields.ORGANIZATION] = organization
-            data[JobFields.PROJECT] = project
         data[JobFields.PROJETO] = payload_dict.get('projeto')
         data[JobFields.ANALYSIS_NAME] = analysis_name
         data[JobFields.ORIGINAL_ANALYSIS_TYPE] = payload_dict.get('analysis_type')
