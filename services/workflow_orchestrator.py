@@ -127,6 +127,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             )
         else:
             # fallback: agente simples
+            # Removido qualquer referência ao AgenteProcessador
             result = llm_provider.run_agent(
                 agent_type, agent_params, repo_reader=repo_reader
             )
