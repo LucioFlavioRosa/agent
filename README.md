@@ -9,12 +9,29 @@ A arquitetura do projeto foi atualizada para utilizar o Amazon Bedrock como prov
 - O provedor é implementado em `tools/requisicao_claude.py` como `AmazonBedrockProvider`.
 - Os secrets AWS são recuperados via `AzureSecretManager` (Key Vault), usando o `vault_type=VaultType.LLM`.
 
+### Segregação de Cofres (Key Vaults)
+Para garantir segurança e organização, os secrets são segregados em cofres distintos:
+
+- **Cofre de LLM (`VaultType.LLM`)**: Armazena tokens e endereços de acesso às APIs de LLM, como OpenAI e AWS Bedrock.
+  - Variável de ambiente: `AZURE_KEY_VAULT_LLM_URL`
+  - Exemplos de secrets: `AWS-ACCESS-KEY-ID`, `AWS-SECRET-ACCESS-KEY`, `AWS-REGION`, secrets de OpenAI.
+
+- **Cofre de Repositórios (`VaultType.REPOSITORY`)**: Armazena tokens de acesso dos repositórios (GitHub, GitLab, Azure DevOps).
+  - Variável de ambiente: `AZURE_KEY_VAULT_REPOSITORY_URL`
+  - Exemplos de secrets: `github-token-ORG`, `gitlab-token-NAMESPACE`, `azure-token-ORG`.
+
+- **Cofre de Blob Storage (`VaultType.BLOB_STORAGE`)**: Armazena secrets relacionados ao Blob Storage.
+  - Variável de ambiente: `AZURE_KEY_VAULT_BLOB_STORAGE_URL`
+  - Exemplos de secrets: Connection strings, chaves de acesso.
+
+> **Importante:** Certifique-se de que cada variável de ambiente está corretamente configurada para apontar para o URL do respectivo cofre no Azure Key Vault. Os cofres devem ser criados e populados com os secrets necessários antes da execução da aplicação.
+
 ### Secrets AWS Necessários
 - `AWS-ACCESS-KEY-ID`
 - `AWS-SECRET-ACCESS-KEY`
 - `AWS-REGION`
 
-Estes secrets devem ser configurados no Azure Key Vault utilizado pelo projeto. Certifique-se que o vault correto está sendo referenciado.
+Estes secrets devem ser configurados no Azure Key Vault de LLM utilizado pelo projeto. Certifique-se que o vault correto está sendo referenciado.
 
 ### Exemplo de Configuração de Model ID
 - O modelo padrão utilizado é: `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
