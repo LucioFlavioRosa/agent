@@ -1,7 +1,6 @@
 import json
 from typing import Dict, Any
 from services.step_executors.base_step_executor import BaseStepExecutor
-from services.factories.agent_factory import AgentFactory
 from tools.readers.reader_geral import ReaderGeral
 
 class ComparadorStepExecutor(BaseStepExecutor):
@@ -32,16 +31,5 @@ class ComparadorStepExecutor(BaseStepExecutor):
             'status_update': step['status_update']
         })
         
-        agente = AgentFactory.create_agent("comparador", repo_reader, llm_provider)
-        agent_response = agente.main(**agent_params)
-        
-        json_string = agent_response.get('resultado', {}).get('reposta_final', {}).get('reposta_final', '')
-        cleaned_string = json_string.replace("```json", "").replace("```", "").strip()
-        
-        if not cleaned_string:
-            if previous_step_result and isinstance(previous_step_result, dict):
-                print(f"[{job_id}] A IA retornou resposta vazia. Reutilizando resultado anterior.")
-                return previous_step_result
-            raise ValueError("IA retornou resposta vazia e não há resultado anterior para usar.")
-        
-        return json.loads(cleaned_string)
+        # Removido import e uso de AgentFactory conforme remoção do arquivo
+        raise NotImplementedError("AgentFactory foi removido do projeto. Adapte a lógica de instanciacao do agente comparador conforme novo padrão.")
