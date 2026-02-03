@@ -29,8 +29,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'projeto': data.get('projeto'),
             'repository_type': data.get('repository_type'),
             'repo_name': data.get('repo_name'),
-            'repo_name_modernizado': data.get('repo_name_modernizado'),
-            'branch_name': data.get('branch_name_modernizado'),
+            'branch_name': data.get('branch_name'),
             'analysis_name': data.get('analysis_name'),
             'original_analysis_type': data.get('original_analysis_type'),
             'model_name': data.get('model_name'),
@@ -65,10 +64,10 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
         job_data = self._extract_job_data(job_info)
-        repo_name_modernizado = job_data.get('repo_name_modernizado')
+        repo_name = job_data.get('repo_name')
         analysis_type = job_data.get('original_analysis_type', '')
-        if not repo_name_modernizado:
-            raise ValueError("O campo 'repo_name_modernizado' é obrigatório em job_info['data'] para execução do workflow.")
+        if not repo_name:
+            raise ValueError("O campo 'repo_name' é obrigatório em job_info['data'] para execução do workflow.")
         workflow = self.workflow_registry.get(job_data['original_analysis_type'])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
@@ -119,7 +118,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_data.get('original_analysis_type')
         agent_params['instrucoes_extras'] = job_data.get('instrucoes_extras', '')
-        repo_name = job_data.get('repo_name_modernizado')
+        repo_name = job_data.get('repo_name')
         branch_name = job_data.get('branch_name')
         if branch_name:
             agent_params['nome_branch'] = branch_name
