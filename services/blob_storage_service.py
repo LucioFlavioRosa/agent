@@ -18,9 +18,10 @@ class BlobStorageService:
         container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
         if not container_name:
             raise RuntimeError('Azure Blob Storage container name missing.')
-        secret_manager = AzureSecretManager(vault_type=VaultType.BLOB_STORAGE)
-        print(f"[BlobStorageService] DEBUG: Usando VaultType '{VaultType.BLOB_STORAGE.value}' para recuperar connection string do Blob Storage.")
-        connection_string = get_blob_connection_string(secret_manager, self._user_email, self.group_resolver)
+        # Sempre usar o cofre de infraestrutura Azure para segredos do Blob Storage
+        secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
+        print(f"[BlobStorageService] DEBUG: Usando VaultType '{VaultType.AZURE_INFRASTRUCTURE.value}' para recuperar connection string do Blob Storage.")
+        connection_string = get_blob_connection_string(secret_manager, self._user_email, self.group_resolver, vault_type=VaultType.AZURE_INFRASTRUCTURE)
         print(f"[BlobStorageService] DEBUG: Connection string recuperada do cofre: {'OK' if connection_string else 'FALHA'}")
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
