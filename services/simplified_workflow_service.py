@@ -8,25 +8,33 @@ class SimplifiedWorkflowService:
         self.reports = {}
 
     def start_analysis(self, payload: Any) -> str:
-        agent_type = getattr(payload, 'agent_type', None)
-        if agent_type not in VALID_AGENT_TYPES:
-            raise ValueError(f"Tipo de agente inválido: {agent_type}. Apenas 'processador' é permitido.")
+        analysis_type = getattr(payload, 'analysis_type', None)
+        if analysis_type not in VALID_AGENT_TYPES:
+            raise ValueError(f"Tipo de agente inválido: {analysis_type}. Apenas 'processador' é permitido.")
         job_id = f"job_{len(self.jobs)+1}"
         self.jobs[job_id] = {
             'status': 'started',
-            'payload': payload,
+            'repository_type': getattr(payload, 'repository_type', None),
+            'repo_name': getattr(payload, 'repo_name', None),
+            'branch_name': getattr(payload, 'branch_name', None),
+            'analysis_type': analysis_type,
+            'arquivos_especificos': getattr(payload, 'arquivos_especificos', None),
+            'instrucoes_extras': getattr(payload, 'instrucoes_extras', None),
+            'projeto': getattr(payload, 'projeto', None),
+            'analysis_name': getattr(payload, 'analysis_name', None),
+            'gerar_relatorio_apenas': getattr(payload, 'gerar_relatorio_apenas', None),
+            'retornar_lista_arquivos': getattr(payload, 'retornar_lista_arquivos', None),
+            'usuario_executor': getattr(payload, 'usuario_executor', None),
             'report_url': None,
             'analysis_report': None
         }
         return job_id
 
     def run_analysis(self, job_id: str):
-        # Simulação de análise mínima
         job = self.jobs.get(job_id)
         if not job:
             return
         job['status'] = 'processing'
-        # Aqui rodaria o agente processador
         job['analysis_report'] = f"Análise concluída para o job {job_id}"
         job['report_url'] = f"http://localhost/reports/{job_id}"
         job['status'] = 'completed'
