@@ -1,23 +1,18 @@
 from typing import Any, Dict
 
-VALID_AGENT_TYPES = ['processador']
-
 class SimplifiedWorkflowService:
     def __init__(self):
         self.jobs = {}
         self.reports = {}
 
     def start_analysis(self, payload: Any) -> str:
-        analysis_type = getattr(payload, 'analysis_type', None)
-        if analysis_type not in VALID_AGENT_TYPES:
-            raise ValueError(f"Tipo de agente inválido: {analysis_type}. Apenas 'processador' é permitido.")
         job_id = f"job_{len(self.jobs)+1}"
         self.jobs[job_id] = {
             'status': 'started',
             'repository_type': getattr(payload, 'repository_type', None),
             'repo_name': getattr(payload, 'repo_name', None),
             'branch_name': getattr(payload, 'branch_name', None),
-            'analysis_type': analysis_type,
+            'analysis_type': getattr(payload, 'analysis_type', None),
             'arquivos_especificos': getattr(payload, 'arquivos_especificos', None),
             'instrucoes_extras': getattr(payload, 'instrucoes_extras', None),
             'projeto': getattr(payload, 'projeto', None),
