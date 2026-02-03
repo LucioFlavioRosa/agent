@@ -7,10 +7,11 @@ from tools.blob_report_path_builder import build_report_blob_path
 from tools.blob_storage_utils import get_blob_connection_string
 
 class BlobStorageService:
-    def __init__(self, user_email: str = None):
+    def __init__(self, user_email: str = None, group_resolver: object = None):
         self._blob_service_client = None
         self._container_name = None
         self._user_email = user_email
+        self.group_resolver = group_resolver
         self._init_blob_service()
 
     def _init_blob_service(self):
@@ -19,7 +20,7 @@ class BlobStorageService:
             raise RuntimeError('Azure Blob Storage container name missing.')
         secret_manager = AzureSecretManager(vault_type=VaultType.BLOB_STORAGE)
         print(f"[BlobStorageService] DEBUG: Usando VaultType '{VaultType.BLOB_STORAGE.value}' para recuperar connection string do Blob Storage.")
-        connection_string = get_blob_connection_string(secret_manager, self._user_email)
+        connection_string = get_blob_connection_string(secret_manager, self._user_email, self.group_resolver)
         print(f"[BlobStorageService] DEBUG: Connection string recuperada do cofre: {'OK' if connection_string else 'FALHA'}")
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name

@@ -15,13 +15,15 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
                  workflow_registry: Dict[str, Any], 
                  job_handler: JobHandler = None, report_handler: ReportHandler = None,
-                 secret_manager: Optional[Any] = None, cache_service=None, dependency_container=None):
+                 secret_manager: Optional[Any] = None, cache_service=None, dependency_container=None,
+                 group_resolver=None):
         self.workflow_registry = workflow_registry
         self.job_handler = job_handler or JobHandler(job_manager)
         self.cache_service = cache_service
-        self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service)
+        self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service, group_resolver=group_resolver)
         self.secret_manager = secret_manager
         self.dependency_container = dependency_container
+        self.group_resolver = group_resolver
 
     def _extract_job_data(self, job_info: Dict[str, Any]) -> Dict[str, Any]:
         data = job_info.get('data', {})
@@ -80,7 +82,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             usuario_executor = job_data.get('usuario_executor')
             repository_provider = get_repository_provider_explicit(repository_type)
             cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
-            # Passa usuario_executor para ReaderGeral
             repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service, user_email=usuario_executor)
             steps = workflow.get('steps', [])
             if not steps:
@@ -115,8 +116,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     agent_params_override: Optional[dict] = None, user_email: Optional[str] = None) -> Dict[str, Any]:
         job_data = self._extract_job_data(job_info)
         model_para_etapa = step.get('model_name', job_data.get('model_name'))
-        # Passa user_email para o provider factory
-        llm_provider = LLMProviderFactory.create_provider(model_para_etapa, user_email=user_email)
+        llm_provider = LLMProviderFactory.create_provider(model_para_etapa, user_email=user_email, group_resolver=self.group_resolver)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_data.get('original_analysis_type')

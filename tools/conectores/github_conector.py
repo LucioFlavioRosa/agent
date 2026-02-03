@@ -16,22 +16,13 @@ class GitHubConector(BaseConector):
             print(f"[GitHub Conector] ERRO: Formato inválido do repositório: {repositorio}")
             raise ValueError(f"O nome do repositório '{repositorio}' tem formato inválido. Esperado 'organizacao/repositorio'.")
 
-    def _extract_user_and_company(self, user_email: str) -> str:
-        # Assume que o email é do formato usuario.empresa@dominio
-        try:
-            local_part = user_email.split('@')[0]
-            return local_part
-        except Exception:
-            raise ValueError(f"Email do usuário inválido para extração: {user_email}")
-
     def _get_token_for_org(self, org_name: str, platform: str, user_email: str) -> str:
         print(f"[{platform} Conector] Buscando token para organização: {org_name} e usuário: {user_email}")
-        user_company = self._extract_user_and_company(user_email)
-        token_secret_name = f"{platform.lower()}-{user_company}"
+        token_secret_name = f"{platform.lower()}-token"
         print(f"[{platform} Conector] Tentando buscar token específico: {token_secret_name}")
         try:
-            token = self.secret_manager.get_secret(token_secret_name)
-            print(f"[{platform} Conector] Token específico encontrado para {user_company}")
+            token = self.secret_manager.get_secret_with_user_context(token_secret_name, user_email, group_resolver=self.group_resolver)
+            print(f"[{platform} Conector] Token específico encontrado para grupo do usuário")
             return token
         except Exception as e:
             print(f"[{platform} Conector] ERRO CRÍTICO: Token '{token_secret_name}' não encontrado. Não há fallback.")

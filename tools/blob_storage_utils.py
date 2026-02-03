@@ -1,13 +1,17 @@
-def get_blob_connection_string(secret_manager, user_email: str):
+def get_blob_connection_string(secret_manager, user_email: str, group_resolver: object = None):
     """
     Obtém a connection string do Azure Blob Storage usando o secret_manager já instanciado.
     O secret_manager deve estar configurado para acessar o cofre dedicado ao Blob Storage.
+    Se group_resolver for fornecido, utiliza o contexto de grupo na busca do secret.
     """
     secret_name = 'azure-storage-connection-string'
     if not user_email:
         raise ValueError("user_email é obrigatório para buscar a connection string do Blob Storage.")
     try:
-        connection_string = secret_manager.get_secret_with_user_context(secret_name, user_email)
+        if group_resolver is not None:
+            connection_string = secret_manager.get_secret_with_user_context(secret_name, user_email, group_resolver=group_resolver)
+        else:
+            connection_string = secret_manager.get_secret_with_user_context(secret_name, user_email)
         if not connection_string:
             raise ValueError(f"Connection string '{secret_name}' não encontrada para o usuário '{user_email}' no Key Vault de Blob Storage.")
         return connection_string

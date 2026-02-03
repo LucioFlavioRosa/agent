@@ -6,6 +6,10 @@ from tools.azure_repository_provider import AzureRepositoryProvider
 from tools.conectores.base_conector import BaseConector
 
 class AzureConector(BaseConector):
+    def __init__(self, repository_provider: IRepositoryProvider, secret_manager: ISecretManager = None, group_resolver=None):
+        super().__init__(repository_provider, secret_manager or AzureSecretManager())
+        self.group_resolver = group_resolver
+
     def _parse_repository_name(self, repository_name: str) -> tuple:
         parts = repository_name.split('/')
         if len(parts) != 3:
@@ -24,25 +28,17 @@ class AzureConector(BaseConector):
             print(f"[Azure Conector] ERRO: {e}")
             raise
 
-    def _extract_user_and_company(self, user_email: str) -> str:
-        try:
-            local_part = user_email.split('@')[0]
-            return local_part
-        except Exception:
-            raise ValueError(f"Email do usuário inválido para extração: {user_email}")
-
     def _get_token_for_org(self, org_name: str, platform: str, user_email: str) -> str:
         print(f"[{platform} Conector] Buscando token para organização: {org_name} e usuário: {user_email}")
-        user_company = self._extract_user_and_company(user_email)
-        token_secret_name = f"{platform.lower()}-{user_company}"
-        print(f"[{platform} Conector] Tentando buscar token específico: {token_secret_name}")
+        token_secret_name = f"{platform.lower()}"
+        print(f"[{platform} Conector] Tentando buscar token com contexto de grupo: {token_secret_name}")
         try:
-            token = self.secret_manager.get_secret(token_secret_name)
-            print(f"[{platform} Conector] Token específico encontrado para {user_company}")
+            token = self.secret_manager.get_secret_with_user_context(token_secret_name, user_email, group_resolver=self.group_resolver)
+            print(f"[{platform} Conector] Token encontrado para grupo e empresa via group_resolver")
             return token
         except Exception as e:
             print(f"[{platform} Conector] ERRO CRÍTICO: Token '{token_secret_name}' não encontrado. Não há fallback.")
-            raise ValueError(f"ERRO CRÍTICO: Nenhum token {platform} encontrado para '{token_secret_name}'. Verifique se existe no gerenciador de segredos.") from e
+            raise ValueError(f"ERRO CRÍTICO: Nenhum token {platform} encontrado para '{token_secret_name}' com grupo. Verifique se existe no gerenciador de segredos.") from e
 
     def connection(self, repositorio: str, user_email: str) -> Union[object]:
         org_name = self._extract_org_name(repositorio)
@@ -80,5 +76,5 @@ class AzureConector(BaseConector):
         return repo
 
     @classmethod
-    def create_with_defaults(cls) -> 'AzureConector':
-        return cls(repository_provider=AzureRepositoryProvider())
+    def create_with_defaults(cls, group_resolver=None) -> 'AzureConector':
+        return cls(repository_provider=AzureRepositoryProvider(), group_resolver=group_resolver)

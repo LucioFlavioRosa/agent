@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.azure_secret_manager import AzureSecretManager
@@ -7,15 +7,16 @@ class BaseConector:
     _cached_repos: Dict[str, Union[object]] = {}
     _TOKEN_MASK = '***'
     
-    def __init__(self, repository_provider: IRepositoryProvider, secret_manager: ISecretManager = None):
+    def __init__(self, repository_provider: IRepositoryProvider, secret_manager: ISecretManager = None, group_resolver: Optional[object] = None):
         self.repository_provider = repository_provider
         self.secret_manager = secret_manager or AzureSecretManager()
+        self.group_resolver = group_resolver
     
     def _get_token_for_org(self, platform: str, user_email: str) -> str:
         print(f"[{platform} Conector] Buscando token para usuário: {user_email}")
         token_secret_name = f"{platform.lower()}-token"
         print(f"[{platform} Conector] Tentando buscar token com contexto de usuário: {token_secret_name}, {user_email}")
-        token = self.secret_manager.get_secret_with_user_context(token_secret_name, user_email)
+        token = self.secret_manager.get_secret_with_user_context(token_secret_name, user_email, group_resolver=self.group_resolver)
         print(f"[{platform} Conector] Token encontrado para usuário {user_email}")
         return token
     
