@@ -19,7 +19,7 @@ class AzureSecretManager:
         VaultType.AZURE_DEVOPS: os.getenv('AZURE_KEY_VAULT_AZURE_DEVOPS_URL'),                  # kv-codeai-devops-dev-usc
     }
 
-    def __init__(self, vault_type: VaultType = VaultType.DEFAULT):
+    def __init__(self, vault_type: VaultType = VaultType.AZURE_INFRASTRUCTURE):
         self.vault_type = vault_type
         self.vault_url = self._get_vault_url(vault_type)
         if not self.vault_url:
@@ -28,10 +28,7 @@ class AzureSecretManager:
         self.client = SecretClient(vault_url=self.vault_url, credential=self.credential)
 
     def _get_vault_url(self, vault_type: VaultType) -> Optional[str]:
-        url = self._VAULT_URLS.get(vault_type)
-        if url:
-            return url
-        return self._VAULT_URLS.get(VaultType.DEFAULT)
+        return self._VAULT_URLS.get(vault_type)
 
     def get_secret(self, secret_name: str) -> str:
         try:
@@ -42,7 +39,6 @@ class AzureSecretManager:
             raise ValueError(f"Secret '{secret_name}' não encontrado ou erro de acesso ao Key Vault.")
 
     def get_secret_with_user_context(self, secret_base_name: str, user_email: str, group_resolver: Optional[object] = None) -> str:
-       
         if group_resolver is not None:
             usuario, empresa, grupo = UserEmailParser.parse_email_with_group(user_email, group_resolver)
             secret_name = f"{secret_base_name}-{grupo}-{empresa}"
