@@ -7,11 +7,11 @@ import os
 class MongoDBGroupResolverService:
     def __init__(self, secret_manager: Optional[AzureSecretManager] = None, vault_type: VaultType = VaultType.AZURE_INFRASTRUCTURE, collection_name: Optional[str] = None):
         # Sempre usar o cofre de infraestrutura Azure para segredos do MongoDB
-        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
-        self.collection_name = collection_name or os.getenv('AZURE_MONGODB_GROUP_COLLECTION', 'user_group_mappings')
+        self.secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
+        self.collection_name = os.getenv('AZURE_MONGODB_GROUP_COLLECTION')
         self.mongo_connection_string = self._get_mongo_connection_string()
         self.client = MongoClient(self.mongo_connection_string)
-        self.db_name = os.getenv('AZURE_MONGODB_DATABASE', 'default_db')
+        self.db_name = os.getenv('AZURE_MONGODB_DATABASE')
         self.db = self.client[self.db_name]
         self.collection = self.db[self.collection_name]
 
