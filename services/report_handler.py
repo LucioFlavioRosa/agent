@@ -33,55 +33,14 @@ class ReportHandler:
             return None
 
     def extract_report_text(self, step_result):
+        # Assumindo estrutura conhecida: dict com 'relatorio' ou 'resultado_gerado'
         if not step_result:
             return None
-
-        # Se for dict e tiver 'relatorio', retorna direto
         if isinstance(step_result, dict):
             if 'relatorio' in step_result:
                 return step_result['relatorio']
             if 'resultado_gerado' in step_result:
-                raw_output_str = step_result['resultado_gerado']
-            elif 'resultado' in step_result:
-                resultado = step_result['resultado']
-                if isinstance(resultado, dict) and 'relatorio' in resultado:
-                    return resultado['relatorio']
-                elif isinstance(resultado, str):
-                    raw_output_str = resultado
-                else:
-                    raw_output_str = None
-            else:
-                raw_output_str = None
-        elif isinstance(step_result, str):
-            raw_output_str = step_result
-        else:
-            raw_output_str = None
-
-        # Tenta parsear como JSON diretamente
-        if raw_output_str:
-            try:
-                data = json.loads(raw_output_str)
-                if isinstance(data, dict) and 'relatorio' in data:
-                    return data['relatorio']
-            except Exception:
-                pass
-
-            # Fallback: tenta encontrar JSON por regex
-            try:
-                match = re.search(r'\{.*\}', raw_output_str, re.DOTALL)
-                if match:
-                    json_str = match.group(0)
-                    data = json.loads(json_str)
-                    if isinstance(data, dict) and 'relatorio' in data:
-                        return data['relatorio']
-            except Exception:
-                pass
-
-            # Fallback final: retorna texto puro se começar com pipe ou não for JSON
-            if raw_output_str.strip().startswith('|'):
-                return raw_output_str
-
-        print("[ReportHandler] extract_report_text: Não foi possível extrair relatório do resultado fornecido.")
+                return step_result['resultado_gerado']
         return None
 
     def save_report_to_blob(self, job_id, job_info, report_text):

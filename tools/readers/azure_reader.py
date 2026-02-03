@@ -42,10 +42,21 @@ class AzureReader(BaseFileReader):
         headers = self._get_azure_auth_headers(repo_name, user_email, group_resolver)
         base_url = self._get_base_api_url(repo_name)
         file_url = f"{base_url}/items?path={file_path}&versionDescriptor.version={branch_a_ler}&$format=text&api-version=7.0"
-        try:
+        repo_desc = f"{repo_name.get('_organization', 'desconhecido')}/{repo_name.get('_project', 'desconhecido')}/{repo_name.get('_repository', 'desconhecido')}"
+        def azure_file_getter(file_path, ref):
             response = requests.get(file_url, headers=headers, timeout=30)
             response.raise_for_status()
-            return response.text
+            class DummyContent:
+                def __init__(self, content):
+                    self.content = base64.b64encode(content.encode('utf-8'))
+            return DummyContent(response.text)
+        try:
+            return self._read_file_with_error_handling(
+                azure_file_getter,
+                file_path,
+                branch_a_ler,
+                repo_desc
+            )
         except Exception:
             return None
 

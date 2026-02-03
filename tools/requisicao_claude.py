@@ -74,21 +74,3 @@ class AmazonBedrockProvider(ILLMProviderComplete):
         except Exception as e:
             print(f"Erro no Bedrock: {str(e)}")
             raise e
-
-    def executar_prompt_com_modelo(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        model_name: Optional[str] = None,
-        max_token_out: int = 8000,
-        job_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        return self.executar_prompt(
-            tipo_tarefa=tipo_tarefa,
-            prompt_principal=prompt_principal,
-            instrucoes_extras=instrucoes_extras,
-            model_name=model_name,
-            max_token_out=max_token_out,
-            job_id=job_id
-        )

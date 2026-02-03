@@ -3,31 +3,22 @@ from typing import Dict, Optional, List, Union
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.gitlab_repository_provider import GitLabRepositoryProvider
 from tools.readers.base_reader import BaseReader
+from tools.readers.base_file_reader import BaseFileReader
 from tools.user_email_parser import UserEmailParser
 
-class GitLabReader(BaseReader):
+class GitLabReader(BaseFileReader):
     def __init__(self, repository_provider: Optional[IRepositoryProvider] = None, group_resolver: Optional[object] = None):
-        super().__init__(repository_provider or GitLabRepositoryProvider())
+        super().__init__(repository_provider or GitLabRepositoryProvider(), group_resolver=group_resolver)
         self.group_resolver = group_resolver
 
     def read_single_file(self, repo_name, file_path: str, branch_name: str) -> Optional[str]:
-        print(f"[GitLabReader] Lendo arquivo específico: '{file_path}' na branch '{branch_name}' do repositório '{getattr(repo_name, 'path_with_namespace', 'desconhecido')}'")
-        try:
-            file_content = repo_name.files.get(file_path=file_path, ref=branch_name)
-            decoded = base64.b64decode(file_content.content).decode('utf-8')
-            print(f"[GitLabReader] Decodificação bem-sucedida para '{file_path}'")
-            return decoded
-        except Exception as e:
-            msg = str(e).lower()
-            if "404" in msg or "not found" in msg:
-                print(f"[GitLabReader] AVISO: Arquivo '{file_path}' não encontrado na branch '{branch_name}'.")
-                return None
-            elif "403" in msg or "forbidden" in msg:
-                print(f"[GitLabReader] AVISO: Sem permissão para acessar o arquivo '{file_path}' na branch '{branch_name}'.")
-                raise PermissionError(f"Sem permissão para acessar o arquivo '{file_path}' na branch '{branch_name}'.") from e
-            else:
-                print(f"[GitLabReader] ERRO inesperado ao ler arquivo '{file_path}' na branch '{branch_name}': {e}")
-                raise RuntimeError(f"Erro inesperado ao ler arquivo '{file_path}' na branch '{branch_name}': {e}") from e
+        repo_desc = getattr(repo_name, 'path_with_namespace', 'desconhecido')
+        return self._read_file_with_error_handling(
+            lambda file_path, ref: repo_name.files.get(file_path=file_path, ref=ref),
+            file_path,
+            branch_name,
+            repo_desc
+        )
 
     def _ler_arquivos_especificos(self, repo_name, branch_name: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         arquivos_lidos = {}
@@ -137,7 +128,6 @@ class GitLabReader(BaseReader):
         usuario = empresa = grupo = None
         if user_email:
             usuario, empresa, grupo = UserEmailParser.parse_email_with_group(user_email, group_resolver)
-        # Aqui, se for necessário obter o repo via conector, passaria usuario/empresa/grupo
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitLab ativado para {len(arquivos_especificos)} arquivos específicos no repositório '{getattr(repo_name, 'path_with_namespace', 'desconhecido')}'.")
             arquivos_lidos = self._ler_arquivos_especificos(repo_name, branch_a_ler, arquivos_especificos)

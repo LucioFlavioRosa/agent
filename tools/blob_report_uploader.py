@@ -10,7 +10,7 @@ def upload_report_to_blob(report_text: str, projeto: str, analysis_type: str, re
         raise RuntimeError('Azure Blob Storage container name missing.')
     # Instancia o AzureSecretManager com VaultType.AZURE_INFRASTRUCTURE para ler secrets de infraestrutura
     secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
-    connection_string = get_blob_connection_string(secret_manager, user_email, group_resolver)
+    connection_string = get_blob_connection_string(secret_manager, user_email, group_resolver, vault_type=VaultType.AZURE_INFRASTRUCTURE)
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     original_analysis_name = analysis_name
     counter = 1
