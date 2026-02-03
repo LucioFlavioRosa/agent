@@ -6,7 +6,6 @@ from services.analysis_name_service import AnalysisNameService, AnalysisNameCach
 from services.workflow_registry_service import WorkflowRegistryService
 from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
-from tools.rag_retriever import AzureAISearchRAGRetriever
 from services.redis_cache_service import RedisCacheService
 from tools.azure_secret_manager import AzureSecretManager
 
@@ -20,7 +19,6 @@ class DependencyContainer:
         self._analysis_name_service = None
         self._job_handler = None
         self._report_handler = None
-        self._rag_retriever = None
         self._redis_cache_service = None
         self._secret_manager = None
     
@@ -43,11 +41,6 @@ class DependencyContainer:
         if self._workflow_registry_service is None:
             self._workflow_registry_service = WorkflowRegistryService()
         return self._workflow_registry_service
-    
-    def get_rag_retriever(self) -> AzureAISearchRAGRetriever:
-        if self._rag_retriever is None:
-            self._rag_retriever = AzureAISearchRAGRetriever()
-        return self._rag_retriever
     
     def get_job_handler(self) -> JobHandler:
         if self._job_handler is None:
@@ -77,7 +70,6 @@ class DependencyContainer:
                 job_manager=self.get_job_manager(), 
                 blob_storage=self.get_blob_storage(), 
                 workflow_registry=workflow_registry,
-                rag_retriever=self.get_rag_retriever(),
                 job_handler=self.get_job_handler(),
                 report_handler=self.get_report_handler(),
                 secret_manager=self.get_secret_manager(),
