@@ -12,21 +12,13 @@ class GitHubReader(BaseFileReader):
         super().__init__(repository_provider or GitHubRepositoryProvider(), user_email=user_email, group_resolver=group_resolver)
 
     def read_single_file(self, repo_name, file_path: str, branch_name: str) -> Optional[str]:
-        try:
-            file_content = repo_name.get_contents(file_path, ref=branch_name)
-            decoded = base64.b64decode(file_content.content).decode('utf-8')
-            return decoded
-        except UnknownObjectException:
-            return None
-        except GithubException as e:
-            if hasattr(e, 'status') and e.status == 404:
-                return None
-            elif hasattr(e, 'status') and e.status == 403:
-                raise PermissionError(f"Sem permissão para acessar o arquivo '{file_path}' na branch '{branch_name}'.") from e
-            else:
-                raise RuntimeError(f"Erro inesperado ao ler arquivo '{file_path}' na branch '{branch_name}': {e}") from e
-        except Exception as e:
-            raise
+        repo_desc = getattr(repo_name, 'full_name', 'desconhecido')
+        return self._read_file_with_error_handling(
+            lambda file_path, ref: repo_name.get_contents(file_path, ref=ref),
+            file_path,
+            branch_name,
+            repo_desc
+        )
 
     def _ler_arquivos_especificos(self, repo_name, branch_name: str, arquivos_especificos: List[str]) -> Dict[str, str]:
         arquivos_lidos = {}
