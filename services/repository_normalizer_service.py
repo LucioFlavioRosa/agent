@@ -34,16 +34,22 @@ class GitLabNormalizerStrategy(RepositoryNormalizerStrategy):
         )
 
     def _validate_gitlab_format(self, repo_name: str) -> None:
-        if repo_name.isdigit():
-            return
+        # Simplificado para fácil manutenção
+        validators = [
+            lambda v: v.isdigit(),
+            lambda v: '/' in v and len([p for p in v.split('/') if p]) >= 2
+        ]
+        for validate in validators:
+            if validate(repo_name):
+                return
+        # Decide qual mensagem de erro usar
         if '/' in repo_name:
             parts = [p for p in repo_name.split('/') if p]
-            if len(parts) >= 2:
-                return
-            raise HTTPException(
-                status_code=400,
-                detail=self._ERR_INVALID_PATH.format(repo_name=repo_name)
-            )
+            if len(parts) < 2:
+                raise HTTPException(
+                    status_code=400,
+                    detail=self._ERR_INVALID_PATH.format(repo_name=repo_name)
+                )
         raise HTTPException(
             status_code=400,
             detail=self._ERR_INVALID_FORMAT.format(repo_name=repo_name)
