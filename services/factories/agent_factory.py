@@ -1,18 +1,12 @@
 from typing import Dict, Type, Any
 from agents.agente_revisor import AgenteRevisor
-from agents.agente_processador import AgenteProcessador
-from agents.agente_comparador import AgenteComparador
-from agents.agente_revisor_board import AgenteRevisorBoard
-from domain.interfaces.llm_provider_interface import ILLMProvider
+]from domain.interfaces.llm_provider_interface import ILLMProvider
 from tools.readers.reader_geral import ReaderGeral
 from services.azure_board_service import AzureBoardService
 
 class AgentFactory:
     _agents: Dict[str, Type] = {
         'revisor': AgenteRevisor,
-        'processador': AgenteProcessador,
-        'comparador': AgenteComparador,
-        'revisor_board': AgenteRevisorBoard
     }
     
     @classmethod
