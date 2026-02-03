@@ -1,6 +1,6 @@
 from typing import Dict, Type, Any
 from agents.agente_revisor import AgenteRevisor
-]from domain.interfaces.llm_provider_interface import ILLMProvider
+from domain.interfaces.llm_provider_interface import ILLMProvider
 from tools.readers.reader_geral import ReaderGeral
 from services.azure_board_service import AzureBoardService
 
