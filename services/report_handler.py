@@ -2,10 +2,11 @@ import json
 import re
 
 class ReportHandler:
-    def __init__(self, blob_storage, cache_service=None, user_email=None):
+    def __init__(self, blob_storage, cache_service=None, user_email=None, group_resolver=None):
         self.blob_storage = blob_storage
         self.cache_service = cache_service
         self.user_email = user_email
+        self.group_resolver = group_resolver
 
     def read_existing_report_from_blob(self, job_id, job_info, current_step_index):
         projeto = job_info['data'].get('projeto')
