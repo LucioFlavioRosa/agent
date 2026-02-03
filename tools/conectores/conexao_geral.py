@@ -6,15 +6,21 @@ from tools.conectores.gitlab_conector import GitLabConector
 from tools.conectores.azure_conector import AzureConector
 from tools.azure_secret_manager import AzureSecretManager
 
+def _extract_user_and_company_from_email(user_email: str):
+    # Assume formato: nome.sobrenome@empresa.com ou nome@empresa.com
+    if not user_email or '@' not in user_email:
+        raise ValueError("user_email inválido ou não informado")
+    local, domain = user_email.split('@', 1)
+    usuario = local.replace('.', '_')
+    empresa = domain.split('.', 1)[0].replace('.', '_')
+    return usuario, empresa
+
 class ConexaoGeral:
-    
     def __init__(self, secret_manager: ISecretManager = None):
         self.secret_manager = secret_manager or AzureSecretManager()
         self._conectores_cache = {}
-    
     def _get_conector(self, repository_type: str, repository_provider: IRepositoryProvider):
         cache_key = f"{repository_type}:{type(repository_provider).__name__}"
-        
         if cache_key not in self._conectores_cache:
             if repository_type == 'github':
                 conector = GitHubConector(repository_provider, self.secret_manager)
@@ -24,18 +30,15 @@ class ConexaoGeral:
                 conector = AzureConector(repository_provider, self.secret_manager)
             else:
                 raise ValueError(f"Tipo de repositório '{repository_type}' não suportado. Tipos válidos: 'github', 'gitlab', 'azure'")
-            
             self._conectores_cache[cache_key] = conector
             print(f"[Conexao Geral] Conector {repository_type} criado e cacheado")
-        
         return self._conectores_cache[cache_key]
-    
-    def connection(self, repositorio: str, repository_type: str, repository_provider: IRepositoryProvider) -> Union[object]:
+    def connection(self, repositorio: str, repository_type: str, repository_provider: IRepositoryProvider, user_email: str) -> Union[object]:
         print(f"[Conexao Geral] Orquestrando conexão para {repository_type}: {repositorio}")
-        
+        usuario, empresa = _extract_user_and_company_from_email(user_email)
         conector = self._get_conector(repository_type, repository_provider)
-        return conector.connection(repositorio)
-    
+        # Passa user_email para o conector específico
+        return conector.connection(repositorio, usuario=usuario, empresa=empresa)
     @classmethod
     def create_with_defaults(cls) -> 'ConexaoGeral':
         return cls()

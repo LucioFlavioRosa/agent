@@ -7,17 +7,36 @@ from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
 class AmazonBedrockProvider(ILLMProviderComplete):
-    def __init__(self, secret_manager: Optional[AzureSecretManager] = None):
+    def __init__(self, secret_manager: Optional[AzureSecretManager] = None, user_email: Optional[str] = None):
         self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
-        self.aws_access_key_id = self.secret_manager.get_secret('AWS-ACCESS-KEY-ID')
-        self.aws_secret_access_key = self.secret_manager.get_secret('AWS-SECRET-ACCESS-KEY')
-        self.aws_region = self.secret_manager.get_secret('AWS-REGION')
+        self.user_email = user_email
+        if not user_email:
+            raise ValueError("user_email é obrigatório para busca de secrets AWS neste projeto.")
+        usuario, empresa = self._parse_user_email(user_email)
+        self.aws_access_key_id = self.secret_manager.get_secret_with_user_context(f'AWS-ACCESS-KEY-ID', usuario, empresa)
+        self.aws_secret_access_key = self.secret_manager.get_secret_with_user_context(f'AWS-SECRET-ACCESS-KEY', usuario, empresa)
+        self.aws_region = self.secret_manager.get_secret_with_user_context(f'AWS-REGION', usuario, empresa)
         self.bedrock_runtime = boto3.client(
             'bedrock-runtime',
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
             region_name=self.aws_region
         )
+
+    def _parse_user_email(self, email: str):
+        # Assume formato email: usuario.empresa@dominio ou usuario@empresa.com
+        # Extrai usuario e empresa do email
+        if '@' not in email:
+            raise ValueError(f"Email inválido para extração de usuario e empresa: {email}")
+        local, domain = email.split('@', 1)
+        if '.' in local:
+            usuario, empresa = local.split('.', 1)
+        elif '-' in local:
+            usuario, empresa = local.split('-', 1)
+        else:
+            usuario = local
+            empresa = domain.split('.', 1)[0]
+        return usuario, empresa
 
     def executar_prompt(
         self,

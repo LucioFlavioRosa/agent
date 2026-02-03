@@ -123,7 +123,8 @@ class GitLabReader(BaseReader):
         analysis_type: str = None,
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None,
-        retornar_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False,
+        user_email: Optional[str] = None
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         branch_a_ler = branch_name or 'main'
         if arquivos_especificos and len(arquivos_especificos) > 0:

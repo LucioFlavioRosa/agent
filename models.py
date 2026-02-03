@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator, model_validator, ValidationError
+from pydantic import BaseModel, Field, validator, ValidationError
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
 
@@ -16,7 +16,13 @@ class JobFields(BaseModel):
     analysis_name: Optional[str] = None
     gerar_relatorio_apenas: Optional[bool] = None
     retornar_lista_arquivos: Optional[bool] = None
-    usuario_executor: Optional[str] = None
+    usuario_executor: str = Field(..., description="Email do usuário executor (obrigatório)")
+
+    @validator('usuario_executor')
+    def validate_usuario_executor(cls, v):
+        if not v or '@' not in v:
+            raise ValueError("usuario_executor deve ser um email válido.")
+        return v
 
 class PullRequestSummary(BaseModel):
     pull_request_url: str

@@ -14,24 +14,26 @@ Para garantir segurança e organização, os secrets são segregados em cofres d
 
 - **Cofre de LLM (`VaultType.LLM`)**: Armazena tokens e endereços de acesso às APIs de LLM, como OpenAI e AWS Bedrock.
   - Variável de ambiente: `AZURE_KEY_VAULT_LLM_URL`
-  - Exemplos de secrets: `AWS-ACCESS-KEY-ID`, `AWS-SECRET-ACCESS-KEY`, `AWS-REGION`, secrets de OpenAI.
+  - Exemplos de secrets: `AWS-ACCESS-KEY-ID-usuario-empresa`, `AWS-SECRET-ACCESS-KEY-usuario-empresa`, `AWS-REGION-usuario-empresa`, secrets de OpenAI no formato `openai-token-usuario-empresa`.
 
 - **Cofre de Repositórios (`VaultType.REPOSITORY`)**: Armazena tokens de acesso dos repositórios (GitHub, GitLab, Azure DevOps).
   - Variável de ambiente: `AZURE_KEY_VAULT_REPOSITORY_URL`
-  - Exemplos de secrets: `github-token-ORG`, `gitlab-token-NAMESPACE`, `azure-token-ORG`.
+  - Exemplos de secrets: `github-token-usuario-empresa`, `gitlab-token-usuario-empresa`, `azure-token-usuario-empresa`.
 
 - **Cofre de Blob Storage (`VaultType.BLOB_STORAGE`)**: Armazena secrets relacionados ao Blob Storage.
   - Variável de ambiente: `AZURE_KEY_VAULT_BLOB_STORAGE_URL`
-  - Exemplos de secrets: Connection strings, chaves de acesso.
+  - Exemplos de secrets: `azure-storage-connection-string-usuario-empresa`.
 
-> **Importante:** Certifique-se de que cada variável de ambiente está corretamente configurada para apontar para o URL do respectivo cofre no Azure Key Vault. Os cofres devem ser criados e populados com os secrets necessários antes da execução da aplicação.
+> **Importante:** Todos os secrets devem seguir o padrão de nomenclatura: `nome-usuario-empresa`, onde `usuario` e `empresa` são extraídos do email do usuário executor (campo `usuario_executor` do payload). Por exemplo, para o email `lucio.rosa@peers.com`, o nome do secret será `github-lucio.rosa-peers`.
+
+> **Não há fallback**: Se o secret com contexto de usuário não existir, a operação falhará. Não existe mais fallback para secrets sem contexto de usuário.
 
 ### Secrets AWS Necessários
-- `AWS-ACCESS-KEY-ID`
-- `AWS-SECRET-ACCESS-KEY`
-- `AWS-REGION`
+- `AWS-ACCESS-KEY-ID-usuario-empresa`
+- `AWS-SECRET-ACCESS-KEY-usuario-empresa`
+- `AWS-REGION-usuario-empresa`
 
-Estes secrets devem ser configurados no Azure Key Vault de LLM utilizado pelo projeto. Certifique-se que o vault correto está sendo referenciado.
+Estes secrets devem ser configurados no Azure Key Vault de LLM utilizado pelo projeto, seguindo o padrão acima.
 
 ### Exemplo de Configuração de Model ID
 - O modelo padrão utilizado é: `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
@@ -50,7 +52,8 @@ Estes secrets devem ser configurados no Azure Key Vault de LLM utilizado pelo pr
 - Os testes validam invocação, fallback de modelo, concatenação de instruções extras e estrutura da resposta.
 
 ### Configuração de Secrets no Azure Key Vault
-- Adicione os secrets listados acima.
+- Adicione os secrets listados acima, sempre usando o padrão `nome-usuario-empresa`.
+- Não existe fallback: se o secret não for encontrado para o usuário, a operação falha.
 - Valide que o `vault_type=VaultType.LLM` está configurado corretamente para apontar para o Key Vault de LLM.
 
 ### Referências

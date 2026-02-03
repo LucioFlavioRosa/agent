@@ -39,7 +39,8 @@ class AgenteRevisor:
         analysis_type: str,
         repository_type: str,
         arquivos_especificos: Optional[List[str]] = None,
-        retornar_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False,
+        user_email: Optional[str] = None
     ) -> Dict[str, Any]:
         params = {
             'repository_type': repository_type,
@@ -50,7 +51,7 @@ class AgenteRevisor:
             'analysis_name': None,
             'gerar_relatorio_apenas': None,
             'retornar_lista_arquivos': retornar_lista_arquivos,
-            'usuario_executor': None
+            'usuario_executor': user_email
         }
         self._validate_common_params(params)
         try:
@@ -60,7 +61,8 @@ class AgenteRevisor:
                 repository_type=repository_type,
                 nome_branch=branch_name,
                 arquivos_especificos=arquivos_especificos,
-                retornar_lista_arquivos=retornar_lista_arquivos
+                retornar_lista_arquivos=retornar_lista_arquivos,
+                user_email=user_email
             )
             if retornar_lista_arquivos and isinstance(resultado, dict) and 'codigo' in resultado:
                 return {
@@ -105,13 +107,15 @@ class AgenteRevisor:
             'usuario_executor': usuario_executor
         }
         self._validate_common_params(params)
+        user_email = usuario_executor
         resultado_leitura = self._get_code(
             repo_name=repo_name,
             branch_name=branch_name,
             analysis_type=analysis_type,
             repository_type=repository_type,
             arquivos_especificos=arquivos_especificos,
-            retornar_lista_arquivos=retornar_lista_arquivos
+            retornar_lista_arquivos=retornar_lista_arquivos,
+            user_email=user_email
         )
         codigo_para_analise = resultado_leitura.get('codigo', {})
         lista_arquivos = resultado_leitura.get('lista_arquivos', [])
