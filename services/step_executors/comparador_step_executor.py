@@ -30,6 +30,6 @@ class ComparadorStepExecutor(BaseStepExecutor):
             'projeto': job_info['data']['projeto'],
             'status_update': step['status_update']
         })
-        
+        # Removido: agent_params['usar_rag']
         # Removido import e uso de AgentFactory conforme remoção do arquivo
         raise NotImplementedError("AgentFactory foi removido do projeto. Adapte a lógica de instanciacao do agente comparador conforme novo padrão.")

@@ -30,7 +30,7 @@ class JobDataService:
         data[JobFields.ORIGINAL_ANALYSIS_TYPE] = payload_dict.get('analysis_type')
         data[JobFields.INSTRUCOES_EXTRAS] = payload_dict.get('instrucoes_extras')
         data[JobFields.MODEL_NAME] = payload_dict.get('model_name')
-        data[JobFields.USAR_RAG] = payload_dict.get('usar_rag', False)
+        # Removido: data[JobFields.USAR_RAG] = payload_dict.get('usar_rag', False)
         data[JobFields.GERAR_RELATORIO_APENAS] = payload_dict.get('gerar_relatorio_apenas', False)
         data[JobFields.ARQUIVOS_ESPECIFICOS] = payload_dict.get('arquivos_especificos')
         data[JobFields.REPOSITORY_TYPE] = payload_dict.get('repository_type')
@@ -64,7 +64,7 @@ class JobDataService:
                 JobFields.ORIGINAL_ANALYSIS_TYPE: 'implementacao',
                 JobFields.INSTRUCOES_EXTRAS: f"Gerar código baseado no seguinte relatório:\n\n{report}",
                 JobFields.MODEL_NAME: original_data.get(JobFields.MODEL_NAME),
-                JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
+                # Removido: JobFields.USAR_RAG: original_data.get(JobFields.USAR_RAG, False),
                 JobFields.GERAR_RELATORIO_APENAS: False,
                 JobFields.ARQUIVOS_ESPECIFICOS: original_data.get(JobFields.ARQUIVOS_ESPECIFICOS),
                 JobFields.ANALYSIS_NAME: f"{analysis_name}-implementation",

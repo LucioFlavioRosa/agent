@@ -67,7 +67,6 @@ class AgenteRevisor:
         repository_type: str,
         nome_branch: Optional[str] = None,
         instrucoes_extras: str = "",
-        usar_rag: bool = False,
         model_name: Optional[str] = None,
         max_token_out: int = 15000,
         arquivos_especificos: Optional[List[str]] = None,
@@ -114,7 +113,6 @@ class AgenteRevisor:
             }, indent=2, ensure_ascii=False)
         else:
             codigo_str = json.dumps(codigo_para_analise, indent=2, ensure_ascii=False)
-        # Suporte a processamento incremental por batch
         if current_batch is not None and isinstance(current_batch, list) and len(current_batch) > 0:
             batch_instrucao = "ATENÇÃO: Processar APENAS os passos listados abaixo. Ignorar todos os outros passos do relatório original.\n"
             batch_instrucao += json.dumps(current_batch, indent=2, ensure_ascii=False)
@@ -126,7 +124,6 @@ class AgenteRevisor:
             tipo_tarefa=tipo_analise,
             prompt_principal=codigo_str,
             instrucoes_extras=instrucoes_extras,
-            usar_rag=usar_rag,
             model_name=model_name,
             max_token_out=max_token_out,
         )

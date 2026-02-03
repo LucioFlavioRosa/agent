@@ -7,8 +7,7 @@ from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 
 class AmazonBedrockProvider(ILLMProviderComplete):
-    def __init__(self, rag_retriever: Optional[Any] = None, secret_manager: Optional[AzureSecretManager] = None):
-        self.rag_retriever = rag_retriever
+    def __init__(self, secret_manager: Optional[AzureSecretManager] = None):
         self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
         self.aws_access_key_id = self.secret_manager.get_secret('AWS-ACCESS-KEY-ID')
         self.aws_secret_access_key = self.secret_manager.get_secret('AWS-SECRET-ACCESS-KEY')
@@ -25,7 +24,6 @@ class AmazonBedrockProvider(ILLMProviderComplete):
         tipo_tarefa: str,
         prompt_principal: str,
         instrucoes_extras: str = "",
-        usar_rag: bool = False,
         model_name: Optional[str] = None,
         max_token_out: int = 8000,
         job_id: Optional[str] = None

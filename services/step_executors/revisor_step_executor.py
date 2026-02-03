@@ -43,6 +43,7 @@ class RevisorStepExecutor(BaseStepExecutor):
         })
         agent_params['retornar_lista_arquivos'] = agent_params.get('retornar_lista_arquivos', False)
         agent_params['modo_adicao_incremental'] = agent_params.get('modo_adicao_incremental', False)
+        # Removido: agent_params['usar_rag']
         max_retries = 3
         for attempt in range(max_retries):
             try:
