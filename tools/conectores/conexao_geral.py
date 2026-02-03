@@ -5,15 +5,7 @@ from tools.conectores.github_conector import GitHubConector
 from tools.conectores.gitlab_conector import GitLabConector
 from tools.conectores.azure_conector import AzureConector
 from tools.azure_secret_manager import AzureSecretManager
-
-def _extract_user_and_company_from_email(user_email: str):
-    # Assume formato: nome.sobrenome@empresa.com ou nome@empresa.com
-    if not user_email or '@' not in user_email:
-        raise ValueError("user_email inválido ou não informado")
-    local, domain = user_email.split('@', 1)
-    usuario = local.replace('.', '_')
-    empresa = domain.split('.', 1)[0].replace('.', '_')
-    return usuario, empresa
+from utils.email_parser import extract_user_and_company_from_email
 
 class ConexaoGeral:
     def __init__(self, secret_manager: ISecretManager = None):
@@ -35,7 +27,7 @@ class ConexaoGeral:
         return self._conectores_cache[cache_key]
     def connection(self, repositorio: str, repository_type: str, repository_provider: IRepositoryProvider, user_email: str) -> Union[object]:
         print(f"[Conexao Geral] Orquestrando conexão para {repository_type}: {repositorio}")
-        usuario, empresa = _extract_user_and_company_from_email(user_email)
+        usuario, empresa = extract_user_and_company_from_email(user_email)
         conector = self._get_conector(repository_type, repository_provider)
         # Passa user_email para o conector específico
         return conector.connection(repositorio, usuario=usuario, empresa=empresa)
