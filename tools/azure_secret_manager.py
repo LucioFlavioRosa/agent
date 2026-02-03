@@ -10,9 +10,6 @@ class VaultType(Enum):
     LLM = 'llm'                                    # kv-codeai-llm-dev-usc
     GITHUB = 'github'                              # kv-codeai-github-dev-usc
     AZURE_DEVOPS = 'azure_devops'                  # kv-codeai-devops-dev-usc
-    REPOSITORY = 'repository'
-    DEFAULT = 'default'
-    BLOB_STORAGE = 'blob_storage'
 
 class AzureSecretManager:
     _VAULT_URLS = {
@@ -20,9 +17,6 @@ class AzureSecretManager:
         VaultType.LLM: os.getenv('AZURE_KEY_VAULT_LLM_URL'),                                    # kv-codeai-llm-dev-usc
         VaultType.GITHUB: os.getenv('AZURE_KEY_VAULT_GITHUB_URL'),                              # kv-codeai-github-dev-usc
         VaultType.AZURE_DEVOPS: os.getenv('AZURE_KEY_VAULT_AZURE_DEVOPS_URL'),                  # kv-codeai-devops-dev-usc
-        VaultType.REPOSITORY: os.getenv('AZURE_KEY_VAULT_REPOSITORY_URL'),
-        VaultType.DEFAULT: os.getenv('AZURE_KEY_VAULT_URL'),
-        VaultType.BLOB_STORAGE: os.getenv('AZURE_KEY_VAULT_BLOB_STORAGE_URL')
     }
 
     def __init__(self, vault_type: VaultType = VaultType.DEFAULT):
