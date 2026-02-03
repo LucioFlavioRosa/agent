@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Optional
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
+from tools.user_email_parser import UserEmailParser
 
 class VaultType(Enum):
     LLM = 'llm'
@@ -30,11 +31,23 @@ class AzureSecretManager:
         url = self._VAULT_URLS.get(vault_type)
         if url:
             return url
-        # fallback para DEFAULT se não encontrar
         return self._VAULT_URLS.get(VaultType.DEFAULT)
 
     def get_secret(self, secret_name: str) -> str:
-        # Suporte para secrets AWS
+        try:
+            secret = self.client.get_secret(secret_name)
+            return secret.value
+        except Exception as e:
+            print(f"[AzureSecretManager] Erro ao buscar secret '{secret_name}' no vault '{self.vault_url}': {e}")
+            raise ValueError(f"Secret '{secret_name}' não encontrado ou erro de acesso ao Key Vault.")
+
+    def get_secret_with_user_context(self, secret_base_name: str, user_email: str) -> str:
+        """
+        Busca o secret usando o padrão '{secret_base_name}-{usuario}-{empresa}'
+        Não há fallback: se não existir, lança erro.
+        """
+        usuario, empresa = UserEmailParser.parse_email(user_email)
+        secret_name = f"{secret_base_name}-{usuario}-{empresa}"
         try:
             secret = self.client.get_secret(secret_name)
             return secret.value
