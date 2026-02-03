@@ -8,7 +8,9 @@ class ReaderGeral:
         self.user_email = user_email
         self.group_resolver = group_resolver
         if user_email:
-            usuario, empresa, grupo = UserEmailParser.parse_email_with_group(user_email, group_resolver)
+            # Obtém grupo diretamente do MongoDB usando o e-mail
+            grupo = group_resolver.get_group_for_user(user_email) if group_resolver is not None else None
+            usuario, empresa = UserEmailParser.parse_email(user_email)
             self.usuario = usuario
             self.empresa = empresa
             self.grupo = grupo

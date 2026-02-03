@@ -14,10 +14,17 @@ class AmazonBedrockProvider(ILLMProviderComplete):
         self.group_resolver = group_resolver
         if not user_email:
             raise ValueError("user_email é obrigatório para busca de secrets AWS neste projeto.")
-        grupo, empresa = UserEmailParser.parse_email_with_group(user_email, group_resolver=self.group_resolver)
-        self.aws_access_key_id = self.secret_manager.get_secret_with_user_context('AWS-ACCESS-KEY-ID', user_email, group_resolver=self.group_resolver)
-        self.aws_secret_access_key = self.secret_manager.get_secret_with_user_context('AWS-SECRET-ACCESS-KEY', user_email, group_resolver=self.group_resolver)
-        self.aws_region = self.secret_manager.get_secret_with_user_context('AWS-REGION', user_email, group_resolver=self.group_resolver)
+        # Obtém grupo diretamente do MongoDB usando o e-mail
+        grupo = group_resolver.get_group_for_user(user_email) if group_resolver is not None else None
+        # Obtém usuario e empresa via parser
+        usuario, empresa = UserEmailParser.parse_email(user_email)
+        # Monta os nomes dos secrets AWS conforme padrão
+        aws_access_key_secret_name = f"AWS-ACCESS-KEY-ID-{grupo}-{empresa}"
+        aws_secret_access_key_secret_name = f"AWS-SECRET-ACCESS-KEY-{grupo}-{empresa}"
+        aws_region_secret_name = f"AWS-REGION-{grupo}-{empresa}"
+        self.aws_access_key_id = self.secret_manager.get_secret(aws_access_key_secret_name)
+        self.aws_secret_access_key = self.secret_manager.get_secret(aws_secret_access_key_secret_name)
+        self.aws_region = self.secret_manager.get_secret(aws_region_secret_name)
         self.bedrock_runtime = boto3.client(
             'bedrock-runtime',
             aws_access_key_id=self.aws_access_key_id,
