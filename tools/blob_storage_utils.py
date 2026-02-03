@@ -1,8 +1,11 @@
-def get_blob_connection_string(secret_manager, user_email: str, group_resolver: object = None):
+from tools.azure_secret_manager import VaultType
+
+def get_blob_connection_string(secret_manager, user_email: str, group_resolver: object = None, vault_type: VaultType = VaultType.AZURE_INFRASTRUCTURE):
     """
     Obtém a connection string do Azure Blob Storage usando o secret_manager já instanciado.
     O secret_manager deve estar configurado para acessar o cofre dedicado ao Blob Storage.
     Se group_resolver for fornecido, utiliza o contexto de grupo na busca do secret.
+    O vault_type agora é explicitamente VaultType.AZURE_INFRASTRUCTURE por padrão, garantindo leitura do cofre correto.
     """
     secret_name = 'azure-storage-connection-string'
     if not user_email:
@@ -13,7 +16,7 @@ def get_blob_connection_string(secret_manager, user_email: str, group_resolver: 
         else:
             connection_string = secret_manager.get_secret_with_user_context(secret_name, user_email)
         if not connection_string:
-            raise ValueError(f"Connection string '{secret_name}' não encontrada para o usuário '{user_email}' no Key Vault de Blob Storage.")
+            raise ValueError(f"Connection string '{secret_name}' não encontrada para o usuário '{user_email}' no Key Vault de Blob Storage (infraestrutura Azure).")
         return connection_string
     except Exception as e:
         print(f"[get_blob_connection_string] Erro ao buscar connection string para usuário '{user_email}': {e}")
