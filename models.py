@@ -1,8 +1,6 @@
-# Modelos de dados necessários para revisão e melhoria de código via agentes genéricos.
-# Todos os modelos/enums relacionados exclusivamente ao AgenteProcessador ou AgenteRevisorCodigo foram removidos/comentados.
-
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field, validator, model_validator, ValidationError
+from typing import List, Dict, Any, Optional, Literal
+from enum import Enum
 
 class JobFields(BaseModel):
     job_id: str
@@ -19,12 +17,32 @@ class JobFields(BaseModel):
     gerar_relatorio_apenas: Optional[bool] = None
     retornar_lista_arquivos: Optional[bool] = None
     usuario_executor: Optional[str] = None
-    # REMOVIDO: REPO_NAME_MODERNIZADO
-    # REMOVIDO: BRANCH_NAME_MODERNIZADO
-    # REMOVIDO: EXECUTAR_STEPS_INCREMENTALMENTE
 
-# Outros modelos necessários para o fluxo de revisão/melhoria podem ser mantidos abaixo.
+class PullRequestSummary(BaseModel):
+    pull_request_url: str
+    branch_name: str
+    arquivos_modificados: List[str]
+    build_result: Optional[Dict[str, Any]] = None
+    commit_url: Optional[str] = None
 
-# ---
-# Modelos relacionados exclusivamente ao AgenteProcessador ou AgenteRevisorCodigo foram removidos.
-# ---
+class FinalStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    summary: Optional[List[PullRequestSummary]] = None
+    error_details: Optional[str] = None
+    analysis_report: Optional[str] = None
+    diagnostic_logs: Optional[Dict[str, Any]] = None
+    report_blob_url: Optional[str] = None
+    build_errors: Optional[List[str]] = None
+
+class JobStatus:
+    STARTING = 'starting'
+    PENDING_APPROVAL = 'pending_approval'
+    WORKFLOW_STARTED = 'workflow_started'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+    REJECTED = 'rejected'
+
+class JobActions:
+    APPROVE = 'approve'
+    REJECT = 'reject'
