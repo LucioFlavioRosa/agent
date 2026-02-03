@@ -6,7 +6,6 @@ import os
 
 class MongoDBGroupResolverService:
     def __init__(self, secret_manager: Optional[AzureSecretManager] = None, vault_type: VaultType = VaultType.AZURE_INFRASTRUCTURE, collection_name: Optional[str] = None):
-        # Sempre usar o cofre de infraestrutura Azure para segredos do MongoDB
         self.secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
         self.collection_name = os.getenv('AZURE_MONGODB_GROUP_COLLECTION')
         self.mongo_connection_string = self._get_mongo_connection_string()
@@ -25,9 +24,12 @@ class MongoDBGroupResolverService:
         except Exception as e:
             raise RuntimeError(f"Erro ao obter connection string do MongoDB: {e}")
 
-    def get_group_for_user(self, usuario: str, empresa: str) -> str:
-        query = {"usuario": usuario, "empresa": empresa}
+    def get_group_for_user(self, usuario_email: str) -> str:
+        """
+        Recebe o email completo do usuário e retorna o grupo correspondente consultando o MongoDB.
+        """
+        query = {"usuario": usuario_email}
         result = self.collection.find_one(query)
         if not result or 'grupo' not in result:
-            raise ValueError(f"Grupo não encontrado para usuario='{usuario}' e empresa='{empresa}' no MongoDB. Sem fallback.")
+            raise ValueError(f"Grupo não encontrado para usuario_email='{usuario_email}' no MongoDB. Sem fallback.")
         return result['grupo']
