@@ -16,20 +16,33 @@ class AzureReader(BaseReader):
         repository = repo_name.get('_repository')
         return f"https://dev.azure.com/{organization}/{project}/_apis/git/repositories/{repository}"
 
-    def _get_azure_auth_headers(self, repo_name: dict) -> dict:
+    def _get_azure_auth_headers(self, repo_name: dict, user_email: Optional[str] = None) -> dict:
         connector = AzureConector.create_with_defaults()
         organization = repo_name.get('_organization')
-        token = connector._get_token_for_org(organization, platform='azure')
+        token = connector._get_token_for_org(self._build_token_key(organization, user_email), platform='azure')
         credentials = base64.b64encode(f":{token}".encode()).decode()
         return {
             "Content-Type": "application/json",
             "Authorization": f"Basic {credentials}"
         }
 
-    def read_single_file(self, repo_name: dict, file_path: str, branch_name: Optional[str] = None) -> Optional[str]:
+    def _build_token_key(self, organization: str, user_email: Optional[str]) -> str:
+        if user_email:
+            usuario, empresa = self._extract_usuario_empresa(user_email)
+            return f"{usuario}.{empresa}"
+        return organization
+
+    def _extract_usuario_empresa(self, email: str) -> tuple:
+        # Assume formato email: usuario@empresa.com ou usuario@empresa
+        parts = email.split('@')
+        usuario = parts[0]
+        empresa = parts[1].split('.')[0] if '.' in parts[1] else parts[1]
+        return usuario, empresa
+
+    def read_single_file(self, repo_name: dict, file_path: str, branch_name: Optional[str] = None, user_email: Optional[str] = None) -> Optional[str]:
         branch_a_ler = branch_name or repo_name.get('default_branch', 'main')
         print(f"[Azure Reader] Lendo arquivo específico: '{file_path}'")
-        headers = self._get_azure_auth_headers(repo_name)
+        headers = self._get_azure_auth_headers(repo_name, user_email)
         base_url = self._get_base_api_url(repo_name)
         file_url = f"{base_url}/items?path={file_path}&versionDescriptor.version={branch_a_ler}&$format=text&api-version=7.0"
         try:
@@ -39,9 +52,9 @@ class AzureReader(BaseReader):
         except Exception as e:
             return self._handle_read_error(e, file_path, branch_a_ler, "Azure")
 
-    def _obter_lista_todos_arquivos(self, repo_name: dict, branch_name: str) -> List[str]:
+    def _obter_lista_todos_arquivos(self, repo_name: dict, branch_name: str, user_email: Optional[str] = None) -> List[str]:
         print(f"[Azure Reader] Obtendo lista completa de arquivos...")
-        headers = self._get_azure_auth_headers(repo_name)
+        headers = self._get_azure_auth_headers(repo_name, user_email)
         base_url = self._get_base_api_url(repo_name)
         try:
             items_url = f"{base_url}/items?recursionLevel=Full&versionDescriptor.version={branch_name}&api-version=7.0"
@@ -55,9 +68,9 @@ class AzureReader(BaseReader):
             print(f"[Azure Reader] ERRO ao obter lista completa de arquivos Azure DevOps: {e}")
             raise
 
-    def _ler_repositorio_completo(self, repo_name: dict, branch_name: str, extensoes_alvo: List[str], arquivos_especificos: Optional[List[str]] = None) -> Dict[str, str]:
+    def _ler_repositorio_completo(self, repo_name: dict, branch_name: str, extensoes_alvo: List[str], arquivos_especificos: Optional[List[str]] = None, user_email: Optional[str] = None) -> Dict[str, str]:
         arquivos_do_repo = {}
-        headers = self._get_azure_auth_headers(repo_name)
+        headers = self._get_azure_auth_headers(repo_name, user_email)
         base_url = self._get_base_api_url(repo_name)
         try:
             print(f"[Azure Reader] Obtendo árvore de arquivos da branch '{branch_name}'...")
@@ -73,7 +86,7 @@ class AzureReader(BaseReader):
             for item in arquivos_para_ler:
                 file_path = item.get('path')
                 if file_path:
-                    content = self.read_single_file(repo_name, file_path, branch_name)
+                    content = self.read_single_file(repo_name, file_path, branch_name, user_email)
                     if content is not None:
                         arquivos_do_repo[file_path] = content
         except Exception as e:
@@ -81,7 +94,7 @@ class AzureReader(BaseReader):
             raise
         return arquivos_do_repo
 
-    def read_repository_internal(self, repository_type: str, repo_name: dict, branch_name: str = None, analysis_type: str = None, arquivos_especificos: Optional[List[str]] = None, mapeamento_tipo_extensoes: Dict = None, retornar_lista_arquivos: bool = False) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
+    def read_repository_internal(self, repository_type: str, repo_name: dict, branch_name: str = None, analysis_type: str = None, arquivos_especificos: Optional[List[str]] = None, mapeamento_tipo_extensoes: Dict = None, retornar_lista_arquivos: bool = False, user_email: Optional[str] = None) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         branch_a_ler = branch_name or repo_name.get('default_branch', 'main')
         extensoes_alvo = []
         if not arquivos_especificos:
@@ -92,10 +105,11 @@ class AzureReader(BaseReader):
             repo_name=repo_name,
             branch_name=branch_a_ler,
             extensoes_alvo=extensoes_alvo,
-            arquivos_especificos=arquivos_especificos
+            arquivos_especificos=arquivos_especificos,
+            user_email=user_email
         )
         if retornar_lista_arquivos:
-            lista_todos_arquivos = self._obter_lista_todos_arquivos(repo_name, branch_a_ler)
+            lista_todos_arquivos = self._obter_lista_todos_arquivos(repo_name, branch_a_ler, user_email)
             return {'codigo': arquivos_lidos, 'lista_arquivos': lista_todos_arquivos}
         else:
             return arquivos_lidos
