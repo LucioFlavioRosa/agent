@@ -32,6 +32,18 @@ class GitLabConector(BaseConector):
                 print(f"[GitLab Conector] Erro ao extrair namespace do path GitLab. Usando 'gitlab' como fallback.")
                 return 'gitlab'
 
+    def _get_token_for_org(self, org_name: str, platform: str, user_email: str) -> str:
+        print(f"[{platform} Conector] Buscando token para organização: {org_name} e usuário: {user_email}")
+        token_secret_name = f"{platform.lower()}-token"
+        print(f"[{platform} Conector] Tentando buscar token específico: {token_secret_name}")
+        try:
+            token = self.secret_manager.get_secret_with_user_context(token_secret_name, user_email, group_resolver=self.group_resolver)
+            print(f"[{platform} Conector] Token específico encontrado para grupo do usuário")
+            return token
+        except Exception as e:
+            print(f"[{platform} Conector] ERRO CRÍTICO: Token '{token_secret_name}' não encontrado. Não há fallback.")
+            raise ValueError(f"ERRO CRÍTICO: Nenhum token {platform} encontrado para '{token_secret_name}'. Verifique se existe no gerenciador de segredos.") from e
+
     def _normalize_repository_identifier(self, repositorio: str) -> str:
         if self._is_gitlab_project_id(repositorio):
             normalized = str(repositorio).strip()
@@ -41,26 +53,6 @@ class GitLabConector(BaseConector):
             normalized = repositorio.strip()
             print(f"[GitLab Conector] GitLab path normalizado: {normalized}")
             return normalized
-
-    def _extract_user_and_company(self, user_email: str) -> str:
-        try:
-            local_part = user_email.split('@')[0]
-            return local_part
-        except Exception:
-            raise ValueError(f"Email do usuário inválido para extração: {user_email}")
-
-    def _get_token_for_org(self, org_name: str, platform: str, user_email: str) -> str:
-        print(f"[{platform} Conector] Buscando token para organização: {org_name} e usuário: {user_email}")
-        user_company = self._extract_user_and_company(user_email)
-        token_secret_name = f"{platform.lower()}-{user_company}"
-        print(f"[{platform} Conector] Tentando buscar token específico: {token_secret_name}")
-        try:
-            token = self.secret_manager.get_secret(token_secret_name)
-            print(f"[{platform} Conector] Token específico encontrado para {user_company}")
-            return token
-        except Exception as e:
-            print(f"[{platform} Conector] ERRO CRÍTICO: Token '{token_secret_name}' não encontrado. Não há fallback.")
-            raise ValueError(f"ERRO CRÍTICO: Nenhum token {platform} encontrado para '{token_secret_name}'. Verifique se existe no gerenciador de segredos.") from e
 
     def connection(self, repositorio: str, user_email: str) -> Union[object]:
         normalized_repo = self._normalize_repository_identifier(repositorio)
