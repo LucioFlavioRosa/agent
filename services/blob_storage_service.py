@@ -5,9 +5,11 @@ from tools.blob_job_tracker import BlobJobTracker
 from tools.azure_secret_manager import AzureSecretManager, VaultType
 from tools.blob_report_path_builder import build_report_blob_path
 from tools.blob_storage_utils import get_blob_connection_string
+from services.base_service import BaseService
 
-class BlobStorageService:
+class BlobStorageService(BaseService):
     def __init__(self, user_email: str = None, group_resolver: object = None):
+        super().__init__()
         self._blob_service_client = None
         self._container_name = None
         self._user_email = user_email
@@ -18,11 +20,10 @@ class BlobStorageService:
         container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
         if not container_name:
             raise RuntimeError('Azure Blob Storage container name missing.')
-        # Sempre usar o cofre de infraestrutura Azure para segredos do Blob Storage
         secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
-        print(f"[BlobStorageService] DEBUG: Usando VaultType '{VaultType.AZURE_INFRASTRUCTURE.value}' para recuperar connection string do Blob Storage.")
+        self.log_info(f"Usando VaultType '{VaultType.AZURE_INFRASTRUCTURE.value}' para recuperar connection string do Blob Storage.")
         connection_string = get_blob_connection_string(secret_manager, self._user_email, self.group_resolver, vault_type=VaultType.AZURE_INFRASTRUCTURE)
-        print(f"[BlobStorageService] DEBUG: Connection string recuperada do cofre: {'OK' if connection_string else 'FALHA'}")
+        self.log_info(f"Connection string recuperada do cofre: {'OK' if connection_string else 'FALHA'}")
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
 
@@ -49,24 +50,24 @@ class BlobStorageService:
             path = urlparse(report_blob_url).path
             path_parts = path.lstrip('/').split('/', 1)
             if len(path_parts) != 2:
-                print(f"[BlobStorageService] Warning: Could not parse blob path from URL: {report_blob_url}")
+                self.log_warning(f"Could not parse blob path from URL: {report_blob_url}")
                 return
             blob_path = path_parts[1]
             tracker_path = BlobJobTracker.build_tracker_blob_path(blob_path)
             BlobJobTracker.append_job_id(self._blob_service_client, self._container_name, tracker_path, job_id)
         except Exception as e:
-            print(f"[BlobStorageService] Warning: Failed to update job tracker for {report_blob_url}: {e}")
+            self.log_warning(f"Failed to update job tracker for {report_blob_url}: {e}")
 
     def get_jobs_for_report(self, report_blob_url: str):
         try:
             path = urlparse(report_blob_url).path
             path_parts = path.lstrip('/').split('/', 1)
             if len(path_parts) != 2:
-                print(f"[BlobStorageService] Warning: Could not parse blob path from URL: {report_blob_url}")
+                self.log_warning(f"Could not parse blob path from URL: {report_blob_url}")
                 return []
             blob_path = path_parts[1]
             tracker_path = BlobJobTracker.build_tracker_blob_path(blob_path)
             return BlobJobTracker.read_job_list(self._blob_service_client, self._container_name, tracker_path)
         except Exception as e:
-            print(f"[BlobStorageService] Warning: Failed to get jobs for report {report_blob_url}: {e}")
+            self.log_warning(f"Failed to get jobs for report {report_blob_url}: {e}")
             return []
