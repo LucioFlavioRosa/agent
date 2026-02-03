@@ -5,9 +5,22 @@ from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.github_repository_provider import GitHubRepositoryProvider
 from tools.readers.base_reader import BaseReader
 
+def _extract_user_and_company_from_email(user_email: str):
+    if not user_email or '@' not in user_email:
+        raise ValueError("user_email inválido ou não informado")
+    local, domain = user_email.split('@', 1)
+    usuario = local.replace('.', '_')
+    empresa = domain.split('.', 1)[0].replace('.', '_')
+    return usuario, empresa
+
 class GitHubReader(BaseReader):
-    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
+    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None, user_email: Optional[str] = None):
         super().__init__(repository_provider or GitHubRepositoryProvider())
+        self.user_email = user_email
+        if user_email:
+            self.usuario, self.empresa = _extract_user_and_company_from_email(user_email)
+        else:
+            self.usuario, self.empresa = None, None
 
     def read_single_file(self, repo_name, file_path: str, branch_name: str) -> Optional[str]:
         print(f"[GitHubReader] Lendo arquivo específico: '{file_path}' na branch '{branch_name}'")
@@ -111,9 +124,15 @@ class GitHubReader(BaseReader):
         analysis_type: str = None,
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None,
-        retornar_lista_arquivos: bool = False
+        retornar_lista_arquivos: bool = False,
+        user_email: Optional[str] = None
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         branch_a_ler = branch_name or 'main'
+        if user_email:
+            usuario, empresa = _extract_user_and_company_from_email(user_email)
+        else:
+            usuario, empresa = None, None
+        # Aqui, se for necessário obter o repo via conector, passaria usuario/empresa
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitHub ativado para {len(arquivos_especificos)} arquivos específicos.")
             arquivos_lidos = self._ler_arquivos_especificos(repo_name, branch_a_ler, arquivos_especificos)
