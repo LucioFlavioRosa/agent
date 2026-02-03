@@ -1,11 +1,17 @@
 from typing import Dict, Union
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from tools.azure_secret_manager import AzureSecretManager, VaultType
+from tools.azure_secret_manager import VaultType
 from tools.gitlab_repository_provider import GitLabRepositoryProvider
 from tools.conectores.base_conector import BaseConector
+from tools.conectores.base_token_manager import BaseTokenManager
 
 class GitLabConector(BaseConector):
+    def __init__(self, repository_provider: IRepositoryProvider, secret_manager: ISecretManager = None, group_resolver=None):
+        super().__init__(repository_provider, secret_manager)
+        self.group_resolver = group_resolver
+        self.token_manager = BaseTokenManager(vault_type=VaultType.GITHUB, group_resolver=group_resolver)
+
     def _is_gitlab_project_id(self, repositorio: str) -> bool:
         try:
             int(repositorio)
@@ -32,21 +38,6 @@ class GitLabConector(BaseConector):
                 print(f"[GitLab Conector] Erro ao extrair namespace do path GitLab. Usando 'gitlab' como fallback.")
                 return 'gitlab'
 
-    def _get_token_for_org(self, org_name: str, platform: str, user_email: str) -> str:
-        print(f"[{platform} Conector] Buscando token para organização: {org_name} e usuário: {user_email}")
-        token_secret_name = f"{platform.lower()}-token"
-        print(f"[{platform} Conector] Tentando buscar token específico: {token_secret_name}")
-        # Instrução do usuário: tokens do GitLab devem ser lidos do cofre kv-codeai-github-dev-usc
-        # Portanto, instanciamos AzureSecretManager com VaultType.REPOSITORY, que deve apontar para o cofre correto
-        secret_manager_github = AzureSecretManager(vault_type=VaultType.REPOSITORY)
-        try:
-            token = secret_manager_github.get_secret_with_user_context(token_secret_name, user_email, group_resolver=self.group_resolver)
-            print(f"[{platform} Conector] Token específico encontrado para grupo do usuário")
-            return token
-        except Exception as e:
-            print(f"[{platform} Conector] ERRO CRÍTICO: Token '{token_secret_name}' não encontrado. Não há fallback.")
-            raise ValueError(f"ERRO CRÍTICO: Nenhum token {platform} encontrado para '{token_secret_name}'. Verifique se existe no gerenciador de segredos.") from e
-
     def _normalize_repository_identifier(self, repositorio: str) -> str:
         if self._is_gitlab_project_id(repositorio):
             normalized = str(repositorio).strip()
@@ -70,7 +61,7 @@ class GitLabConector(BaseConector):
         if cache_key in self._cached_repos:
             print(f"[{platform} Conector] Retornando repositório '{normalized_repo}' do cache.")
             return self._cached_repos[cache_key]
-        token = self._get_token_for_org(org_name, platform, user_email)
+        token = self.token_manager.get_token(platform, org_name, user_email)
         masked_token = self._TOKEN_MASK + token[-4:] if len(token) > 4 else self._TOKEN_MASK
         print(f"[{platform} Conector] Token obtido: {masked_token}")
         try:
