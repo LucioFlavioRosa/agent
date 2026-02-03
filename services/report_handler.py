@@ -36,45 +36,53 @@ class ReportHandler:
         if not step_result:
             return None
 
-        raw_output_str = None
-
+        # Se for dict e tiver 'relatorio', retorna direto
         if isinstance(step_result, dict):
             if 'relatorio' in step_result:
                 return step_result['relatorio']
             if 'resultado_gerado' in step_result:
                 raw_output_str = step_result['resultado_gerado']
-            elif 'resultado' in step_result and isinstance(step_result['resultado'], dict):
-                if 'relatorio' in step_result['resultado']:
-                    return step_result['resultado']['relatorio']
-            elif isinstance(step_result.get('resultado'), str):
-                raw_output_str = step_result.get('resultado')
+            elif 'resultado' in step_result:
+                resultado = step_result['resultado']
+                if isinstance(resultado, dict) and 'relatorio' in resultado:
+                    return resultado['relatorio']
+                elif isinstance(resultado, str):
+                    raw_output_str = resultado
+                else:
+                    raw_output_str = None
+            else:
+                raw_output_str = None
         elif isinstance(step_result, str):
             raw_output_str = step_result
+        else:
+            raw_output_str = None
 
-        if not raw_output_str:
-            print("[ReportHandler] extract_report_text: step_result não continha uma string de saída reconhecida.")
-            return None
+        # Tenta parsear como JSON diretamente
+        if raw_output_str:
+            try:
+                data = json.loads(raw_output_str)
+                if isinstance(data, dict) and 'relatorio' in data:
+                    return data['relatorio']
+            except Exception:
+                pass
 
-        try:
-            match = re.search(r'\{.*\}', raw_output_str, re.DOTALL)
-            if match:
-                json_str = match.group(0)
-            else:
-                if raw_output_str.strip().startswith('|'):
-                    return raw_output_str
-                print(f"[ReportHandler] extract_report_text: Não foi possível encontrar um JSON na string: {raw_output_str[:200]}")
-                return None
-            data = json.loads(json_str)
-            if isinstance(data, dict) and 'relatorio' in data:
-                return data['relatorio']
-            else:
-                print(f"[ReportHandler] extract_report_text: JSON parseado não contém a chave 'relatorio'.")
-                return None
-        except json.JSONDecodeError as e:
-            print(f"[ReportHandler] extract_report_text: Falha ao decodificar JSON. Error: {e}. String: {raw_output_str[:200]}")
+            # Fallback: tenta encontrar JSON por regex
+            try:
+                match = re.search(r'\{.*\}', raw_output_str, re.DOTALL)
+                if match:
+                    json_str = match.group(0)
+                    data = json.loads(json_str)
+                    if isinstance(data, dict) and 'relatorio' in data:
+                        return data['relatorio']
+            except Exception:
+                pass
+
+            # Fallback final: retorna texto puro se começar com pipe ou não for JSON
             if raw_output_str.strip().startswith('|'):
                 return raw_output_str
-            return None
+
+        print("[ReportHandler] extract_report_text: Não foi possível extrair relatório do resultado fornecido.")
+        return None
 
     def save_report_to_blob(self, job_id, job_info, report_text):
         if not report_text or len(str(report_text).strip()) == 0:
