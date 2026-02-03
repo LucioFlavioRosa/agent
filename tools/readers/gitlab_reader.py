@@ -3,10 +3,12 @@ from typing import Dict, Optional, List, Union
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
 from tools.gitlab_repository_provider import GitLabRepositoryProvider
 from tools.readers.base_reader import BaseReader
+from tools.user_email_parser import UserEmailParser
 
 class GitLabReader(BaseReader):
-    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None):
+    def __init__(self, repository_provider: Optional[IRepositoryProvider] = None, group_resolver: Optional[object] = None):
         super().__init__(repository_provider or GitLabRepositoryProvider())
+        self.group_resolver = group_resolver
 
     def read_single_file(self, repo_name, file_path: str, branch_name: str) -> Optional[str]:
         print(f"[GitLabReader] Lendo arquivo específico: '{file_path}' na branch '{branch_name}' do repositório '{getattr(repo_name, 'path_with_namespace', 'desconhecido')}'")
@@ -124,9 +126,14 @@ class GitLabReader(BaseReader):
         arquivos_especificos: Optional[List[str]] = None,
         mapeamento_tipo_extensoes: Dict = None,
         retornar_lista_arquivos: bool = False,
-        user_email: Optional[str] = None
+        user_email: Optional[str] = None,
+        group_resolver: Optional[object] = None
     ) -> Union[Dict[str, str], Dict[str, Union[Dict[str, str], List[str]]]]:
         branch_a_ler = branch_name or 'main'
+        usuario = empresa = grupo = None
+        if user_email:
+            usuario, empresa, grupo = UserEmailParser.parse_email_with_group(user_email, group_resolver)
+        # Aqui, se for necessário obter o repo via conector, passaria usuario/empresa/grupo
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitLab ativado para {len(arquivos_especificos)} arquivos específicos no repositório '{getattr(repo_name, 'path_with_namespace', 'desconhecido')}'.")
             arquivos_lidos = self._ler_arquivos_especificos(repo_name, branch_a_ler, arquivos_especificos)
