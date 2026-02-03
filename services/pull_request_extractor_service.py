@@ -10,8 +10,7 @@ class PullRequestExtractorService:
         return summary_list
     def _extract_from_commit_details(self, job_id: str, job_data: dict) -> List[PullRequestSummary]:
         summary_list = []
-        commit_details = job_data.get(JobFields.COMMIT_DETAILS, [])
-        print(f"[{job_id}] Extraindo PRs de commit_details: {len(commit_details)} itens")
+        commit_details = job_data.get('commit_details', [])
         for i, pr_info in enumerate(commit_details):
             if not isinstance(pr_info, dict):
                 continue
@@ -21,10 +20,8 @@ class PullRequestExtractorService:
             success = pr_info.get('success', False)
             commit_url = pr_info.get('commit_url') if 'commit_url' in pr_info else None
             build_result = pr_info.get('build_result') if 'build_result' in pr_info else None
-            print(f"[{job_id}] [DEBUG][PullRequestExtractorService] build_result presente no commit_details[{i}]: {build_result is not None}")
             if success and branch_name:
                 if pr_url:
-                    print(f"[{job_id}] PR válido encontrado: {pr_url} - Branch: {branch_name}")
                     summary_list.append(
                         PullRequestSummary(
                             pull_request_url=pr_url,
@@ -35,7 +32,6 @@ class PullRequestExtractorService:
                         )
                     )
                 else:
-                    print(f"[{job_id}] Branch processada sem PR URL: {branch_name}")
                     summary_list.append(
                         PullRequestSummary(
                             pull_request_url=f"Branch processada: {branch_name}",
@@ -58,8 +54,7 @@ class PullRequestExtractorService:
         return summary_list
     def _extract_from_diagnostic_logs(self, job_id: str, job_data: dict) -> List[PullRequestSummary]:
         summary_list = []
-        diagnostic_logs = job_data.get(JobFields.DIAGNOSTIC_LOGS, {})
-        print(f"[{job_id}] Extraindo PRs de diagnostic_logs")
+        diagnostic_logs = job_data.get('diagnostic_logs', {})
         final_result = diagnostic_logs.get('final_result', {})
         if final_result:
             summary_list = self._extract_from_final_result(job_id, final_result)
@@ -72,7 +67,6 @@ class PullRequestExtractorService:
         summary_list = []
         for key, value in final_result.items():
             if key.startswith('pr_grupo_') and isinstance(value, dict):
-                print(f"[{job_id}] Encontrado grupo de PR: {key}")
                 branch_name = value.get('resumo_do_pr', key.replace('pr_grupo_', 'branch-'))
                 arquivos_modificados = []
                 conjunto_mudancas = value.get('conjunto_de_mudancas', [])
