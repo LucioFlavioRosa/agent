@@ -11,6 +11,7 @@ from tools.user_email_parser import UserEmailParser
 
 class OpenAILLMProvider(ILLMProviderComplete):
     def __init__(self, secret_manager: Optional[AzureSecretManager] = None, user_email: Optional[str] = None, group_resolver: Optional[object] = None):
+        # Sempre usar o cofre de LLM para segredos do OpenAI
         self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
         self.user_email = user_email
         self.group_resolver = group_resolver
@@ -24,27 +25,22 @@ class OpenAILLMProvider(ILLMProviderComplete):
 
         try:
             # 4. Leitura dos segredos usando get_secret_with_user_context
-            # Substituímos as variáveis de ambiente pela busca no Vault com contexto
-            # Nota: Ajuste os nomes das chaves ('AZURE-OPENAI-KEY', etc) conforme estão no seu Vault
-            
+            # Segredos do OpenAI SEMPRE do cofre kv-codeai-llm-dev-usc (VaultType.LLM)
             api_key = self.secret_manager.get_secret_with_user_context(
                 'AZURE-OPENAI-KEY', 
                 user_email, 
                 group_resolver=self.group_resolver
             )
-            
             self.azure_endpoint = self.secret_manager.get_secret_with_user_context(
                 'AZURE-OPENAI-ENDPOINT', 
                 user_email, 
                 group_resolver=self.group_resolver
             )
-
             self.openai_client = AzureOpenAI(
                 azure_endpoint=self.azure_endpoint,
                 api_version="2025-03-01-preview",
                 api_key=api_key,
             )
-
         except Exception as e:
             print(f"ERRO CRÍTICO ao configurar o cliente do Azure OpenAI: {e}")
             raise
@@ -68,10 +64,8 @@ class OpenAILLMProvider(ILLMProviderComplete):
     ) -> Dict[str, Any]:
         modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
         job_id_final = job_id or str(uuid.uuid4())
-        
         prompt_sistema_base = self.carregar_prompt(tipo_tarefa)
         prompt_sistema_final = prompt_sistema_base
-        
         try:
             mensagens = [
                 {"role": "system", "content": prompt_sistema_final},
@@ -79,25 +73,21 @@ class OpenAILLMProvider(ILLMProviderComplete):
                 {'role': 'user',
                  'content': f'Instruções extras do usuário: {instrucoes_extras}' if instrucoes_extras.strip() else 'Nenhuma instrução extra.'}
             ]
-            
             response = self.openai_client.chat.completions.create(
                 model=modelo_final,
                 messages=mensagens,
                 temperature=0.3,
                 max_completion_tokens=max_token_out
             )
-            
             conteudo_resposta = (response.choices[0].message.content or "").strip()
             tokens_entrada = response.usage.prompt_tokens
             tokens_saida = response.usage.completion_tokens
-            
             return {
                 'reposta_final': conteudo_resposta,
                 'tokens_entrada': tokens_entrada,
                 'tokens_saida': tokens_saida,
                 'job_id': job_id_final
             }
-            
         except Exception as e:
             nome_modelo_erro = modelo_final or "modelo não especificado"
-            print(f"ERRO: Falha na chamada à API da OpenAI para o modelo '{nome_modelo_erro}'. C
+            print(f"ERRO: Falha na chamada à API da OpenAI para o modelo '{nome_modelo_erro}'. C")
