@@ -39,10 +39,17 @@ class AzureSecretManager:
             raise ValueError(f"Secret '{secret_name}' não encontrado ou erro de acesso ao Key Vault.")
 
     def get_secret_with_user_context(self, secret_base_name: str, user_email: str, group_resolver: Optional[object] = None) -> str:
+        """
+        Obtém o secret usando o email completo do usuário e o group_resolver.
+        O nome do secret é construído como '{secret_base_name}-{grupo}-{empresa}',
+        onde grupo é obtido via group_resolver.get_group_for_user(user_email) e empresa via UserEmailParser.parse_email(user_email).
+        """
         if group_resolver is not None:
-            usuario, empresa, grupo = UserEmailParser.parse_email_with_group(user_email, group_resolver)
+            grupo = group_resolver.get_group_for_user(user_email)
+            _, empresa = UserEmailParser.parse_email(user_email)
             secret_name = f"{secret_base_name}-{grupo}-{empresa}"
         else:
+            # Fallback: utiliza apenas usuario e empresa (não recomendado)
             usuario, empresa = UserEmailParser.parse_email(user_email)
             secret_name = f"{secret_base_name}-{usuario}-{empresa}"
         try:
