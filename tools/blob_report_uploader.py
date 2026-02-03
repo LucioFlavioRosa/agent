@@ -1,6 +1,6 @@
 import os
 from azure.storage.blob import BlobServiceClient, ContentSettings
-from tools.azure_secret_manager import AzureSecretManager
+from tools.azure_secret_manager import AzureSecretManager, VaultType
 from tools.blob_report_path_builder import build_report_blob_path
 from tools.blob_storage_utils import get_blob_connection_string
 
@@ -8,7 +8,8 @@ def upload_report_to_blob(report_text: str, projeto: str, analysis_type: str, re
     container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
     if not container_name:
         raise RuntimeError('Azure Blob Storage container name missing.')
-    secret_manager = AzureSecretManager()
+    # Instancia o AzureSecretManager com VaultType.AZURE_INFRASTRUCTURE para ler secrets de infraestrutura
+    secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
     connection_string = get_blob_connection_string(secret_manager, user_email, group_resolver)
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
     original_analysis_name = analysis_name

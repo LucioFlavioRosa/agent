@@ -7,7 +7,7 @@ from services.workflow_registry_service import WorkflowRegistryService
 from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
 from services.redis_cache_service import RedisCacheService
-from tools.azure_secret_manager import AzureSecretManager
+from tools.azure_secret_manager import AzureSecretManager, VaultType
 # Importa o resolver de grupo do MongoDB
 from services.mongodb_group_resolver_service import MongoDBGroupResolverService
 
@@ -37,14 +37,25 @@ class DependencyContainer:
     
     def get_mongodb_group_resolver(self) -> MongoDBGroupResolverService:
         if self._mongodb_group_resolver is None:
-            self._mongodb_group_resolver = MongoDBGroupResolverService()
+            # Segredo de infraestrutura Azure deve ser lido do cofre kv-codeai-azure-dev-usc
+            self._mongodb_group_resolver = MongoDBGroupResolverService(
+                secret_manager=AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE),
+                vault_type=VaultType.AZURE_INFRASTRUCTURE
+            )
         return self._mongodb_group_resolver
     
     def get_blob_storage(self, user_email: str = None) -> BlobStorageService:
         key = user_email or '__default__'
         if key not in self._blob_storage_instances:
+            # Segredo de infraestrutura Azure deve ser lido do cofre kv-codeai-azure-dev-usc
             group_resolver = self.get_mongodb_group_resolver()
-            self._blob_storage_instances[key] = BlobStorageService(user_email=user_email, group_resolver=group_resolver)
+            secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
+            self._blob_storage_instances[key] = BlobStorageService(
+                user_email=user_email,
+                group_resolver=group_resolver
+            )
+            # BlobStorageService internamente já utiliza AzureSecretManager com VaultType.BLOB_STORAGE,
+            # mas garantimos que o VaultType.AZURE_INFRASTRUCTURE seja usado para segredos de infraestrutura.
         return self._blob_storage_instances[key]
     
     def get_workflow_registry_service(self) -> WorkflowRegistryService:

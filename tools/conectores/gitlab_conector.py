@@ -1,7 +1,7 @@
 from typing import Dict, Union
 from domain.interfaces.secret_manager_interface import ISecretManager
 from domain.interfaces.repository_provider_interface import IRepositoryProvider
-from tools.azure_secret_manager import AzureSecretManager
+from tools.azure_secret_manager import AzureSecretManager, VaultType
 from tools.gitlab_repository_provider import GitLabRepositoryProvider
 from tools.conectores.base_conector import BaseConector
 
@@ -36,8 +36,11 @@ class GitLabConector(BaseConector):
         print(f"[{platform} Conector] Buscando token para organização: {org_name} e usuário: {user_email}")
         token_secret_name = f"{platform.lower()}-token"
         print(f"[{platform} Conector] Tentando buscar token específico: {token_secret_name}")
+        # Instrução do usuário: tokens do GitLab devem ser lidos do cofre kv-codeai-github-dev-usc
+        # Portanto, instanciamos AzureSecretManager com VaultType.REPOSITORY, que deve apontar para o cofre correto
+        secret_manager_github = AzureSecretManager(vault_type=VaultType.REPOSITORY)
         try:
-            token = self.secret_manager.get_secret_with_user_context(token_secret_name, user_email, group_resolver=self.group_resolver)
+            token = secret_manager_github.get_secret_with_user_context(token_secret_name, user_email, group_resolver=self.group_resolver)
             print(f"[{platform} Conector] Token específico encontrado para grupo do usuário")
             return token
         except Exception as e:
