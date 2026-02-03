@@ -11,8 +11,6 @@ app = FastAPI(
 
 workflow_service = SimplifiedWorkflowService()
 
-VALID_AGENT_TYPES = ['processador']
-
 class StartAnalysisPayload(BaseModel):
     repository_type: Literal['github', 'gitlab', 'azure'] = Field(..., description="Tipo do repositório")
     repo_name: str = Field(..., description="Nome do repositório (ex: org/projeto/repo)")
@@ -25,12 +23,6 @@ class StartAnalysisPayload(BaseModel):
     gerar_relatorio_apenas: Optional[bool] = None
     retornar_lista_arquivos: Optional[bool] = None
     usuario_executor: str = Field(..., description="Email do usuário executor (obrigatório)")
-
-    @validator('analysis_type')
-    def validate_agent_type(cls, v):
-        if v not in VALID_AGENT_TYPES:
-            raise ValueError(f"Tipo de agente inválido: {v}. Apenas 'processador' é permitido.")
-        return v
 
     @validator('usuario_executor')
     def validate_usuario_executor(cls, v):
@@ -49,7 +41,6 @@ class StatusResponse(BaseModel):
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse)
 def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    # usuario_executor extraído do payload e propagado para o workflow
     job_id = workflow_service.start_analysis(payload)
     background_tasks.add_task(workflow_service.run_analysis, job_id)
     return StartAnalysisResponse(job_id=job_id)
