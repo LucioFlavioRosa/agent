@@ -27,6 +27,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _extract_job_data(self, job_info: Dict[str, Any]) -> Dict[str, Any]:
         data = job_info.get('data', {})
+        # Mantém apenas os campos utilizados pelos métodos que chamam _extract_job_data
         return {
             'projeto': data.get('projeto'),
             'repository_type': data.get('repository_type'),

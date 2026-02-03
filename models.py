@@ -1,6 +1,16 @@
 from pydantic import BaseModel, Field, validator, ValidationError
 from typing import List, Dict, Any, Optional, Literal
 from enum import Enum
+from utils.constants import (
+    JOB_STATUS_STARTING,
+    JOB_STATUS_PENDING_APPROVAL,
+    JOB_STATUS_WORKFLOW_STARTED,
+    JOB_STATUS_COMPLETED,
+    JOB_STATUS_FAILED,
+    JOB_STATUS_REJECTED,
+    JOB_ACTION_APPROVE,
+    JOB_ACTION_REJECT
+)
 
 class JobFields(BaseModel):
     job_id: str
@@ -42,13 +52,13 @@ class FinalStatusResponse(BaseModel):
     build_errors: Optional[List[str]] = None
 
 class JobStatus:
-    STARTING = 'starting'
-    PENDING_APPROVAL = 'pending_approval'
-    WORKFLOW_STARTED = 'workflow_started'
-    COMPLETED = 'completed'
-    FAILED = 'failed'
-    REJECTED = 'rejected'
+    STARTING = JOB_STATUS_STARTING
+    PENDING_APPROVAL = JOB_STATUS_PENDING_APPROVAL
+    WORKFLOW_STARTED = JOB_STATUS_WORKFLOW_STARTED
+    COMPLETED = JOB_STATUS_COMPLETED
+    FAILED = JOB_STATUS_FAILED
+    REJECTED = JOB_STATUS_REJECTED
 
 class JobActions:
-    APPROVE = 'approve'
-    REJECT = 'reject'
+    APPROVE = JOB_ACTION_APPROVE
+    REJECT = JOB_ACTION_REJECT
