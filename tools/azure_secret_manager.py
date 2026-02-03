@@ -6,14 +6,20 @@ from azure.keyvault.secrets import SecretClient
 from tools.user_email_parser import UserEmailParser
 
 class VaultType(Enum):
-    LLM = 'llm'
+    AZURE_INFRASTRUCTURE = 'azure_infrastructure'  # kv-codeai-azure-dev-usc
+    LLM = 'llm'                                    # kv-codeai-llm-dev-usc
+    GITHUB = 'github'                              # kv-codeai-github-dev-usc
+    AZURE_DEVOPS = 'azure_devops'                  # kv-codeai-devops-dev-usc
     REPOSITORY = 'repository'
     DEFAULT = 'default'
     BLOB_STORAGE = 'blob_storage'
 
 class AzureSecretManager:
     _VAULT_URLS = {
-        VaultType.LLM: os.getenv('AZURE_KEY_VAULT_LLM_URL'),
+        VaultType.AZURE_INFRASTRUCTURE: os.getenv('AZURE_KEY_VAULT_AZURE_INFRASTRUCTURE_URL'),  # kv-codeai-azure-dev-usc
+        VaultType.LLM: os.getenv('AZURE_KEY_VAULT_LLM_URL'),                                    # kv-codeai-llm-dev-usc
+        VaultType.GITHUB: os.getenv('AZURE_KEY_VAULT_GITHUB_URL'),                              # kv-codeai-github-dev-usc
+        VaultType.AZURE_DEVOPS: os.getenv('AZURE_KEY_VAULT_AZURE_DEVOPS_URL'),                  # kv-codeai-devops-dev-usc
         VaultType.REPOSITORY: os.getenv('AZURE_KEY_VAULT_REPOSITORY_URL'),
         VaultType.DEFAULT: os.getenv('AZURE_KEY_VAULT_URL'),
         VaultType.BLOB_STORAGE: os.getenv('AZURE_KEY_VAULT_BLOB_STORAGE_URL')
@@ -47,7 +53,6 @@ class AzureSecretManager:
         caso contrário, usa '{secret_base_name}-{usuario}-{empresa}'. Não há fallback: se não existir, lança erro.
         """
         if group_resolver is not None:
-            # UserEmailParser deve ter o método parse_email_with_group
             usuario, empresa, grupo = UserEmailParser.parse_email_with_group(user_email, group_resolver)
             secret_name = f"{secret_base_name}-{grupo}-{empresa}"
         else:
