@@ -46,13 +46,17 @@ class GitLabReader(BaseReader):
         return arquivos_lidos
 
     def _build_gitlab_error_message(self, error_code: str, context: dict) -> str:
-        error_messages = {
-            'branch_not_found': f"Branch '{context.get('branch')}' não encontrada no repositório GitLab '{context.get('repo')}'. Verifique se a branch existe.",
-            'repo_not_found': f"Repositório GitLab '{context.get('repo')}' não encontrado ou sem permissão de acesso.",
-            'permission_denied': f"Sem permissão para acessar a árvore do repositório GitLab '{context.get('repo')}'. Verifique as permissões do token.",
-            'unexpected': f"Erro inesperado ao obter árvore do repositório GitLab '{context.get('repo')}': {context.get('error')}"
-        }
-        return error_messages.get(error_code, f"Erro desconhecido: {context.get('error')}")
+        branch = context.get('branch')
+        repo = context.get('repo')
+        error = context.get('error')
+        if error_code == 'branch_not_found':
+            return f"Branch '{branch}' não encontrada no repositório GitLab '{repo}'. Verifique se a branch existe."
+        elif error_code == 'repo_not_found':
+            return f"Repositório GitLab '{repo}' não encontrado ou sem permissão de acesso."
+        elif error_code == 'permission_denied':
+            return f"Sem permissão para acessar a árvore do repositório GitLab '{repo}'. Verifique as permissões do token."
+        else:
+            return f"Erro inesperado ao obter árvore do repositório GitLab '{repo}': {error}"
 
     def _obter_lista_todos_arquivos(self, repo_name, branch_name: str) -> List[str]:
         repo_namespace = getattr(repo_name, 'path_with_namespace', 'desconhecido')
