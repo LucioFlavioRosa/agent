@@ -14,14 +14,19 @@ workflow_service = SimplifiedWorkflowService()
 VALID_AGENT_TYPES = ['processador']
 
 class StartAnalysisPayload(BaseModel):
-    repository_type: Literal['github', 'gitlab', 'azure']
+    repository_type: Literal['github', 'gitlab', 'azure'] = Field(..., description="Tipo do repositório")
     repo_name: str = Field(..., description="Nome do repositório (ex: org/projeto/repo)")
     branch_name: str = Field(..., description="Nome da branch para análise")
-    agent_type: Literal['processador'] = Field(..., description="Tipo de agente a ser executado (apenas 'processador' permitido)")
+    analysis_type: str = Field(..., description="Tipo de análise a ser executada")
     arquivos_especificos: Optional[List[str]] = None
     instrucoes_extras: Optional[str] = None
+    projeto: Optional[str] = None
+    analysis_name: Optional[str] = None
+    gerar_relatorio_apenas: Optional[bool] = None
+    retornar_lista_arquivos: Optional[bool] = None
+    usuario_executor: Optional[str] = None
 
-    @validator('agent_type')
+    @validator('analysis_type')
     def validate_agent_type(cls, v):
         if v not in VALID_AGENT_TYPES:
             raise ValueError(f"Tipo de agente inválido: {v}. Apenas 'processador' é permitido.")
