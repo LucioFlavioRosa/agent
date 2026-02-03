@@ -10,6 +10,7 @@ from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 import traceback
+from services.step_strategies.default_step_strategy import DefaultStepStrategy
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -27,7 +28,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def _extract_job_data(self, job_info: Dict[str, Any]) -> Dict[str, Any]:
         data = job_info.get('data', {})
-        # Mantém apenas os campos utilizados pelos métodos que chamam _extract_job_data
         return {
             'projeto': data.get('projeto'),
             'repository_type': data.get('repository_type'),
@@ -136,16 +136,11 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
         agent_params['job_id'] = job_id
         if agent_params_override:
             agent_params.update(agent_params_override)
-        strategy = step.get('strategy')
-        if strategy:
-            strategy_instance = strategy(self.job_handler)
-            result = strategy_instance.execute_step(
-                job_id, job_info, step, current_step_index, 
-                previous_step_result, repo_reader, llm_provider, agent_params
-            )
-        else:
-            result = llm_provider.run_agent(
-                agent_type, agent_params, repo_reader=repo_reader
-            )
+        # Simplificação: sempre usa DefaultStepStrategy
+        strategy_instance = DefaultStepStrategy(self.job_handler)
+        result = strategy_instance.execute_step(
+            job_id, job_info, step, current_step_index, 
+            previous_step_result, repo_reader, llm_provider, agent_params
+        )
         print(f"[{job_id}] [DEBUG] strategy.execute_step retornou resultado para step {current_step_index}: {str(result)[:300]}...")
         return result
