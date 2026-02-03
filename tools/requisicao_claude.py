@@ -5,38 +5,25 @@ from typing import Optional, Dict, Any
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
 from services.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
+from tools.user_email_parser import UserEmailParser
 
 class AmazonBedrockProvider(ILLMProviderComplete):
-    def __init__(self, secret_manager: Optional[AzureSecretManager] = None, user_email: Optional[str] = None):
+    def __init__(self, secret_manager: Optional[AzureSecretManager] = None, user_email: Optional[str] = None, group_resolver: Optional[object] = None):
         self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
         self.user_email = user_email
+        self.group_resolver = group_resolver
         if not user_email:
             raise ValueError("user_email é obrigatório para busca de secrets AWS neste projeto.")
-        usuario, empresa = self._parse_user_email(user_email)
-        self.aws_access_key_id = self.secret_manager.get_secret_with_user_context(f'AWS-ACCESS-KEY-ID', usuario, empresa)
-        self.aws_secret_access_key = self.secret_manager.get_secret_with_user_context(f'AWS-SECRET-ACCESS-KEY', usuario, empresa)
-        self.aws_region = self.secret_manager.get_secret_with_user_context(f'AWS-REGION', usuario, empresa)
+        grupo, empresa = UserEmailParser.parse_email_with_group(user_email, group_resolver=self.group_resolver)
+        self.aws_access_key_id = self.secret_manager.get_secret_with_user_context('AWS-ACCESS-KEY-ID', user_email, group_resolver=self.group_resolver)
+        self.aws_secret_access_key = self.secret_manager.get_secret_with_user_context('AWS-SECRET-ACCESS-KEY', user_email, group_resolver=self.group_resolver)
+        self.aws_region = self.secret_manager.get_secret_with_user_context('AWS-REGION', user_email, group_resolver=self.group_resolver)
         self.bedrock_runtime = boto3.client(
             'bedrock-runtime',
             aws_access_key_id=self.aws_access_key_id,
             aws_secret_access_key=self.aws_secret_access_key,
             region_name=self.aws_region
         )
-
-    def _parse_user_email(self, email: str):
-        # Assume formato email: usuario.empresa@dominio ou usuario@empresa.com
-        # Extrai usuario e empresa do email
-        if '@' not in email:
-            raise ValueError(f"Email inválido para extração de usuario e empresa: {email}")
-        local, domain = email.split('@', 1)
-        if '.' in local:
-            usuario, empresa = local.split('.', 1)
-        elif '-' in local:
-            usuario, empresa = local.split('-', 1)
-        else:
-            usuario = local
-            empresa = domain.split('.', 1)[0]
-        return usuario, empresa
 
     def executar_prompt(
         self,
