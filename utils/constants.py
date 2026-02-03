@@ -21,3 +21,15 @@ REPORT_BLOB_URL = "report_blob_url"
 BUILD_ERRORS = "build_errors"
 PLATFORM_AZURE = "Azure"
 TOKEN_MASK = "***"
+
+# Status de Job centralizados
+JOB_STATUS_STARTING = "starting"
+JOB_STATUS_PENDING_APPROVAL = "pending_approval"
+JOB_STATUS_WORKFLOW_STARTED = "workflow_started"
+JOB_STATUS_COMPLETED = "completed"
+JOB_STATUS_FAILED = "failed"
+JOB_STATUS_REJECTED = "rejected"
+
+# Job Actions
+JOB_ACTION_APPROVE = "approve"
+JOB_ACTION_REJECT = "reject"
