@@ -13,7 +13,7 @@ class DependencyContainer:
     def __init__(self):
         self._job_store = None
         self._job_manager = None
-        self._blob_storage = None
+        self._blob_storage_instances = {}
         self._workflow_registry_service = None
         self._workflow_orchestrator = None
         self._analysis_name_service = None
@@ -32,24 +32,26 @@ class DependencyContainer:
             self._job_manager = JobManager(self.get_job_store())
         return self._job_manager
     
-    def get_blob_storage(self) -> BlobStorageService:
-        if self._blob_storage is None:
-            self._blob_storage = BlobStorageService()
-        return self._blob_storage
+    def get_blob_storage(self, user_email: str = None) -> BlobStorageService:
+        key = user_email or '__default__'
+        if key not in self._blob_storage_instances:
+            self._blob_storage_instances[key] = BlobStorageService(user_email=user_email)
+        return self._blob_storage_instances[key]
     
     def get_workflow_registry_service(self) -> WorkflowRegistryService:
         if self._workflow_registry_service is None:
             self._workflow_registry_service = WorkflowRegistryService()
         return self._workflow_registry_service
     
-    def get_job_handler(self) -> JobHandler:
+    def get_job_handler(self, user_email: str = None) -> JobHandler:
         if self._job_handler is None:
             self._job_handler = JobHandler(self.get_job_manager())
         return self._job_handler
     
-    def get_report_handler(self) -> ReportHandler:
+    def get_report_handler(self, user_email: str = None) -> ReportHandler:
         if self._report_handler is None:
-            self._report_handler = ReportHandler(self.get_blob_storage())
+            blob_storage = self.get_blob_storage(user_email)
+            self._report_handler = ReportHandler(blob_storage)
         return self._report_handler
     
     def get_secret_manager(self) -> AzureSecretManager:
@@ -63,15 +65,15 @@ class DependencyContainer:
             self._redis_cache_service = RedisCacheService(job_store=job_store_instance)
         return self._redis_cache_service
     
-    def get_workflow_orchestrator(self) -> WorkflowOrchestrator:
+    def get_workflow_orchestrator(self, user_email: str = None) -> WorkflowOrchestrator:
         if self._workflow_orchestrator is None:
             workflow_registry = self.get_workflow_registry_service().get_workflow_registry()
             self._workflow_orchestrator = WorkflowOrchestrator(
                 job_manager=self.get_job_manager(), 
-                blob_storage=self.get_blob_storage(), 
+                blob_storage=self.get_blob_storage(user_email), 
                 workflow_registry=workflow_registry,
-                job_handler=self.get_job_handler(),
-                report_handler=self.get_report_handler(),
+                job_handler=self.get_job_handler(user_email),
+                report_handler=self.get_report_handler(user_email),
                 secret_manager=self.get_secret_manager(),
                 cache_service=self.get_redis_cache_service(),
                 dependency_container=self
