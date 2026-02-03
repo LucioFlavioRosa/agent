@@ -6,7 +6,6 @@ from domain.interfaces.blob_storage_interface import IBlobStorageService
 from services.factories.llm_provider_factory import LLMProviderFactory
 from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
-from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
@@ -14,11 +13,10 @@ import traceback
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
-                 workflow_registry: Dict[str, Any], rag_retriever=None, 
+                 workflow_registry: Dict[str, Any], 
                  job_handler: JobHandler = None, report_handler: ReportHandler = None,
                  secret_manager: Optional[Any] = None, cache_service=None, dependency_container=None):
         self.workflow_registry = workflow_registry
-        self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
         self.job_handler = job_handler or JobHandler(job_manager)
         self.cache_service = cache_service
         self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service)
@@ -37,7 +35,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             'original_analysis_type': data.get('original_analysis_type'),
             'model_name': data.get('model_name'),
             'instrucoes_extras': data.get('instrucoes_extras'),
-            'usar_rag': data.get('usar_rag', False),
             'retornar_lista_arquivos': data.get('retornar_lista_arquivos', False),
             'usuario_executor': data.get('usuario_executor'),
             'arquivos_especificos': data.get('arquivos_especificos')
@@ -117,7 +114,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
         job_data = self._extract_job_data(job_info)
         model_para_etapa = step.get('model_name', job_data.get('model_name'))
-        llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
+        llm_provider = LLMProviderFactory.create_provider(model_para_etapa)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_data.get('original_analysis_type')
@@ -128,7 +125,6 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             agent_params['nome_branch'] = branch_name
         agent_params['repositorio'] = repo_name
         agent_params.update({
-            'usar_rag': job_data.get("usar_rag", False), 
             'model_name': model_para_etapa,
             'repository_type': job_data['repository_type'],
             'retornar_lista_arquivos': job_data.get('retornar_lista_arquivos', False),
