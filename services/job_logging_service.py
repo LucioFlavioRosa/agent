@@ -31,7 +31,7 @@ class JobLoggingService:
         for pr_summary in summary_list:
             pr_entry = base_entry.copy()
             pr_entry.update({
-                'branch_name': job_data.get(JobFields.BRANCH_NAME_MODERNIZADO),
+                'branch_name': job_data.get(JobFields.BRANCH_NAME),
                 'pr_url': pr_summary.pull_request_url,
                 'arquivos_modificados': pr_summary.arquivos_modificados
             })
@@ -50,7 +50,7 @@ class JobLoggingService:
             'tipo_repositorio': payload_data.get('repository_type'),
             'nome_repositorio': normalized_repo_name,
             'tipo_analise': payload_data.get('analysis_type'),
-            'branch_name': payload_data.get('branch_name_modernizado'),
+            'branch_name': payload_data.get('branch_name'),
             'analysis_name': analysis_name,
             'arquivos_especificos': payload_data.get('arquivos_especificos'),
             'retornar_lista_arquivos': payload_data.get('retornar_lista_arquivos'),
