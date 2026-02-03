@@ -41,9 +41,8 @@ class AmazonBedrockProvider(ILLMProviderComplete):
         max_token_out: int = 8000,
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        default_model = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
-        model_id = model_name or default_model
-        job_id_final = job_id or str(uuid.uuid4())
+        model_id = model_name
+        job_id_final = job_id
         prompt_sistema = carregar_prompt(tipo_tarefa)
         prompt_input = prompt_principal
         if instrucoes_extras.strip():
