@@ -127,7 +127,8 @@ class GitLabReader(BaseFileReader):
         branch_a_ler = branch_name or 'main'
         usuario = empresa = grupo = None
         if user_email:
-            usuario, empresa, grupo = UserEmailParser.parse_email_with_group(user_email, group_resolver)
+            grupo = group_resolver.get_group_for_user(user_email) if group_resolver is not None else None
+            usuario, empresa = UserEmailParser.parse_email(user_email)
         if arquivos_especificos and len(arquivos_especificos) > 0:
             print(f"Modo de leitura filtrada GitLab ativado para {len(arquivos_especificos)} arquivos específicos no repositório '{getattr(repo_name, 'path_with_namespace', 'desconhecido')}'.")
             arquivos_lidos = self._ler_arquivos_especificos(repo_name, branch_a_ler, arquivos_especificos)
