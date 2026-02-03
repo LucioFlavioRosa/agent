@@ -4,6 +4,7 @@ import time
 
 from typing import Dict, Any
 
+from agents.agente_revisor import AgenteRevisor
 from services.step_executors.base_step_executor import BaseStepExecutor
 from tools.readers.reader_geral import ReaderGeral
 
@@ -46,7 +47,8 @@ class RevisorStepExecutor(BaseStepExecutor):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                raise NotImplementedError("AgentFactory foi removido do projeto. Adapte a lógica de instanciacao do agente revisor conforme novo padrão.")
+                agente = AgenteRevisor(repository_reader=repo_reader, llm_provider=llm_provider)
+                return agente.executar(job_id, agent_params)
             except (json.JSONDecodeError, ValueError) as e:
                 print(f"[{job_id}] Tentativa {attempt + 1}/{max_retries} falhou: {e}")
                 if attempt + 1 == max_retries:
