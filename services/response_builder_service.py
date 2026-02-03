@@ -14,12 +14,11 @@ class FinalStatusResponse(BaseModel):
 
 class ResponseBuilderService:
     def __init__(self, pr_extractor, logging_service):
-        """Inicializa o serviço com suas dependências."""
         self.pr_extractor = pr_extractor
         self.logging_service = logging_service
          
     def build_completed_response(self, job_id: str, job: Dict[str, Any], blob_url: Optional[str]) -> FinalStatusResponse:
-        data = job.get(JobFields.DATA, {})
+        data = job.get('data', {})
         commit_details = data.get('commit_details', [])
         summary = []
         build_errors_aggregate = []
@@ -30,7 +29,6 @@ class ResponseBuilderService:
             build_result = commit.get('build_result') if 'build_result' in commit else None
             commit_url = commit.get('commit_url') if 'commit_url' in commit else None
             build_errors = commit.get('build_errors') if 'build_errors' in commit else None
-            # Agrega build_errors para resposta geral
             if build_errors:
                 if isinstance(build_errors, list):
                     build_errors_aggregate.extend(build_errors)
@@ -43,12 +41,12 @@ class ResponseBuilderService:
                 "build_result": build_result,
                 "commit_url": commit_url
             })
-        analysis_report = data.get(JobFields.ANALYSIS_REPORT, None)
+        analysis_report = data.get('analysis_report', None)
         diagnostic_logs = data.get('diagnostic_logs', None)
         error_details = job.get('error_details', None)
         return FinalStatusResponse(
             job_id=job_id,
-            status=job.get(JobFields.STATUS, "completed"),
+            status=job.get('status', "completed"),
             summary=summary,
             error_details=error_details,
             analysis_report=analysis_report,
@@ -57,15 +55,15 @@ class ResponseBuilderService:
             build_errors=build_errors_aggregate if build_errors_aggregate else None
         )
     def build_failed_response(self, job_id: str, job: Dict[str, Any]) -> FinalStatusResponse:
-        data = job.get(JobFields.DATA, {})
+        data = job.get('data', {})
         error_details = job.get('error_details', None)
-        analysis_report = data.get(JobFields.ANALYSIS_REPORT, None)
+        analysis_report = data.get('analysis_report', None)
         diagnostic_logs = data.get('diagnostic_logs', None)
-        blob_url = data.get(JobFields.REPORT_BLOB_URL, None)
+        blob_url = data.get('report_blob_url', None)
         build_errors = data.get('build_errors', None)
         return FinalStatusResponse(
             job_id=job_id,
-            status=job.get(JobFields.STATUS, "failed"),
+            status=job.get('status', "failed"),
             summary=None,
             error_details=error_details,
             analysis_report=analysis_report,

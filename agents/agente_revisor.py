@@ -17,35 +17,48 @@ class AgenteRevisor:
         init_logger()
 
     def _validate_common_params(self, params: Dict[str, Any]) -> None:
-        required_keys = ['job_id', 'projeto', 'repository_type', 'repo_name', 'branch_name', 'analysis_name']
+        required_keys = [
+            'repository_type',
+            'repo_name',
+            'branch_name',
+            'analysis_type',
+            'projeto',
+            'analysis_name',
+            'gerar_relatorio_apenas',
+            'retornar_lista_arquivos',
+            'usuario_executor'
+        ]
         missing = [key for key in required_keys if key not in params or params[key] is None]
         if missing:
             raise ValueError(f"Parâmetros obrigatórios ausentes: {', '.join(missing)}")
 
     def _get_code(
         self,
-        repositorio: str,
-        nome_branch: Optional[str],
-        tipo_analise: str,
+        repo_name: str,
+        branch_name: Optional[str],
+        analysis_type: str,
         repository_type: str,
         arquivos_especificos: Optional[List[str]] = None,
         retornar_lista_arquivos: bool = False
     ) -> Dict[str, Any]:
         params = {
-            'job_id': None,
-            'projeto': None,
             'repository_type': repository_type,
-            'repo_name': repositorio,
-            'branch_name': nome_branch,
-            'analysis_name': tipo_analise
+            'repo_name': repo_name,
+            'branch_name': branch_name,
+            'analysis_type': analysis_type,
+            'projeto': None,
+            'analysis_name': None,
+            'gerar_relatorio_apenas': None,
+            'retornar_lista_arquivos': retornar_lista_arquivos,
+            'usuario_executor': None
         }
         self._validate_common_params(params)
         try:
             resultado = self.repository_reader.read_repository(
-                nome_repo=repositorio,
-                tipo_analise=tipo_analise,
+                nome_repo=repo_name,
+                tipo_analise=analysis_type,
                 repository_type=repository_type,
-                nome_branch=nome_branch,
+                nome_branch=branch_name,
                 arquivos_especificos=arquivos_especificos,
                 retornar_lista_arquivos=retornar_lista_arquivos
             )
@@ -62,36 +75,40 @@ class AgenteRevisor:
 
     def main(
         self,
-        tipo_analise: str,
-        repositorio: str,
+        analysis_type: str,
+        repo_name: str,
         repository_type: str,
-        nome_branch: Optional[str] = None,
+        branch_name: Optional[str] = None,
+        projeto: Optional[str] = None,
+        analysis_name: Optional[str] = None,
+        gerar_relatorio_apenas: bool = False,
+        retornar_lista_arquivos: bool = False,
+        usuario_executor: Optional[str] = None,
         instrucoes_extras: str = "",
         model_name: Optional[str] = None,
         max_token_out: int = 15000,
         arquivos_especificos: Optional[List[str]] = None,
         job_id: Optional[str] = None,
-        projeto: Optional[str] = None,
         status_update: Optional[str] = None,
-        retornar_lista_arquivos: bool = False,
-        modo_adicao_incremental: bool = False,
-        usuario_executor: Optional[str] = None,
         current_batch: Optional[List[Dict[str, Any]]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         params = {
-            'job_id': job_id,
-            'projeto': projeto,
             'repository_type': repository_type,
-            'repo_name': repositorio,
-            'branch_name': nome_branch,
-            'analysis_name': tipo_analise
+            'repo_name': repo_name,
+            'branch_name': branch_name,
+            'analysis_type': analysis_type,
+            'projeto': projeto,
+            'analysis_name': analysis_name,
+            'gerar_relatorio_apenas': gerar_relatorio_apenas,
+            'retornar_lista_arquivos': retornar_lista_arquivos,
+            'usuario_executor': usuario_executor
         }
         self._validate_common_params(params)
         resultado_leitura = self._get_code(
-            repositorio=repositorio,
-            nome_branch=nome_branch,
-            tipo_analise=tipo_analise,
+            repo_name=repo_name,
+            branch_name=branch_name,
+            analysis_type=analysis_type,
             repository_type=repository_type,
             arquivos_especificos=arquivos_especificos,
             retornar_lista_arquivos=retornar_lista_arquivos
@@ -100,9 +117,9 @@ class AgenteRevisor:
         lista_arquivos = resultado_leitura.get('lista_arquivos', [])
         if not codigo_para_analise:
             if arquivos_especificos and len(arquivos_especificos) > 0:
-                print(f"[Agente Revisor] AVISO: Nenhum dos arquivos específicos foi encontrado no repositório para a análise '{tipo_analise}'.")
+                print(f"[Agente Revisor] AVISO: Nenhum dos arquivos específicos foi encontrado no repositório para a análise '{analysis_type}'.")
             else:
-                print(f"[Agente Revisor] AVISO: Nenhum código encontrado no repositório para a análise '{tipo_analise}'.")
+                print(f"[Agente Revisor] AVISO: Nenhum código encontrado no repositório para a análise '{analysis_type}'.")
             print(f"[Agente Revisor] Retornando resposta vazia devido à ausência de código")
             return {"resultado": {"reposta_final": {}}}
         if lista_arquivos:
@@ -121,7 +138,7 @@ class AgenteRevisor:
             else:
                 instrucoes_extras = batch_instrucao
         resultado_da_ia = self.llm_provider.executar_prompt(
-            tipo_tarefa=tipo_analise,
+            tipo_tarefa=analysis_type,
             prompt_principal=codigo_str,
             instrucoes_extras=instrucoes_extras,
             model_name=model_name,
@@ -135,10 +152,9 @@ class AgenteRevisor:
             tokens_out=resultado_da_ia['tokens_saida'],
             status='FINALIZADO',
             tipo_repositorio=repository_type,
-            nome_repositorio=repositorio,
-            tipo_analise=tipo_analise,
+            nome_repositorio=repo_name,
+            tipo_analise=analysis_type,
             model_name=model_name,
-            modo_adicao_incremental=modo_adicao_incremental,
             usuario_executor=usuario_executor
         )
         return {

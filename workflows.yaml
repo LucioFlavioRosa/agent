@@ -6,14 +6,30 @@ relatorio_performance_eficiencia:
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
-        tipo_analise: "relatorio_performance_eficiencia"
+        repository_type: "${repository_type}"
+        repo_name: "${repo_name}"
+        branch_name: "${branch_name}"
+        analysis_type: "relatorio_performance_eficiencia"
+        projeto: "${projeto}"
+        analysis_name: "${analysis_name}"
+        gerar_relatorio_apenas: ${gerar_relatorio_apenas}
+        retornar_lista_arquivos: ${retornar_lista_arquivos}
+        usuario_executor: "${usuario_executor}"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
-        tipo_analise: "aplicacao_de_mudancas"
-        
+        repository_type: "${repository_type}"
+        repo_name: "${repo_name}"
+        branch_name: "${branch_name}"
+        analysis_type: "aplicacao_de_mudancas"
+        projeto: "${projeto}"
+        analysis_name: "${analysis_name}"
+        gerar_relatorio_apenas: ${gerar_relatorio_apenas}
+        retornar_lista_arquivos: ${retornar_lista_arquivos}
+        usuario_executor: "${usuario_executor}"
+
 relatorio_sast:
   description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido, simulando a mentalidade de um atacante"
   extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
@@ -22,13 +38,29 @@ relatorio_sast:
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
-        tipo_analise: "relatorio_sast"
+        repository_type: "${repository_type}"
+        repo_name: "${repo_name}"
+        branch_name: "${branch_name}"
+        analysis_type: "relatorio_sast"
+        projeto: "${projeto}"
+        analysis_name: "${analysis_name}"
+        gerar_relatorio_apenas: ${gerar_relatorio_apenas}
+        retornar_lista_arquivos: ${retornar_lista_arquivos}
+        usuario_executor: "${usuario_executor}"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
-        tipo_analise: "aplicacao_de_mudancas"
+        repository_type: "${repository_type}"
+        repo_name: "${repo_name}"
+        branch_name: "${branch_name}"
+        analysis_type: "aplicacao_de_mudancas"
+        projeto: "${projeto}"
+        analysis_name: "${analysis_name}"
+        gerar_relatorio_apenas: ${gerar_relatorio_apenas}
+        retornar_lista_arquivos: ${retornar_lista_arquivos}
+        usuario_executor: "${usuario_executor}"
 
 relatorio_simplicacao:
   description: "Analisar o código-fonte fornecido com o objetivo exclusivo de identificar violações dos princípios DRY (Don't Repeat Yourself), YAGNI (You Ain't Gonna Need It) e KISS (Keep It Simple, Stupid)"
@@ -38,10 +70,26 @@ relatorio_simplicacao:
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
-        tipo_analise: "relatorio_simplicacao"
+        repository_type: "${repository_type}"
+        repo_name: "${repo_name}"
+        branch_name: "${branch_name}"
+        analysis_type: "relatorio_simplicacao"
+        projeto: "${projeto}"
+        analysis_name: "${analysis_name}"
+        gerar_relatorio_apenas: ${gerar_relatorio_apenas}
+        retornar_lista_arquivos: ${retornar_lista_arquivos}
+        usuario_executor: "${usuario_executor}"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
-        tipo_analise: "aplicacao_de_mudancas"
+        repository_type: "${repository_type}"
+        repo_name: "${repo_name}"
+        branch_name: "${branch_name}"
+        analysis_type: "aplicacao_de_mudancas"
+        projeto: "${projeto}"
+        analysis_name: "${analysis_name}"
+        gerar_relatorio_apenas: ${gerar_relatorio_apenas}
+        retornar_lista_arquivos: ${retornar_lista_arquivos}
+        usuario_executor: "${usuario_executor}"

@@ -16,7 +16,6 @@ class BlobStorageService:
         container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
         if not container_name:
             raise RuntimeError('Azure Blob Storage container name missing.')
-        # Instancia o secret manager com o cofre específico para blob storage
         secret_manager = AzureSecretManager(vault_type=VaultType.BLOB_STORAGE)
         print(f"[BlobStorageService] DEBUG: Usando VaultType '{VaultType.BLOB_STORAGE.value}' para recuperar connection string do Blob Storage.")
         connection_string = get_blob_connection_string(secret_manager)
@@ -24,21 +23,20 @@ class BlobStorageService:
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
 
-    def upload_report(self, report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name):
+    def upload_report(self, projeto: str, analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str, report_text: str):
         blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
         blob_client.upload_blob(report_text, overwrite=True, content_settings=ContentSettings(content_type='text/markdown'))
         return blob_client.url
 
-    def read_report(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name):
+    def read_report(self, projeto: str, analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str):
         blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
         if not blob_client.exists():
             return None
         return blob_client.download_blob().readall().decode('utf-8')
-        
-    def get_report_url(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name) -> str:
-        """Constrói e retorna a URL de um relatório sem fazer upload."""
+
+    def get_report_url(self, projeto: str, analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str) -> str:
         blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
         blob_client = self._blob_service_client.get_blob_client(container=self._container_name, blob=blob_path)
         return blob_client.url

@@ -19,3 +19,8 @@ class AnalysisConfig(BaseModel):
     arquivos_especificos: Optional[List[str]] = Field(None, description="Lista opcional de arquivos específicos para análise")
     instrucoes_extras: Optional[str] = Field(None, description="Instruções extras para o agente de análise")
     model_name: Optional[str] = Field(None, description="Nome do modelo de LLM a ser usado")
+    projeto: Optional[str] = Field(None, description="Nome do projeto")
+    analysis_name: Optional[str] = Field(None, description="Nome da análise")
+    gerar_relatorio_apenas: Optional[bool] = Field(None, description="Se deve gerar apenas o relatório")
+    retornar_lista_arquivos: Optional[bool] = Field(None, description="Se deve retornar a lista de arquivos")
+    usuario_executor: Optional[str] = Field(None, description="Usuário executor da análise")

@@ -10,7 +10,6 @@ class ComparadorStepExecutor(BaseStepExecutor):
     def execute(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
                 current_step_index: int, previous_step_result: Dict[str, Any], 
                 repo_reader: ReaderGeral, llm_provider, agent_params: Dict[str, Any]) -> Dict[str, Any]:
-        
         instrucoes_formatadas = job_info['data'].get('instrucoes_extras', '')
         instrucoes_formatadas += "\n\n---\n\nCONTEXTO DA ETAPA ANTERIOR:\n"
         instrucoes_formatadas += json.dumps(previous_step_result, indent=2, ensure_ascii=False)
@@ -24,12 +23,17 @@ class ComparadorStepExecutor(BaseStepExecutor):
 
         agent_params['instrucoes_extras'] = instrucoes_formatadas
         agent_params.update({
-            'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
+            'repo_name': job_info['data']['repo_name'],
+            'branch_name': job_info['data']['branch_name'],
             'repository_type': job_info['data']['repository_type'],
-            'job_id': job_id,
+            'analysis_type': job_info['data']['analysis_type'],
             'projeto': job_info['data']['projeto'],
+            'analysis_name': job_info['data'].get('analysis_name'),
+            'gerar_relatorio_apenas': job_info['data'].get('gerar_relatorio_apenas'),
+            'retornar_lista_arquivos': job_info['data'].get('retornar_lista_arquivos', False),
+            'usuario_executor': job_info['data'].get('usuario_executor'),
+            'arquivos_especificos': job_info['data'].get('arquivos_especificos'),
+            'job_id': job_id,
             'status_update': step['status_update']
         })
-        # Removido: agent_params['usar_rag']
-        # Removido import e uso de AgentFactory conforme remoção do arquivo
         raise NotImplementedError("AgentFactory foi removido do projeto. Adapte a lógica de instanciacao do agente comparador conforme novo padrão.")
