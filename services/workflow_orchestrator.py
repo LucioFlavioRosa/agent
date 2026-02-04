@@ -11,6 +11,7 @@ from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 import traceback
 from services.step_strategies.default_step_strategy import DefaultStepStrategy
+from tools.prompt_utils import carregar_prompt
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -81,22 +82,36 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             branch_name = job_data.get('branch_name')
             analysis_name = job_data.get('analysis_name')
             usuario_executor = job_data.get('usuario_executor')
-            repository_provider = get_repository_provider_explicit(repository_type)
-            cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
-            repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service, user_email=usuario_executor)
-            steps = workflow.get('steps', [])
-            if not steps:
-                raise ValueError("Workflow não possui steps definidos.")
-            step = steps[0]
-            print(f"[{job_id}] Executando step 0 (análise)")
-            self.job_handler.update_job_status(job_id, step.get('status_update', 'processing'))
-            previous_step_result = None
-            step_result = self._execute_step_with_strategy(
-                job_id, job_info, step, 0, previous_step_result, repo_reader, 0, start_from_step, user_email=usuario_executor
-            )
-            print(f"[{job_id}] [DEBUG] Resultado do agente: {str(step_result)[:300]}...")
-            report_saved = self._save_generated_report(job_id, job_info, step_result, 0)
-            print(f"[{job_id}] [DEBUG] _save_generated_report retornou {report_saved}")
+            # 1. Buscar relatório existente no Blob Storage
+            report_text = self.report_handler.read_existing_report_from_blob(job_id, job_info, 0)
+            if report_text and len(str(report_text).strip()) > 0:
+                print(f"[{job_id}] Relatório encontrado no Blob Storage. Retornando relatório existente.")
+                job_info['data']['analysis_report'] = report_text
+                job_info['data']['report_blob_url'] = None  # Não sobrescrever url se não houver upload novo
+                self.job_handler.update_job(job_id, job_info)
+                self.job_handler.update_job_status(job_id, 'completed')
+                return
+            # 2. Carregar prompt do arquivo correto
+            tipo_tarefa = job_data.get('original_analysis_type') or job_data.get('analysis_type')
+            try:
+                prompt_principal = carregar_prompt(tipo_tarefa)
+            except Exception as e:
+                raise ValueError(f"[{job_id}] ERRO ao carregar prompt para tipo_tarefa '{tipo_tarefa}': {e}")
+            # 3. Concatenar instrucoes_extras ao final do prompt
+            instrucoes_extras = job_data.get('instrucoes_extras') or ''
+            prompt_final = prompt_principal.strip()
+            if instrucoes_extras:
+                prompt_final += '\n\n' + instrucoes_extras.strip()
+            # 4. Enviar para LLM
+            model_para_etapa = job_data.get('model_name')
+            llm_provider = create_provider(model_name=model_para_etapa, user_email=usuario_executor, group_resolver=self.group_resolver)
+            # O provider deve aceitar o prompt concatenado
+            llm_response = llm_provider.invoke(prompt_final)
+            # 5. Salvar e retornar relatório gerado
+            job_info['data']['analysis_report'] = llm_response
+            url = self.report_handler.save_report_to_blob(job_id, job_info, llm_response)
+            job_info['data']['report_blob_url'] = url
+            self.job_handler.update_job(job_id, job_info)
             self.job_handler.update_job_status(job_id, 'completed')
         except Exception as e:
             error_message = str(e)
@@ -109,39 +124,3 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             except Exception as update_err:
                 print(f"[{job_id}] ERRO CRÍTICO: Falha ao salvar detalhes do erro no job: {update_err}")
             self.job_handler.update_job_status(job_id, 'failed')
-
-    def _execute_step_with_strategy(self, job_id: str, job_info: Dict[str, Any], step: Dict[str, Any], 
-                                    current_step_index: int, previous_step_result: Dict[str, Any], 
-                                    repo_reader: ReaderGeral, step_iteration: int, 
-                                    start_from_step: int, batch_steps: Optional[list] = None, 
-                                    agent_params_override: Optional[dict] = None, user_email: Optional[str] = None) -> Dict[str, Any]:
-        job_data = self._extract_job_data(job_info)
-        model_para_etapa = step.get('model_name', job_data.get('model_name'))
-        # Seleção dinâmica do provedor LLM conforme model_name
-        llm_provider = create_provider(model_name=model_para_etapa, user_email=user_email, group_resolver=self.group_resolver)
-        agent_params = step.get('params', {}).copy() if step.get('params') else {}
-        agent_type = step.get('agent_type', step.get('agent'))
-        analysis_type = job_data.get('original_analysis_type')
-        agent_params['instrucoes_extras'] = job_data.get('instrucoes_extras', '')
-        repo_name = job_data.get('repo_name')
-        branch_name = job_data.get('branch_name')
-        if branch_name:
-            agent_params['nome_branch'] = branch_name
-        agent_params['repositorio'] = repo_name
-        agent_params.update({
-            'model_name': model_para_etapa,
-            'repository_type': job_data['repository_type'],
-            'retornar_lista_arquivos': job_data.get('retornar_lista_arquivos', False),
-            'usuario_executor': job_data.get('usuario_executor')
-        })
-        agent_params['job_id'] = job_id
-        if agent_params_override:
-            agent_params.update(agent_params_override)
-        # Simplificação: sempre usa DefaultStepStrategy
-        strategy_instance = DefaultStepStrategy(self.job_handler)
-        result = strategy_instance.execute_step(
-            job_id, job_info, step, current_step_index, 
-            previous_step_result, repo_reader, llm_provider, agent_params
-        )
-        print(f"[{job_id}] [DEBUG] strategy.execute_step retornou resultado para step {current_step_index}: {str(result)[:300]}...")
-        return result

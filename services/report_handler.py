@@ -32,6 +32,29 @@ class ReportHandler:
             print(f"[ReportHandler] Erro ao tentar ler relatório do Blob Storage: {e}")
             return None
 
+    def check_existing_report(self, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name, user_email):
+        """
+        Verifica se já existe um relatório no Blob Storage com o analysis_name fornecido.
+        Retorna o conteúdo do relatório se existir, ou None caso contrário.
+        """
+        try:
+            from tools.blob_report_reader import read_report_from_blob
+            report_text = read_report_from_blob(
+                projeto=projeto,
+                analysis_type=analysis_type,
+                repository_type=repository_type,
+                repo_name=repo_name,
+                branch_name=branch_name,
+                analysis_name=analysis_name,
+                user_email=user_email
+            )
+            if report_text and len(str(report_text).strip()) > 0:
+                return report_text
+            return None
+        except Exception as e:
+            print(f"[ReportHandler] Erro ao verificar relatório existente no Blob Storage: {e}")
+            return None
+
     def extract_report_text(self, step_result):
         # Assumindo estrutura conhecida: dict com 'relatorio' ou 'resultado_gerado'
         if not step_result:
