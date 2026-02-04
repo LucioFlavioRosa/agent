@@ -2,7 +2,7 @@ import os
 from azure.storage.blob import BlobServiceClient
 from tools.azure_secret_manager import AzureSecretManager, VaultType
 from tools.blob_report_path_builder import build_report_blob_path
-from tools.blob_storage_utils import get_blob_connection_string
+from tools.blob_storage_utils import get_blob_connection_string, get_blob_container_name
 from tools.user_email_parser import UserEmailParser
 
 def read_report_from_blob(projeto: str, analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str, user_email: str, group_resolver: object = None) -> str:
@@ -10,10 +10,8 @@ def read_report_from_blob(projeto: str, analysis_type: str, repository_type: str
         raise RuntimeError('user_email é obrigatório para ler do Blob Storage.')
     if group_resolver is None:
         raise RuntimeError('group_resolver é obrigatório para ler do Blob Storage.')
-    grupo = group_resolver.get_group_for_user(user_email)
-    _, empresa = UserEmailParser.parse_email(user_email)
-    container_name = f"azure-storage-container-name-{grupo}-{empresa}"
     secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
+    container_name = get_blob_container_name(secret_manager, user_email, group_resolver)
     connection_string = get_blob_connection_string(secret_manager, user_email, group_resolver)
     blob_path = build_report_blob_path(projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name)
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
