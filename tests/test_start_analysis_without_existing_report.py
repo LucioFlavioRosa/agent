@@ -23,7 +23,9 @@ def payload():
 @patch("services.simplified_workflow_service.SimplifiedWorkflowService.start_analysis")
 @patch("tools.prompt_utils.carregar_prompt")
 @patch("services.factories.llm_provider_factory.create_provider")
+@patch("tools.blob_storage_utils.get_blob_container_name")
 def test_start_analysis_without_existing_report(
+    mock_get_blob_container_name,
     mock_create_provider,
     mock_carregar_prompt,
     mock_start_analysis,
@@ -36,6 +38,7 @@ def test_start_analysis_without_existing_report(
     mock_read_report.return_value = None  # Não existe relatório
     mock_carregar_prompt.return_value = "Prompt base para melhoria de código."
     mock_save_report.return_value = "http://blobstorage/fake_report_url"
+    mock_get_blob_container_name.return_value = "container-grupo-peers"
 
     # Simula provider LLM
     mock_llm = MagicMock()
@@ -66,3 +69,6 @@ def test_start_analysis_without_existing_report(
     mock_carregar_prompt.assert_called_once_with("melhoria_codigo")
     mock_llm.generate_report.assert_called()
     mock_save_report.assert_called()
+    # Garante que o container foi resolvido corretamente
+    mock_get_blob_container_name.assert_called()
+    assert mock_get_blob_container_name.return_value == "container-grupo-peers"
