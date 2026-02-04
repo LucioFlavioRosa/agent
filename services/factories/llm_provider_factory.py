@@ -1,6 +1,6 @@
 from tools.requisicao_claude import AmazonBedrockProvider
 from tools.requisicao_openai import OpenAILLMProvider
-from services.azure_secret_manager import AzureSecretManager, VaultType
+from tools.azure_secret_manager import AzureSecretManager, VaultType
 
 def create_provider(model_name=None, secret_manager=None, user_email=None, group_resolver=None):
     secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
