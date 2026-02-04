@@ -1,7 +1,6 @@
 import re
 
 def build_report_blob_path(projeto: str, analysis_type: str, repository_type: str, repo_name: str, branch_name: str, analysis_name: str) -> str:
-    print(f"[DEBUG] build_report_blob_path - projeto: '{projeto}', analysis_type: '{analysis_type}', repository_type: '{repository_type}', repo_name: '{repo_name}', branch_name recebido: '{branch_name}', analysis_name: '{analysis_name}'")
     def sanitize_path_component(component: str) -> str:
         if not component:
             return "unknown"

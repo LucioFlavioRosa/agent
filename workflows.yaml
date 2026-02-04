@@ -1,44 +1,12 @@
-relatorio_performance_eficiencia:
+analise_performance_eficiencia:
   description: "Analisar o código-fonte fornecido, independentemente da linguagem, para identificar gargalos de performance e ineficiências computacionais"
-  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
+  extensions: [".py", ".cs", ".css", ".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
   steps:
     - status_update: "analisando o repositório"
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_performance_eficiencia"
-      requires_approval: true
-    - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "gpt-4.1"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "aplicacao_de_mudancas"
-        
-relatorio_sast:
-  description: "Realizar uma auditoria de segurança aprofundada no código-fonte fornecido, simulando a mentalidade de um atacante"
-  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
-  steps:
-    - status_update: "analisando o repositório"
-      model_name: "claude-sonnet-4-5"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "relatorio_sast"
-      requires_approval: true
-    - status_update: "aplicando_as_mudancas_apontadas"
-      model_name: "gpt-4.1"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "aplicacao_de_mudancas"
-
-relatorio_simplicacao:
-  description: "Analisar o código-fonte fornecido com o objetivo exclusivo de identificar violações dos princípios DRY (Don't Repeat Yourself), YAGNI (You Ain't Gonna Need It) e KISS (Keep It Simple, Stupid)"
-  extensions: [".py", ".cs", ".css",".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
-  steps:
-    - status_update: "analisando o repositório"
-      model_name: "claude-sonnet-4-5"
-      agent_type: "revisor"
-      params:
-        tipo_analise: "relatorio_simplicacao"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "gpt-4.1"

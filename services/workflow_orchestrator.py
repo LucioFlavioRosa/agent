@@ -3,31 +3,44 @@ from typing import Dict, Any, Optional
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
 from domain.interfaces.job_manager_interface import IJobManager
 from domain.interfaces.blob_storage_interface import IBlobStorageService
-from services.factories.llm_provider_factory import LLMProviderFactory
+from services.factories.llm_provider_factory import create_provider
 from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
-from tools.rag_retriever import AzureAISearchRAGRetriever
 from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
 from models import JobFields
 import traceback
-
-# Nenhuma referência direta ou indireta ao AgenteProcessador ou ao agents/agente_processador.py foi encontrada neste arquivo.
-# Imports e lógica relacionados ao agente processador não existem neste contexto.
-# O arquivo está pronto para futura remoção de dependências caso sejam identificadas em outros arquivos/factories.
+from services.step_strategies.default_step_strategy import DefaultStepStrategy
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
-                 workflow_registry: Dict[str, Any], rag_retriever=None, 
+                 workflow_registry: Dict[str, Any], 
                  job_handler: JobHandler = None, report_handler: ReportHandler = None,
-                 secret_manager: Optional[Any] = None, cache_service=None, dependency_container=None):
+                 secret_manager: Optional[Any] = None, cache_service=None, dependency_container=None,
+                 group_resolver=None):
         self.workflow_registry = workflow_registry
-        self.rag_retriever = rag_retriever or AzureAISearchRAGRetriever()
         self.job_handler = job_handler or JobHandler(job_manager)
         self.cache_service = cache_service
-        self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service)
+        self.report_handler = report_handler or ReportHandler(blob_storage, cache_service=self.cache_service, group_resolver=group_resolver)
         self.secret_manager = secret_manager
         self.dependency_container = dependency_container
+        self.group_resolver = group_resolver
+
+    def _extract_job_data(self, job_info: Dict[str, Any]) -> Dict[str, Any]:
+        data = job_info.get('data', {})
+        return {
+            'projeto': data.get('projeto'),
+            'repository_type': data.get('repository_type'),
+            'repo_name': data.get('repo_name'),
+            'branch_name': data.get('branch_name'),
+            'analysis_name': data.get('analysis_name'),
+            'original_analysis_type': data.get('original_analysis_type'),
+            'model_name': data.get('model_name'),
+            'instrucoes_extras': data.get('instrucoes_extras'),
+            'retornar_lista_arquivos': data.get('retornar_lista_arquivos', False),
+            'usuario_executor': data.get('usuario_executor'),
+            'arquivos_especificos': data.get('arquivos_especificos')
+        }
 
     def _save_generated_report(self, job_id: str, job_info: Dict[str, Any], step_result: Dict[str, Any], current_step_index: int) -> bool:
         print(f"[{job_id}] [DEBUG] Entrando em _save_generated_report para step {current_step_index}.")
@@ -53,23 +66,24 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
 
     def execute_workflow(self, job_id: str, start_from_step: int = 0) -> None:
         job_info = self.job_handler.get_job_info(job_id)
-        repo_name_modernizado = job_info['data'].get('repo_name_modernizado')
-        analysis_type = job_info['data'].get('original_analysis_type', '')
-        if not repo_name_modernizado:
-            raise ValueError("O campo 'repo_name_modernizado' é obrigatório em job_info['data'] para execução do workflow.")
-        workflow = self.workflow_registry.get(job_info['data']['original_analysis_type'])
+        job_data = self._extract_job_data(job_info)
+        repo_name = job_data.get('repo_name')
+        analysis_type = job_data.get('original_analysis_type', '')
+        if not repo_name:
+            raise ValueError("O campo 'repo_name' é obrigatório em job_info['data'] para execução do workflow.")
+        workflow = self.workflow_registry.get(job_data['original_analysis_type'])
         if not workflow:
             raise ValueError("Workflow não encontrado.")
         try:
-            projeto = job_info['data'].get('projeto')
-            repository_type = job_info['data'].get('repository_type')
-            repo_name = job_info['data'].get('repo_name')
-            branch_name = job_info['data'].get('branch_name_modernizado')
-            analysis_name = job_info['data'].get('analysis_name')
-            # Sempre lê do repositório antes de rodar análise
+            projeto = job_data.get('projeto')
+            repository_type = job_data.get('repository_type')
+            repo_name = job_data.get('repo_name')
+            branch_name = job_data.get('branch_name')
+            analysis_name = job_data.get('analysis_name')
+            usuario_executor = job_data.get('usuario_executor')
             repository_provider = get_repository_provider_explicit(repository_type)
             cache_service = self.cache_service or (self.dependency_container.get_redis_cache_service() if self.dependency_container else None)
-            repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service)
+            repo_reader = ReaderGeral(repository_provider=repository_provider, cache_service=cache_service, user_email=usuario_executor)
             steps = workflow.get('steps', [])
             if not steps:
                 raise ValueError("Workflow não possui steps definidos.")
@@ -78,7 +92,7 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
             self.job_handler.update_job_status(job_id, step.get('status_update', 'processing'))
             previous_step_result = None
             step_result = self._execute_step_with_strategy(
-                job_id, job_info, step, 0, previous_step_result, repo_reader, 0, start_from_step
+                job_id, job_info, step, 0, previous_step_result, repo_reader, 0, start_from_step, user_email=usuario_executor
             )
             print(f"[{job_id}] [DEBUG] Resultado do agente: {str(step_result)[:300]}...")
             report_saved = self._save_generated_report(job_id, job_info, step_result, 0)
@@ -100,40 +114,34 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     current_step_index: int, previous_step_result: Dict[str, Any], 
                                     repo_reader: ReaderGeral, step_iteration: int, 
                                     start_from_step: int, batch_steps: Optional[list] = None, 
-                                    agent_params_override: Optional[dict] = None) -> Dict[str, Any]:
-        model_para_etapa = step.get('model_name', job_info.get('data', {}).get('model_name'))
-        llm_provider = LLMProviderFactory.create_provider(model_para_etapa, self.rag_retriever)
+                                    agent_params_override: Optional[dict] = None, user_email: Optional[str] = None) -> Dict[str, Any]:
+        job_data = self._extract_job_data(job_info)
+        model_para_etapa = step.get('model_name', job_data.get('model_name'))
+        # Seleção dinâmica do provedor LLM conforme model_name
+        llm_provider = create_provider(model_name=model_para_etapa, user_email=user_email, group_resolver=self.group_resolver)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
-        analysis_type = job_info['data'].get('original_analysis_type')
-        agent_params['instrucoes_extras'] = job_info['data'].get('instrucoes_extras', '')
-        repo_name = job_info['data'].get('repo_name_modernizado')
-        branch_name = job_info['data'].get('branch_name_modernizado')
+        analysis_type = job_data.get('original_analysis_type')
+        agent_params['instrucoes_extras'] = job_data.get('instrucoes_extras', '')
+        repo_name = job_data.get('repo_name')
+        branch_name = job_data.get('branch_name')
         if branch_name:
             agent_params['nome_branch'] = branch_name
         agent_params['repositorio'] = repo_name
         agent_params.update({
-            'usar_rag': job_info.get("data", {}).get("usar_rag", False), 
             'model_name': model_para_etapa,
-            'repository_type': job_info['data']['repository_type'],
-            'retornar_lista_arquivos': job_info.get('data', {}).get('retornar_lista_arquivos', False),
-            'usuario_executor': job_info.get('data', {}).get('usuario_executor')
+            'repository_type': job_data['repository_type'],
+            'retornar_lista_arquivos': job_data.get('retornar_lista_arquivos', False),
+            'usuario_executor': job_data.get('usuario_executor')
         })
         agent_params['job_id'] = job_id
         if agent_params_override:
             agent_params.update(agent_params_override)
-        strategy = step.get('strategy')
-        if strategy:
-            strategy_instance = strategy(self.job_handler)
-            result = strategy_instance.execute_step(
-                job_id, job_info, step, current_step_index, 
-                previous_step_result, repo_reader, llm_provider, agent_params
-            )
-        else:
-            # fallback: agente simples
-            # Nenhuma referência ao AgenteProcessador ou agente_processador.py
-            result = llm_provider.run_agent(
-                agent_type, agent_params, repo_reader=repo_reader
-            )
+        # Simplificação: sempre usa DefaultStepStrategy
+        strategy_instance = DefaultStepStrategy(self.job_handler)
+        result = strategy_instance.execute_step(
+            job_id, job_info, step, current_step_index, 
+            previous_step_result, repo_reader, llm_provider, agent_params
+        )
         print(f"[{job_id}] [DEBUG] strategy.execute_step retornou resultado para step {current_step_index}: {str(result)[:300]}...")
         return result

@@ -1,126 +1,82 @@
-import os
+import boto3
+import json
 import uuid
-import anthropic
-from datetime import datetime
 from typing import Optional, Dict, Any
-
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
-from domain.interfaces.rag_retriever_interface import IRAGRetriever
-from domain.interfaces.secret_manager_interface import ISecretManager
-from tools.azure_secret_manager import AzureSecretManager
+from services.azure_secret_manager import AzureSecretManager, VaultType
+from tools.prompt_utils import carregar_prompt
+from tools.user_email_parser import UserEmailParser
 
-class AnthropicClaudeProvider(ILLMProviderComplete):
-    def __init__(self, rag_retriever: Optional[IRAGRetriever] = None, secret_manager: ISecretManager = None):
-        self.rag_retriever = rag_retriever
-        self.secret_manager = secret_manager or AzureSecretManager()
-        
-        print("Configurando o cliente da Anthropic (Claude)...")
-        try:
-            anthropic_api_key = self.secret_manager.get_secret("ANTHROPICAPIKEY")
-            self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
-            print("Cliente da Anthropic (Claude) configurado com sucesso.")
-        except Exception as e:
-            print(f"ERRO CRÍTICO ao configurar o cliente da Anthropic: {e}")
-            raise
-
-    def carregar_prompt(self, tipo_tarefa: str) -> str:
-        caminho_prompt = os.path.join(os.path.dirname(__file__), 'prompts', f'{tipo_tarefa}.md')
-        try:
-            with open(caminho_prompt, 'r', encoding='utf-8') as f:
-                return f.read()
-        except FileNotFoundError:
-            raise ValueError(f"Arquivo de prompt para '{tipo_tarefa}' não encontrado: {caminho_prompt}")
+class AmazonBedrockProvider(ILLMProviderComplete):
+    def __init__(self, secret_manager: Optional[AzureSecretManager] = None, user_email: Optional[str] = None, group_resolver: Optional[object] = None):
+        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
+        self.user_email = user_email
+        self.group_resolver = group_resolver
+        if not user_email:
+            raise ValueError("user_email é obrigatório para busca de secrets AWS neste projeto.")
+        # Obtém grupo diretamente do MongoDB usando o e-mail
+        grupo = group_resolver.get_group_for_user(user_email) if group_resolver is not None else None
+        # Obtém usuario e empresa via parser
+        usuario, empresa = UserEmailParser.parse_email(user_email)
+        # Monta os nomes dos secrets AWS conforme padrão
+        aws_access_key_secret_name = f"AWS-ACCESS-KEY-ID-{grupo}-{empresa}"
+        aws_secret_access_key_secret_name = f"AWS-SECRET-ACCESS-KEY-{grupo}-{empresa}"
+        aws_region_secret_name = f"AWS-REGION-{grupo}-{empresa}"
+        self.aws_access_key_id = self.secret_manager.get_secret(aws_access_key_secret_name)
+        self.aws_secret_access_key = self.secret_manager.get_secret(aws_secret_access_key_secret_name)
+        self.aws_region = self.secret_manager.get_secret(aws_region_secret_name)
+        self.bedrock_runtime = boto3.client(
+            'bedrock-runtime',
+            aws_access_key_id=self.aws_access_key_id,
+            aws_secret_access_key=self.aws_secret_access_key,
+            region_name=self.aws_region
+        )
 
     def executar_prompt(
         self,
         tipo_tarefa: str,
         prompt_principal: str,
         instrucoes_extras: str = "",
-        usar_rag: bool = False,
         model_name: Optional[str] = None,
-        max_token_out: int = 15000,
+        max_token_out: int = 8000,
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        modelo_final = model_name or "claude-3-opus-20240229"
-        job_id_final = job_id or str(uuid.uuid4())
-        
-        prompt_sistema = self.carregar_prompt(tipo_tarefa)
-
-        if usar_rag and self.rag_retriever:
-            print("[Claude Handler] Usando o RAG retriever injetado...")
-            politicas_relevantes = self.rag_retriever.buscar_politicas(
-                query=f"políticas de {tipo_tarefa} para desenvolvimento de software"
-            )
-            prompt_sistema = f"{prompt_sistema}\n\n--- CONTEXTO ADICIONAL ---\n{politicas_relevantes}"
-
-        mensagens = [
-            {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{prompt_principal}"},
-        ]
+        model_id = model_name
+        job_id_final = job_id
+        prompt_sistema = carregar_prompt(tipo_tarefa)
+        prompt_input = prompt_principal
         if instrucoes_extras.strip():
-            mensagens.append({"role": "user", "content": f"--- INSTRUÇÕES EXTRAS ---\n{instrucoes_extras}"})
-
+            prompt_input += f"\n--- INSTRUÇÕES EXTRAS ---\n{instrucoes_extras}"
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": prompt_input}]
+                }
+            ],
+            "system": prompt_sistema,
+            "max_tokens": max_token_out,
+            "temperature": 0.2
+        }
         try:
-            print(f"[Claude Handler] Chamando o modelo: '{modelo_final}'")
-            
-            response = self.anthropic_client.messages.create(
-                model=modelo_final,
-                system=prompt_sistema,  
-                messages=mensagens,
-                max_tokens=max_token_out,
-                temperature=0.3,
-                timeout=900.0
+            response = self.bedrock_runtime.invoke_model(
+                modelId=model_id,
+                contentType='application/json',
+                accept='application/json',
+                body=json.dumps(body)
             )
-            
-            conteudo_resposta = response.content[0].text
-            tokens_entrada = response.usage.input_tokens
-            tokens_saida = response.usage.output_tokens
-            
-            projeto = model_name or "claude"
-            data_atual = datetime.utcnow().strftime("%Y-%m-%d")
-            hora_atual = datetime.utcnow().strftime("%H:%M:%S")
-            
+            response_body = json.loads(response['body'].read())
+            content = response_body.get('content', [])
+            result = content[0].get('text', '') if content else ""
+            usage = response_body.get('usage', {})
             return {
-                'reposta_final': conteudo_resposta,
-                'tokens_entrada': tokens_entrada,
-                'tokens_saida': tokens_saida
+                'reposta_final': result,
+                'tokens_entrada': usage.get('input_tokens', 0),
+                'tokens_saida': usage.get('output_tokens', 0),
+                'job_id': job_id_final,
+                'model_id': model_id
             }
-            
         except Exception as e:
-            print(f"ERRO: Falha na chamada à API da Anthropic para análise '{tipo_tarefa}'. Causa: {e}")
-            raise RuntimeError(f"Erro ao comunicar com a API da Anthropic: {e}") from e
-    
-    def executar_prompt_com_rag(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        usar_rag: bool = False,
-        max_token_out: int = 15000,
-        job_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        return self.executar_prompt(
-            tipo_tarefa=tipo_tarefa,
-            prompt_principal=prompt_principal,
-            instrucoes_extras=instrucoes_extras,
-            usar_rag=usar_rag,
-            max_token_out=max_token_out,
-            job_id=job_id
-        )
-    
-    def executar_prompt_com_modelo(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        model_name: Optional[str] = None,
-        max_token_out: int = 15000,
-        job_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        return self.executar_prompt(
-            tipo_tarefa=tipo_tarefa,
-            prompt_principal=prompt_principal,
-            instrucoes_extras=instrucoes_extras,
-            model_name=model_name,
-            max_token_out=max_token_out,
-            job_id=job_id
-        )
+            print(f"Erro no Bedrock: {str(e)}")
+            raise e
