@@ -12,6 +12,7 @@ from schemas import JobFields
 import traceback
 from services.step_strategies.default_step_strategy import DefaultStepStrategy
 from tools.prompt_utils import carregar_prompt
+from tools.workflow_utils import resolver_tipo_analise_do_workflow
 
 class WorkflowOrchestrator(IWorkflowOrchestrator):
     def __init__(self, job_manager: IJobManager, blob_storage: IBlobStorageService, 
@@ -92,11 +93,13 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                 self.job_handler.update_job_status(job_id, 'completed')
                 return
             # 2. Carregar prompt do arquivo correto
-            tipo_tarefa = job_data.get('original_analysis_type') or job_data.get('analysis_type')
+            # --- INÍCIO DA MODIFICAÇÃO: usa resolver_tipo_analise_do_workflow ---
+            tipo_tarefa = resolver_tipo_analise_do_workflow(job_data.get('original_analysis_type'))
             try:
                 prompt_principal = carregar_prompt(tipo_tarefa)
             except Exception as e:
                 raise ValueError(f"[{job_id}] ERRO ao carregar prompt para tipo_tarefa '{tipo_tarefa}': {e}")
+            # --- FIM DA MODIFICAÇÃO ---
             # 3. Concatenar instrucoes_extras ao final do prompt
             instrucoes_extras = job_data.get('instrucoes_extras') or ''
             prompt_final = prompt_principal.strip()
