@@ -37,13 +37,15 @@ class RevisorStepExecutor(BaseStepExecutor):
             'repository_type': job_info['data']['repository_type'],
             'job_id': job_id,
             'projeto': job_info['data']['projeto'],
-            'analysis_type': job_info['data']['analysis_type'],
             'analysis_name': job_info['data'].get('analysis_name'),
             'gerar_relatorio_apenas': job_info['data'].get('gerar_relatorio_apenas'),
             'retornar_lista_arquivos': job_info['data'].get('retornar_lista_arquivos', False),
             'usuario_executor': job_info['data'].get('usuario_executor'),
             'status_update': step['status_update']
         })
+        # Passo 4: garantir que o parâmetro tipo_analise seja extraído corretamente e passado como analysis_type
+        if 'params' in step and 'tipo_analise' in step['params']:
+            agent_params['analysis_type'] = step['params']['tipo_analise']
         max_retries = 3
         for attempt in range(max_retries):
             try:

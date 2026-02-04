@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 from domain.interfaces.workflow_orchestrator_interface import IWorkflowOrchestrator
 from domain.interfaces.job_manager_interface import IJobManager
 from domain.interfaces.blob_storage_interface import IBlobStorageService
-from services.factories.llm_provider_factory import LLMProviderFactory
+from services.factories.llm_provider_factory import create_provider
 from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
 from tools.readers.reader_geral import ReaderGeral
@@ -117,7 +117,8 @@ class WorkflowOrchestrator(IWorkflowOrchestrator):
                                     agent_params_override: Optional[dict] = None, user_email: Optional[str] = None) -> Dict[str, Any]:
         job_data = self._extract_job_data(job_info)
         model_para_etapa = step.get('model_name', job_data.get('model_name'))
-        llm_provider = LLMProviderFactory.create_provider(model_para_etapa, user_email=user_email, group_resolver=self.group_resolver)
+        # Seleção dinâmica do provedor LLM conforme model_name
+        llm_provider = create_provider(model_name=model_para_etapa, user_email=user_email, group_resolver=self.group_resolver)
         agent_params = step.get('params', {}).copy() if step.get('params') else {}
         agent_type = step.get('agent_type', step.get('agent'))
         analysis_type = job_data.get('original_analysis_type')

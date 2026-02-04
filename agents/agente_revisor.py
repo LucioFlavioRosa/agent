@@ -141,6 +141,7 @@ class AgenteRevisor:
                 instrucoes_extras += "\n\n" + batch_instrucao
             else:
                 instrucoes_extras = batch_instrucao
+        # Passo 5: garantir que analysis_type seja utilizado para carregar o prompt correto
         resultado_da_ia = self.llm_provider.executar_prompt(
             tipo_tarefa=analysis_type,
             prompt_principal=codigo_str,
