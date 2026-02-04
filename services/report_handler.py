@@ -18,6 +18,8 @@ class ReportHandler:
         user_email = job_info['data'].get('usuario_executor') or self.user_email
         try:
             from tools.blob_report_reader import read_report_from_blob
+            if self.group_resolver is None:
+                raise RuntimeError("group_resolver não pode ser None ao ler relatório do Blob Storage.")
             report_text = read_report_from_blob(
                 projeto=projeto,
                 analysis_type=analysis_type,
@@ -40,6 +42,8 @@ class ReportHandler:
         """
         try:
             from tools.blob_report_reader import read_report_from_blob
+            if self.group_resolver is None:
+                raise RuntimeError("group_resolver não pode ser None ao verificar relatório existente no Blob Storage.")
             report_text = read_report_from_blob(
                 projeto=projeto,
                 analysis_type=analysis_type,
@@ -80,7 +84,9 @@ class ReportHandler:
         user_email = job_info['data'].get('usuario_executor') or self.user_email
         print(f"[{job_id}] [DEBUG] Iniciando upload do relatório para o Blob Storage...")
         from tools.blob_report_uploader import upload_report_to_blob
-        url = upload_report_to_blob(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name, user_email)
+        if self.group_resolver is None:
+            raise RuntimeError("group_resolver não pode ser None ao salvar relatório no Blob Storage.")
+        url = upload_report_to_blob(report_text, projeto, analysis_type, repository_type, repo_name, branch_name, analysis_name, user_email, group_resolver=self.group_resolver)
         if not url:
             raise ValueError(f"[{job_id}] ERRO: Blob Storage não retornou URL válida")
         job_info['data']['report_blob_url'] = url

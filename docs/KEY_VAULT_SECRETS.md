@@ -1,65 +1,29 @@
-# Secrets nos Key Vaults Azure
+# Documentação de Secrets no Azure Key Vault
 
-Este documento detalha **todos os secrets** que devem ser configurados nos Key Vaults Azure do projeto, organizados por cofre (vault) e com exemplos de nomes e valores. O padrão de nomenclatura é `{nome}-{grupo}-{empresa}`.
+## Secrets de Infraestrutura (Blob Storage)
 
-## Padrão de Nomenclatura
-- Todos os secrets seguem o padrão: `{nome}-{grupo}-{empresa}`
-- Exemplo: `github-token-grupo-peers`
-- O valor de `grupo` é obtido via consulta ao serviço `MongoDBGroupResolverService` no MongoDB.
-- O valor de `empresa` corresponde ao domínio do usuário (ex: `peers`).
+### Nome do Container do Blob Storage
+- **Secret:** `azure-storage-container-name-{grupo}-{empresa}`
+- **Vault:** Cofre de infraestrutura (`VaultType.AZURE_INFRASTRUCTURE`)
+- **Valor esperado:** Nome real do container no Blob Storage (exemplo: `container-grupo-peers`)
+- **Descrição:** O nome do container é recuperado dinamicamente do Key Vault de infraestrutura. Para cada grupo e empresa, deve existir um secret com este padrão, cujo valor é o nome do container.
 
-## Cofres e seus Secrets
+**Exemplo de configuração:**
+- Nome do secret: `azure-storage-container-name-grupo-peers`
+- Valor do secret: `container-grupo-peers`
 
-### 1. Cofre de Infraestrutura Azure (`VaultType.AZURE_INFRASTRUCTURE`)
+O serviço irá buscar este secret usando o grupo (do MongoDB) e a empresa (do e-mail ou MongoDB) para acessar o container correto no Blob Storage.
 
-| Nome do Secret                                  | Descrição                                         | Exemplo de Nome                           | Exemplo de Valor                  |
-|-------------------------------------------------|---------------------------------------------------|-------------------------------------------|------------------------------------|
-| azure-storage-connection-string                 | Connection string do Blob Storage Azure (fixo para todos os clientes) | `azure-storage-connection-string`         | `DefaultEndpointsProtocol=https;AccountName=...` |
-| azure-mongodb-connection-string                 | Connection string do MongoDB                      | `azure-mongodb-connection-string`          | `mongodb+srv://user:pass@cluster.mongodb.net/db` |
+## Outros Secrets
 
-> **Nota:** Cada cliente terá um container próprio no Blob Storage, com o nome construído dinamicamente no formato `azure-storage-container-name-{grupo}-{empresa}`. O nome do secret da connection string é fixo: `azure-storage-connection-string`.
+- **Connection String do Blob Storage:**
+  - Secret fixo: `azure-storage-connection-string`
+  - Valor: String de conexão do Blob Storage
+  - Vault: Cofre de infraestrutura (`VaultType.AZURE_INFRASTRUCTURE`)
 
-### 2. Cofre de LLM (`VaultType.LLM`)
+- **Tokens de LLM, Repositórios, etc:**
+  - Seguem padrão `nome-grupo-empresa` conforme documentação principal.
 
-| Nome do Secret                                  | Descrição                                         | Exemplo de Nome                           | Exemplo de Valor                  |
-|-------------------------------------------------|---------------------------------------------------|-------------------------------------------|------------------------------------|
-| AWS-ACCESS-KEY-ID-{grupo}-{empresa}             | AWS Access Key para Bedrock                       | `AWS-ACCESS-KEY-ID-grupo-peers`           | `AKIAIOSFODNN7EXAMPLE`            |
-| AWS-SECRET-ACCESS-KEY-{grupo}-{empresa}         | AWS Secret Key para Bedrock                       | `AWS-SECRET-ACCESS-KEY-grupo-peers`       | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
-| AWS-REGION-{grupo}-{empresa}                    | Região AWS para Bedrock                           | `AWS-REGION-grupo-peers`                  | `us-east-1`                       |
-| openai-token-{grupo}-{empresa}                  | Token de acesso OpenAI (se aplicável)             | `openai-token-grupo-peers`                | `sk-abc123...`                    |
-
-### 3. Cofre GitHub (`VaultType.GITHUB`)
-
-| Nome do Secret                                  | Descrição                                         | Exemplo de Nome                           | Exemplo de Valor                  |
-|-------------------------------------------------|---------------------------------------------------|-------------------------------------------|------------------------------------|
-| github-token-{grupo}-{empresa}                  | Token de acesso GitHub                            | `github-token-grupo-peers`                | `ghp_16charactertokenexample`      |
-
-### 4. Cofre Azure DevOps (`VaultType.AZURE_DEVOPS`)
-
-| Nome do Secret                                  | Descrição                                         | Exemplo de Nome                           | Exemplo de Valor                  |
-|-------------------------------------------------|---------------------------------------------------|-------------------------------------------|------------------------------------|
-| azure-token-{grupo}-{empresa}                   | Token de acesso Azure DevOps                      | `azure-token-grupo-peers`                 | `azdo_16charactertokenexample`     |
-
-## Exemplos Concretos
-
-- Para o usuário `lucio.rosa@peers.com` cujo grupo é `grupo`:
-  - GitHub: `github-token-grupo-peers`
-  - Bedrock AWS Access Key: `AWS-ACCESS-KEY-ID-grupo-peers`
-  - Blob Storage: container `azure-storage-container-name-grupo-peers`, secret de connection string: `azure-storage-connection-string`
-
-## Observações Importantes
-- **Todos os secrets devem ser criados previamente** nos respectivos cofres.
-- O nome do secret da connection string do Blob Storage é fixo para todos os clientes: `azure-storage-connection-string`. O nome do container é específico por cliente.
-- O nome do secret deve sempre incluir o grupo e empresa, obtidos via serviço de mapeamento no MongoDB, exceto para a connection string do Blob Storage.
-- Não existe fallback: se o mapeamento de grupo não existir, a operação falha.
-- Os valores dos secrets devem ser strings válidas para autenticação nos respectivos serviços.
-
-## Resumo dos Cofres
-- **VaultType.AZURE_INFRASTRUCTURE**: Secrets de infraestrutura (Blob Storage, MongoDB)
-- **VaultType.LLM**: Secrets de provedores LLM (AWS Bedrock, OpenAI)
-- **VaultType.GITHUB**: Token de acesso GitHub
-- **VaultType.AZURE_DEVOPS**: Token de acesso Azure DevOps
-
-## Referências
-- [Documentação Azure Key Vault](https://learn.microsoft.com/pt-br/azure/key-vault/general/)
-- [Documentação AWS Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/)
+## Observações
+- Não existe fallback: se o mapeamento de grupo não for encontrado no MongoDB, a operação falha.
+- O nome do container nunca é montado como string literal, sempre recuperado do Key Vault.
