@@ -5,6 +5,7 @@ from tools.blob_job_tracker import BlobJobTracker
 from tools.azure_secret_manager import AzureSecretManager, VaultType
 from tools.blob_report_path_builder import build_report_blob_path
 from tools.blob_storage_utils import get_blob_connection_string
+from tools.user_email_parser import UserEmailParser
 from services.base_service import BaseService
 
 class BlobStorageService(BaseService):
@@ -17,13 +18,17 @@ class BlobStorageService(BaseService):
         self._init_blob_service()
 
     def _init_blob_service(self):
-        container_name = os.getenv('AZURE_STORAGE_CONTAINER_NAME')
-        if not container_name:
-            raise RuntimeError('Azure Blob Storage container name missing.')
+        if not self._user_email:
+            raise RuntimeError('user_email é obrigatório para inicializar BlobStorageService.')
+        if not self.group_resolver:
+            raise RuntimeError('group_resolver é obrigatório para inicializar BlobStorageService.')
         secret_manager = AzureSecretManager(vault_type=VaultType.AZURE_INFRASTRUCTURE)
         self.log_info(f"Usando VaultType '{VaultType.AZURE_INFRASTRUCTURE.value}' para recuperar connection string do Blob Storage.")
         connection_string = get_blob_connection_string(secret_manager, self._user_email, self.group_resolver, vault_type=VaultType.AZURE_INFRASTRUCTURE)
         self.log_info(f"Connection string recuperada do cofre: {'OK' if connection_string else 'FALHA'}")
+        grupo = self.group_resolver.get_group_for_user(self._user_email)
+        _, empresa = UserEmailParser.parse_email(self._user_email)
+        container_name = f"azure-storage-container-name-{grupo}-{empresa}"
         self._blob_service_client = BlobServiceClient.from_connection_string(connection_string)
         self._container_name = container_name
 
