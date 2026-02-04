@@ -8,7 +8,7 @@ from services.job_handler import JobHandler
 from services.report_handler import ReportHandler
 from tools.readers.reader_geral import ReaderGeral
 from tools.repository_provider_factory import get_repository_provider_explicit
-from models import JobFields
+from schemas import JobFields
 import traceback
 from services.step_strategies.default_step_strategy import DefaultStepStrategy
 from tools.prompt_utils import carregar_prompt
