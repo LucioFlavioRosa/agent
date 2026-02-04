@@ -34,10 +34,8 @@ def get_blob_connection_string(secret_manager, user_email, group_resolver=None):
     usuario_sanitizado = usuario.replace('.', '-')
     
     # Exemplo: azure-storage-connection-string-lucio-rosa-peers
-    try:
-        secret_name = f"azure-storage-connection-string-{usuario_sanitizado}-{empresa}"
-    except:
-        secret_name = "azure-storage-connection-string"
+    
+    secret_name = "azure-storage-connection-string"
     
     try:
         conn_string = secret_manager.get_secret(secret_name)
