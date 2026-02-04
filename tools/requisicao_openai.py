@@ -17,14 +17,14 @@ class OpenAILLMProvider(ILLMProviderComplete):
         self.user_email = user_email
         self.group_resolver = group_resolver or MongoDBGroupResolverService()
         
-        try:
-            self.azure_endpoint = os.environ["AZURE_OPENAI_MODELS"]
-        except KeyError as e:
-            raise EnvironmentError(f"ERRO: A variável de ambiente {e} não foi configurada para o Azure OpenAI.")
-        
         # Recupera empresa do email
         self.empresa = self._extrair_empresa_do_email(user_email) if user_email else None
         self.grupo = self._resolver_grupo(user_email, self.empresa) if user_email and self.empresa else None
+
+        try:
+            self.azure_endpoint = os.environ[f"AZURE_OPENAI_MODELS_{self.empresa}_{self.grupo}"]
+        except KeyError as e:
+            raise EnvironmentError(f"ERRO: A variável de ambiente {e} não foi configurada para o Azure OpenAI.")
         
         # Recupera API Key do formato correto
         self.api_key = self._recuperar_api_key()
@@ -82,8 +82,8 @@ class OpenAILLMProvider(ILLMProviderComplete):
         max_token_out: int = 15000,
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        modelo_final = model_name or os.environ.get("AZURE_DEFAULT_DEPLOYMENT_NAME")
-        job_id_final = job_id or str(uuid.uuid4())
+        modelo_final = model_name
+        job_id_final = job_id
         prompt_sistema = self.carregar_prompt(tipo_tarefa)
 
         # Concatena instrucoes_extras ao prompt_principal se houver
