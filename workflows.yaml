@@ -6,8 +6,10 @@ relatorio_performance_eficiencia:
       model_name: "claude-sonnet-4-5"
       agent_type: "revisor"
       params:
+        tipo_analise: "relatorio_performance_eficiencia"
       requires_approval: true
     - status_update: "aplicando_as_mudancas_apontadas"
       model_name: "gpt-4.1"
       agent_type: "revisor"
       params:
+        tipo_analise: "aplicacao_de_mudancas"
