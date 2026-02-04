@@ -31,7 +31,7 @@ class OpenAILLMProvider(ILLMProviderComplete):
         
         self.openai_client = AzureOpenAI(
             azure_endpoint=self.azure_endpoint,
-            api_version="2025-03-01-preview",
+            api_version="2024-12-01-preview",
             api_key=self.api_key,
         )
 
