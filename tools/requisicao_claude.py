@@ -3,7 +3,7 @@ import json
 import uuid
 from typing import Optional, Dict, Any
 from domain.interfaces.llm_provider_interface import ILLMProviderComplete
-from services.azure_secret_manager import AzureSecretManager, VaultType
+from tools.azure_secret_manager import AzureSecretManager, VaultType
 from tools.prompt_utils import carregar_prompt
 from tools.user_email_parser import UserEmailParser
 
