@@ -32,6 +32,8 @@ class StartAnalysisPayload(BaseModel):
 
 class StartAnalysisResponse(BaseModel):
     job_id: str
+    status: str
+    analysis_report: Optional[str] = None
 
 class StatusResponse(BaseModel):
     job_id: str
@@ -40,10 +42,16 @@ class StatusResponse(BaseModel):
     analysis_report: Optional[str] = None
 
 @app.post("/start-analysis", response_model=StartAnalysisResponse)
-def start_analysis(payload: StartAnalysisPayload, background_tasks: BackgroundTasks):
-    job_id = workflow_service.start_analysis(payload)
-    background_tasks.add_task(workflow_service.run_analysis, job_id)
-    return StartAnalysisResponse(job_id=job_id)
+def start_analysis(payload: StartAnalysisPayload):
+    # Segue a sequência de eventos conforme instruções do usuário
+    result = workflow_service.start_analysis(payload)
+    if not result or 'job_id' not in result:
+        raise HTTPException(status_code=500, detail="Falha ao iniciar análise")
+    return StartAnalysisResponse(
+        job_id=result['job_id'],
+        status=result.get('status', 'completed'),
+        analysis_report=result.get('analysis_report')
+    )
 
 @app.get("/status/{job_id}", response_model=StatusResponse)
 def get_status(job_id: str):
