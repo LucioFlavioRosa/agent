@@ -20,20 +20,24 @@ Para garantir segurança e organização, os secrets são segregados em cofres d
   - Variável de ambiente: `AZURE_KEY_VAULT_REPOSITORY_URL`
   - Exemplos de secrets: `github-token-grupo-peers`, `gitlab-token-grupo-peers`, `azure-token-grupo-peers`.
 
-- **Cofre de Blob Storage (`VaultType.BLOB_STORAGE`)**: Armazena secrets relacionados ao Blob Storage.
+- **Cofre de Blob Storage (`VaultType.BLOB_STORAGE` / `VaultType.AZURE_INFRASTRUCTURE`)**: Armazena secrets relacionados ao Blob Storage.
   - Variável de ambiente: `AZURE_KEY_VAULT_BLOB_STORAGE_URL`
-  - Exemplo de secret: `azure-storage-connection-string` (fixo para todo o projeto).
+  - **Nome do container:** Agora o nome do container é recuperado dinamicamente do Key Vault de infraestrutura via secret `azure-storage-container-name-{grupo}-{empresa}`. Não é mais montado como string literal.
+    - Exemplo de configuração do secret:
+      - Nome do secret: `azure-storage-container-name-grupo-peers`
+      - Valor do secret: `container-grupo-peers`
+  - Exemplo de secret fixo: `azure-storage-connection-string` (fixo para todo o projeto).
 
-> **Importante:** O nome do secret para a connection string do Blob Storage agora é **fixo**: `azure-storage-connection-string`. Não há mais contextualização por grupo ou empresa para o secret de conexão.
+> **Importante:** O nome do secret para a connection string do Blob Storage continua **fixo**: `azure-storage-connection-string`. Não há mais contextualização por grupo ou empresa para o secret de conexão.
 
-> **Containers dinâmicos por cliente:** Cada cliente possui um container próprio no Blob Storage. O nome do container é construído dinamicamente no formato: `azure-storage-container-name-{grupo}-{empresa}`. O grupo é obtido via consulta ao serviço `MongoDBGroupResolverService` que acessa o MongoDB configurado. O serviço consulta o mapeamento de grupos para o usuário e empresa informados, retornando o grupo correspondente. Por exemplo, para o email `lucio.rosa@peers.com`, o serviço consulta o MongoDB para obter o grupo do usuário `lucio.rosa` na empresa `peers`, e o nome do container será `azure-storage-container-name-grupo-peers`.
+> **Containers dinâmicos por cliente:** Cada cliente possui um container próprio no Blob Storage. O nome do container é obtido dinamicamente do Key Vault de infraestrutura (`VaultType.AZURE_INFRASTRUCTURE`) usando o secret `azure-storage-container-name-{grupo}-{empresa}`. O grupo é obtido via consulta ao serviço `MongoDBGroupResolverService` que acessa o MongoDB configurado. O serviço consulta o mapeamento de grupos para o usuário e empresa informados, retornando o grupo correspondente. Por exemplo, para o email `lucio.rosa@peers.com`, o serviço consulta o MongoDB para obter o grupo do usuário `lucio.rosa` na empresa `peers`, e o nome do secret será `azure-storage-container-name-grupo-peers`.
 
 > **Não há fallback**: Se o mapeamento de grupo não existir no MongoDB para o usuário/empresa, a operação falhará. Não existe mais fallback para secrets sem contexto de grupo.
 
 ### Serviço de Resolução de Grupo
 - O serviço `MongoDBGroupResolverService` é responsável por consultar o MongoDB da Azure para obter o grupo do usuário e empresa informados.
 - O MongoDB deve conter uma collection com o mapeamento `{ "usuario": "lucio.rosa", "empresa": "peers", "grupo": "grupo" }`.
-- O nome do container será sempre montado como `azure-storage-container-name-{grupo}-{empresa}`.
+- O nome do secret do container será sempre montado como `azure-storage-container-name-{grupo}-{empresa}` e seu valor deve ser o nome real do container.
 
 ### Secrets AWS Necessários
 - `AWS-ACCESS-KEY-ID-grupo-peers`
@@ -60,6 +64,7 @@ Estes secrets devem ser configurados no Azure Key Vault de LLM utilizado pelo pr
 
 ### Configuração de Secrets no Azure Key Vault
 - Adicione os secrets listados acima, sempre usando o padrão `nome-grupo-empresa` para LLM e repositórios, e `azure-storage-connection-string` para Blob Storage.
+- Para o nome do container, crie o secret `azure-storage-container-name-{grupo}-{empresa}` no Key Vault de infraestrutura e defina seu valor como o nome real do container.
 - Não existe fallback: se o mapeamento de grupo não for encontrado no MongoDB, a operação falha.
 - Valide que o `vault_type=VaultType.LLM` está configurado corretamente para apontar para o Key Vault de LLM.
 
