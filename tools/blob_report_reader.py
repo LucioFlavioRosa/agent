@@ -15,7 +15,6 @@ def read_report_from_blob(projeto: str, analysis_type: str, repository_type: str
         raise RuntimeError('Azure Blob Storage container name missing.')
     
     connection_string = None
-    secret_name = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
     
     try:
         secret_manager = AzureSecretManager()
