@@ -22,16 +22,18 @@ Para garantir segurança e organização, os secrets são segregados em cofres d
 
 - **Cofre de Blob Storage (`VaultType.BLOB_STORAGE`)**: Armazena secrets relacionados ao Blob Storage.
   - Variável de ambiente: `AZURE_KEY_VAULT_BLOB_STORAGE_URL`
-  - Exemplos de secrets: `azure-storage-connection-string-grupo-peers`.
+  - Exemplo de secret: `azure-storage-connection-string` (fixo para todo o projeto).
 
-> **Importante:** Todos os secrets devem seguir o padrão de nomenclatura: `nome-grupo-empresa`, onde `grupo` é obtido via consulta ao serviço `MongoDBGroupResolverService` que acessa o MongoDB configurado. O serviço consulta o mapeamento de grupos para o usuário e empresa informados, retornando o grupo correspondente. Por exemplo, para o email `lucio.rosa@peers.com`, o serviço consulta o MongoDB para obter o grupo do usuário `lucio.rosa` na empresa `peers`, e o nome do secret será `github-token-grupo-peers`.
+> **Importante:** O nome do secret para a connection string do Blob Storage agora é **fixo**: `azure-storage-connection-string`. Não há mais contextualização por grupo ou empresa para o secret de conexão.
+
+> **Containers dinâmicos por cliente:** Cada cliente possui um container próprio no Blob Storage. O nome do container é construído dinamicamente no formato: `azure-storage-container-name-{grupo}-{empresa}`. O grupo é obtido via consulta ao serviço `MongoDBGroupResolverService` que acessa o MongoDB configurado. O serviço consulta o mapeamento de grupos para o usuário e empresa informados, retornando o grupo correspondente. Por exemplo, para o email `lucio.rosa@peers.com`, o serviço consulta o MongoDB para obter o grupo do usuário `lucio.rosa` na empresa `peers`, e o nome do container será `azure-storage-container-name-grupo-peers`.
 
 > **Não há fallback**: Se o mapeamento de grupo não existir no MongoDB para o usuário/empresa, a operação falhará. Não existe mais fallback para secrets sem contexto de grupo.
 
 ### Serviço de Resolução de Grupo
 - O serviço `MongoDBGroupResolverService` é responsável por consultar o MongoDB da Azure para obter o grupo do usuário e empresa informados.
 - O MongoDB deve conter uma collection com o mapeamento `{ "usuario": "lucio.rosa", "empresa": "peers", "grupo": "grupo" }`.
-- O nome do secret será sempre montado como `nome-grupo-empresa`.
+- O nome do container será sempre montado como `azure-storage-container-name-{grupo}-{empresa}`.
 
 ### Secrets AWS Necessários
 - `AWS-ACCESS-KEY-ID-grupo-peers`
@@ -57,7 +59,7 @@ Estes secrets devem ser configurados no Azure Key Vault de LLM utilizado pelo pr
 - Os testes validam invocação, fallback de modelo, concatenação de instruções extras e estrutura da resposta.
 
 ### Configuração de Secrets no Azure Key Vault
-- Adicione os secrets listados acima, sempre usando o padrão `nome-grupo-empresa`.
+- Adicione os secrets listados acima, sempre usando o padrão `nome-grupo-empresa` para LLM e repositórios, e `azure-storage-connection-string` para Blob Storage.
 - Não existe fallback: se o mapeamento de grupo não for encontrado no MongoDB, a operação falha.
 - Valide que o `vault_type=VaultType.LLM` está configurado corretamente para apontar para o Key Vault de LLM.
 
