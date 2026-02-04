@@ -1,3 +1,5 @@
+from enum import Enum  # <--- Adicionado (Essencial)
+
 # Centralização de literais mágicos usadas em múltiplos arquivos
 
 STATUS = "status"
@@ -33,3 +35,8 @@ JOB_STATUS_REJECTED = "rejected"
 # Job Actions
 JOB_ACTION_APPROVE = "approve"
 JOB_ACTION_REJECT = "reject"
+
+# --- ADICIONADO PARA CORRIGIR O ERRO ---
+class VaultType(str, Enum):
+    ENVIRONMENT = "environment"
+    AZURE_KEYVAULT = "azure_keyvault"
