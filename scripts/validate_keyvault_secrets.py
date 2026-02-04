@@ -6,8 +6,7 @@ from azure.keyvault.secrets import SecretClient
 
 # Secrets essenciais (não contextualizados por usuário)
 REQUIRED_SECRETS = [
-    'azure-mongodb-connection-string',
-    'azure-storage-connection-string-grupo-peers',
+    'azure-storage-connection-string',
     'AWS-ACCESS-KEY-ID-grupo-peers',
     'AWS-SECRET-ACCESS-KEY-grupo-peers',
     'AWS-REGION-grupo-peers',

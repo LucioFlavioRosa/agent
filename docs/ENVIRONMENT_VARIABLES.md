@@ -7,7 +7,6 @@ Este documento lista **todas as variáveis de ambiente** necessárias para o fun
 | Nome da Variável                         | Descrição                                                                 | Exemplo de Valor                                   | Obrigatória |
 |------------------------------------------|---------------------------------------------------------------------------|----------------------------------------------------|-------------|
 | REDIS_URL                               | URL de conexão do Redis para cache e filas.                              | `redis://localhost:6379/0`                         | Sim         |
-| AZURE_STORAGE_CONTAINER_NAME             | Nome do container do Blob Storage Azure para armazenar relatórios e artefatos. | `relatorios-mcp`                                   | Sim         |
 | AZURE_KEY_VAULT_AZURE_INFRASTRUCTURE_URL | URL do Key Vault Azure de infraestrutura (armazenamento de secrets de infra). | `https://kv-infra-peers.vault.azure.net/`          | Sim         |
 | AZURE_KEY_VAULT_LLM_URL                  | URL do Key Vault Azure para secrets de LLM (modelos, tokens, etc).        | `https://kv-llm-peers.vault.azure.net/`            | Sim         |
 | AZURE_KEY_VAULT_GITHUB_URL               | URL do Key Vault Azure para secrets do GitHub.                            | `https://kv-github-peers.vault.azure.net/`         | Sim         |
@@ -20,11 +19,6 @@ Este documento lista **todas as variáveis de ambiente** necessárias para o fun
 ### REDIS_URL
 - **Descrição:** URL de conexão para o serviço Redis utilizado pelo projeto.
 - **Exemplo:** `redis://localhost:6379/0`
-- **Obrigatória:** Sim
-
-### AZURE_STORAGE_CONTAINER_NAME
-- **Descrição:** Nome do container no Blob Storage Azure onde relatórios e artefatos são armazenados.
-- **Exemplo:** `relatorios-mcp`
 - **Obrigatória:** Sim
 
 ### AZURE_KEY_VAULT_AZURE_INFRASTRUCTURE_URL
@@ -59,6 +53,7 @@ Este documento lista **todas as variáveis de ambiente** necessárias para o fun
 
 ## Observações Importantes
 - Todas as variáveis acima são **obrigatórias** para o funcionamento correto do projeto.
+- O nome do container do Blob Storage agora é construído dinamicamente para cada cliente no formato `azure-storage-container-name-{grupo}-{empresa}`. Não é mais necessário definir a variável `AZURE_STORAGE_CONTAINER_NAME` no ambiente.
 - Os valores dos Key Vaults devem ser URLs válidas do serviço Azure Key Vault.
 - O nome do container e os nomes de banco/collection devem ser previamente criados e configurados no Azure/MongoDB.
 

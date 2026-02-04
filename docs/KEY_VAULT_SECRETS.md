@@ -14,8 +14,10 @@ Este documento detalha **todos os secrets** que devem ser configurados nos Key V
 
 | Nome do Secret                                  | Descrição                                         | Exemplo de Nome                           | Exemplo de Valor                  |
 |-------------------------------------------------|---------------------------------------------------|-------------------------------------------|------------------------------------|
-| azure-storage-connection-string-{grupo}-{empresa}| Connection string do Blob Storage Azure           | `azure-storage-connection-string-grupo-peers` | `DefaultEndpointsProtocol=https;AccountName=...` |
-| azure-mongodb-connection-string                  | Connection string do MongoDB                      | `azure-mongodb-connection-string`          | `mongodb+srv://user:pass@cluster.mongodb.net/db` |
+| azure-storage-connection-string                 | Connection string do Blob Storage Azure (fixo para todos os clientes) | `azure-storage-connection-string`         | `DefaultEndpointsProtocol=https;AccountName=...` |
+| azure-mongodb-connection-string                 | Connection string do MongoDB                      | `azure-mongodb-connection-string`          | `mongodb+srv://user:pass@cluster.mongodb.net/db` |
+
+> **Nota:** Cada cliente terá um container próprio no Blob Storage, com o nome construído dinamicamente no formato `azure-storage-container-name-{grupo}-{empresa}`. O nome do secret da connection string é fixo: `azure-storage-connection-string`.
 
 ### 2. Cofre de LLM (`VaultType.LLM`)
 
@@ -43,11 +45,12 @@ Este documento detalha **todos os secrets** que devem ser configurados nos Key V
 - Para o usuário `lucio.rosa@peers.com` cujo grupo é `grupo`:
   - GitHub: `github-token-grupo-peers`
   - Bedrock AWS Access Key: `AWS-ACCESS-KEY-ID-grupo-peers`
-  - Blob Storage: `azure-storage-connection-string-grupo-peers`
+  - Blob Storage: container `azure-storage-container-name-grupo-peers`, secret de connection string: `azure-storage-connection-string`
 
 ## Observações Importantes
 - **Todos os secrets devem ser criados previamente** nos respectivos cofres.
-- O nome do secret deve sempre incluir o grupo e empresa, obtidos via serviço de mapeamento no MongoDB.
+- O nome do secret da connection string do Blob Storage é fixo para todos os clientes: `azure-storage-connection-string`. O nome do container é específico por cliente.
+- O nome do secret deve sempre incluir o grupo e empresa, obtidos via serviço de mapeamento no MongoDB, exceto para a connection string do Blob Storage.
 - Não existe fallback: se o mapeamento de grupo não existir, a operação falha.
 - Os valores dos secrets devem ser strings válidas para autenticação nos respectivos serviços.
 
