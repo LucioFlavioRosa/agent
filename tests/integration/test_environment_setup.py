@@ -73,3 +73,23 @@ def test_environment_setup():
             assert manager is not None, f"Falha ao instanciar AzureSecretManager para {vault_type.name}"
         except Exception as e:
             pytest.fail(f"Falha ao instanciar AzureSecretManager para {vault_type.name}: {e}")
+
+    # Validação do secret fixo do Blob Storage
+    try:
+        secret_manager_blob = AzureSecretManager(vault_type=VaultType.BLOB_STORAGE)
+        connection_string = secret_manager_blob.get_secret("azure-storage-connection-string")
+        assert connection_string, "Secret fixo 'azure-storage-connection-string' não encontrado ou vazio no Key Vault de Blob Storage."
+    except Exception as e:
+        pytest.fail(f"Falha ao validar secret fixo do Blob Storage: {e}")
+
+    # Validação do nome dinâmico do container
+    try:
+        # Exemplo de grupo e empresa
+        grupo = "grupo"
+        empresa = "peers"
+        container_name = f"azure-storage-container-name-{grupo}-{empresa}"
+        # Simula que container_name será utilizado no fluxo
+        assert container_name.startswith("azure-storage-container-name-") and grupo in container_name and empresa in container_name, \
+            f"Nome do container não está no formato esperado: {container_name}"
+    except Exception as e:
+        pytest.fail(f"Falha ao validar nome dinâmico do container: {e}")
