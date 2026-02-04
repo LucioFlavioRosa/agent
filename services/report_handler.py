@@ -25,7 +25,8 @@ class ReportHandler:
                 repo_name=repo_name,
                 branch_name=branch_name,
                 analysis_name=analysis_name,
-                user_email=user_email
+                user_email=user_email,
+                group_resolver=self.group_resolver
             )
             return report_text
         except Exception as e:
@@ -46,7 +47,8 @@ class ReportHandler:
                 repo_name=repo_name,
                 branch_name=branch_name,
                 analysis_name=analysis_name,
-                user_email=user_email
+                user_email=user_email,
+                group_resolver=self.group_resolver
             )
             if report_text and len(str(report_text).strip()) > 0:
                 return report_text
