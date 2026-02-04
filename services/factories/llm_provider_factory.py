@@ -9,4 +9,6 @@ def create_provider(model_name=None, secret_manager=None, user_email=None, group
         provider = OpenAILLMProvider(secret_manager=secret_manager, user_email=user_email, group_resolver=group_resolver)
     else:
         provider = AmazonBedrockProvider(secret_manager=secret_manager, user_email=user_email, group_resolver=group_resolver)
+    # O provider deve aceitar o prompt concatenado (prompt + instrucoes_extras)
+    # A responsabilidade de concatenar já é do orchestrator, então aqui apenas retorna o provider
     return provider

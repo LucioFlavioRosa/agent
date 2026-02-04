@@ -66,6 +66,48 @@ Estes secrets devem ser configurados no Azure Key Vault de LLM utilizado pelo pr
 - `MONGODB_DATABASE_NAME`: Nome do banco de dados MongoDB onde está o mapeamento de grupos.
 - `MONGODB_COLLECTION_NAME`: Nome da collection do MongoDB que armazena o mapeamento de grupos.
 
+### Nova Funcionalidade: Verificação de Relatório Existente no Blob Storage
+
+A primeira operação do fluxo de análise agora segue a seguinte sequência de eventos para garantir eficiência e evitar processamento desnecessário:
+
+1. **Envio do Payload Inicial**
+   - O usuário envia o payload inicial contendo os parâmetros da análise (exemplo: tipo de repositório, nome do repositório, branch, tipo de análise, instruções extras, usuário executor, etc).
+
+2. **Geração do job_id**
+   - O sistema gera um identificador único (`job_id`) para a análise.
+
+3. **Verificação de Relatório Existente no Blob Storage**
+   - Antes de iniciar qualquer processamento, o sistema consulta o Blob Storage para verificar se já existe um relatório para o mesmo contexto (projeto, análise, repositório, branch, usuário, etc).
+
+4. **Retorno Imediato do Relatório Existente**
+   - Se um relatório já existir no Blob Storage, ele é lido e retornado imediatamente ao usuário, evitando reprocessamento.
+
+5. **Carregamento do Prompt**
+   - Caso não exista relatório, o sistema carrega o arquivo de prompt correspondente à tarefa (por exemplo, via função `carregar_prompt(tipo_tarefa)`).
+
+6. **Concatenação do Prompt com Instruções Extras**
+   - O prompt carregado é concatenado com as instruções extras fornecidas pelo usuário no payload.
+
+7. **Envio para o LLM**
+   - O conteúdo resultante é enviado ao provedor LLM (Amazon Bedrock ou OpenAI, conforme configuração) para geração do relatório.
+
+8. **Retorno do Relatório Gerado**
+   - O relatório gerado pela LLM é retornado ao usuário e salvo no Blob Storage para futuras consultas.
+
+#### Parâmetros Necessários no Payload
+- `repository_type`: Tipo do repositório (github, gitlab, azure)
+- `repo_name`: Nome do repositório
+- `branch_name`: Nome da branch
+- `analysis_type`: Tipo de análise
+- `instrucoes_extras`: Instruções adicionais para o agente
+- `usuario_executor`: Email do usuário executor
+- Outros campos opcionais conforme necessidade
+
+#### Observações Importantes
+- O sistema prioriza a reutilização de relatórios existentes para otimizar recursos e tempo.
+- O fluxo é transparente para o usuário: se o relatório já existe, ele é retornado; caso contrário, é gerado conforme instruções e prompt.
+- O nome e contexto do relatório no Blob Storage são derivados dos parâmetros do payload e do mapeamento de grupo do usuário.
+
 ### Referências
 - [Documentação AWS Bedrock](https://docs.aws.amazon.com/bedrock/latest/userguide/)
 - [SDK boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html)
