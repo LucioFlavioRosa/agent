@@ -23,36 +23,37 @@ class AmazonBedrockProvider(ILLMProviderComplete):
         print(f"[DEBUG] Group Resolver objeto: {group_resolver}", flush=True)
         
         if group_resolver is not None:
-            # Obtém grupo diretamente do MongoDB usando o e-mail
             grupo = group_resolver.get_group_for_user(user_email)
             print(f"[DEBUG] Resultado do get_group_for_user: {grupo}", flush=True)
         else:
             print("[DEBUG] AVISO: group_resolver é None! Grupo será definido como None.", flush=True)
             grupo = None
         
-        # Obtém usuario e empresa via parser
         usuario, empresa = UserEmailParser.parse_email(user_email)
         print(f"[DEBUG] Parser - Usuario: {usuario}, Empresa: {empresa}", flush=True)
 
-        # Monta os nomes dos secrets AWS conforme padrão
         aws_access_key_secret_name = f"AWS-ACCESS-KEY-ID-{grupo}-{empresa}"
         aws_secret_access_key_secret_name = f"AWS-SECRET-ACCESS-KEY-{grupo}-{empresa}"
         aws_region_secret_name = f"AWS-REGION-{grupo}-{empresa}"
 
         print(f"[DEBUG] Nome Secret ID montado: '{aws_access_key_secret_name}'", flush=True)
         print(f"[DEBUG] Nome Secret Key montado: '{aws_secret_access_key_secret_name}'", flush=True)
+        # CORREÇÃO: Faltava o flush=True aqui
+        print(f"[DEBUG] Nome Region montado: '{aws_region_secret_name}'", flush=True)
 
-        # Verificação de segurança antes de chamar o cofre
         if grupo is None:
-            print("[CRÍTICO] A variável 'grupo' é None. Isso vai causar erro no Key Vault se o secret não tiver 'None' no nome.", flush=True)
+            print("[CRÍTICO] A variável 'grupo' é None. Verifique se os secrets permitem 'None' no nome.", flush=True)
 
-        # Tenta buscar os secrets
         print("[DEBUG] Chamando self.secret_manager.get_secret...", flush=True)
         self.aws_access_key_id = self.secret_manager.get_secret(aws_access_key_secret_name)
         self.aws_secret_access_key = self.secret_manager.get_secret(aws_secret_access_key_secret_name)
         self.aws_region = self.secret_manager.get_secret(aws_region_secret_name)
         
-        print("[DEBUG] Secrets recuperados com sucesso. Iniciando cliente Boto3...", flush=True)
+        # --- NOVO: Verificação de sanidade dos valores (Mascarados) ---
+        key_check = f"{self.aws_access_key_id[:4]}..." if self.aws_access_key_id else "NONE/VAZIO"
+        region_check = self.aws_region if self.aws_region else "NONE/VAZIO"
+        print(f"[DEBUG] Secrets carregados? KeyID={key_check}, Region={region_check}", flush=True)
+        # -------------------------------------------------------------
 
         self.bedrock_runtime = boto3.client(
             'bedrock-runtime',
@@ -60,6 +61,10 @@ class AmazonBedrockProvider(ILLMProviderComplete):
             aws_secret_access_key=self.aws_secret_access_key,
             region_name=self.aws_region
         )
+        
+        # --- NOVO: Confirmação da Região Efetiva no Boto3 ---
+        # Isso tira a dúvida se ele está assumindo us-east-1 ou us-east-2
+        print(f"[DEBUG] Cliente Boto3 criado. Região efetiva: {self.bedrock_runtime.meta.region_name}", flush=True)
 
     def executar_prompt(
         self,
@@ -70,9 +75,15 @@ class AmazonBedrockProvider(ILLMProviderComplete):
         max_token_out: int = 8000,
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        # (O resto do código permanece igual)
-        model_id = model_name
-        job_id_final = job_id
+        
+        # --- CORREÇÃO: Lógica de Fallback do Modelo ---
+        # Se não passar nada, usa o Sonnet padrão. Sem isso, o código quebraria se model_name fosse None.
+        default_model = "anthropic.claude-3-5-sonnet-20241022-v2:0" 
+        model_id = model_name or default_model
+        
+        print(f"[DEBUG] Executando Prompt. Model ID final: {model_id}", flush=True)
+
+        job_id_final = job_id or str(uuid.uuid4())
         prompt_sistema = carregar_prompt(tipo_tarefa)
         prompt_input = prompt_principal
 
@@ -113,5 +124,6 @@ class AmazonBedrockProvider(ILLMProviderComplete):
                 'model_id': model_id
             }
         except Exception as e:
-            print(f"Erro no Bedrock: {str(e)}", flush=True)
+            # Importante: Logar o erro com flush=True para garantir que apareça antes do crash
+            print(f"[ERRO] Falha no Bedrock: {str(e)}", flush=True)
             raise e
