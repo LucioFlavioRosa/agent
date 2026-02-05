@@ -3,7 +3,7 @@ analise_performance_eficiencia:
   extensions: [".py", ".cs", ".css", ".js", ".aspx", ".csproj", ".config", ".aspx.cs", ".Global.asax", ".Web.config", ".designer.cs", ".razor", ".cshtml", "xlsx", ".md", ".yaml", ".txt", ".html"]
   steps:
     - status_update: "analisando o repositório"
-      model_name: "claude-sonnet-4-5"
+      model_name: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
       agent_type: "revisor"
       params:
         tipo_analise: "relatorio_performance_eficiencia"
