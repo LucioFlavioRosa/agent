@@ -56,3 +56,59 @@ def test_start_analysis_with_docx(monkeypatch):
     monkeypatch.setattr("httpx.AsyncClient.post", mock_post)
     result = asyncio.run(mcp_service.start_analysis(payload, arquivo_docx=fake_file))
     assert result.project_id == payload["project_id"]
+
+@pytest.mark.asyncio
+def test_get_projects(monkeypatch):
+    # Testa método get_projects do MCPClientService
+    mcp_service = MCPClientService(base_url="https://fake-mcp")
+    email = "user@example.com"
+    empresa = "Peers"
+    async def mock_post(*args, **kwargs):
+        assert args[1].endswith("/projects/list")
+        assert kwargs.get("json") == {"email": email, "empresa": empresa}
+        class Response:
+            status_code = 200
+            def json(self):
+                return [
+                    {
+                        "nome_projeto": "ProjetoNovo",
+                        "project_id": "projeto-uuid-123",
+                        "ultima_analysis_type": "criacao_epicos_azure_devops",
+                        "created_at": "2024-06-01T12:00:00Z",
+                        "ultima_atualizacao": "2024-06-01T12:30:00Z"
+                    }
+                ]
+        return Response()
+    monkeypatch.setattr("httpx.AsyncClient.post", mock_post)
+    projects = asyncio.run(mcp_service.get_projects(email=email, empresa=empresa))
+    assert isinstance(projects, list)
+    assert projects[0]["nome_projeto"] == "ProjetoNovo"
+    assert projects[0]["project_id"] == "projeto-uuid-123"
+
+@pytest.mark.asyncio
+def test_get_report(monkeypatch):
+    # Testa método get_report do MCPClientService
+    mcp_service = MCPClientService(base_url="https://fake-mcp")
+    project_id = "projeto-uuid-123"
+    job_id = "job-uuid-456"
+    async def mock_post(*args, **kwargs):
+        assert args[1].endswith(f"/session/project/{project_id}/{job_id}/reports")
+        class Response:
+            status_code = 200
+            def json(self):
+                return {
+                    "report_data": {
+                        "features_report": [
+                            {"id": 101, "nome": "Login"},
+                            {"id": 102, "nome": "Cadastro"}
+                        ]
+                    },
+                    "job_id": job_id,
+                    "project_id": project_id
+                }
+        return Response()
+    monkeypatch.setattr("httpx.AsyncClient.post", mock_post)
+    report = asyncio.run(mcp_service.get_report(project_id=project_id, job_id=job_id))
+    assert "report_data" in report
+    assert report["job_id"] == job_id
+    assert report["project_id"] == project_id
