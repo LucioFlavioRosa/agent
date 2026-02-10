@@ -1,5 +1,5 @@
 from motor.motor_asyncio import AsyncIOMotorClient
-from backend.app.models.mongodb_models import User, Group, Project, ProjectMember
+from backend.app.models.permission_models import UserPermission, GroupPermission, ProjectPermission, ProjectMember
 from typing import Optional, List
 import os
 
@@ -10,19 +10,19 @@ class MongoDBService:
         self.client = AsyncIOMotorClient(self.mongo_uri)
         self.db = self.client[self.db_name]
 
-    async def get_user_by_email(self, email: str) -> Optional[User]:
+    async def get_user_by_email(self, email: str) -> Optional[UserPermission]:
         doc = await self.db.users.find_one({"email": email})
         if doc:
-            return User(**doc)
+            return UserPermission(**doc)
         return None
 
-    async def get_user_groups(self, user_id: str) -> List[Group]:
+    async def get_user_groups(self, user_id: str) -> List[GroupPermission]:
         user_doc = await self.db.users.find_one({"_id": user_id})
         if not user_doc or not user_doc.get("group_ids"):
             return []
         group_ids = user_doc["group_ids"]
         cursor = self.db.groups.find({"_id": {"$in": group_ids}})
-        groups = [Group(**doc) async for doc in cursor]
+        groups = [GroupPermission(**doc) async for doc in cursor]
         return groups
 
     async def get_group_allowed_agents(self, group_id: str) -> List[str]:
@@ -31,10 +31,13 @@ class MongoDBService:
             return group_doc["allowed_agents"]
         return []
 
-    async def get_project_by_id(self, project_id: str) -> Optional[Project]:
+    async def get_project_by_id(self, project_id: str) -> Optional[ProjectPermission]:
         doc = await self.db.projects.find_one({"_id": project_id})
         if doc:
-            return Project(**doc)
+            # Corrige membros para ProjectMember
+            members = [ProjectMember(**m) for m in doc.get("members", [])]
+            doc["members"] = members
+            return ProjectPermission(**doc)
         return None
 
     async def check_user_project_permission(self, user_id: str, project_id: str) -> Optional[str]:
