@@ -1,26 +1,46 @@
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
-from unittest.mock import patch
 
 @pytest.fixture(scope="module")
 def client():
     return TestClient(app)
 
-@pytest.fixture(autouse=True)
-def mock_key_vault_secrets(monkeypatch):
-    def secret_side_effect(secret_name):
-        if '-' in secret_name:
-            return f"mocked-{secret_name}-value"
-        elif '_' in secret_name:
-            return f"mocked-env-{secret_name}-value"
-        return f"mocked-{secret_name}-value"
-    with patch("backend.app.services.azure_secret_manager.AzureSecretManager.get_secret") as mock_get_secret:
-        mock_get_secret.side_effect = secret_side_effect
-        yield
+@pytest.mark.asyncio
+def test_auth_login_accepts_email_and_empresa(client):
+    # Testa que o endpoint /auth/login aceita email e empresa e retorna user_info corretamente
+    payload = {
+        "email": "user@example.com",
+        "empresa": "Peers"
+    }
+    response = client.post("/auth/login", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert "user_info" in data
+    assert data["user_info"]["email"] == payload["email"]
+    assert data["user_info"]["empresa"] == payload["empresa"]
+    assert "projects" in data
+    assert isinstance(data["projects"], list)
+
+@pytest.mark.asyncio
+def test_auth_login_missing_fields(client):
+    # Testa que falta de email ou empresa retorna erro
+    payload = {"email": "user@example.com"}
+    response = client.post("/auth/login", json=payload)
+    assert response.status_code == 400
+    assert "detail" in response.json()
+    payload = {"empresa": "Peers"}
+    response = client.post("/auth/login", json=payload)
+    assert response.status_code == 400
+    assert "detail" in response.json()
+    payload = {}
+    response = client.post("/auth/login", json=payload)
+    assert response.status_code == 400
+    assert "detail" in response.json()
 
 @pytest.mark.asyncio
 def test_auth_config_endpoint(client):
+    # Endpoint /auth/config pode ser mantido para compatibilidade, mas não depende mais de Azure AD
     response = client.get("/auth/config")
     assert response.status_code == 200
     data = response.json()
@@ -29,11 +49,3 @@ def test_auth_config_endpoint(client):
     assert "authority" in data
     assert "redirect_uri" in data
     assert "scope" in data
-
-@pytest.mark.asyncio
-def test_auth_without_key_vault_secrets(client):
-    with patch("backend.app.services.config_loader_service.ConfigLoaderService.load_secrets_from_key_vault") as mock_loader:
-        mock_loader.side_effect = Exception("Key Vault indisponível")
-        response = client.get("/auth/config")
-        assert response.status_code in (503, 500)
-        assert "detail" in response.json()
