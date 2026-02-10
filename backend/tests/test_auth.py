@@ -30,9 +30,6 @@ def test_auth_config_endpoint(client):
     assert "redirect_uri" in data
     assert "scope" in data
 
-# Testes de autenticação não verificam mais upload de arquivos nem enriquecimento de contexto.
-# O fluxo de análise agora apenas verifica autenticação e configuração, sem upload/enriquecimento.
-
 @pytest.mark.asyncio
 def test_auth_without_key_vault_secrets(client):
     with patch("backend.app.services.config_loader_service.ConfigLoaderService.load_secrets_from_key_vault") as mock_loader:
