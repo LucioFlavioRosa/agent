@@ -131,20 +131,7 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
-    def add_docx_file(self, project_id: str, blob_url: str):
-        key = f"project:{project_id}:resumo"
-        session_json = self.redis_client.get(key)
-        if session_json:
-            try:
-                session_data = self._deserialize_session(session_json)
-                session_data["docx_url"] = blob_url
-                session_data["ultima_atualizacao"] = datetime.utcnow().isoformat()
-                self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
-                self.logger.info(f"DOCX vinculado com sucesso ao projeto {project_id}")
-            except Exception as e:
-                self.logger.error(f"Erro ao atualizar sessão com DOCX no Redis: {e}")
-        else:
-            self.logger.warning(f"Tentativa de adicionar DOCX a uma sessão inexistente: {project_id}")
+    # Método add_docx_file removido.
 
     def create_report_state(self, project_id: str, report_type: str, state_data: Dict[str, Any]):
         key = f"project:{project_id}:report:{report_type}"
