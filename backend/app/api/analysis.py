@@ -1,20 +1,24 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 
-from backend.app.models.user_models import UserContext
 from backend.app.services.mcp_client_service import MCPClientService
+from backend.app.services.mcp_config_service import MCPConfigService
+from backend.app.services.permission_service import PermissionService
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
 
 class StartAnalysisRequest(BaseModel):
-    email: str
-    empresa: str
-    nome_projeto: str
-    analysis_type: str
+    email: Optional[str] = None
+    nome_projeto: Optional[str] = None
+    agent_name: Optional[str] = None
+    analysis_type: Optional[str] = None
+    branch: Optional[str] = None
+    repository: Optional[str] = None
     comentario_extra: Optional[str] = None
+    # arquivo_docx será tratado separadamente
 
 class StartAnalysisResponse(BaseModel):
     message: str
@@ -23,33 +27,68 @@ class StartAnalysisResponse(BaseModel):
     nome_projeto: Optional[str] = None
 
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
-async def start_analysis(request: StartAnalysisRequest):
-    logger.info(f"Iniciando análise para projeto '{request.nome_projeto}' (analysis_type: '{request.analysis_type}') para usuário {request.email} / empresa {request.empresa}")
+async def start_analysis(
+    email: Optional[str] = Form(None),
+    nome_projeto: Optional[str] = Form(None),
+    agent_name: Optional[str] = Form(None),
+    analysis_type: Optional[str] = Form(None),
+    branch: Optional[str] = Form(None),
+    repository: Optional[str] = Form(None),
+    comentario_extra: Optional[str] = Form(None),
+    arquivo_docx: Optional[UploadFile] = File(None)
+):
+    logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' (agent_name: '{agent_name}', analysis_type: '{analysis_type}') para usuário {email}")
 
     # Validação mínima dos campos obrigatórios
-    if not request.email or not request.empresa or not request.nome_projeto or not request.analysis_type:
-        raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes.")
+    if not nome_projeto or not agent_name:
+        raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes: nome_projeto, agent_name.")
+    if not email:
+        raise HTTPException(status_code=400, detail="Campo 'email' do usuário é obrigatório.")
 
-    # Monta payload para MCP
+    # 1. Verifica permissão do usuário para executar ação no projeto
+    try:
+        permission_result = await PermissionService.check_user_project_permission(email, nome_projeto, agent_name)
+        if not permission_result["authorized"]:
+            raise HTTPException(status_code=403, detail="Usuário não possui permissão para executar esta ação no projeto.")
+        project_id = permission_result["project_id"]
+    except Exception as e:
+        logger.error(f"Erro ao validar permissões: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
+
+    # 2. Busca mcp_service_url do agente
+    try:
+        mcp_cfg = MCPConfigService.get_agent_config(agent_name)
+        mcp_service_url = mcp_cfg.mcp_service_url
+        if not mcp_service_url:
+            raise HTTPException(status_code=500, detail=f"URL do MCP Service não configurada para agente '{agent_name}'.")
+    except Exception as e:
+        logger.error(f"Erro ao buscar configuração do agente: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao buscar configuração do agente MCP.")
+
+    # 3. Monta payload para MCP
+    job_id = await PermissionService.generate_job_id(project_id, agent_name)
     mcp_payload = {
-        "email": request.email,
-        "empresa": request.empresa,
-        "nome_projeto": request.nome_projeto,
-        "analysis_type": request.analysis_type,
-        "comentario_extra": request.comentario_extra
+        "email": email,
+        "nome_projeto": nome_projeto,
+        "agent_name": agent_name,
+        "analysis_type": analysis_type,
+        "branch": branch,
+        "repository": repository,
+        "comentario_extra": comentario_extra,
+        "project_id": project_id,
+        "job_id": job_id
     }
 
-    mcp_client = MCPClientService()
+    mcp_client = MCPClientService(base_url=mcp_service_url)
     try:
-        # Repassa o payload para MCP, sem processamento de arquivo DOCX ou enriquecimento
-        mcp_response = await mcp_client.start_analysis(mcp_payload)
+        mcp_response = await mcp_client.start_analysis(mcp_payload, arquivo_docx)
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
-        raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o servidor de Inteligência (MCP): {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o MCP Service: {str(e)}")
 
     return StartAnalysisResponse(
-        message="Análise solicitada com sucesso ao agente.",
-        project_id=getattr(mcp_response, "project_id", None),
-        job_id=getattr(mcp_response, "job_id", None),
-        nome_projeto=request.nome_projeto
+        message="Análise multiagente solicitada com sucesso ao MCP.",
+        project_id=project_id,
+        job_id=job_id,
+        nome_projeto=nome_projeto
     )

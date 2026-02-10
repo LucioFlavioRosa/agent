@@ -3,41 +3,49 @@
     "criacao_epicos_azure_devops": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-epicos-azure-devops.azurewebsites.net",
       "report_fields": ["epicos_report"]
     },
     "refinamento_epicos_azure_devops": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-epicos-refinamento.azurewebsites.net",
       "report_fields": ["epicos_report"]
     },
     "criacao_epicos_timeline": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-epicos-timeline.azurewebsites.net",
       "report_fields": ["epicos_timeline_report"]
     },
     "refinamento_epicos_timeline": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-epicos-timeline-refinamento.azurewebsites.net",
       "report_fields": ["epicos_timeline_report"]
     },
     "criacao_features_azure_devops": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-features-azure-devops.azurewebsites.net",
       "report_fields": ["features_report"]
     },
     "refinamento_features_azure_devops": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-features-refinamento.azurewebsites.net",
       "report_fields": ["features_report"]
     },
     "criacao_premissas_riscos": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-premissas-riscos.azurewebsites.net",
       "report_fields": ["premissas_riscos_report"]
     },
-     "refinamento_premissas_riscos": {
+    "refinamento_premissas_riscos": {
       "agent_name": "Planejamento",
       "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
+      "mcp_service_url": "https://mcp-premissas-riscos-refinamento.azurewebsites.net",
       "report_fields": ["premissas_riscos_report"]
     }
   }
