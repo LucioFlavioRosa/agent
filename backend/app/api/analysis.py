@@ -10,9 +10,6 @@ from ..middleware.auth_middleware import get_current_user, _extract_usuario_exec
 from ..services.mcp_client_service import MCPClientService
 from ..services.redis_session_service import RedisSessionService
 from ..services.project_state_service import ProjectStateService
-from ..services.blob_storage_service import upload_docx_to_blob
-from ..services.docx_parser_service import extract_text_from_docx
-from ..services.context_enrichment_service import ContextEnrichmentService
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
@@ -61,24 +58,11 @@ async def start_analysis(
         logger.error(f"Falha ao gerar ou recuperar project_id_final: '{project_id_final}'")
         raise HTTPException(status_code=500, detail="Falha ao gerar ou recuperar project_id do projeto.")
 
-    texto_extraido = None
-    blob_url = None
+    # Não processa arquivo_docx nem extrai texto, apenas repassa ao MCP
+    # Não faz upload para blob nem extrai texto
+    # Não faz enriquecimento de contexto
 
-    if arquivo_docx is not None:
-        try:
-            texto_extraido = await extract_text_from_docx(arquivo_docx)
-        except Exception as e:
-            logger.error(f"Erro ao extrair texto do docx: {e}")
-            raise HTTPException(status_code=400, detail=f"Erro ao extrair texto do docx: {str(e)}")
-        blob_folder = f"{usuario_executor}/{nome_projeto}/arquivos_recebidos/docx"
-        blob_filename = f"{analysis_type}/{arquivo_docx.filename}"
-        blob_url = await upload_docx_to_blob(
-            arquivo_docx,
-            blob_folder,
-            blob_filename,
-            background_tasks
-        )
-
+    # Criação de sessão no Redis: apenas metadados mínimos
     if project_state:
         redis_service.restore_session_from_state(
             usuario_executor,
@@ -110,45 +94,23 @@ async def start_analysis(
             nome_projeto,
             analysis_type,
             project_id=project_id_final,
-            extracted_text=texto_extraido,
             initial_state=resumo_state
         )
-        logger.info(f"Salvando novo estado no Blob Storage para {usuario_executor}, Projeto: {nome_projeto}, ID: {project_id_final}")
-        await ProjectStateService.save_state_to_blob(resumo_state)
+        logger.info(f"Sessão criada no Redis para {usuario_executor}, Projeto: {nome_projeto}, ID: {project_id_final}")
+        # Não salva estado no Blob Storage
 
-    if blob_url:
-        redis_service.add_docx_file(project_id_final, blob_url)
-
-    instrucoes_extras = comentario_extra
-    try:
-        instrucoes_extras_enriquecidas = await ContextEnrichmentService.enrich_instructions(
-            usuario_executor=usuario_executor,
-            nome_projeto=nome_projeto,
-            project_id=project_id_final,
-            analysis_type=analysis_type,
-            instrucoes_extras=instrucoes_extras
-        )
-        logger.debug(f"[ANALYSIS] instrucoes_extras_enriquecidas para MCP: '{instrucoes_extras_enriquecidas}'")
-        logger.debug(f"[ANALYSIS] Tamanho instrucoes_extras_enriquecidas: {len(instrucoes_extras_enriquecidas) if instrucoes_extras_enriquecidas else 0}")
-        logger.debug(f"[ANALYSIS] Preview instrucoes_extras_enriquecidas: '{instrucoes_extras_enriquecidas[:500] if instrucoes_extras_enriquecidas else ''}'")
-        logger.debug(f"[ANALYSIS] Preview comentario_extra original: '{comentario_extra[:500] if comentario_extra else ''}'")
-    except Exception as e:
-        logger.error(f"Erro ao enriquecer instrucoes_extras: {e}")
-        if analysis_type.startswith("refinamento_"):
-            raise HTTPException(status_code=500, detail=f"Erro ao enriquecer contexto/refinamento: {str(e)}")
-        instrucoes_extras_enriquecidas = instrucoes_extras
-
-    logger.debug(f"[ANALYSIS] MCP PAYLOAD instrucoes_extras_enriquecidas: '{instrucoes_extras_enriquecidas}'")
-
-    # Gera job_id e salva job no Redis antes de enviar ao MCP
+    # MCP Payload: repassa arquivo_docx e comentario_extra sem processamento
     job_id = redis_service.create_job(project_id_final, analysis_type)
 
     mcp_payload = {
         "project_id": project_id_final,
-        "texto_extraido_do_docx": texto_extraido,
-        "comentario_extra": instrucoes_extras_enriquecidas,
         "analysis_type": analysis_type,
-        "job_id": job_id
+        "job_id": job_id,
+        "nome_projeto": nome_projeto,
+        "usuario_executor": usuario_executor,
+        "comentario_extra": comentario_extra,
+        # O arquivo_docx será repassado como UploadFile (FastAPI) para o MCP
+        "arquivo_docx": arquivo_docx
     }
     logger.debug(f"[ANALYSIS] Payload enviado ao MCP: {mcp_payload}")
 
