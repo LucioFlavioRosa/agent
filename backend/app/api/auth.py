@@ -1,8 +1,11 @@
-from fastapi import APIRouter
-from backend.app.models.user_models import UserContext
+from fastapi import APIRouter, Body
 from pydantic import BaseModel
 
 router = APIRouter()
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    empresa: str
 
 class AuthLoginResponse(BaseModel):
     message: str
@@ -10,10 +13,10 @@ class AuthLoginResponse(BaseModel):
     empresa: str
 
 @router.post("/login", response_model=AuthLoginResponse, tags=["Auth"])
-def auth_login(user: UserContext):
-    # Não faz nenhuma validação de autenticação, apenas confirma recebimento
+def auth_login(request: AuthLoginRequest = Body(...)):
+    # Apenas confirma recebimento, sem validação de autenticação
     return AuthLoginResponse(
         message="Login recebido com sucesso.",
-        email=user.email,
-        empresa=user.empresa
+        email=request.email,
+        empresa=request.empresa
     )
