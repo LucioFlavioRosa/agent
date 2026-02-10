@@ -9,3 +9,4 @@ class ProjectListItem(BaseModel):
     last_saved_to_blob: Optional[datetime] = Field(None)
     project_id: Optional[str] = Field(default=None)
     job_id: Optional[str] = Field(default=None)
+    # Mantido para listar projetos, mesmo que os dados venham do MCP.

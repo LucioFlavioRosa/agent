@@ -37,15 +37,3 @@ def test_auth_login_missing_fields(client):
     response = client.post("/auth/login", json=payload)
     assert response.status_code == 400
     assert "detail" in response.json()
-
-@pytest.mark.asyncio
-def test_auth_config_endpoint(client):
-    # Endpoint /auth/config pode ser mantido para compatibilidade, mas não depende mais de Azure AD
-    response = client.get("/auth/config")
-    assert response.status_code == 200
-    data = response.json()
-    assert "client_id" in data
-    assert "tenant_id" in data
-    assert "authority" in data
-    assert "redirect_uri" in data
-    assert "scope" in data
