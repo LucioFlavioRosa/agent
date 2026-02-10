@@ -14,9 +14,11 @@ async def mcp_webhook(payload: dict, request: Request):
     report_data = payload.get("report_data")
     error_message = payload.get("error_message")
 
+    # Validação dos campos obrigatórios
     if not project_id or not job_id or not status_val:
         raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes: project_id, job_id, status.")
 
+    # Atualiza status do job no Redis
     redis_service.update_job_status(job_id, status_val)
 
     msg = f"Job {job_id} status: {status_val}"
