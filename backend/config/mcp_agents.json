@@ -1,52 +1,31 @@
 {
   "agents": {
-    "criacao_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-epicos-azure-devops.azurewebsites.net",
-      "report_fields": ["epicos_report"]
+    "agent_code_generation": {
+      "agent_name": "agent_code_generation",
+      "mcp_url": "https://mcp-code-gen.azurewebsites.net",
+      "mcp_service_url": "https://mcp-code-gen.azurewebsites.net/api/v1/analysis",
+      "report_fields": ["code_report"],
+      "report_mapping": {
+        "code_report": "Código Gerado"
+      }
     },
-    "refinamento_epicos_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-epicos-refinamento.azurewebsites.net",
-      "report_fields": ["epicos_report"]
+    "agent_refactoring": {
+      "agent_name": "agent_refactoring",
+      "mcp_url": "https://mcp-refactoring.azurewebsites.net",
+      "mcp_service_url": "https://mcp-refactoring.azurewebsites.net/api/v1/analysis",
+      "report_fields": ["refactor_report"],
+      "report_mapping": {
+        "refactor_report": "Refatoração"
+      }
     },
-    "criacao_epicos_timeline": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-epicos-timeline.azurewebsites.net",
-      "report_fields": ["epicos_timeline_report"]
-    },
-    "refinamento_epicos_timeline": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-epicos-timeline-refinamento.azurewebsites.net",
-      "report_fields": ["epicos_timeline_report"]
-    },
-    "criacao_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-features-azure-devops.azurewebsites.net",
-      "report_fields": ["features_report"]
-    },
-    "refinamento_features_azure_devops": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-features-refinamento.azurewebsites.net",
-      "report_fields": ["features_report"]
-    },
-    "criacao_premissas_riscos": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-premissas-riscos.azurewebsites.net",
-      "report_fields": ["premissas_riscos_report"]
-    },
-    "refinamento_premissas_riscos": {
-      "agent_name": "Planejamento",
-      "mcp_url": "https://app-codeai-backend-dev--mcp-mock-bec9fbcne2a6cgde.centralus-01.azurewebsites.net",
-      "mcp_service_url": "https://mcp-premissas-riscos-refinamento.azurewebsites.net",
-      "report_fields": ["premissas_riscos_report"]
+    "agent_unit_tests": {
+      "agent_name": "agent_unit_tests",
+      "mcp_url": "https://mcp-unit-tests.azurewebsites.net",
+      "mcp_service_url": "https://mcp-unit-tests.azurewebsites.net/api/v1/analysis",
+      "report_fields": ["unit_test_report"],
+      "report_mapping": {
+        "unit_test_report": "Testes Unitários"
+      }
     }
   }
 }
