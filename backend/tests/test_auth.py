@@ -9,23 +9,16 @@ def client():
 
 @pytest.fixture(autouse=True)
 def mock_key_vault_secrets(monkeypatch):
-    # Simula carregamento dos segredos do Key Vault antes dos testes
-    # No Key Vault, os nomes dos segredos DEVEM usar hífens (-), não underscores (_)
-    # Exemplo: 'azure-storage-connection-string' ao invés de 'AZURE_STORAGE_CONNECTION_STRING'
     def secret_side_effect(secret_name):
-        # Simula comportamento real do Key Vault: nomes com hífens
-        # Para testes, retorna valor mockado para ambos formatos
         if '-' in secret_name:
             return f"mocked-{secret_name}-value"
         elif '_' in secret_name:
-            # Simula fallback para variável local (não Key Vault)
             return f"mocked-env-{secret_name}-value"
         return f"mocked-{secret_name}-value"
     with patch("backend.app.services.azure_secret_manager.AzureSecretManager.get_secret") as mock_get_secret:
         mock_get_secret.side_effect = secret_side_effect
         yield
 
-# Exemplo de teste de autenticação
 @pytest.mark.asyncio
 def test_auth_config_endpoint(client):
     response = client.get("/auth/config")
@@ -37,16 +30,13 @@ def test_auth_config_endpoint(client):
     assert "redirect_uri" in data
     assert "scope" in data
 
-# Outros testes de autenticação podem ser adicionados aqui, usando o fixture mock_key_vault_secrets
+# Testes de autenticação não verificam mais upload de arquivos nem enriquecimento de contexto.
+# O fluxo de análise agora apenas verifica autenticação e configuração, sem upload/enriquecimento.
 
-# Novo teste para modo degradado
 @pytest.mark.asyncio
 def test_auth_without_key_vault_secrets(client):
-    # Simula falha no carregamento de segredos do Key Vault
     with patch("backend.app.services.config_loader_service.ConfigLoaderService.load_secrets_from_key_vault") as mock_loader:
         mock_loader.side_effect = Exception("Key Vault indisponível")
-        # O sistema deve entrar em modo degradado, endpoints críticos devem retornar erro 503
         response = client.get("/auth/config")
-        # O endpoint pode retornar 503 ou 500 dependendo da implementação
         assert response.status_code in (503, 500)
         assert "detail" in response.json()
