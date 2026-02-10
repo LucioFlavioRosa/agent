@@ -58,10 +58,6 @@ async def start_analysis(
         logger.error(f"Falha ao gerar ou recuperar project_id_final: '{project_id_final}'")
         raise HTTPException(status_code=500, detail="Falha ao gerar ou recuperar project_id do projeto.")
 
-    # Não processa arquivo_docx nem extrai texto, apenas repassa ao MCP
-    # Não faz upload para blob nem extrai texto
-    # Não faz enriquecimento de contexto
-
     # Criação de sessão no Redis: apenas metadados mínimos
     if project_state:
         redis_service.restore_session_from_state(
@@ -97,7 +93,6 @@ async def start_analysis(
             initial_state=resumo_state
         )
         logger.info(f"Sessão criada no Redis para {usuario_executor}, Projeto: {nome_projeto}, ID: {project_id_final}")
-        # Não salva estado no Blob Storage
 
     # MCP Payload: repassa arquivo_docx e comentario_extra sem processamento
     job_id = redis_service.create_job(project_id_final, analysis_type)
@@ -109,7 +104,6 @@ async def start_analysis(
         "nome_projeto": nome_projeto,
         "usuario_executor": usuario_executor,
         "comentario_extra": comentario_extra,
-        # O arquivo_docx será repassado como UploadFile (FastAPI) para o MCP
         "arquivo_docx": arquivo_docx
     }
     logger.debug(f"[ANALYSIS] Payload enviado ao MCP: {mcp_payload}")
