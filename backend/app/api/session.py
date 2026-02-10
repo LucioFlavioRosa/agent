@@ -15,25 +15,17 @@ async def get_project_reports(
     email: str = Query(..., description="Email do usuário"),
     empresa: str = Query(..., description="Empresa do usuário")
 ):
-    mcp_url = settings.MCP_SERVER_BASE_URL.rstrip("/") + f"/session/project/{project_id}/{job_id}/reports"
-    params = {
-        "email": email,
-        "empresa": empresa
-    }
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(mcp_url, params=params)
-            logger.info(f"MCP response [{response.status_code}]: {response.text}")
-            if response.status_code == 202:
-                return JSONResponse(
-                    content=response.json(),
-                    status_code=status.HTTP_202_ACCEPTED
-                )
-            elif response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"Erro MCP /session/project/{project_id}/{job_id}/reports: {response.status_code} {response.text}")
-                raise HTTPException(status_code=502, detail="Erro ao consultar MCP.")
-    except Exception as e:
-        logger.error(f"Falha ao consultar MCP /session/project/{project_id}/{job_id}/reports: {e}")
-        raise HTTPException(status_code=502, detail="Erro ao consultar MCP.")
+    redis_service = RedisSessionService()
+    report_data = redis_service.get_report_data_for_job(job_id)
+    if report_data:
+        return {
+            "report_data": report_data,
+            "job_id": job_id,
+            "project_id": project_id
+        }
+    else:
+        logger.info(f"Report data não encontrado para job_id {job_id}, retornando 202 (processando)")
+        return JSONResponse(
+            content={"status": "processing", "job_id": job_id, "project_id": project_id},
+            status_code=status.HTTP_202_ACCEPTED
+        )
