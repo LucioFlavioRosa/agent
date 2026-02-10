@@ -3,18 +3,30 @@ import httpx
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, validator
 from backend.app.core.config import settings
-from fastapi.encoders import jsonable_encoder
+from fastapi import UploadFile
 
 class MCPStartAnalysisPayload(BaseModel):
     project_id: str = Field(...)
-    texto_extraido_do_docx: Optional[str] = Field(None)
     comentario_extra: Optional[str] = Field(None)
     analysis_type: str = Field(...)
+    job_id: str = Field(...)
 
     @validator('analysis_type')
     def analysis_type_must_not_be_empty(cls, v):
         if not v or not isinstance(v, str) or not v.strip():
             raise ValueError('analysis_type deve ser uma string não vazia')
+        return v
+
+    @validator('project_id')
+    def project_id_must_not_be_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_id deve ser uma string não vazia')
+        return v
+
+    @validator('job_id')
+    def job_id_must_not_be_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('job_id deve ser uma string não vazia')
         return v
 
 class MCPStartAnalysisResponse(BaseModel):
@@ -36,31 +48,51 @@ class MCPClientService:
                 return agent_cfg.mcp_url.rstrip('/')
         return self.base_url
 
-    async def start_analysis(self, payload: dict) -> MCPStartAnalysisResponse:
+    async def start_analysis(self, payload: dict, arquivo_docx: Optional[UploadFile] = None) -> MCPStartAnalysisResponse:
         raw_base = self.get_mcp_endpoint(payload["analysis_type"])
         logging.info(f"🕵️ [DEBUG URL] Bruta vinda da env: '[{raw_base}]'")
         base = raw_base.strip().rstrip("/")
         url = f"{base}/start"
         logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
-        mcp_payload = {
+
+        # Monta dados para envio
+        data = {
             "project_id": payload["project_id"],
-            "texto_extraido_do_docx": payload.get("texto_extraido_do_docx"),
             "comentario_extra": payload.get("comentario_extra"),
             "analysis_type": payload["analysis_type"],
-            "job_id": payload.get("job_id")
+            "job_id": payload["job_id"]
         }
+
+        files = None
+        if arquivo_docx is not None:
+            try:
+                arquivo_docx.file.seek(0)
+                file_bytes = await arquivo_docx.read()
+            except Exception as e:
+                raise Exception(f"Erro ao ler arquivo DOCX: {str(e)}")
+            files = {
+                "arquivo_docx": (arquivo_docx.filename, file_bytes, arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            }
+
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    url,
-                    json=jsonable_encoder(mcp_payload),
-                    headers={"Content-Type": "application/json"}
-                )
+                if files:
+                    response = await client.post(
+                        url,
+                        data=data,
+                        files=files
+                    )
+                else:
+                    response = await client.post(
+                        url,
+                        json=data,
+                        headers={"Content-Type": "application/json"}
+                    )
                 if response.status_code != 200:
                     logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
                 response.raise_for_status()
-                data = response.json()
-                return MCPStartAnalysisResponse(project_id=data.get("project_id", payload["project_id"]))
+                data_resp = response.json()
+                return MCPStartAnalysisResponse(project_id=data_resp.get("project_id", payload["project_id"]))
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
         except Exception as exc:
