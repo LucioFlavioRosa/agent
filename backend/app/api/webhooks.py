@@ -4,7 +4,6 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, status, Request
 from backend.app.models.mcp_webhook_models import MCPWebhookPayload
 from backend.app.services.redis_session_service import RedisSessionService
-from backend.app.services.project_state_service import ProjectStateService
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
@@ -40,71 +39,25 @@ async def mcp_webhook(payload: MCPWebhookPayload, request: Request):
             # B. Atualiza Redis (Dados de Negócio)
             redis_service.update_report(payload.project_id, report_data)
             
-            # C. Prepara Dados Comuns
+            # C. Atualiza timestamps e job_id no Redis
+            session = redis_service.get_session_by_project_id(payload.project_id)
             agora_dt = datetime.utcnow()
             agora_iso = agora_dt.isoformat()
-            
-            # D. Recupera Sessão Completa para Salvar o Relatório
-            session = redis_service.get_session_by_project_id(payload.project_id)
-            
             if session:
-                # Atualiza Timestamps e Job ID no objeto principal
                 if hasattr(session, "ultima_atualizacao"): session.ultima_atualizacao = agora_dt
                 if hasattr(session, "last_saved_to_blob"): session.last_saved_to_blob = agora_dt
                 if hasattr(session, "last_job_id"): session.last_job_id = payload.job_id
-                
-                # Fallback Dict
                 if isinstance(session, dict):
                     session["ultima_atualizacao"] = agora_iso
                     session["last_saved_to_blob"] = agora_iso
                     session["last_job_id"] = payload.job_id
-
                 if hasattr(session, "project_id") and not session.project_id:
                     session.project_id = payload.project_id
-                
-                # 1º SAVE: Salva o Relatório Específico (ex: Epicos, Alocação)
-                await ProjectStateService.save_state_to_blob(session)
-                logger.info("Relatório específico salvo no Blob Storage.")
-                
-                # ==============================================================================
-                # E. NOVO PASSO: PREPARAÇÃO SEGURA DO RESUMO
-                # ==============================================================================
-                
-                # --- LÓGICA DE SEGURANÇA PARA ANALYSIS_TYPE ---
-                # Pega o tipo de análise da SESSÃO (Redis), que é garantido,
-                # em vez de pegar do payload (que pode falhar).
-                analise_tipo_seguro = getattr(session, "analysis_type", None)
-                
-                # Se for dict, tenta pegar pelas chaves
-                if not analise_tipo_seguro and isinstance(session, dict):
-                    analise_tipo_seguro = session.get("analysis_type") or session.get("ultima_analysis_type")
-                
-                # Último recurso: string padrão para não quebrar
-                if not analise_tipo_seguro:
-                    analise_tipo_seguro = "analise_desconhecida"
-                # -----------------------------------------------
+                # Atualiza o Redis com o novo estado
+                redis_service.redis_client.setex(f"project:{payload.project_id}:resumo", redis_service.session_ttl, json.dumps(session if isinstance(session, dict) else session.dict()))
+                logger.info("Resumo atualizado no Redis.")
 
-                resumo_update = {
-                    "usuario_executor": getattr(session, "usuario_executor", "") or session.get("usuario_executor"),
-                    "nome_projeto": getattr(session, "nome_projeto", "") or session.get("nome_projeto"),
-                    "project_id": payload.project_id,
-                    "last_job_id": payload.job_id,
-                    "ultima_analysis_type": analise_tipo_seguro, # <--- AQUI ESTÁ A CORREÇÃO
-                    "ultima_atualizacao": agora_iso,
-                    "last_saved_to_blob": agora_iso,
-                    "created_at": getattr(session, "created_at", agora_iso) if hasattr(session, "created_at") else session.get("created_at", agora_iso)
-                }
-                
-                # Conversão de datetime para string se necessário
-                if isinstance(resumo_update["created_at"], datetime):
-                    resumo_update["created_at"] = resumo_update["created_at"].isoformat()
-
-                # 2º SAVE: Salva o Resumo Atualizado
-                await ProjectStateService.save_state_to_blob(resumo_update)
-                logger.info(f"Arquivo de Resumo atualizado com last_job_id: {payload.job_id}")
-                # ==============================================================================
-
-            # F. FINALMENTE: Marca o Job como DONE
+            # D. Marca o Job como DONE
             redis_service.update_job_status(payload.job_id, "done")
             logger.info(f"Job {payload.job_id} finalizado e marcado como DONE no Redis.")
 
