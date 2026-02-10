@@ -112,53 +112,13 @@ class ProjectStateService:
                 project_id = state.get("project_id")
                 if not project_id:
                      project_id = validate_and_fix_project_id(state, usuario_executor, state.get("nome_projeto", ""))
-                
                 if nome_blob == nome_projeto_normalizado and project_id:
                     ProjectStateService._project_id_cache[cache_key] = project_id
                     return project_id
         return None
 
-    @staticmethod
-    async def save_state_to_blob(state_data: Any) -> str:
-        logger = logging.getLogger("ProjectStateService")
-        if hasattr(state_data, "dict"):
-            data = state_data.dict()
-        elif hasattr(state_data, "model_dump"):
-            data = state_data.model_dump()
-        elif isinstance(state_data, dict):
-            data = state_data
-        else:
-            data = state_data.__dict__
-        
-        usuario_executor = data.get("usuario_executor")
-        nome_projeto = data.get("nome_projeto")
-        
-        subfolder_map = {
-            "epicos_report": "epicos",
-            "epicos_timeline_report": "epicos_timeline",
-            "features_report": "features",
-            "alocacao_times_report": "alocacao_times",
-            "premissas_riscos_report": "premissas_riscos"
-        }
-        report_type = "resumo"
-        subfolder = "resumo"
-        for key, folder in subfolder_map.items():
-            if key in data and data[key]:
-                report_type = key
-                subfolder = folder
-                break
-        timestamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        filename = f"estado_{report_type}_{timestamp}.json"
-        blob_path = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/{filename}"
-        try:
-            _, container_client = _get_blob_clients()
-            blob_client = container_client.get_blob_client(blob_path)
-            json_data = json.dumps(data, default=str, ensure_ascii=False)
-            blob_client.upload_blob(json_data, overwrite=True)
-            return blob_client.url
-        except Exception as e:
-            logger.error(f"Erro ao salvar estado no blob: {str(e)}")
-            raise e
+    # Removido: save_state_to_blob
+    # O backend não deve mais salvar estados no Blob Storage.
 
     @staticmethod
     async def load_latest_state_from_blob(usuario_executor: str, project_id: Optional[str] = None, nome_projeto: Optional[str] = None, report_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -188,74 +148,49 @@ class ProjectStateService:
         for blob in blobs:
             if blob.name.endswith('.json') and file_prefix in blob.name:
                 blob_client = container_client.get_blob_client(blob.name)
-                # Download e parse
                 try:
                     state_bytes = blob_client.download_blob().readall()
                     state = json.loads(state_bytes.decode("utf-8"))
                 except Exception as e:
                     logger.warning(f"Erro ao ler JSON do blob {blob.name}: {e}")
                     continue
-
                 pid = state.get("project_id")
-                # Validação de Project ID (se necessário corrigir)
                 if not pid or not isinstance(pid, str) or not pid.strip():
                     pid = validate_and_fix_project_id(state, usuario_executor, state.get("nome_projeto", ""))
-
-                # 1. Lógica de FILTRO (Quem entra na lista de candidatos?)
                 match = False
                 if project_id:
                     if pid == project_id:
                         match = True
                 elif nome_projeto:
-                    # Se não tem ID, tenta pelo nome
                     nome_blob = ProjectStateService._normalize_nome_projeto(state.get("nome_projeto", ""))
                     nome_target = ProjectStateService._normalize_nome_projeto(nome_projeto)
                     if nome_blob == nome_target:
                         match = True
-                
                 if match:
                     states.append((blob, state))
-
-        # 2. Lógica de ORDENAÇÃO (Quem é o mais recente?)
         if states:
             def get_sort_key(item):
                 blob_obj, state_dict = item
-                
-                # PRIORIDADE 1: Timestamp no NOME DO ARQUIVO (A fonte mais confiável de "criação")
-                # Ex esperado: estado_epicos_20251213T231912Z.json
                 try:
-                    # Pega a última parte depois do "_" e remove a extensão
                     ts_str = blob_obj.name.split("_")[-1].replace(".json", "")
-                    # Tenta converter o formato ISO compactado
                     return datetime.datetime.strptime(ts_str, "%Y%m%dT%H%M%SZ")
                 except Exception:
-                    # Se o nome não seguir o padrão, passamos para a próxima tentativa
                     pass
-
-                # PRIORIDADE 2: Campo 'created_at' dentro do JSON
                 if state_dict.get("created_at"):
                     try:
                         return datetime.datetime.fromisoformat(state_dict.get("created_at"))
                     except:
                         pass
-                
-                # PRIORIDADE 3: Campo 'ultima_atualizacao' dentro do JSON
                 if state_dict.get("ultima_atualizacao"):
                     try:
                         return datetime.datetime.fromisoformat(state_dict.get("ultima_atualizacao"))
                     except:
                         pass
-
-                # Se tudo falhar, retorna data mínima para ir para o fim da fila
                 return datetime.datetime.min
-            
-            # Ordena do MAIOR (mais novo) para o MENOR (mais antigo)
             states_sorted = sorted(states, key=get_sort_key, reverse=True)
-            
             melhor_arquivo = states_sorted[0][0].name
             logger.info(f"[DEBUG] Estado mais recente selecionado: {melhor_arquivo} (Baseado na data de criação)")
             return states_sorted[0][1]
-
         logger.info(f"Nenhum estado válido encontrado para usuario_executor={usuario_executor}...")
         return None
 
@@ -263,22 +198,16 @@ class ProjectStateService:
     async def load_all_states_from_blob(usuario_executor: str, project_id: str) -> Dict[str, Any]:
         logger.info(f"Carregando estados para usuario={usuario_executor}, project_id={project_id}")
         _, container_client = _get_blob_clients()
-        
         def extract_timestamp_from_filename(blob_name: str) -> datetime.datetime:
             try:
                 ts_str = blob_name.split("_")[-1].replace(".json", "")
                 return datetime.datetime.strptime(ts_str, "%Y%m%dT%H%M%SZ")
             except Exception:
                 return datetime.datetime.min
-
-        # --- MUDANÇA 1: Prioridade para o ID do Resumo ---
         job_id_master = None 
-
-        # 1. Carregar Resumo
         prefix_resumo = f"{usuario_executor}/"
         blobs_resumo = list(container_client.list_blobs(name_starts_with=prefix_resumo))
         candidatos_resumo = []
-        
         for blob in blobs_resumo:
             if blob.name.endswith('.json') and "estado_resumo_" in blob.name:
                 blob_client = container_client.get_blob_client(blob.name)
@@ -287,27 +216,20 @@ class ProjectStateService:
                     state = json.loads(state_bytes.decode("utf-8"))
                     pid = state.get("project_id")
                     if not pid: pid = validate_and_fix_project_id(state, usuario_executor, state.get("nome_projeto", ""))
-                    
                     if pid == project_id:
                         candidatos_resumo.append((blob, state))
                 except:
                     continue
-
         resumo_state = None
         nome_projeto = None
-        
         if candidatos_resumo:
             candidatos_resumo.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
             resumo_state = candidatos_resumo[0][1]
             nome_projeto = resumo_state.get("nome_projeto")
-            
-            # O Resumo é a autoridade máxima sobre qual é o Job atual
             job_id_master = resumo_state.get("last_job_id") or resumo_state.get("job_id")
-            
             logger.info(f"[RESUMO] Arquivo recente: {candidatos_resumo[0][0].name} | Job ID Mestre: {job_id_master}")
         else:
             return {}
-
         states_dict = {
             "resumo": resumo_state,
             "epicos": None,
@@ -316,8 +238,6 @@ class ProjectStateService:
             "alocacao_times": None,
             "premissas_riscos": None
         }
-
-        # 2. Carregar outros relatórios
         if nome_projeto:
             subfolder_map = {
                 "epicos_report": "epicos",
@@ -333,14 +253,11 @@ class ProjectStateService:
                 "alocacao_times_report": "alocacao_times",
                 "premissas_riscos_report": "premissas_riscos"
             }
-
             for report_type, subfolder in subfolder_map.items():
                 prefix = f"{usuario_executor}/{nome_projeto}/estados/{subfolder}/"
                 file_prefix = f"estado_{report_type}_"
-                
                 blobs = list(container_client.list_blobs(name_starts_with=prefix))
                 candidatos_report = []
-                
                 for blob in blobs:
                     if blob.name.endswith('.json') and file_prefix in blob.name:
                         blob_client = container_client.get_blob_client(blob.name)
@@ -348,35 +265,42 @@ class ProjectStateService:
                         state = json.loads(state_bytes.decode("utf-8"))
                         if state.get("project_id") == project_id:
                             candidatos_report.append((blob, state))
-                
                 if candidatos_report:
                     candidatos_report.sort(key=lambda item: extract_timestamp_from_filename(item[0].name), reverse=True)
                     latest_state = candidatos_report[0][1]
-                    
-                    # --- MUDANÇA 2: NÃO SOBRESCREVER O MESTRE COM LIXO VELHO ---
-                    # Só pegamos o ID daqui se ainda não tivermos achado nada no resumo
                     id_local = latest_state.get("last_job_id") or latest_state.get("job_id")
                     if not job_id_master and id_local:
                         job_id_master = id_local
-
                     agora_iso = datetime.datetime.utcnow().isoformat()
                     if "ultima_atualizacao" not in latest_state: latest_state["ultima_atualizacao"] = agora_iso
-                    
                     chave_destino = key_map.get(report_type)
                     if chave_destino:
                         states_dict[chave_destino] = latest_state
-
-        # 3. CONSTRUÇÃO FINAL
         try:
             response_obj = EstadoCompletoProjetoResponse(**states_dict)
             final_dict = response_obj.dict()
         except Exception as e:
             logger.error(f"Erro Pydantic: {e}")
             final_dict = states_dict
-
-        # 4. INJEÇÃO SEGURA
         if job_id_master:
             final_dict["last_job_id"] = job_id_master
             logger.info(f"✅ last_job_id ({job_id_master}) injetado com sucesso.")
-        
         return final_dict
+
+    @staticmethod
+    async def get_report_state(project_id: str, report_type: str) -> Optional[Dict[str, Any]]:
+        logger = logging.getLogger("ProjectStateService")
+        _, container_client = _get_blob_clients()
+        blobs = list(container_client.list_blobs())
+        for blob in blobs:
+            if blob.name.endswith('.json') and f"estado_{report_type}_" in blob.name:
+                blob_client = container_client.get_blob_client(blob.name)
+                try:
+                    state_bytes = blob_client.download_blob().readall()
+                    state = json.loads(state_bytes.decode("utf-8"))
+                    if state.get("project_id") == project_id:
+                        return state
+                except Exception as e:
+                    logger.warning(f"Erro ao ler JSON do blob {blob.name}: {e}")
+                    continue
+        return None
