@@ -1,4 +1,5 @@
 import logging
+import uuid
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
@@ -55,18 +56,19 @@ async def start_analysis(
         logger.error(f"Erro ao validar permissões: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
-    # 2. Busca mcp_service_url do agente
-    try:
-        mcp_cfg = MCPConfigService.get_agent_config(agent_name)
-        mcp_service_url = mcp_cfg.mcp_service_url
-        if not mcp_service_url:
-            raise HTTPException(status_code=500, detail=f"URL do MCP Service não configurada para agente '{agent_name}'.")
-    except Exception as e:
-        logger.error(f"Erro ao buscar configuração do agente: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao buscar configuração do agente MCP.")
+    # 2. Busca configuração do agente via MCPConfigService
+    agent_cfg = MCPConfigService.get_agent_config(agent_name)
+    if not agent_cfg:
+        logger.error(f"Configuração do agente '{agent_name}' não encontrada.")
+        raise HTTPException(status_code=400, detail=f"Configuração do agente '{agent_name}' não encontrada.")
+    mcp_service_url = agent_cfg.mcp_service_url
+    if not mcp_service_url:
+        raise HTTPException(status_code=500, detail=f"URL do MCP Service não configurada para agente '{agent_name}'.")
 
-    # 3. Monta payload para MCP
-    job_id = await PermissionService.generate_job_id(project_id, agent_name)
+    # 3. Gera job_id único
+    job_id = str(uuid.uuid4())
+
+    # 4. Monta payload para MCP
     mcp_payload = {
         "email": email,
         "nome_projeto": nome_projeto,
@@ -81,7 +83,7 @@ async def start_analysis(
 
     mcp_client = MCPClientService(base_url=mcp_service_url)
     try:
-        mcp_response = await mcp_client.start_analysis(mcp_payload, arquivo_docx)
+        mcp_response = await mcp_client.start_analysis(mcp_payload, mcp_service_url, arquivo_docx)
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP: {e}")
         raise HTTPException(status_code=502, detail=f"Erro ao comunicar com o MCP Service: {str(e)}")
