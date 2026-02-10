@@ -48,3 +48,29 @@ class MongoDBService:
             if member["user_id"] == user_id:
                 return member.get("role")
         return None
+
+    async def get_user_projects_with_access(self, email: str) -> List[dict]:
+        user_doc = await self.db.users.find_one({"email": email})
+        if not user_doc:
+            return []
+        user_id = user_doc.get("_id")
+        cursor = self.db.projects.find({"members.email": email})
+        projects = []
+        async for project_doc in cursor:
+            project_id = str(project_doc.get("_id"))
+            project_name = project_doc.get("name")
+            description = project_doc.get("description")
+            created_at = project_doc.get("created_at")
+            role = None
+            for member in project_doc.get("members", []):
+                if member.get("email") == email:
+                    role = member.get("role")
+                    break
+            projects.append({
+                "project_id": project_id,
+                "project_name": project_name,
+                "role": role,
+                "description": description,
+                "created_at": created_at
+            })
+        return projects
