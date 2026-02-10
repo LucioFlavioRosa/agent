@@ -12,6 +12,8 @@
 | MCP_SERVER_BASE_URL             | URL base do MCP Server                                  | Sim         | -            | https://mcp-app-service.azurewebsites.net                    |
 | ALLOWED_IPS                     | Lista de IPs permitidos (separados por vírgula)         | Não         | 127.0.0.1    | 177.104.212.42,200.100.50.25                                 |
 | LOG_LEVEL                       | Nível de log (INFO, DEBUG, ERROR)                       | Não         | INFO         | INFO                                                         |
+| MONGODB_URI                     | URI de conexão com o MongoDB                            | Sim         | -            | mongodb://user:password@cluster.mongodb.net/dbname?retryWrites=true&w=majority |
+| MONGODB_DATABASE_NAME           | Nome do banco de dados MongoDB                          | Sim         | -            | peers_codeai_dev                                             |
 
 > **Importante:** O valor de `AZURE_STORAGE_CONNECTION_STRING` é carregado automaticamente do Key Vault `kv-codeai-azure-dev-usc` (segredo: `azure-storage-connection-string`). Não defina como variável de ambiente no App Service.
 
@@ -19,3 +21,15 @@
 
 > **Observação:** Segredos sensíveis devem ser criados no Key Vault usando nomes com hífens. O backend faz o mapeamento automaticamente.
 > **Observação:** Para ambientes com Azure Cache for Redis em subrede privada, é obrigatório configurar os segredos do Redis no Key Vault e garantir que o App Service esteja integrado à mesma VNET/subrede do Redis.
+
+## Exemplos de valores para MongoDB
+
+- MONGODB_URI: `mongodb://user:password@cluster.mongodb.net/dbname?retryWrites=true&w=majority`
+- MONGODB_DATABASE_NAME: `peers_codeai_dev`
+
+## Validações obrigatórias
+
+- `MONGODB_URI` e `MONGODB_DATABASE_NAME` são obrigatórios para o backend funcionar corretamente.
+- O backend deve validar a presença dessas variáveis no startup e emitir erro caso estejam ausentes.
+- O URI deve ser válido e permitir conexão segura (preferencialmente TLS/SSL).
+- O nome do banco deve corresponder ao banco utilizado para registros de usuários, grupos e projetos.
