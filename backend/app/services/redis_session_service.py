@@ -39,10 +39,12 @@ class RedisSessionService:
                 return None
         return None
 
-    def create_session(self, usuario_executor: str, nome_projeto: str, project_id: str) -> str:
+    def create_session(self, email: str, empresa: str, usuario_executor: str, nome_projeto: str, project_id: str) -> str:
         key = f"project:{project_id}:resumo"
         created_at = datetime.utcnow().isoformat()
         session_data = {
+            "email": email,
+            "empresa": empresa,
             "usuario_executor": usuario_executor,
             "nome_projeto": nome_projeto,
             "created_at": created_at,
@@ -51,7 +53,7 @@ class RedisSessionService:
         self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
-    def create_job(self, project_id: str, analysis_type: str) -> str:
+    def create_job(self, project_id: str, analysis_type: str, email: str = None, empresa: str = None) -> str:
         job_id = str(uuid.uuid4())
         now = datetime.utcnow()
         job = JobData(
@@ -63,7 +65,9 @@ class RedisSessionService:
             updated_at=now,
             request_timestamp=now,
             response_timestamp=None,
-            completed_at=None
+            completed_at=None,
+            email=email,
+            empresa=empresa
         )
         key = f"job:{job_id}"
         self.redis_client.setex(key, self.session_ttl, job.json())
@@ -101,83 +105,20 @@ class RedisSessionService:
         except Exception as e:
             self.logger.error(f"Erro ao atualizar status do job {job_id}: {e}")
 
-    def get_active_job_for_project(self, project_id: str) -> Optional[JobData]:
-        pattern = f"job:*"
-        job_keys = self.redis_client.keys(pattern)
-        jobs: List[JobData] = []
-        TOLERANCIA_MINUTOS = 10
-        for key in job_keys:
-            job_json = self.redis_client.get(key)
-            if not job_json:
-                continue
-            try:
-                data = json.loads(job_json)
-                if (
-                    data.get('project_id') == project_id and
-                    data.get('status') in ('pending', 'in_progress')
-                ):
-                    job = JobData(**data)
-                    updated_at = job.updated_at
-                    if isinstance(updated_at, str):
-                        updated_at = datetime.fromisoformat(updated_at)
-                    tempo_ocioso = (datetime.utcnow() - updated_at).total_seconds() / 60
-                    if tempo_ocioso > TOLERANCIA_MINUTOS:
-                        self.logger.warning(f"Ignorando Job Zumbi {job.job_id}: Ativo há {tempo_ocioso:.1f} min sem atualização.")
-                        continue
-                    jobs.append(job)
-            except Exception:
-                continue
-        if not jobs:
-            return None
-        jobs.sort(key=lambda j: j.request_timestamp if hasattr(j, 'request_timestamp') and j.request_timestamp else datetime.min, reverse=True)
-        return jobs[0]
+    def store_report_data_for_job(self, job_id: str, report_data: dict):
+        key = f"job:{job_id}:report"
+        try:
+            self.redis_client.setex(key, self.session_ttl, json.dumps(report_data))
+        except Exception as e:
+            self.logger.error(f"Erro ao armazenar report_data para job {job_id}: {e}")
 
-    def get_latest_done_job_for_project(self, project_id: str) -> Optional[JobData]:
-        pattern = f"job:*"
-        job_keys = self.redis_client.keys(pattern)
-        jobs: List[JobData] = []
-        for key in job_keys:
-            job_json = self.redis_client.get(key)
-            if not job_json:
-                continue
+    def get_report_data_for_job(self, job_id: str) -> Optional[dict]:
+        key = f"job:{job_id}:report"
+        report_json = self.redis_client.get(key)
+        if report_json:
             try:
-                data = json.loads(job_json)
-                if data.get('project_id') == project_id and data.get('status') == 'done':
-                    jobs.append(JobData(**data))
-            except Exception:
-                continue
-        if not jobs:
-            return None
-        jobs.sort(key=lambda j: j.response_timestamp if hasattr(j, 'response_timestamp') and j.response_timestamp else datetime.min, reverse=True)
-        return jobs[0]
-
-    def get_latest_completed_job_for_project(self, project_id: str) -> Optional[JobData]:
-        pattern = f"job:*"
-        job_keys = self.redis_client.keys(pattern)
-        jobs: List[JobData] = []
-        for key in job_keys:
-            job_json = self.redis_client.get(key)
-            if not job_json:
-                continue
-            try:
-                data = json.loads(job_json)
-                if data.get('project_id') == project_id and data.get('status') == 'done':
-                    jobs.append(JobData(**data))
-            except Exception:
-                continue
-        if not jobs:
-            return None
-        def sort_key(j):
-            if hasattr(j, 'completed_at') and j.completed_at:
-                try:
-                    return j.completed_at if isinstance(j.completed_at, datetime) else datetime.fromisoformat(str(j.completed_at))
-                except Exception:
-                    return datetime.min
-            elif hasattr(j, 'response_timestamp') and j.response_timestamp:
-                try:
-                    return j.response_timestamp if isinstance(j.response_timestamp, datetime) else datetime.fromisoformat(str(j.response_timestamp))
-                except Exception:
-                    return datetime.min
-            return datetime.min
-        jobs.sort(key=sort_key, reverse=True)
-        return jobs[0]
+                return json.loads(report_json)
+            except Exception as e:
+                self.logger.error(f"Erro ao desserializar report_data para job {job_id}: {e}")
+                return None
+        return None
