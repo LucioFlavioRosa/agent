@@ -16,7 +16,6 @@ from backend.app.api.analysis import router as analysis_router
 from backend.app.api.projects import router as projects_router
 from backend.app.api.session import router as session_router
 from backend.app.api.webhooks import router as webhooks_router
-from backend.app.middleware.auth_middleware import get_current_user
 
 load_dotenv(override=False)
 
@@ -29,30 +28,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
-SKIP_AUTH_FOR_TESTING = True
+# Removido SKIP_AUTH_FOR_TESTING e get_current_user: autenticação agora é feita pelo frontend
 
-def _create_mock_user(request: Request) -> dict:
-    test_user_header = request.headers.get("X-Test-User-Json")
-    if test_user_header:
-        try:
-            user_data = json.loads(test_user_header)
-            logging.info(f"🧪 [MOCK AUTH] Usando usuário dinâmico: {user_data.get('email')}")
-            return user_data
-        except json.JSONDecodeError:
-            logging.error("Erro ao decodificar X-Test-User-Json")
-    return {
-        "sub": "user-teste-id-123",
-        "usuario_executor": "dev_tester_local",
-        "name": "Desenvolvedor Teste",
-        "email": "dev@peers.com.br",
-        "roles": ["admin"]
-    }
-
-if SKIP_AUTH_FOR_TESTING:
-    async def mock_get_current_user(request: Request):
-        return _create_mock_user(request)
-    app.dependency_overrides[get_current_user] = mock_get_current_user
-    logging.warning("⚠️ ALERTA: MODO DE TESTE ATIVO. Autenticação via Header habilitada.")
+# IP Restriction Middleware permanece para segurança de infraestrutura
 
 def _extract_client_ip(request: Request) -> str:
     client_ip = request.client.host
@@ -129,12 +107,9 @@ def on_startup():
     setup_logging()
     logging.info("🚀 Iniciando Backend Peers CodeAI...")
     try:
+        # Carregar apenas segredos do Redis, não Azure AD ou Blob Storage
         ConfigLoaderService().load_secrets_from_key_vault()
-        conn_string = getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", None)
-        if not conn_string:
-            logging.warning("⚠️ AZURE_STORAGE_CONNECTION_STRING não encontrado. O Upload vai falhar se tentado.")
-        else:
-            logging.info("✅ Segredos carregados com sucesso.")
+        # Removido: validação de AZURE_STORAGE_CONNECTION_STRING
         validator = StartupValidator()
         validator.validate_redis_connection()
         if validator.status_report.get('redis', {}).get('status') != 'ok':
