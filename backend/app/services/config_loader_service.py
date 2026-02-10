@@ -12,29 +12,19 @@ logger = logging.getLogger("ConfigLoaderService")
 class ConfigLoaderService:
     _secret_cache = {}
     _vault_map = {
-        'azure': 'kv-codeai-azure-dev-usc',
-        'devops': 'kv-codeai-devops-dev-usc',
-        'github': 'kv-codeai-github-dev-usc',
-        'llm': 'kv-codeai-llm-dev-usc'
+        'azure': 'kv-codeai-azure-dev-usc'
     }
     _secrets_by_vault = {
         'azure': [
-            'azure-ad-client-secret',
-            'jwt-secret-key',
             'redis-host',
             'redis-port',
             'redis-password',
             'redis-db',
             'redis-use-ssl',
             'redis-ssl-cert-reqs'
-        ],
-        'devops': [],
-        'github': [],
-        'llm': []
+        ]
     }
     _secret_name_to_settings_attr = {
-        'azure-ad-client-secret': 'AZURE_AD_CLIENT_SECRET',
-        'jwt-secret-key': 'JWT_SECRET_KEY',
         'redis-host': 'REDIS_HOST',
         'redis-port': 'REDIS_PORT',
         'redis-password': 'REDIS_PASSWORD',
