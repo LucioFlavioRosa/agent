@@ -11,3 +11,5 @@ pydantic-settings
 requests
 azure-keyvault-secrets>=4.7.0
 redis>=4.5.0  # Necessário para suporte SSL/TLS ao conectar ao Azure Cache for Redis via endpoint privado em subrede
+motor>=3.3.0
+pymongo>=4.5.0
