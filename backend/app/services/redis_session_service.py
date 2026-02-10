@@ -128,3 +128,13 @@ class RedisSessionService:
                 self.logger.error(f"Erro ao desserializar report_data para job {job_id}: {e}")
                 return None
         return None
+
+    def store_error_message_for_job(self, job_id: str, error_message: str):
+        """
+        Armazena uma mensagem de erro associada ao job_id.
+        """
+        key = f"job:{job_id}:error"
+        try:
+            self.redis_client.setex(key, self.session_ttl, json.dumps({"error_message": error_message}))
+        except Exception as e:
+            self.logger.error(f"Erro ao armazenar error_message para job {job_id}: {e}")
