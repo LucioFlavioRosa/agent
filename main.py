@@ -10,12 +10,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend.app.services.config_loader_service import ConfigLoaderService
 from backend.app.core.config import settings
-from backend.app.services.startup_validator import StartupValidator
 from backend.app.api.auth import router as auth_router
 from backend.app.api.analysis import router as analysis_router
 from backend.app.api.projects import router as projects_router
 from backend.app.api.session import router as session_router
 from backend.app.api.webhooks import router as webhooks_router
+from backend.app.services.mongodb_service import MongoDBService
 
 load_dotenv(override=False)
 
@@ -27,8 +27,6 @@ app = FastAPI(
     description="Backend para orquestração de Agentes AI e Azure", 
     version="1.0.0"
 )
-
-# Removido SKIP_AUTH_FOR_TESTING e get_current_user: autenticação agora é feita pelo frontend
 
 # IP Restriction Middleware permanece para segurança de infraestrutura
 
@@ -106,13 +104,22 @@ def setup_logging():
 def on_startup():
     setup_logging()
     logging.info("🚀 Iniciando Backend Peers CodeAI...")
+    # Validação das variáveis de ambiente obrigatórias para MongoDB
+    mongo_uri = os.environ.get("MONGODB_URI") or getattr(settings, "MONGODB_URI", None)
+    mongo_db_name = os.environ.get("MONGODB_DATABASE_NAME") or getattr(settings, "MONGODB_DATABASE_NAME", None)
+    if not mongo_uri or not mongo_db_name:
+        logging.critical("Variáveis obrigatórias do MongoDB ausentes: MONGODB_URI e/ou MONGODB_DATABASE_NAME.")
+        raise RuntimeError("Variáveis obrigatórias do MongoDB ausentes: MONGODB_URI e/ou MONGODB_DATABASE_NAME.")
     try:
-        # Carregar apenas segredos do Redis, não Azure AD ou Blob Storage
+        # Inicializa MongoDBService globalmente
+        app.state.mongo_service = MongoDBService(uri=mongo_uri, db_name=mongo_db_name)
+        logging.info("MongoDBService inicializado com sucesso.")
+    except Exception as e:
+        logging.critical(f"Erro ao inicializar MongoDBService: {str(e)}")
+        raise
+    try:
+        # Carrega segredos gerais (exceto Azure AD e Blob Storage)
         ConfigLoaderService().load_secrets_from_key_vault()
-        # Removido: validação de AZURE_STORAGE_CONNECTION_STRING
-        validator = StartupValidator()
-        validator.validate_redis_connection()
-        if validator.status_report.get('redis', {}).get('status') != 'ok':
-            logging.critical(f"Erro crítico Redis: {validator.status_report['redis']['detail']}")
+        logging.info("ConfigLoaderService: Segredos carregados com sucesso.")
     except Exception as e:
         logging.error(f"⚠️ Aviso de Startup: {str(e)}")

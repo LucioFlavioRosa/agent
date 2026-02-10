@@ -42,6 +42,7 @@ class MCPClientService:
             "email": payload.get("email"),
             "nome_projeto": payload.get("nome_projeto"),
             "agent_name": payload.get("agent_name"),
+            "analysis_type": payload.get("analysis_type"),
             "branch": payload.get("branch"),
             "repository": payload.get("repository"),
             "comentario_extra": payload.get("comentario_extra"),
@@ -70,7 +71,7 @@ class MCPClientService:
                     )
                 if response.status_code != 200:
                     logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
-                response.raise_for_status()
+                    raise Exception(f"Erro ao comunicar com MCP Server: {response.status_code} - {response.text}")
                 data_resp = response.json()
                 return MCPStartAnalysisResponse(
                     project_id=data_resp.get("project_id", payload.get("project_id")),
