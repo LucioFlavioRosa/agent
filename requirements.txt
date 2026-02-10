@@ -4,14 +4,10 @@ uvicorn==0.38.0
 starlette==0.47.2
 
 PyJWT
-python-docx
-azure-storage-blob
 httpx
 python-multipart
 azure-identity>=1.12.0
 pydantic-settings
-python-jose[cryptography]
-msal
 requests
 azure-keyvault-secrets>=4.7.0
 redis>=4.5.0  # Necessário para suporte SSL/TLS ao conectar ao Azure Cache for Redis via endpoint privado em subrede
