@@ -77,3 +77,37 @@ class MCPClientService:
         except Exception as exc:
             logging.error(f"❌ [MCP Client] Falha ao chamar [{url}]: {str(exc)}", exc_info=True)
             raise Exception(f"Erro inesperado ao comunicar com MCP Server: {str(exc)}")
+
+    async def get_projects(self, email: str, empresa: str, mcp_url: str) -> Any:
+        """
+        Busca projetos do usuário no MCP.
+        O backend apenas repassa email e empresa, não faz validação nem processamento.
+        """
+        url = f"{mcp_url.rstrip('/')}/projects/list"
+        payload = {
+            "email": email,
+            "empresa": empresa
+        }
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                return response.json()
+        except Exception as exc:
+            logging.error(f"Erro ao buscar projetos do MCP: {str(exc)}")
+            raise Exception(f"Erro ao buscar projetos do MCP: {str(exc)}")
+
+    async def get_report(self, project_id: str, job_id: str, mcp_url: str) -> Any:
+        """
+        Busca relatório do MCP para o job e projeto especificados.
+        O backend apenas repassa os parâmetros, não faz validação nem processamento.
+        """
+        url = f"{mcp_url.rstrip('/')}/project/{project_id}/{job_id}/reports"
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                return response.json()
+        except Exception as exc:
+            logging.error(f"Erro ao buscar relatório do MCP: {str(exc)}")
+            raise Exception(f"Erro ao buscar relatório do MCP: {str(exc)}")
