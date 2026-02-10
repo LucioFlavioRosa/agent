@@ -1,7 +1,7 @@
 import logging
 import httpx
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 from backend.app.core.config import settings
 from fastapi import UploadFile
 
@@ -10,24 +10,7 @@ class MCPStartAnalysisPayload(BaseModel):
     comentario_extra: Optional[str] = Field(None)
     analysis_type: str = Field(...)
     job_id: str = Field(...)
-
-    @validator('analysis_type')
-    def analysis_type_must_not_be_empty(cls, v):
-        if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('analysis_type deve ser uma string não vazia')
-        return v
-
-    @validator('project_id')
-    def project_id_must_not_be_empty(cls, v):
-        if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('project_id deve ser uma string não vazia')
-        return v
-
-    @validator('job_id')
-    def job_id_must_not_be_empty(cls, v):
-        if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('job_id deve ser uma string não vazia')
-        return v
+    # arquivo_docx não é processado, apenas repassado
 
 class MCPStartAnalysisResponse(BaseModel):
     project_id: str
@@ -65,13 +48,9 @@ class MCPClientService:
 
         files = None
         if arquivo_docx is not None:
-            try:
-                arquivo_docx.file.seek(0)
-                file_bytes = await arquivo_docx.read()
-            except Exception as e:
-                raise Exception(f"Erro ao ler arquivo DOCX: {str(e)}")
+            # Não processa nem lê o arquivo, apenas repassa como multipart
             files = {
-                "arquivo_docx": (arquivo_docx.filename, file_bytes, arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                "arquivo_docx": (arquivo_docx.filename, arquivo_docx.file, arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
             }
 
         try:
