@@ -3,9 +3,10 @@
 ## 1. Pré-requisitos de Infraestrutura Azure
 - Azure App Service (Web App for Linux)
 - Azure Key Vault(s) (ex: kv-codeai-azure-dev-usc, kv-codeai-devops-dev-usc, etc.)
-- Azure Blob Storage Account (ex: codeai-storage)
 - Azure Cache for Redis
 - Azure AD (para autenticação)
+
+> **Nota Importante:** A partir de junho de 2024, o Backend NÃO é mais responsável por salvar ou ler arquivos do Blob Storage. Toda a lógica de persistência, leitura e extração de arquivos (incluindo DOCX) foi migrada para o MCP correspondente. O Backend apenas gerencia autenticação, permissões (futuro via MongoDB) e cache de jobs no Redis.
 
 ## 2. Configuração de Variáveis de Ambiente no App Service
 No portal do Azure, acesse seu App Service > Configurações > Configurações de Aplicativo. Adicione as variáveis conforme `backend/docs/ENVIRONMENT_VARIABLES.md`.
@@ -18,19 +19,7 @@ No portal do Azure, acesse seu App Service > Configurações > Configurações d
   - `LLM_KV_URL=https://kv-codeai-llm-dev-usc.vault.azure.net/`
 - O backend irá consultar cada Key Vault conforme o tipo de segredo (veja `KEY_VAULT_SECRETS_MAPPING.md`).
 
-## 4. Como Salvar a String de Conexão do Blob Storage no Key Vault
-- No Azure Portal ou CLI, crie o segredo no Key Vault principal:
-  - Nome do segredo: `azure-storage-connection-string` (use hífens)
-  - Valor: string de conexão do Blob Storage (obtida no portal do Storage Account)
-- O backend buscará este valor automaticamente via Managed Identity.
-- **Importante:** O segredo `AZURE_STORAGE_CONNECTION_STRING` deve estar no Key Vault `kv-codeai-azure-dev-usc` com o nome `azure-storage-connection-string`. Não defina como variável de ambiente no App Service.
-- Exemplo de comando Azure CLI:
-
-sh
-az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-storage-connection-string --value "<sua-string-de-conexao>"
-
-
-## 5. Configuração da Conexão com o Cache Redis
+## 4. Configuração da Conexão com o Cache Redis
 - Os segredos do Redis **NÃO** devem ser definidos como variáveis de ambiente no App Service.
 - No portal do Azure, acesse seu Redis Cache e copie:
   - Host: `REDIS_HOST` (crie como segredo `redis-host` no Key Vault)
@@ -43,12 +32,11 @@ az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-storage
 - O backend irá carregar automaticamente esses valores do Key Vault via Managed Identity.
 - Para ambientes com Redis em subrede privada, utilize o endpoint privado do Redis. O App Service deve estar integrado à mesma VNET/subrede do Redis (VNET Integration).
 
-## 6. Managed Identity Setup
+## 5. Managed Identity Setup
 - No App Service, habilite "Identidade Gerenciada" (System-assigned).
 - Dê permissão de "Get" e "List" nos Key Vaults para esta identidade.
-- Dê permissão de "Storage Blob Data Contributor" no Storage Account.
 
-## 7. Passo a Passo para Deploy
+## 6. Passo a Passo para Deploy
 1. Crie todos os recursos Azure necessários.
 2. Configure as variáveis de ambiente no App Service.
 3. Crie os segredos nos Key Vaults (veja `KEY_VAULT_SECRETS_MAPPING.md`).
@@ -58,6 +46,12 @@ az keyvault secret set --vault-name kv-codeai-azure-dev-usc --name azure-storage
 7. Reinicie o App Service.
 8. Teste conectividade usando o endpoint `/health/infrastructure`.
 
-## 8. Testando o Backend
+## 7. Testando o Backend
 - Use os exemplos de payload em `API_PAYLOAD_EXAMPLES.md` para testar os endpoints.
 - Para autenticação, obtenha um token Azure AD (MSAL.js, Postman, ou Azure Portal).
+
+---
+
+### Mudanças de responsabilidade:
+- **Blob Storage:** Toda a lógica de persistência, leitura e extração de arquivos (incluindo DOCX) foi migrada para o MCP correspondente. O Backend NÃO salva nem lê arquivos do Blob Storage.
+- **Backend:** Gerencia autenticação, permissões (futuro via MongoDB) e cache de jobs no Redis. Apenas repassa as requisições para o MCP e retorna as respostas ao frontend, sem processar ou validar relatórios.

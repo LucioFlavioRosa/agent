@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Dict, Optional
+from typing import Optional
 from backend.app.services.azure_secret_manager import AzureSecretManager, VaultType
 import logging
 import os
@@ -13,26 +13,19 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     
-    # --- Azure Resources ---
-    AZURE_STORAGE_CONNECTION_STRING: str = ""
-    AZURE_STORAGE_CONTAINER_NAME: str = ""
-    
+    # --- Azure AD ---
     AZURE_AD_TENANT_ID: str = ""
     AZURE_AD_CLIENT_ID: str = ""
     AZURE_AD_CLIENT_SECRET: str = ""
-    
     AZURE_AD_JWKS_URI: Optional[str] = None
     AZURE_AD_ISSUER: Optional[str] = None
     AZURE_AD_AUDIENCE: Optional[str] = None
 
-    # --- MCP CONFIGURATION (A Mágica acontece aqui) ---
+    # --- MCP CONFIGURATION ---
     MCP_SERVER_BASE_URL: str = "" 
     MCP_URL_EPICOS: Optional[str] = None
     MCP_URL_FEATURES: Optional[str] = None
     MCP_URL_TECH_DEBT: Optional[str] = None
-
-    # 3. O Mapa (removido o dicionário hardcoded)
-    # MCP_ENDPOINTS: Dict[str, str] = {}
 
     # --- Redis ---
     REDIS_HOST: Optional[str] = None
@@ -49,7 +42,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
-        extra = "ignore"  # Permite variáveis extras no .env sem dar erro
+        extra = "ignore"
 
     def __init__(self, **values):
         super().__init__(**values)
@@ -70,8 +63,6 @@ class Settings(BaseSettings):
     def _log_missing_sensitive_fields(self):
         logger = logging.getLogger("Settings")
         sensitive_fields = [
-            "AZURE_STORAGE_CONNECTION_STRING",
-            "AZURE_STORAGE_CONTAINER_NAME",
             "AZURE_AD_CLIENT_SECRET",
             "JWT_SECRET_KEY",
             "MCP_SERVER_BASE_URL",
@@ -92,8 +83,6 @@ class Settings(BaseSettings):
 
     def validate_required_fields(self):
         required_fields = [
-            "AZURE_STORAGE_CONNECTION_STRING",
-            "AZURE_STORAGE_CONTAINER_NAME",
             "AZURE_AD_CLIENT_SECRET",
             "JWT_SECRET_KEY",
             "MCP_SERVER_BASE_URL",

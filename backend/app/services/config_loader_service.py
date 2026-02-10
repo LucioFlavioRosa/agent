@@ -20,8 +20,6 @@ class ConfigLoaderService:
     _secrets_by_vault = {
         'azure': [
             'azure-ad-client-secret',
-            'azure-storage-connection-string',
-            'azure-storage-container-name',
             'jwt-secret-key',
             'redis-host',
             'redis-port',
@@ -36,8 +34,6 @@ class ConfigLoaderService:
     }
     _secret_name_to_settings_attr = {
         'azure-ad-client-secret': 'AZURE_AD_CLIENT_SECRET',
-        'azure-storage-connection-string': 'AZURE_STORAGE_CONNECTION_STRING',
-        'azure-storage-container-name': 'AZURE_STORAGE_CONTAINER_NAME',
         'jwt-secret-key': 'JWT_SECRET_KEY',
         'redis-host': 'REDIS_HOST',
         'redis-port': 'REDIS_PORT',
