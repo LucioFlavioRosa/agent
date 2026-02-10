@@ -132,12 +132,3 @@ async def save_project_state(project_id: str):
         return {"blob_url": url, "project_id": session.project_id, "nome_projeto": session.nome_projeto}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao salvar estado: {e}")
-
-@router.get("/project/{project_id}/docx-files")
-def get_project_docx_files(project_id: str):
-    redis_service = RedisSessionService()
-    try:
-        session = redis_service.get_session_by_project_id(project_id)
-        return {"docx_files": session.docx_files, "project_id": session.project_id, "nome_projeto": session.nome_projeto}
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Projeto não encontrado: {e}")
