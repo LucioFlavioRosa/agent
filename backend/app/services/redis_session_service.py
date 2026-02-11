@@ -85,6 +85,15 @@ class RedisSessionService:
                 return None
         return None
 
+    def _update_timestamps(self, data: dict, status: str):
+        data['status'] = status
+        data['updated_at'] = datetime.utcnow().isoformat()
+        if status == 'done':
+            now_iso = datetime.utcnow().isoformat()
+            data['response_timestamp'] = now_iso
+            if not data.get('completed_at'):
+                data['completed_at'] = now_iso
+
     def update_job_status(self, job_id: str, status: str):
         key = f"job:{job_id}"
         job_json = self.redis_client.get(key)
@@ -93,14 +102,7 @@ class RedisSessionService:
             return
         try:
             data = json.loads(job_json)
-            previous_status = data.get('status')
-            data['status'] = status
-            data['updated_at'] = datetime.utcnow().isoformat()
-            if status == 'done':
-                now_iso = datetime.utcnow().isoformat()
-                data['response_timestamp'] = now_iso
-                if not data.get('completed_at'):
-                    data['completed_at'] = now_iso
+            self._update_timestamps(data, status)
             self.redis_client.setex(key, self.session_ttl, json.dumps(data))
         except Exception as e:
             self.logger.error(f"Erro ao atualizar status do job {job_id}: {e}")
