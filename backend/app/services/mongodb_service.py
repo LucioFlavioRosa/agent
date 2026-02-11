@@ -104,3 +104,25 @@ class MongoDBService:
             {"$set": {"members": members}}
         )
         return result.modified_count > 0
+
+    async def create_project(self, project_id: str, nome_projeto: str, company_id: str, email: str, user_id: str) -> bool:
+        now = datetime.utcnow()
+        project_doc = {
+            "_id": project_id,
+            "name": nome_projeto,
+            "description": None,
+            "company_id": company_id,
+            "blob_path": None,
+            "members": [
+                {
+                    "user_id": user_id,
+                    "email": email,
+                    "role": "owner",
+                    "added_at": now.isoformat()
+                }
+            ],
+            "created_at": now,
+            "updated_at": now
+        }
+        result = await self.db.projects.insert_one(project_doc)
+        return result.acknowledged
