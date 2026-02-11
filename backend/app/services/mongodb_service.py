@@ -3,6 +3,7 @@ from backend.app.models.permission_models import UserPermission, GroupPermission
 from typing import Optional, List
 import os
 from datetime import datetime
+import uuid
 
 class MongoDBService:
     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
@@ -104,3 +105,33 @@ class MongoDBService:
             {"$set": {"members": members}}
         )
         return result.modified_count > 0
+
+    async def get_project_by_normalized_name(self, nome_projeto: str, company_id: str) -> Optional[ProjectPermission]:
+        nome_projeto_normalizado = nome_projeto.lower().strip()
+        doc = await self.db.projects.find_one({"name_normalized": nome_projeto_normalizado, "company_id": company_id})
+        if doc:
+            members = [ProjectMember(**m) for m in doc.get("members", [])]
+            doc["members"] = members
+            return ProjectPermission(**doc)
+        return None
+
+    async def create_project(self, project_data: dict) -> str:
+        project_id = str(uuid.uuid4())
+        nome_projeto = project_data.get("name")
+        name_normalized = nome_projeto.lower().strip() if nome_projeto else ""
+        description = project_data.get("description")
+        company_id = project_data.get("company_id")
+        members = project_data.get("members", [])
+        now = datetime.utcnow()
+        doc = {
+            "_id": project_id,
+            "name": nome_projeto,
+            "name_normalized": name_normalized,
+            "description": description,
+            "company_id": company_id,
+            "members": members,
+            "created_at": now,
+            "updated_at": now
+        }
+        await self.db.projects.insert_one(doc)
+        return project_id
