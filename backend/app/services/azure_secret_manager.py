@@ -33,7 +33,12 @@ class AzureSecretManager:
                 raise ValueError(f"Segredo '{secret_name}' está vazio no Key Vault '{self._key_vault_url}'.")
             return secret.value
         except Exception as e:
-            raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}': {e}") from e
+            error_msg = str(e)
+            if '404' in error_msg or 'not found' in error_msg.lower():
+                logger.error(f"[KeyVault] Segredo '{secret_name}' NÃO encontrado no Key Vault (404). Verifique se o nome está correto (exemplo: 'mongodb-uri', 'redis-host').")
+            else:
+                logger.error(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}': {error_msg}")
+            raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}': {error_msg}") from e
 
     def list_secret_names(self):
         secret_client = self._get_secret_client()
