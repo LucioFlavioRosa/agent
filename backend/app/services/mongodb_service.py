@@ -35,7 +35,6 @@ class MongoDBService:
     async def get_project_by_id(self, project_id: str) -> Optional[ProjectPermission]:
         doc = await self.db.projects.find_one({"_id": project_id})
         if doc:
-            # Corrige membros para ProjectMember
             members = [ProjectMember(**m) for m in doc.get("members", [])]
             doc["members"] = members
             return ProjectPermission(**doc)
@@ -76,7 +75,6 @@ class MongoDBService:
             })
         return projects
 
-    # NOVOS MÉTODOS PARA GERENCIAMENTO DE PROJETOS/MEMBROS
     async def get_projects_where_user_is_owner(self, email: str) -> List[dict]:
         cursor = self.db.projects.find({"members": {"$elemMatch": {"email": email, "role": "owner"}}})
         projects = []
