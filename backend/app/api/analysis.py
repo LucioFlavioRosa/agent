@@ -119,7 +119,7 @@ async def start_analysis(
     # 3. Gera job_id único
     job_id = str(uuid.uuid4())
 
-    # 4. Monta payload para MCP
+    # 4. Monta payload para MCP, incluindo job_id explicitamente
     mcp_payload = {
         "email": email,
         "nome_projeto": nome_projeto,
