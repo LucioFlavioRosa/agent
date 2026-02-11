@@ -13,6 +13,10 @@ from datetime import datetime
 
 router = APIRouter()
 
+async def verify_user_is_owner(email: str, project_id: str, mongo_service: MongoDBService) -> bool:
+    owner_projects = await mongo_service.get_projects_where_user_is_owner(email, company_id=getattr(await mongo_service.get_user_by_email(email), "company_id", None))
+    return any(p["project_id"] == project_id for p in owner_projects)
+
 @router.get("/projects/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
 async def list_owned_projects(email: str = Query(..., description="Email do usuário owner")):
     mongo_service = MongoDBService()
@@ -43,8 +47,7 @@ async def add_project_member(
     company_id = getattr(user, "company_id", None)
     if not company_id:
         return AddProjectMemberResponse(success=False, message="Usuário solicitante não possui company_id.")
-    owner_projects = await mongo_service.get_projects_where_user_is_owner(req.requester_email, company_id=company_id)
-    if not any(p["project_id"] == project_id for p in owner_projects):
+    if not await verify_user_is_owner(req.requester_email, project_id, mongo_service):
         return AddProjectMemberResponse(success=False, message="Usuário não é owner deste projeto.")
     # Busca user_id do novo membro
     new_user = await mongo_service.get_user_by_email(req.new_member_email)
@@ -76,8 +79,7 @@ async def update_project_members(
     company_id = getattr(user, "company_id", None)
     if not company_id:
         return UpdateProjectMembersResponse(success=False, message="Usuário solicitante não possui company_id.")
-    owner_projects = await mongo_service.get_projects_where_user_is_owner(req.requester_email, company_id=company_id)
-    if not any(p["project_id"] == project_id for p in owner_projects):
+    if not await verify_user_is_owner(req.requester_email, project_id, mongo_service):
         return UpdateProjectMembersResponse(success=False, message="Usuário não é owner deste projeto.")
     # Salva membros
     result = await mongo_service.update_project_members(project_id, req.members)

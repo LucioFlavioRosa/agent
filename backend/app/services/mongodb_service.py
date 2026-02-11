@@ -61,24 +61,20 @@ class MongoDBService:
             return []
         user_id = user_doc.get("_id")
         cursor = self.db.projects.find({"members.email": email})
-        projects = []
-        async for project_doc in cursor:
+        async def _build_project_dict(project_doc, email):
             project_id = str(project_doc.get("_id"))
             project_name = project_doc.get("name")
             description = project_doc.get("description")
             created_at = project_doc.get("created_at")
-            role = None
-            for member in project_doc.get("members", []):
-                if member.get("email") == email:
-                    role = member.get("role")
-                    break
-            projects.append({
+            role = next((member.get("role") for member in project_doc.get("members", []) if member.get("email") == email), None)
+            return {
                 "project_id": project_id,
                 "project_name": project_name,
                 "role": role,
                 "description": description,
                 "created_at": created_at
-            })
+            }
+        projects = [await _build_project_dict(project_doc, email) async for project_doc in cursor]
         return projects
 
     async def get_projects_where_user_is_owner(self, email: str, company_id: str) -> List[dict]:

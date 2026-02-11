@@ -22,6 +22,15 @@ class ConfigLoaderService:
             raise EnvironmentError("Variável de ambiente KEY_VAULT_URL não definida.")
         self.secret_manager = AzureSecretManager(self.key_vault_url)
 
+    def _get_secret_with_fallback(self, secret_name: str) -> str:
+        settings_attr = kebab_to_upper_snake(secret_name)
+        secret_value = os.environ.get(settings_attr) or getattr(settings, settings_attr, None)
+        if secret_value:
+            logger.warning(f"Fallback: Segredo '{secret_name}' não encontrado no Key Vault, usando variável de ambiente ou valor default para '{settings_attr}'.")
+        else:
+            logger.critical(f"Falha crítica: Segredo '{secret_name}' não encontrado no Key Vault nem nas variáveis de ambiente/settings para '{settings_attr}'.")
+        return secret_value
+
     def _load_single_secret(self, secret_name: str) -> str:
         cache_key = secret_name
         settings_attr = kebab_to_upper_snake(secret_name)
@@ -40,12 +49,7 @@ class ConfigLoaderService:
                 logger.error(f"[KeyVault] Segredo '{secret_name}' NÃO encontrado no Key Vault (404). Tentando fallback para variável de ambiente ou settings.")
             else:
                 logger.error(f"Erro ao buscar segredo '{secret_name}' do Key Vault: {e}")
-            secret_value = os.environ.get(settings_attr) or getattr(settings, settings_attr, None)
-            if secret_value:
-                logger.warning(f"Fallback: Segredo '{secret_name}' não encontrado no Key Vault, usando variável de ambiente ou valor default para '{settings_attr}'.")
-            else:
-                logger.critical(f"Falha crítica: Segredo '{secret_name}' não encontrado no Key Vault nem nas variáveis de ambiente/settings para '{settings_attr}'.")
-            return secret_value
+            return self._get_secret_with_fallback(secret_name)
 
     def load_secrets_from_key_vault(self):
         secret_names = self.secret_manager.list_secret_names()
