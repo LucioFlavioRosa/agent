@@ -48,10 +48,13 @@ if env_ips_str:
     ALLOWED_IPS.extend(extra_ips)
     logging.info(f"IPs adicionais permitidos: {extra_ips}")
 
+def _is_ip_allowed(client_ip: str) -> bool:
+    return "*" in ALLOWED_IPS or client_ip in ALLOWED_IPS
+
 @app.middleware("http")
 async def ip_restriction_middleware(request: Request, call_next):
     client_ip = _extract_client_ip(request)
-    if "*" not in ALLOWED_IPS and client_ip not in ALLOWED_IPS:
+    if not _is_ip_allowed(client_ip):
         if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
             logging.warning(f"⛔ Acesso negado: IP {client_ip}")
             return JSONResponse(
