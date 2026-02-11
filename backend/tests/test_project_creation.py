@@ -16,11 +16,17 @@ async def test_create_project_when_user_has_agent_access(monkeypatch):
     # Mock MongoDBService methods
     class MockMongoDBService:
         async def get_user_by_email(self, email):
+            # company_id deve estar sempre populado
             return type('User', (), {'id': 'user123', 'email': email, 'company_id': 'company123', 'active': True})()
         async def get_project_by_normalized_name(self, name_normalized, company_id):
+            # company_id deve ser utilizado na busca
+            assert company_id == 'company123'
             return None
         async def create_project(self, project_data):
             return True
+        async def get_user_groups(self, user_id):
+            # company_id pode ser validado aqui se necessário
+            return [type('Group', (), {'company_id': 'company123', 'allowed_agents': ['agentA']})()]
     monkeypatch.setattr('backend.app.api.analysis.MongoDBService', lambda: MockMongoDBService())
     monkeypatch.setattr('backend.app.api.analysis.PermissionService', lambda mongo: PermissionService(mongo))
     monkeypatch.setattr('backend.app.services.permission_service.PermissionService.check_user_agent_permission', lambda self, email, agent_name: (True, None))
@@ -44,9 +50,12 @@ async def test_error_when_user_has_no_agent_access(monkeypatch):
         async def get_user_by_email(self, email):
             return type('User', (), {'id': 'user123', 'email': email, 'company_id': 'company123', 'active': True})()
         async def get_project_by_normalized_name(self, name_normalized, company_id):
+            assert company_id == 'company123'
             return None
         async def create_project(self, project_data):
             return True
+        async def get_user_groups(self, user_id):
+            return [type('Group', (), {'company_id': 'company123', 'allowed_agents': []})()]
     monkeypatch.setattr('backend.app.api.analysis.MongoDBService', lambda: MockMongoDBService())
     monkeypatch.setattr('backend.app.api.analysis.PermissionService', lambda mongo: PermissionService(mongo))
     monkeypatch.setattr('backend.app.services.permission_service.PermissionService.check_user_agent_permission', lambda self, email, agent_name: (False, 'Usuário não possui permissão para usar este agente.'))
@@ -69,9 +78,12 @@ async def test_use_existing_project(monkeypatch):
         async def get_user_by_email(self, email):
             return type('User', (), {'id': 'user123', 'email': email, 'company_id': 'company123', 'active': True})()
         async def get_project_by_normalized_name(self, name_normalized, company_id):
+            assert company_id == 'company123'
             return {'_id': 'existing_project_id', 'name': 'Projeto Teste', 'company_id': 'company123'}
         async def create_project(self, project_data):
             return True
+        async def get_user_groups(self, user_id):
+            return [type('Group', (), {'company_id': 'company123', 'allowed_agents': ['agentA']})()]
     monkeypatch.setattr('backend.app.api.analysis.MongoDBService', lambda: MockMongoDBService())
     monkeypatch.setattr('backend.app.api.analysis.PermissionService', lambda mongo: PermissionService(mongo))
     monkeypatch.setattr('backend.app.services.permission_service.PermissionService.check_user_agent_permission', lambda self, email, agent_name: (True, None))
@@ -95,9 +107,12 @@ async def test_project_name_normalization(monkeypatch):
             return type('User', (), {'id': 'user123', 'email': email, 'company_id': 'company123', 'active': True})()
         async def get_project_by_normalized_name(self, name_normalized, company_id):
             assert name_normalized == 'projeto_teste'
+            assert company_id == 'company123'
             return None
         async def create_project(self, project_data):
             return True
+        async def get_user_groups(self, user_id):
+            return [type('Group', (), {'company_id': 'company123', 'allowed_agents': ['agentA']})()]
     monkeypatch.setattr('backend.app.api.analysis.MongoDBService', lambda: MockMongoDBService())
     monkeypatch.setattr('backend.app.api.analysis.PermissionService', lambda mongo: PermissionService(mongo))
     monkeypatch.setattr('backend.app.services.permission_service.PermissionService.check_user_agent_permission', lambda self, email, agent_name: (True, None))
