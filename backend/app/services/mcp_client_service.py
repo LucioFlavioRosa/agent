@@ -14,7 +14,6 @@ class MCPStartAnalysisPayload(BaseModel):
     branch: Optional[str] = Field(None)
     repository: Optional[str] = Field(None)
     comentario_extra: Optional[str] = Field(None)
-    instrucoes_extras: Optional[str] = Field(None)
 
     @staticmethod
     def validate_job_id(job_id):
@@ -40,8 +39,7 @@ class MCPClientService:
             "analysis_type": payload.get("analysis_type"),
             "branch": payload.get("branch"),
             "repository": payload.get("repository"),
-            "comentario_extra": payload.get("comentario_extra"),
-            "instrucoes_extras": payload.get("instrucoes_extras")
+            "comentario_extra": payload.get("comentario_extra")
         }
 
     async def start_analysis(
