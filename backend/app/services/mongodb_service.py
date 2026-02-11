@@ -1,14 +1,32 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from backend.app.models.permission_models import UserPermission, GroupPermission, ProjectPermission, ProjectMember
 from typing import Optional, List
-import os
+from backend.app.core.config import settings
+from backend.app.services.azure_secret_manager import AzureSecretManager
 from datetime import datetime
 import uuid
+import logging
 
 class MongoDBService:
     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
-        self.mongo_uri = uri or os.getenv('MONGODB_URI', 'mongodb://localhost:27017')
-        self.db_name = db_name or os.getenv('MONGODB_DB', 'codeai_ecosystem')
+        logger = logging.getLogger("MongoDBService")
+        # Extração dos segredos do Key Vault se não fornecidos
+        if uri is None or db_name is None:
+            try:
+                key_vault_url = getattr(settings, "KEY_VAULT_URL", None)
+                if not key_vault_url:
+                    logger.critical("KEY_VAULT_URL não definido nas configurações.")
+                    raise EnvironmentError("KEY_VAULT_URL não definido.")
+                secret_manager = AzureSecretManager(key_vault_url)
+                if uri is None:
+                    uri = secret_manager.get_secret("mongodb-uri")
+                if db_name is None:
+                    db_name = secret_manager.get_secret("mongodb-database-name")
+            except Exception as e:
+                logger.critical(f"Erro ao obter segredos do MongoDB do Key Vault: {e}")
+                raise
+        self.mongo_uri = uri
+        self.db_name = db_name
         self.client = AsyncIOMotorClient(self.mongo_uri)
         self.db = self.client[self.db_name]
 
