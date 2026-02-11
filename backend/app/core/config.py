@@ -7,9 +7,7 @@ logger = logging.getLogger("Settings")
 class Settings(BaseSettings):
     # --- Key Vault ---
     KEY_VAULT_URL: str = ""
-    # --- MongoDB ---
-    MONGODB_URI: str = ""
-    MONGODB_DATABASE_NAME: str = ""
+    # Removido: MONGODB_URI e MONGODB_DATABASE_NAME
 
     class Config:
         env_file = ".env"

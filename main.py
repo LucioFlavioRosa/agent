@@ -111,20 +111,17 @@ def setup_logging():
 def on_startup():
     setup_logging()
     logging.info("🚀 Iniciando Backend Peers CodeAI...")
-    # Carrega segredos do Key Vault (incluindo MONGODB_URI e MONGODB_DATABASE_NAME)
+    # Carrega segredos do Key Vault (incluindo Redis)
     try:
         ConfigLoaderService().load_secrets_from_key_vault()
         logging.info("ConfigLoaderService: Segredos carregados do Key Vault com sucesso.")
     except Exception as e:
         logging.error(f"⚠️ Aviso de Startup: {str(e)}")
         raise RuntimeError(f"Falha ao carregar segredos do Key Vault: {str(e)}")
-    # Validação das variáveis obrigatórias do MongoDB
-    if not getattr(settings, "MONGODB_URI", None) or not getattr(settings, "MONGODB_DATABASE_NAME", None):
-        logging.critical("Variáveis obrigatórias do MongoDB ausentes: MONGODB_URI e/ou MONGODB_DATABASE_NAME.")
-        raise RuntimeError("Variáveis obrigatórias do MongoDB ausentes: MONGODB_URI e/ou MONGODB_DATABASE_NAME.")
+    # Removida validação de settings.MONGODB_URI e settings.MONGODB_DATABASE_NAME
     try:
         # Inicializa MongoDBService globalmente
-        app.state.mongo_service = MongoDBService(uri=settings.MONGODB_URI, db_name=settings.MONGODB_DATABASE_NAME)
+        app.state.mongo_service = MongoDBService()
         logging.info("MongoDBService inicializado com sucesso.")
     except Exception as e:
         logging.critical(f"Erro ao inicializar MongoDBService: {str(e)}")
