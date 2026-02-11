@@ -30,6 +30,20 @@ class MCPClientService:
     def __init__(self, base_url: str = None):
         self.base_url = base_url or settings.MCP_SERVER_BASE_URL.rstrip('/')
 
+    def _build_payload(self, payload: dict) -> dict:
+        return {
+            "project_id": payload.get("project_id"),
+            "job_id": payload.get("job_id"),
+            "email": payload.get("email"),
+            "nome_projeto": payload.get("nome_projeto"),
+            "agent_name": payload.get("agent_name"),
+            "analysis_type": payload.get("analysis_type"),
+            "branch": payload.get("branch"),
+            "repository": payload.get("repository"),
+            "comentario_extra": payload.get("comentario_extra"),
+            "instrucoes_extras": payload.get("instrucoes_extras")
+        }
+
     async def start_analysis(
         self,
         payload: dict,
@@ -43,25 +57,16 @@ class MCPClientService:
         job_id = payload.get("job_id")
         MCPStartAnalysisPayload.validate_job_id(job_id)
 
-        data = {
-            "project_id": payload.get("project_id"),
-            "job_id": job_id,
-            "email": payload.get("email"),
-            "nome_projeto": payload.get("nome_projeto"),
-            "agent_name": payload.get("agent_name"),
-            "analysis_type": payload.get("analysis_type"),
-            "branch": payload.get("branch"),
-            "repository": payload.get("repository"),
-            "comentario_extra": payload.get("comentario_extra"),
-            "instrucoes_extras": payload.get("instrucoes_extras")
-        }
-
+        data = self._build_payload(payload)
         files = None
         if arquivo_docx is not None:
             files = {
-                "arquivo_docx": (arquivo_docx.filename, arquivo_docx.file, arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                "arquivo_docx": (
+                    arquivo_docx.filename,
+                    arquivo_docx.file,
+                    arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
             }
-
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 if files:
