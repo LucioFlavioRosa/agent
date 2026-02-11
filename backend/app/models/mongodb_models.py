@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, validator
 from typing import List, Optional, Any, Dict
 from datetime import datetime
+import uuid
 
 class User(BaseModel):
     id: str = Field(..., alias="_id")
@@ -46,6 +47,27 @@ class Project(BaseModel):
     members: List[ProjectMember] = Field(default_factory=list)
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
+
+    @classmethod
+    def create_new_project(cls, name: str, company_id: str, owner_user_id: str, owner_email: str, description: Optional[str] = None, blob_path: Optional[str] = None) -> "Project":
+        project_id = str(uuid.uuid4())
+        now = datetime.utcnow()
+        owner_member = ProjectMember(
+            user_id=owner_user_id,
+            email=owner_email,
+            role="owner",
+            added_at=now
+        )
+        return cls(
+            id=project_id,
+            name=name,
+            description=description,
+            company_id=company_id,
+            blob_path=blob_path,
+            members=[owner_member],
+            created_at=now,
+            updated_at=now
+        )
 
 class Company(BaseModel):
     id: str = Field(..., alias="_id")
