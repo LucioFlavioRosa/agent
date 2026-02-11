@@ -29,49 +29,30 @@ class StartAnalysisResponse(BaseModel):
     job_id: Optional[str] = None
     nome_projeto: Optional[str] = None
 
-@router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
-async def start_analysis(
-    email: Optional[str] = Form(None),
-    nome_projeto: Optional[str] = Form(None),
-    agent_name: Optional[str] = Form(None),
-    analysis_type: Optional[str] = Form(None),
-    branch: Optional[str] = Form(None),
-    repository: Optional[str] = Form(None),
-    comentario_extra: Optional[str] = Form(None),
-    arquivo_docx: Optional[UploadFile] = File(None)
-):
-    logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' (agent_name: '{agent_name}', analysis_type: '{analysis_type}') para usuário {email}")
-
-    # Validação mínima dos campos obrigatórios
-    if not nome_projeto or not agent_name:
-        raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes: nome_projeto, agent_name.")
+async def validate_user_and_company(email: Optional[str], mongo_service: MongoDBService):
     if not email:
         raise HTTPException(status_code=400, detail="Campo 'email' do usuário é obrigatório.")
-
-    mongo_service = MongoDBService()
     user = await mongo_service.get_user_by_email(email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     company_id = getattr(user, "company_id", None)
     if not company_id:
         raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
+    return user, company_id
 
-    # Normaliza nome do projeto
+async def get_or_create_project(nome_projeto: Optional[str], agent_name: Optional[str], email: str, user, company_id, mongo_service: MongoDBService):
+    if not nome_projeto or not agent_name:
+        raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes: nome_projeto, agent_name.")
     def normalize_project_name(name):
         return name.strip().lower().replace(" ", "_")
-
     nome_projeto_normalized = normalize_project_name(nome_projeto)
-
-    # Busca projeto pelo nome normalizado e company_id
     project = await mongo_service.get_project_by_normalized_name(nome_projeto_normalized, company_id)
     project_id = None
     if not project:
-        # Projeto não existe: verifica permissão do agente
         permission_service = PermissionService(mongo_service)
         has_access, error_msg = await permission_service.check_user_agent_permission(email, agent_name)
         if not has_access:
             raise HTTPException(status_code=403, detail=error_msg or "Usuário não possui permissão para usar este agente.")
-        # Usuário tem acesso: cria projeto
         project_id = str(uuid.uuid4())
         project_data = {
             "_id": project_id,
@@ -96,13 +77,32 @@ async def start_analysis(
             raise HTTPException(status_code=500, detail="Falha ao criar projeto no MongoDB.")
     else:
         project_id = getattr(project, "id", None) or project.get("_id")
+    return project_id, nome_projeto
+
+@router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
+async def start_analysis(
+    email: Optional[str] = Form(None),
+    nome_projeto: Optional[str] = Form(None),
+    agent_name: Optional[str] = Form(None),
+    analysis_type: Optional[str] = Form(None),
+    branch: Optional[str] = Form(None),
+    repository: Optional[str] = Form(None),
+    comentario_extra: Optional[str] = Form(None),
+    arquivo_docx: Optional[UploadFile] = File(None)
+):
+    logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' (agent_name: '{agent_name}', analysis_type: '{analysis_type}') para usuário {email}")
+
+    mongo_service = MongoDBService()
+    # Validação de usuário e company_id
+    user, company_id = await validate_user_and_company(email, mongo_service)
+    # Criação ou busca de projeto
+    project_id, nome_projeto_final = await get_or_create_project(nome_projeto, agent_name, email, user, company_id, mongo_service)
 
     # 1. Verifica permissão do usuário para executar ação no projeto
     try:
         permission_result = await PermissionService(mongo_service).check_user_project_permission(email, project_id, agent_name, "write")
         if not permission_result[0]:
             raise HTTPException(status_code=403, detail=permission_result[2] or "Usuário não possui permissão para executar esta ação no projeto.")
-        project_id = project_id
     except Exception as e:
         logger.error(f"Erro ao validar permissões: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
@@ -122,7 +122,7 @@ async def start_analysis(
     # 4. Monta payload para MCP, incluindo job_id explicitamente
     mcp_payload = {
         "email": email,
-        "nome_projeto": nome_projeto,
+        "nome_projeto": nome_projeto_final,
         "agent_name": agent_name,
         "analysis_type": analysis_type,
         "branch": branch,
@@ -143,5 +143,5 @@ async def start_analysis(
         message="Análise multiagente solicitada com sucesso ao MCP.",
         project_id=project_id,
         job_id=job_id,
-        nome_projeto=nome_projeto
+        nome_projeto=nome_projeto_final
     )
