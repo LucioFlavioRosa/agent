@@ -16,6 +16,12 @@ class MCPStartAnalysisPayload(BaseModel):
     comentario_extra: Optional[str] = Field(None)
     instrucoes_extras: Optional[str] = Field(None)
 
+    @staticmethod
+    def validate_job_id(job_id):
+        if not job_id or not isinstance(job_id, str) or not job_id.strip():
+            raise ValueError('job_id é obrigatório e não pode ser vazio')
+        return job_id
+
 class MCPStartAnalysisResponse(BaseModel):
     project_id: str
     job_id: Optional[str] = None
@@ -34,9 +40,12 @@ class MCPClientService:
         url = f"{base}/start"
         logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
 
+        job_id = payload.get("job_id")
+        MCPStartAnalysisPayload.validate_job_id(job_id)
+
         data = {
             "project_id": payload.get("project_id"),
-            "job_id": payload.get("job_id"),
+            "job_id": job_id,
             "email": payload.get("email"),
             "nome_projeto": payload.get("nome_projeto"),
             "agent_name": payload.get("agent_name"),
@@ -73,7 +82,7 @@ class MCPClientService:
                 data_resp = response.json()
                 return MCPStartAnalysisResponse(
                     project_id=data_resp.get("project_id", payload.get("project_id")),
-                    job_id=data_resp.get("job_id", payload.get("job_id"))
+                    job_id=data_resp.get("job_id", job_id)
                 )
         except httpx.HTTPStatusError as exc:
             raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")

@@ -11,6 +11,13 @@ from main import app
 
 client = TestClient(app)
 
+def is_valid_uuid(val):
+    try:
+        uuid.UUID(str(val))
+        return True
+    except Exception:
+        return False
+
 @pytest.mark.asyncio
 async def test_create_project_when_user_has_agent_access(monkeypatch):
     # Mock MongoDBService methods
@@ -43,6 +50,10 @@ async def test_create_project_when_user_has_agent_access(monkeypatch):
     assert response.status_code == 200
     assert 'project_id' in response.json()
     assert response.json()['message'].startswith('Análise multiagente solicitada')
+    # Verifica job_id
+    job_id = response.json().get('job_id')
+    assert job_id is not None
+    assert is_valid_uuid(job_id)
 
 @pytest.mark.asyncio
 async def test_error_when_user_has_no_agent_access(monkeypatch):
@@ -71,6 +82,8 @@ async def test_error_when_user_has_no_agent_access(monkeypatch):
     )
     assert response.status_code == 403
     assert response.json()['detail'] == 'Usuário não possui permissão para usar este agente.'
+    # Não deve retornar job_id
+    assert 'job_id' not in response.json()
 
 @pytest.mark.asyncio
 async def test_use_existing_project(monkeypatch):
@@ -99,6 +112,10 @@ async def test_use_existing_project(monkeypatch):
     )
     assert response.status_code == 200
     assert response.json()['project_id'] == 'existing_project_id'
+    # Verifica job_id
+    job_id = response.json().get('job_id')
+    assert job_id is not None
+    assert is_valid_uuid(job_id)
 
 @pytest.mark.asyncio
 async def test_project_name_normalization(monkeypatch):
@@ -127,3 +144,7 @@ async def test_project_name_normalization(monkeypatch):
         }
     )
     assert response.status_code == 200
+    # Verifica job_id
+    job_id = response.json().get('job_id')
+    assert job_id is not None
+    assert is_valid_uuid(job_id)
