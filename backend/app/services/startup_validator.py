@@ -11,8 +11,8 @@ class StartupValidator:
 
     def validate_mongodb_connection(self):
         try:
-            mongo_uri = getattr(settings, "MONGODB_URI", None)
-            db_name = getattr(settings, "MONGODB_DATABASE_NAME", None)
+            mongo_uri = settings.MONGODB_URI
+            db_name = settings.MONGODB_DATABASE_NAME
             if not mongo_uri or not db_name:
                 raise ValueError("MONGODB_URI ou MONGODB_DATABASE_NAME não configurados.")
             client = AsyncIOMotorClient(mongo_uri)
@@ -37,12 +37,12 @@ class StartupValidator:
 
     def validate_redis_connection(self):
         try:
-            host = getattr(settings, 'REDIS_HOST', None)
-            port = getattr(settings, 'REDIS_PORT', None)
-            password = getattr(settings, 'REDIS_PASSWORD', None)
-            db = getattr(settings, 'REDIS_DB', None)
-            use_ssl = getattr(settings, 'REDIS_USE_SSL', None)
-            ssl_cert_reqs = getattr(settings, 'REDIS_SSL_CERT_REQS', None)
+            host = settings.REDIS_HOST
+            port = settings.REDIS_PORT
+            password = settings.REDIS_PASSWORD
+            db = settings.REDIS_DB
+            use_ssl = settings.REDIS_USE_SSL
+            ssl_cert_reqs = settings.REDIS_SSL_CERT_REQS
             missing = []
             if not host:
                 missing.append('REDIS_HOST')

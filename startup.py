@@ -12,15 +12,14 @@ from backend.app.services.config_loader_service import ConfigLoaderService
 
 def validate_env_vars():
     required_vars = [
-        'AZURE_STORAGE_CONNECTION_STRING',
-        'AZURE_STORAGE_CONTAINER_NAME',
+        'KEY_VAULT_URL',
     ]
     missing = [var for var in required_vars if not os.getenv(var)]
     if missing:
-        logging.error(f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing)}")
-        raise RuntimeError(f"Variáveis de ambiente obrigatórias não definidas: {', '.join(missing)}")
+        logging.error(f"Variável de ambiente obrigatória não definida: {', '.join(missing)}")
+        raise RuntimeError(f"Variável de ambiente obrigatória não definida: {', '.join(missing)}")
     else:
-        logging.info("Todas as variáveis de ambiente obrigatórias estão definidas.")
+        logging.info("Variável de ambiente KEY_VAULT_URL está definida.")
 
 # Carrega segredos sensíveis do Key Vault antes de inicializar endpoints
 try:

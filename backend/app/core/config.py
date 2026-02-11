@@ -5,6 +5,8 @@ import os
 logger = logging.getLogger("Settings")
 
 class Settings(BaseSettings):
+    # --- Key Vault ---
+    KEY_VAULT_URL: str = ""
     # --- MongoDB ---
     MONGODB_URI: str = ""
     MONGODB_DATABASE_NAME: str = ""
@@ -16,16 +18,7 @@ class Settings(BaseSettings):
 
     def __init__(self, **values):
         super().__init__(**values)
-        self._validate_mongodb_env()
-
-    def _validate_mongodb_env(self):
-        missing = []
-        if not self.MONGODB_URI:
-            missing.append("MONGODB_URI")
-        if not self.MONGODB_DATABASE_NAME:
-            missing.append("MONGODB_DATABASE_NAME")
-        if missing:
-            logger.error(f"[Settings] Variáveis obrigatórias do MongoDB ausentes: {', '.join(missing)}")
-            raise ValueError(f"Variáveis obrigatórias do MongoDB ausentes: {', '.join(missing)}")
+        # Removida validação de MONGODB_URI e MONGODB_DATABASE_NAME do construtor;
+        # a validação de campos obrigatórios deve ocorrer após carregamento dos segredos.
 
 settings = Settings()

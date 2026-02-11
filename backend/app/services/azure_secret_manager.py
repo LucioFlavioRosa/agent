@@ -1,35 +1,17 @@
-import os
 import logging
-from enum import Enum
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 
-class VaultType(str, Enum):
-    AZURE = 'azure'
-    DEVOPS = 'devops'
-    GITHUB = 'github'
-    LLM = 'llm'
-
 class AzureSecretManager:
     """
-    Gerenciador de segredos usando Azure Key Vault, suportando múltiplos cofres por objetivo.
+    Gerenciador de segredos usando Azure Key Vault, genérico para qualquer cofre cuja URL seja fornecida externamente.
     """
-    def __init__(self, vault_type: VaultType):
+    def __init__(self, key_vault_url: str):
+        if not key_vault_url:
+            logging.error("URL do Key Vault não fornecida.")
+            raise EnvironmentError("A URL do Key Vault deve ser fornecida como parâmetro.")
+        self._key_vault_url = key_vault_url
         self._secret_client = None
-        self.vault_type = vault_type
-        
-        self._vault_urls = {
-            VaultType.AZURE: os.environ.get('AZURE_KV_URL'),
-            VaultType.DEVOPS: os.environ.get('DEVOPS_KV_URL'),
-            VaultType.GITHUB: os.environ.get('GITHUB_KV_URL'),
-            VaultType.LLM: os.environ.get('LLM_KV_URL')
-        }
-        
-        self._key_vault_url = self._vault_urls.get(self.vault_type)
-        
-        if not self._key_vault_url:
-            logging.error(f"URL do Key Vault para '{self.vault_type}' não encontrada nas variáveis de ambiente.")
-            raise EnvironmentError(f"A URL do Key Vault para o tipo '{self.vault_type}' não foi configurada na variável de ambiente.")
 
     def _get_secret_client(self) -> SecretClient:
         if self._secret_client is None:
@@ -52,3 +34,7 @@ class AzureSecretManager:
             return secret.value
         except Exception as e:
             raise ValueError(f"Erro ao obter segredo '{secret_name}' do Azure Key Vault '{self._key_vault_url}': {e}") from e
+
+    def list_secret_names(self):
+        secret_client = self._get_secret_client()
+        return [prop.name for prop in secret_client.list_properties_of_secrets()]
