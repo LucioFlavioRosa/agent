@@ -16,7 +16,7 @@ class ConfigLoaderService:
     _secret_cache = {}
 
     def __init__(self):
-        self.key_vault_url = os.environ.get('KEY_VAULT_URL') or getattr(settings, 'KEY_VAULT_URL', None)
+        self.key_vault_url = os.environ.get('KEY_VAULT_URL')
         if not self.key_vault_url:
             logger.critical("Variável de ambiente KEY_VAULT_URL não definida.")
             raise EnvironmentError("Variável de ambiente KEY_VAULT_URL não definida.")
