@@ -2,6 +2,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from backend.app.models.permission_models import UserPermission, GroupPermission, ProjectPermission, ProjectMember
 from typing import Optional, List
 import os
+from datetime import datetime
 
 class MongoDBService:
     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
@@ -74,3 +75,34 @@ class MongoDBService:
                 "created_at": created_at
             })
         return projects
+
+    # NOVOS MÉTODOS PARA GERENCIAMENTO DE PROJETOS/MEMBROS
+    async def get_projects_where_user_is_owner(self, email: str) -> List[dict]:
+        cursor = self.db.projects.find({"members": {"$elemMatch": {"email": email, "role": "owner"}}})
+        projects = []
+        async for project_doc in cursor:
+            project_id = str(project_doc.get("_id"))
+            name = project_doc.get("name")
+            description = project_doc.get("description")
+            members = project_doc.get("members", [])
+            projects.append({
+                "project_id": project_id,
+                "name": name,
+                "description": description,
+                "members": members
+            })
+        return projects
+
+    async def add_member_to_project(self, project_id: str, new_member: dict) -> bool:
+        result = await self.db.projects.update_one(
+            {"_id": project_id},
+            {"$addToSet": {"members": new_member}}
+        )
+        return result.modified_count > 0
+
+    async def update_project_members(self, project_id: str, members: List[dict]) -> bool:
+        result = await self.db.projects.update_one(
+            {"_id": project_id},
+            {"$set": {"members": members}}
+        )
+        return result.modified_count > 0
