@@ -43,3 +43,17 @@ class PermissionService:
             return False, member_role, "Usuário com role 'viewer' não pode executar ações de escrita."
 
         return True, member_role, None
+
+    async def check_user_agent_access(self, email: str, agent_name: str) -> Tuple[bool, Optional[str]]:
+        user = await self.mongo_service.get_user_by_email(email)
+        if not user:
+            return False, f"Usuário não encontrado."
+        if not user.active:
+            return False, f"Usuário inativo."
+        groups = await self.mongo_service.get_user_groups(user.id)
+        allowed_agents = set()
+        for group in groups:
+            allowed_agents.update(group.allowed_agents)
+        if agent_name not in allowed_agents:
+            return False, f"Usuário não possui acesso ao agente '{agent_name}'."
+        return True, None
