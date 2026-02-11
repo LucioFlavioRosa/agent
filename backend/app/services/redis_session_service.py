@@ -106,9 +106,6 @@ class RedisSessionService:
             self.logger.error(f"Erro ao atualizar status do job {job_id}: {e}")
 
     def store_report_data_for_job(self, job_id: str, report_data: dict):
-        """
-        Armazena o report_data no Redis associado ao job_id.
-        """
         key = f"job:{job_id}:report"
         try:
             self.redis_client.setex(key, self.session_ttl, json.dumps(report_data))
@@ -116,9 +113,6 @@ class RedisSessionService:
             self.logger.error(f"Erro ao armazenar report_data para job {job_id}: {e}")
 
     def get_report_data_for_job(self, job_id: str) -> Optional[dict]:
-        """
-        Recupera o report_data do Redis associado ao job_id.
-        """
         key = f"job:{job_id}:report"
         report_json = self.redis_client.get(key)
         if report_json:
@@ -130,9 +124,6 @@ class RedisSessionService:
         return None
 
     def store_error_message_for_job(self, job_id: str, error_message: str):
-        """
-        Armazena uma mensagem de erro associada ao job_id.
-        """
         key = f"job:{job_id}:error"
         try:
             self.redis_client.setex(key, self.session_ttl, json.dumps({"error_message": error_message}))
