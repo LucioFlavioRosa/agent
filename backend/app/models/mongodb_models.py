@@ -17,6 +17,12 @@ class User(BaseModel):
             raise ValueError('Email é obrigatório')
         return v
 
+    @validator('company_id')
+    def company_id_must_be_valid(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('company_id é obrigatório e não pode ser vazio')
+        return v
+
 class Group(BaseModel):
     id: str = Field(..., alias="_id")
     name: str
