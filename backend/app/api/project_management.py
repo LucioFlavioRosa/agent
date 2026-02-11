@@ -16,7 +16,13 @@ router = APIRouter()
 @router.get("/projects/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
 async def list_owned_projects(email: str = Query(..., description="Email do usuário owner")):
     mongo_service = MongoDBService()
-    projects = await mongo_service.get_projects_where_user_is_owner(email)
+    user = await mongo_service.get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    company_id = getattr(user, "company_id", None)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
+    projects = await mongo_service.get_projects_where_user_is_owner(email, company_id=company_id)
     items = [OwnedProjectItem(
         project_id=p["project_id"],
         name=p["name"],
@@ -31,8 +37,13 @@ async def add_project_member(
     req: AddProjectMemberRequest = Body(...)
 ):
     mongo_service = MongoDBService()
-    # Valida se requester é owner
-    owner_projects = await mongo_service.get_projects_where_user_is_owner(req.requester_email)
+    user = await mongo_service.get_user_by_email(req.requester_email)
+    if not user:
+        return AddProjectMemberResponse(success=False, message="Usuário solicitante não encontrado.")
+    company_id = getattr(user, "company_id", None)
+    if not company_id:
+        return AddProjectMemberResponse(success=False, message="Usuário solicitante não possui company_id.")
+    owner_projects = await mongo_service.get_projects_where_user_is_owner(req.requester_email, company_id=company_id)
     if not any(p["project_id"] == project_id for p in owner_projects):
         return AddProjectMemberResponse(success=False, message="Usuário não é owner deste projeto.")
     # Busca user_id do novo membro
@@ -59,8 +70,13 @@ async def update_project_members(
     req: UpdateProjectMembersRequest = Body(...)
 ):
     mongo_service = MongoDBService()
-    # Valida se requester é owner
-    owner_projects = await mongo_service.get_projects_where_user_is_owner(req.requester_email)
+    user = await mongo_service.get_user_by_email(req.requester_email)
+    if not user:
+        return UpdateProjectMembersResponse(success=False, message="Usuário solicitante não encontrado.")
+    company_id = getattr(user, "company_id", None)
+    if not company_id:
+        return UpdateProjectMembersResponse(success=False, message="Usuário solicitante não possui company_id.")
+    owner_projects = await mongo_service.get_projects_where_user_is_owner(req.requester_email, company_id=company_id)
     if not any(p["project_id"] == project_id for p in owner_projects):
         return UpdateProjectMembersResponse(success=False, message="Usuário não é owner deste projeto.")
     # Salva membros
