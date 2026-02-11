@@ -17,7 +17,6 @@ class StartupValidator:
                 raise ValueError("MONGODB_URI ou MONGODB_DATABASE_NAME não configurados.")
             client = AsyncIOMotorClient(mongo_uri)
             db = client[db_name]
-            # Testa conexão e consulta simples
             result = db.command("ping")
             if result.get("ok") == 1.0:
                 self.status_report['mongodb'] = {

@@ -9,4 +9,3 @@ class MCPWebhookPayload(BaseModel):
     error_type: Optional[str] = Field(None)
     error_message: Optional[str] = Field(None)
     project_id: Optional[str] = Field(None)
-    # ATENÇÃO: O backend não valida a estrutura de report_data, apenas repassa o conteúdo recebido do MCP.

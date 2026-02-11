@@ -15,7 +15,6 @@ class MCPConfigService:
             with open(config_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             return MCPConfigRegistry.parse_obj(data)
-        # Fallback: retorna config vazia
         return MCPConfigRegistry(agents={})
 
     @classmethod

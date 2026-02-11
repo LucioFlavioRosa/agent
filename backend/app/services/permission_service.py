@@ -14,10 +14,6 @@ class PermissionService:
         agent_name: str,
         action_type: str
     ) -> Tuple[bool, Optional[str], Optional[str]]:
-        """
-        Verifica se o usuário pode executar a ação no projeto com o agente solicitado.
-        Retorna (authorized, role, error_message).
-        """
         user = await self.mongo_service.get_user_by_email(email)
         if not user:
             return False, None, "Usuário não encontrado."
@@ -43,7 +39,6 @@ class PermissionService:
         if agent_name not in allowed_agents:
             return False, member_role, "Agente não permitido para o grupo do usuário."
 
-        # Verifica ação permitida pela role
         if action_type == "write" and member_role == "viewer":
             return False, member_role, "Usuário com role 'viewer' não pode executar ações de escrita."
 
