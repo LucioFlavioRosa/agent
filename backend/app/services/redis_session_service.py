@@ -7,20 +7,40 @@ from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData
 import logging
 from backend.app.models.job_models import JobData
+from backend.app.services.azure_secret_manager import AzureSecretManager
 
 class RedisSessionService:
     def __init__(self):
+        logger = logging.getLogger("RedisSessionService")
+        try:
+            key_vault_url = getattr(settings, "KEY_VAULT_URL", None)
+            if not key_vault_url:
+                logger.critical("KEY_VAULT_URL não definido nas configurações.")
+                raise EnvironmentError("KEY_VAULT_URL não definido.")
+            secret_manager = AzureSecretManager(key_vault_url)
+            redis_host = secret_manager.get_secret("redis-host")
+            redis_port = int(secret_manager.get_secret("redis-port"))
+            redis_password = secret_manager.get_secret("redis-password")
+            redis_db = int(secret_manager.get_secret("redis-db"))
+            redis_use_ssl = secret_manager.get_secret("redis-use-ssl")
+            redis_ssl_cert_reqs = secret_manager.get_secret("redis-ssl-cert-reqs")
+            # Converte redis_use_ssl para boolean
+            if isinstance(redis_use_ssl, str):
+                redis_use_ssl = redis_use_ssl.lower() in ["true", "1", "yes"]
+        except Exception as e:
+            logger.critical(f"Erro ao obter segredos do Redis do Key Vault: {e}")
+            raise
         self.redis_client = redis.Redis(
-            host=getattr(settings, 'REDIS_HOST', 'localhost'),
-            port=int(getattr(settings, 'REDIS_PORT', 6379)),
-            password=getattr(settings, 'REDIS_PASSWORD', None),
-            db=int(getattr(settings, 'REDIS_DB', 0)),
+            host=redis_host,
+            port=redis_port,
+            password=redis_password,
+            db=redis_db,
             decode_responses=True,
-            ssl=getattr(settings, 'REDIS_USE_SSL', True),
-            ssl_cert_reqs=getattr(settings, 'REDIS_SSL_CERT_REQS', 'required')
+            ssl=redis_use_ssl,
+            ssl_cert_reqs=redis_ssl_cert_reqs
         )
         self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
-        self.logger = logging.getLogger("RedisSessionService")
+        self.logger = logger
 
     def _serialize_session(self, session_data: dict) -> str:
         return json.dumps(session_data)
