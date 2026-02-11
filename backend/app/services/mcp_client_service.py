@@ -15,7 +15,6 @@ class MCPStartAnalysisPayload(BaseModel):
     repository: Optional[str] = Field(None)
     comentario_extra: Optional[str] = Field(None)
     instrucoes_extras: Optional[str] = Field(None)
-    # arquivo_docx não é processado, apenas repassado
 
 class MCPStartAnalysisResponse(BaseModel):
     project_id: str
@@ -35,7 +34,6 @@ class MCPClientService:
         url = f"{base}/start"
         logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
 
-        # Monta dados para envio
         data = {
             "project_id": payload.get("project_id"),
             "job_id": payload.get("job_id"),
