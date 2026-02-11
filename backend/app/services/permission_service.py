@@ -43,3 +43,21 @@ class PermissionService:
             return False, member_role, "Usuário com role 'viewer' não pode executar ações de escrita."
 
         return True, member_role, None
+
+    async def check_user_agent_permission(self, email: str, agent_name: str) -> Tuple[bool, Optional[str]]:
+        """
+        Verifica se o usuário tem permissão para usar o agente especificado.
+        Retorna (True, None) se permitido, ou (False, mensagem_erro) caso contrário.
+        """
+        user = await self.mongo_service.get_user_by_email(email)
+        if not user:
+            return False, "Usuário não encontrado."
+        if not user.active:
+            return False, "Usuário inativo."
+        groups = await self.mongo_service.get_user_groups(user.id)
+        allowed_agents = set()
+        for group in groups:
+            allowed_agents.update(group.allowed_agents)
+        if agent_name not in allowed_agents:
+            return False, "Usuário não possui permissão para usar este agente."
+        return True, None

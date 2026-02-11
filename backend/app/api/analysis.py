@@ -3,10 +3,12 @@ import uuid
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 from backend.app.services.mcp_client_service import MCPClientService
 from backend.app.services.mcp_config_service import MCPConfigService
 from backend.app.services.permission_service import PermissionService
+from backend.app.services.mongodb_service import MongoDBService
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
@@ -46,12 +48,61 @@ async def start_analysis(
     if not email:
         raise HTTPException(status_code=400, detail="Campo 'email' do usuário é obrigatório.")
 
+    mongo_service = MongoDBService()
+    user = await mongo_service.get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    company_id = getattr(user, "company_id", None)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
+
+    # Normaliza nome do projeto
+    def normalize_project_name(name):
+        return name.strip().lower().replace(" ", "_")
+
+    nome_projeto_normalized = normalize_project_name(nome_projeto)
+
+    # Busca projeto pelo nome normalizado e company_id
+    project = await mongo_service.get_project_by_normalized_name(nome_projeto_normalized, company_id)
+    project_id = None
+    if not project:
+        # Projeto não existe: verifica permissão do agente
+        permission_service = PermissionService(mongo_service)
+        has_access, error_msg = await permission_service.check_user_agent_permission(email, agent_name)
+        if not has_access:
+            raise HTTPException(status_code=403, detail=error_msg or "Usuário não possui permissão para usar este agente.")
+        # Usuário tem acesso: cria projeto
+        project_id = str(uuid.uuid4())
+        project_data = {
+            "_id": project_id,
+            "name": nome_projeto,
+            "name_normalized": nome_projeto_normalized,
+            "company_id": company_id,
+            "members": [
+                {
+                    "user_id": user.id,
+                    "email": email,
+                    "role": "owner",
+                    "added_at": datetime.utcnow().isoformat()
+                }
+            ],
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "description": None
+        }
+        created = await mongo_service.create_project(project_data)
+        if not created:
+            logger.error(f"Falha ao criar projeto {nome_projeto} para usuário {email}")
+            raise HTTPException(status_code=500, detail="Falha ao criar projeto no MongoDB.")
+    else:
+        project_id = getattr(project, "id", None) or project.get("_id")
+
     # 1. Verifica permissão do usuário para executar ação no projeto
     try:
-        permission_result = await PermissionService.check_user_project_permission(email, nome_projeto, agent_name)
-        if not permission_result["authorized"]:
-            raise HTTPException(status_code=403, detail="Usuário não possui permissão para executar esta ação no projeto.")
-        project_id = permission_result["project_id"]
+        permission_result = await PermissionService(mongo_service).check_user_project_permission(email, project_id, agent_name, "write")
+        if not permission_result[0]:
+            raise HTTPException(status_code=403, detail=permission_result[2] or "Usuário não possui permissão para executar esta ação no projeto.")
+        project_id = project_id
     except Exception as e:
         logger.error(f"Erro ao validar permissões: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
