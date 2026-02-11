@@ -1,12 +1,13 @@
 import logging
 import uuid
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel
 from typing import Optional
 
 from backend.app.services.mcp_client_service import MCPClientService
 from backend.app.services.mcp_config_service import MCPConfigService
 from backend.app.services.permission_service import PermissionService
+from backend.app.services.mongodb_service import MongoDBService
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
@@ -27,6 +28,12 @@ class StartAnalysisResponse(BaseModel):
     job_id: Optional[str] = None
     nome_projeto: Optional[str] = None
 
+async def get_mongo_service():
+    from backend.app.core.config import settings
+    mongo_uri = getattr(settings, "MONGODB_URI", None)
+    mongo_db_name = getattr(settings, "MONGODB_DATABASE_NAME", None)
+    return MongoDBService(uri=mongo_uri, db_name=mongo_db_name)
+
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
     email: Optional[str] = Form(None),
@@ -36,7 +43,8 @@ async def start_analysis(
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
-    arquivo_docx: Optional[UploadFile] = File(None)
+    arquivo_docx: Optional[UploadFile] = File(None),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' (agent_name: '{agent_name}', analysis_type: '{analysis_type}') para usuário {email}")
 
@@ -46,15 +54,52 @@ async def start_analysis(
     if not email:
         raise HTTPException(status_code=400, detail="Campo 'email' do usuário é obrigatório.")
 
-    # 1. Verifica permissão do usuário para executar ação no projeto
-    try:
-        permission_result = await PermissionService.check_user_project_permission(email, nome_projeto, agent_name)
-        if not permission_result["authorized"]:
-            raise HTTPException(status_code=403, detail="Usuário não possui permissão para executar esta ação no projeto.")
-        project_id = permission_result["project_id"]
-    except Exception as e:
-        logger.error(f"Erro ao validar permissões: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
+    permission_service = PermissionService(mongo_service)
+
+    # 1. Verifica se projeto existe pelo nome
+    project_doc = None
+    project_id = None
+    # Busca projeto por nome
+    project_cursor = mongo_service.db.projects.find({"name": nome_projeto})
+    project_list = [doc async for doc in project_cursor]
+    if project_list:
+        project_doc = project_list[0]
+        project_id = str(project_doc.get("_id"))
+    else:
+        project_doc = None
+
+    if not project_doc:
+        # Projeto não existe: verifica acesso ao agente
+        has_access, access_msg = await permission_service.check_user_agent_access(email, agent_name)
+        if not has_access:
+            raise HTTPException(status_code=403, detail=access_msg)
+        # Cria novo projeto
+        project_id = str(uuid.uuid4())
+        user = await mongo_service.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=400, detail="Usuário não encontrado.")
+        user_id = user.id
+        company_id = user.company_id
+        # Criação do projeto
+        result = await mongo_service.create_project(
+            project_id=project_id,
+            nome_projeto=nome_projeto,
+            company_id=company_id,
+            email=email,
+            user_id=user_id
+        )
+        if not result:
+            raise HTTPException(status_code=500, detail="Erro ao criar projeto no MongoDB.")
+    else:
+        # Projeto já existe: verifica permissão
+        has_perm, member_role, perm_msg = await permission_service.check_user_project_permission(
+            email=email,
+            project_id=project_id,
+            agent_name=agent_name,
+            action_type="write"
+        )
+        if not has_perm:
+            raise HTTPException(status_code=403, detail=perm_msg or "Usuário não possui permissão para executar esta ação no projeto.")
 
     # 2. Busca configuração do agente via MCPConfigService
     agent_cfg = MCPConfigService.get_agent_config(agent_name)
