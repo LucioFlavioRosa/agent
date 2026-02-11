@@ -17,8 +17,14 @@ async def get_user_projects(
     empresa: str = Query(None, description="Empresa do usuário"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ) -> List[Dict]:
-    # Busca todos os projetos onde o usuário é membro
-    projects_cursor = mongo_service.db.projects.find({"members.email": email})
+    user = await mongo_service.get_user_by_email(email)
+    if not user:
+        return []
+    company_id = getattr(user, "company_id", None)
+    if not company_id:
+        return []
+    # Busca todos os projetos onde o usuário é membro, filtrando por company_id
+    projects_cursor = mongo_service.db.projects.find({"members.email": email, "company_id": company_id})
     projects = []
     async for doc in projects_cursor:
         try:

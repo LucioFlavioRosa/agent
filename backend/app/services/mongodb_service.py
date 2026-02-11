@@ -15,7 +15,12 @@ class MongoDBService:
     async def get_user_by_email(self, email: str) -> Optional[UserPermission]:
         doc = await self.db.users.find_one({"email": email})
         if doc:
-            return UserPermission(**doc)
+            company_id = doc.get("company_id")
+            user = UserPermission(**doc)
+            # Garante que company_id está populado no objeto
+            if not getattr(user, "company_id", None):
+                user.company_id = company_id
+            return user
         return None
 
     async def get_user_groups(self, user_id: str) -> List[GroupPermission]:
@@ -76,8 +81,13 @@ class MongoDBService:
             })
         return projects
 
-    async def get_projects_where_user_is_owner(self, email: str) -> List[dict]:
-        cursor = self.db.projects.find({"members": {"$elemMatch": {"email": email, "role": "owner"}}})
+    async def get_projects_where_user_is_owner(self, email: str, company_id: str) -> List[dict]:
+        if not company_id or not isinstance(company_id, str) or not company_id.strip():
+            raise ValueError("company_id é obrigatório e não pode ser vazio.")
+        cursor = self.db.projects.find({
+            "members": {"$elemMatch": {"email": email, "role": "owner"}},
+            "company_id": company_id
+        })
         projects = []
         async for project_doc in cursor:
             project_id = str(project_doc.get("_id"))
@@ -107,6 +117,8 @@ class MongoDBService:
         return result.modified_count > 0
 
     async def get_project_by_normalized_name(self, nome_projeto: str, company_id: str) -> Optional[ProjectPermission]:
+        if not company_id or not isinstance(company_id, str) or not company_id.strip():
+            raise ValueError("company_id é obrigatório e não pode ser vazio.")
         nome_projeto_normalizado = nome_projeto.lower().strip()
         doc = await self.db.projects.find_one({"name_normalized": nome_projeto_normalizado, "company_id": company_id})
         if doc:
@@ -115,12 +127,13 @@ class MongoDBService:
             return ProjectPermission(**doc)
         return None
 
-    async def create_project(self, project_data: dict) -> str:
+    async def create_project(self, project_data: dict, company_id: str) -> str:
+        if not company_id or not isinstance(company_id, str) or not company_id.strip():
+            raise ValueError("company_id é obrigatório e não pode ser vazio.")
         project_id = str(uuid.uuid4())
         nome_projeto = project_data.get("name")
         name_normalized = nome_projeto.lower().strip() if nome_projeto else ""
         description = project_data.get("description")
-        company_id = project_data.get("company_id")
         members = project_data.get("members", [])
         now = datetime.utcnow()
         doc = {

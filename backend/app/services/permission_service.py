@@ -19,7 +19,11 @@ class PermissionService:
             return False, None, "Usuário não encontrado."
         if not user.active:
             return False, None, "Usuário inativo."
+        company_id = getattr(user, "company_id", None)
+        if not company_id:
+            return False, None, "Usuário não possui company_id."
 
+        # Passa company_id para buscas subsequentes se necessário
         project = await self.mongo_service.get_project_by_id(project_id)
         if not project:
             return False, None, "Projeto não encontrado."
@@ -32,9 +36,13 @@ class PermissionService:
         if not member_role:
             return False, None, "Usuário não possui permissão no projeto."
 
+        # Busca grupos do usuário considerando company_id
         groups = await self.mongo_service.get_user_groups(user.id)
         allowed_agents = set()
         for group in groups:
+            # Se o grupo tiver company_id, valida se corresponde ao do usuário
+            if hasattr(group, "company_id") and group.company_id != company_id:
+                continue
             allowed_agents.update(group.allowed_agents)
         if agent_name not in allowed_agents:
             return False, member_role, "Agente não permitido para o grupo do usuário."
@@ -54,9 +62,14 @@ class PermissionService:
             return False, "Usuário não encontrado."
         if not user.active:
             return False, "Usuário inativo."
+        company_id = getattr(user, "company_id", None)
+        if not company_id:
+            return False, "Usuário não possui company_id."
         groups = await self.mongo_service.get_user_groups(user.id)
         allowed_agents = set()
         for group in groups:
+            if hasattr(group, "company_id") and group.company_id != company_id:
+                continue
             allowed_agents.update(group.allowed_agents)
         if agent_name not in allowed_agents:
             return False, "Usuário não possui permissão para usar este agente."
