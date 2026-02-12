@@ -2,7 +2,6 @@
   "agents": {
     "agent_code_generation": {
       "agent_name": "agent_code_generation",
-      "mcp_url": "https://mcp-code-gen.azurewebsites.net",
       "mcp_service_url": "https://mcp-code-gen.azurewebsites.net/api/v1/analysis",
       "report_fields": ["code_report"],
       "report_mapping": {
@@ -11,7 +10,6 @@
     },
     "agent_refactoring": {
       "agent_name": "agent_refactoring",
-      "mcp_url": "https://mcp-refactoring.azurewebsites.net",
       "mcp_service_url": "https://mcp-refactoring.azurewebsites.net/api/v1/analysis",
       "report_fields": ["refactor_report"],
       "report_mapping": {
@@ -20,7 +18,6 @@
     },
     "agent_unit_tests": {
       "agent_name": "agent_unit_tests",
-      "mcp_url": "https://mcp-unit-tests.azurewebsites.net",
       "mcp_service_url": "https://mcp-unit-tests.azurewebsites.net/api/v1/analysis",
       "report_fields": ["unit_test_report"],
       "report_mapping": {
