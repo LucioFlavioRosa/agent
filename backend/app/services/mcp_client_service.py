@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 from backend.app.core.config import settings
 from fastapi import UploadFile
+from backend.app.utils.logger_utils import log_service_call
 
 class MCPStartAnalysisPayload(BaseModel):
     project_id: str = Field(...)
@@ -30,7 +31,7 @@ class MCPClientService:
         self.base_url = base_url or settings.MCP_SERVER_BASE_URL.rstrip('/')
 
     def _build_payload(self, payload: dict) -> dict:
-        return {
+        built_payload = {
             "project_id": payload.get("project_id"),
             "job_id": payload.get("job_id"),
             "email": payload.get("email"),
@@ -41,6 +42,8 @@ class MCPClientService:
             "repository": payload.get("repository"),
             "comentario_extra": payload.get("comentario_extra")
         }
+        log_service_call("MCPClientService", "build_payload", built_payload)
+        return built_payload
 
     async def start_analysis(
         self,
@@ -59,9 +62,7 @@ class MCPClientService:
         files = None
 
         if arquivo_docx is not None:
-            
             await arquivo_docx.seek(0)
-            
             files = {
                 "arquivo_docx": (
                     arquivo_docx.filename,
@@ -70,24 +71,64 @@ class MCPClientService:
                 )
             }
 
+        log_service_call(
+            "MCPClientService",
+            "http_request",
+            {
+                "url": url,
+                "method": "POST",
+                "has_file": arquivo_docx is not None,
+                "job_id": job_id,
+                "payload": data
+            }
+        )
+
         try:
             # Aumentei o timeout para 120s pois upload de arquivos + processamento de IA demora
             async with httpx.AsyncClient(timeout=120.0) as client:
                 if files:
-                    # Envio como multipart/form-data
                     response = await client.post(url, data=data, files=files)
                 else:
-                    # Envio como application/json
                     response = await client.post(url, json=data)
+
+                log_service_call(
+                    "MCPClientService",
+                    "http_response",
+                    {
+                        "url": url,
+                        "status_code": response.status_code,
+                        "job_id": job_id,
+                        "response_body": response.text[:512]  # Limita tamanho do log
+                    }
+                )
 
                 response.raise_for_status()
                 data_resp = response.json()
                 
+                log_service_call(
+                    "MCPClientService",
+                    "parsed_response",
+                    {
+                        "job_id": job_id,
+                        "project_id": data_resp.get("project_id", payload.get("project_id")),
+                        "response_keys": list(data_resp.keys())
+                    }
+                )
+
                 return MCPStartAnalysisResponse(
                     project_id=data_resp.get("project_id", payload.get("project_id")),
                     job_id=data_resp.get("job_id", job_id)
                 )
         except Exception as exc:
+            log_service_call(
+                "MCPClientService",
+                "exception",
+                {
+                    "url": url,
+                    "job_id": job_id,
+                    "error": str(exc)
+                }
+            )
             logging.error(f"❌ [MCP Client] Falha ao chamar [{url}]: {str(exc)}")
             raise Exception(f"Erro na comunicação com MCP: {str(exc)}")
             
