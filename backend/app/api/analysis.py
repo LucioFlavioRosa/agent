@@ -10,6 +10,7 @@ from backend.app.services.mcp_client_service import MCPClientService
 from backend.app.services.mcp_config_service import MCPConfigService
 from backend.app.services.permission_service import PermissionService
 from backend.app.services.mongodb_service import MongoDBService
+from backend.app.utils.logger_utils import log_request_received, log_validation_step, log_service_call, log_response_sent
 
 router = APIRouter()
 logger = logging.getLogger("analysis_api")
@@ -107,21 +108,48 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
+    # Log recebimento do payload
+    log_request_received("/analysis/start", {
+        "email": email,
+        "nome_projeto": nome_projeto,
+        "agent_name": agent_name,
+        "analysis_type": analysis_type,
+        "branch": branch,
+        "repository": repository,
+        "comentario_extra": comentario_extra,
+        "arquivo_docx": arquivo_docx.filename if arquivo_docx else None
+    })
+
     # 1. Validação de Segurança do Arquivo
     if arquivo_docx:
-        validate_file_extension(arquivo_docx)
+        try:
+            validate_file_extension(arquivo_docx)
+            log_validation_step("file_extension", "success", f"Arquivo '{arquivo_docx.filename}' válido.")
+        except HTTPException as e:
+            log_validation_step("file_extension", "fail", f"Arquivo '{arquivo_docx.filename}' inválido: {e.detail}")
+            raise
 
     logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' para usuário {email}")
 
     mongo_service = MongoDBService()
     
     # 2. Validação de usuário e company_id
-    user, company_id = await validate_user_and_company(email, mongo_service)
+    try:
+        user, company_id = await validate_user_and_company(email, mongo_service)
+        log_validation_step("user_and_company_id", "success", f"Usuário '{email}' e company_id '{company_id}' validados.")
+    except HTTPException as e:
+        log_validation_step("user_and_company_id", "fail", str(e.detail))
+        raise
     
     # 3. Criação ou busca de projeto
-    project_id, nome_projeto_final = await get_or_create_project(
-        nome_projeto, agent_name, email, user, company_id, mongo_service
-    )
+    try:
+        project_id, nome_projeto_final = await get_or_create_project(
+            nome_projeto, agent_name, email, user, company_id, mongo_service
+        )
+        log_validation_step("project_creation_or_fetch", "success", f"Projeto '{nome_projeto_final}' com id '{project_id}' pronto.")
+    except HTTPException as e:
+        log_validation_step("project_creation_or_fetch", "fail", str(e.detail))
+        raise
 
     # 4. Verifica permissão do usuário para executar ação no projeto
     try:
@@ -129,24 +157,31 @@ async def start_analysis(
             email, project_id, agent_name, "write"
         )
         if not permission_result[0]:
+            log_validation_step("project_permission", "fail", permission_result[2] or "Usuário não possui permissão para executar esta ação no projeto.")
             raise HTTPException(
                 status_code=403, 
                 detail=permission_result[2] or "Usuário não possui permissão para executar esta ação no projeto."
             )
-    except HTTPException:
+        log_validation_step("project_permission", "success", f"Permissão validada: role={permission_result[1]}.")
+    except HTTPException as e:
+        log_validation_step("project_permission", "fail", str(e.detail))
         raise
     except Exception as e:
         logger.error(f"Erro ao validar permissões: {e}")
+        log_validation_step("project_permission", "fail", f"Erro ao validar permissões: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
     # 5. Busca configuração do agente via MCPConfigService
     agent_cfg = MCPConfigService.get_agent_config(agent_name)
     if not agent_cfg or not agent_cfg.mcp_service_url:
         logger.error(f"Configuração do agente '{agent_name}' inválida ou URL do MCP ausente.")
+        log_validation_step("agent_config", "fail", f"Configuração do agente '{agent_name}' não disponível.")
         raise HTTPException(status_code=500, detail=f"Configuração do agente '{agent_name}' não disponível.")
+    log_validation_step("agent_config", "success", f"Configuração do agente '{agent_name}' carregada.")
 
     # 6. Gera job_id único para rastreamento da execução
     job_id = str(uuid.uuid4())
+    log_validation_step("job_id_generation", "success", f"Job ID gerado: {job_id}")
 
     # 7. Monta payload para o serviço MCP
     mcp_payload = {
@@ -160,19 +195,38 @@ async def start_analysis(
         "project_id": project_id,
         "job_id": job_id
     }
+    log_service_call("MCPClientService", "prepare_payload", mcp_payload)
 
     # 8. Comunicação com o serviço MCP via Client Service
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
     try:
-        # Nota: O arquivo_docx é passado separadamente para ser tratado como multipart
+        log_service_call("MCPClientService", "start_analysis_call", {
+            "url": agent_cfg.mcp_service_url,
+            "has_file": arquivo_docx is not None,
+            "job_id": job_id,
+            "project_id": project_id
+        })
         await mcp_client.start_analysis(mcp_payload, agent_cfg.mcp_service_url, arquivo_docx)
+        log_service_call("MCPClientService", "start_analysis_response", {
+            "job_id": job_id,
+            "project_id": project_id,
+            "status": "success"
+        })
     except Exception as e:
         logger.error(f"Erro na comunicação com MCP para o job {job_id}: {e}")
+        log_service_call("MCPClientService", "start_analysis_response", {
+            "job_id": job_id,
+            "project_id": project_id,
+            "status": "fail",
+            "error": str(e)
+        })
         raise HTTPException(status_code=502, detail=f"O serviço de agentes (MCP) retornou um erro: {str(e)}")
 
-    return StartAnalysisResponse(
+    response = StartAnalysisResponse(
         message="Análise multiagente solicitada com sucesso ao MCP.",
         project_id=project_id,
         job_id=job_id,
         nome_projeto=nome_projeto_final
     )
+    log_response_sent("/analysis/start", 200, response.dict())
+    return response
