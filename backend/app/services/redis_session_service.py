@@ -8,6 +8,7 @@ from backend.app.models.session_models import SessionData
 import logging
 from backend.app.models.job_models import JobData
 from backend.app.services.azure_secret_manager import AzureSecretManager
+from backend.app.utils import logger_utils
 
 class RedisSessionService:
     def __init__(self):
@@ -76,6 +77,13 @@ class RedisSessionService:
     def create_job(self, project_id: str, analysis_type: str, email: str = None, empresa: str = None) -> str:
         job_id = str(uuid.uuid4())
         now = datetime.utcnow()
+        logger_utils.log_request_received(self.logger, "create_job", {
+            "job_id": job_id,
+            "project_id": project_id,
+            "analysis_type": analysis_type,
+            "email": email,
+            "empresa": empresa
+        })
         job = JobData(
             job_id=job_id,
             project_id=project_id,
@@ -90,7 +98,13 @@ class RedisSessionService:
             empresa=empresa
         )
         key = f"job:{job_id}"
-        self.redis_client.setex(key, self.session_ttl, job.json())
+        try:
+            logger_utils.log_service_call(self.logger, "create_job", "Executando setex no Redis", {"key": key})
+            self.redis_client.setex(key, self.session_ttl, job.json())
+            logger_utils.log_response_sent(self.logger, "create_job", "Job criado com sucesso", {"job_id": job_id})
+        except Exception as e:
+            logger_utils.log_response_sent(self.logger, "create_job", f"Falha ao criar job: {e}", {"job_id": job_id})
+            raise
         return job_id
 
     def get_job(self, job_id: str) -> Optional[JobData]:
@@ -116,38 +130,56 @@ class RedisSessionService:
 
     def update_job_status(self, job_id: str, status: str):
         key = f"job:{job_id}"
+        logger_utils.log_request_received(self.logger, "update_job_status", {"job_id": job_id, "status": status})
         job_json = self.redis_client.get(key)
         if not job_json:
+            logger_utils.log_response_sent(self.logger, "update_job_status", "Job não encontrado para atualização de status", {"job_id": job_id})
             self.logger.error(f"Job {job_id} não encontrado para atualização de status.")
             return
         try:
+            logger_utils.log_service_call(self.logger, "update_job_status", "Atualizando timestamps e status", {"job_id": job_id})
             data = json.loads(job_json)
             self._update_timestamps(data, status)
             self.redis_client.setex(key, self.session_ttl, json.dumps(data))
+            logger_utils.log_response_sent(self.logger, "update_job_status", "Status atualizado com sucesso", {"job_id": job_id, "status": status})
         except Exception as e:
+            logger_utils.log_response_sent(self.logger, "update_job_status", f"Falha ao atualizar status: {e}", {"job_id": job_id})
             self.logger.error(f"Erro ao atualizar status do job {job_id}: {e}")
 
     def store_report_data_for_job(self, job_id: str, report_data: dict):
         key = f"job:{job_id}:report"
+        logger_utils.log_request_received(self.logger, "store_report_data_for_job", {"job_id": job_id})
         try:
+            logger_utils.log_service_call(self.logger, "store_report_data_for_job", "Executando setex para report_data", {"key": key})
             self.redis_client.setex(key, self.session_ttl, json.dumps(report_data))
+            logger_utils.log_response_sent(self.logger, "store_report_data_for_job", "Report data armazenado com sucesso", {"job_id": job_id})
         except Exception as e:
+            logger_utils.log_response_sent(self.logger, "store_report_data_for_job", f"Falha ao armazenar report_data: {e}", {"job_id": job_id})
             self.logger.error(f"Erro ao armazenar report_data para job {job_id}: {e}")
 
     def get_report_data_for_job(self, job_id: str) -> Optional[dict]:
         key = f"job:{job_id}:report"
+        logger_utils.log_request_received(self.logger, "get_report_data_for_job", {"job_id": job_id})
         report_json = self.redis_client.get(key)
+        logger_utils.log_service_call(self.logger, "get_report_data_for_job", "Executando get para report_data", {"key": key})
         if report_json:
             try:
+                logger_utils.log_response_sent(self.logger, "get_report_data_for_job", "Report data encontrado", {"job_id": job_id})
                 return json.loads(report_json)
             except Exception as e:
+                logger_utils.log_response_sent(self.logger, "get_report_data_for_job", f"Falha ao desserializar report_data: {e}", {"job_id": job_id})
                 self.logger.error(f"Erro ao desserializar report_data para job {job_id}: {e}")
                 return None
+        logger_utils.log_response_sent(self.logger, "get_report_data_for_job", "Report data não encontrado", {"job_id": job_id})
         return None
 
     def store_error_message_for_job(self, job_id: str, error_message: str):
         key = f"job:{job_id}:error"
+        logger_utils.log_request_received(self.logger, "store_error_message_for_job", {"job_id": job_id})
         try:
+            logger_utils.log_service_call(self.logger, "store_error_message_for_job", "Executando setex para error_message", {"key": key})
             self.redis_client.setex(key, self.session_ttl, json.dumps({"error_message": error_message}))
+            logger_utils.log_response_sent(self.logger, "store_error_message_for_job", "Error message armazenado com sucesso", {"job_id": job_id})
         except Exception as e:
+            logger_utils.log_response_sent(self.logger, "store_error_message_for_job", f"Falha ao armazenar error_message: {e}", {"job_id": job_id})
             self.logger.error(f"Erro ao armazenar error_message para job {job_id}: {e}")
