@@ -30,40 +30,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# IP Restriction Middleware permanece para segurança de infraestrutura
-
-def _extract_client_ip(request: Request) -> str:
-    client_ip = request.client.host
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-    if ":" in client_ip and "." in client_ip:
-        client_ip = client_ip.split(":")[0]
-    return client_ip
-
-ALLOWED_IPS = ["127.0.0.1", "localhost", "::1"]
-env_ips_str = os.environ.get("ALLOWED_IPS", "")
-if env_ips_str:
-    extra_ips = [ip.strip() for ip in env_ips_str.split(",") if ip.strip()]
-    ALLOWED_IPS.extend(extra_ips)
-    logging.info(f"IPs adicionais permitidos: {extra_ips}")
-
-def _is_ip_allowed(client_ip: str) -> bool:
-    return "*" in ALLOWED_IPS or client_ip in ALLOWED_IPS
-
-@app.middleware("http")
-async def ip_restriction_middleware(request: Request, call_next):
-    client_ip = _extract_client_ip(request)
-    if not _is_ip_allowed(client_ip):
-        if request.url.path not in ["/docs", "/openapi.json", "/redoc"]:
-            logging.warning(f"⛔ Acesso negado: IP {client_ip}")
-            return JSONResponse(
-                status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": f"Acesso negado. IP {client_ip} não autorizado."}
-            )
-    response = await call_next(request)
-    return response
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
