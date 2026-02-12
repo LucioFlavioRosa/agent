@@ -1,18 +1,30 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 class MCPStartAnalysisPayload(BaseModel):
-    project_id: str = Field(..., description="Identificador único do projeto.")
-    comentario_extra: Optional[str] = Field(None, description="Comentário adicional enviado pelo usuário.")
-    analysis_type: str = Field(..., description="Tipo de análise a ser realizada pelo MCP.")
-    job_id: str = Field(..., description="Identificador único do job.")
-    # Removido: arquivo_docx
+    project_id: str = Field(..., description="ID único do projeto no MongoDB")
+    job_id: str = Field(..., description="ID único da execução (UUID)")
+    email: Optional[str] = None
+    nome_projeto: Optional[str] = None
+    agent_name: Optional[str] = None
+    analysis_type: Optional[str] = None
+    branch: Optional[str] = None
+    repository: Optional[str] = None
+    comentario_extra: Optional[str] = None
 
-    @validator('job_id')
-    def job_id_must_not_be_empty(cls, v):
-        if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('job_id é obrigatório e não pode ser vazio')
+    @field_validator('job_id', 'project_id', mode='before')
+    @classmethod
+    def fields_not_empty(cls, v):
+        """
+        Garante que os IDs não sejam nulos, vazios ou apenas espaços.
+        O modo 'before' garante a validação antes mesmo da conversão final.
+        """
+        if v is None:
+            raise ValueError('Este campo não pode ser nulo')
+        if isinstance(v, str) and not v.strip():
+            raise ValueError('Este campo não pode estar vazio ou conter apenas espaços')
         return v
 
 class MCPStartAnalysisResponse(BaseModel):
-    project_id: str = Field(..., description="Identificador único do projeto.")
+    project_id: str
+    job_id: Optional[str] = None
