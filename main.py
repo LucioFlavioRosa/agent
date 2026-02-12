@@ -48,11 +48,13 @@ app.include_router(project_management_router, prefix="/projects", tags=["Project
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    logging.info(f"[HTTPException] {exc.status_code} - {exc.detail} - Path: {request.url.path}")
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logging.error(f"Erro não tratado: {exc}", exc_info=True)
+    logging.error(f"[UnhandledException] Erro não tratado: {exc}", exc_info=True)
+    logging.error(f"[UnhandledException] Path: {request.url.path}, Method: {request.method}")
     return JSONResponse(status_code=500, content={"detail": "Erro interno do servidor."})
 
 def setup_logging():
@@ -77,18 +79,20 @@ def setup_logging():
 def on_startup():
     setup_logging()
     logging.info("🚀 Iniciando Backend Peers CodeAI...")
+    logging.info("[Startup] Iniciando carregamento de segredos do Key Vault...")
     # Carrega segredos do Key Vault (incluindo Redis)
     try:
         ConfigLoaderService().load_secrets_from_key_vault()
-        logging.info("ConfigLoaderService: Segredos carregados do Key Vault com sucesso.")
+        logging.info("[Startup] ConfigLoaderService: Segredos carregados do Key Vault com sucesso.")
     except Exception as e:
-        logging.error(f"⚠️ Aviso de Startup: {str(e)}")
+        logging.error(f"⚠️ [Startup] Falha ao carregar segredos do Key Vault: {str(e)}")
         raise RuntimeError(f"Falha ao carregar segredos do Key Vault: {str(e)}")
     # Removida validação de settings.MONGODB_URI e settings.MONGODB_DATABASE_NAME
     try:
-        # Inicializa MongoDBService globalmente
+        logging.info("[Startup] Inicializando MongoDBService...")
         app.state.mongo_service = MongoDBService()
-        logging.info("MongoDBService inicializado com sucesso.")
+        logging.info("[Startup] MongoDBService inicializado com sucesso.")
     except Exception as e:
-        logging.critical(f"Erro ao inicializar MongoDBService: {str(e)}")
+        logging.critical(f"[Startup] Erro ao inicializar MongoDBService: {str(e)}")
         raise
+    logging.info("[Startup] Aplicação pronta para receber requisições.")
