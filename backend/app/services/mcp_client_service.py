@@ -50,14 +50,18 @@ class MCPClientService:
     ) -> MCPStartAnalysisResponse:
         base = mcp_service_url.strip().rstrip("/")
         url = f"{base}/start"
-        logging.info(f"🔌 [MCP Client] URL Final Limpa: '[{url}]'")
-
+        
         job_id = payload.get("job_id")
-        MCPStartAnalysisPayload.validate_job_id(job_id)
+        # Removi a chamada ao validador estático do Pydantic aqui para evitar conflitos
+        if not job_id: raise ValueError("job_id é obrigatório")
 
         data = self._build_payload(payload)
         files = None
+
         if arquivo_docx is not None:
+            
+            await arquivo_docx.seek(0)
+            
             files = {
                 "arquivo_docx": (
                     arquivo_docx.filename,
@@ -65,34 +69,28 @@ class MCPClientService:
                     arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
             }
+
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            # Aumentei o timeout para 120s pois upload de arquivos + processamento de IA demora
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 if files:
-                    response = await client.post(
-                        url,
-                        data=data,
-                        files=files
-                    )
+                    # Envio como multipart/form-data
+                    response = await client.post(url, data=data, files=files)
                 else:
-                    response = await client.post(
-                        url,
-                        json=data,
-                        headers={"Content-Type": "application/json"}
-                    )
-                if response.status_code != 200:
-                    logging.error(f"❌ [MCP Client] Erro {response.status_code}: {response.text}")
-                    raise Exception(f"Erro ao comunicar com MCP Server: {response.status_code} - {response.text}")
+                    # Envio como application/json
+                    response = await client.post(url, json=data)
+
+                response.raise_for_status()
                 data_resp = response.json()
+                
                 return MCPStartAnalysisResponse(
                     project_id=data_resp.get("project_id", payload.get("project_id")),
                     job_id=data_resp.get("job_id", job_id)
                 )
-        except httpx.HTTPStatusError as exc:
-            raise Exception(f"Erro ao comunicar com MCP Server: {exc.response.status_code} - {exc.response.text}")
         except Exception as exc:
-            logging.error(f"❌ [MCP Client] Falha ao chamar [{url}]: {str(exc)}", exc_info=True)
-            raise Exception(f"Erro inesperado ao comunicar com MCP Server: {str(exc)}")
-
+            logging.error(f"❌ [MCP Client] Falha ao chamar [{url}]: {str(exc)}")
+            raise Exception(f"Erro na comunicação com MCP: {str(exc)}")
+            
     async def get_projects(self, email: str, empresa: str, mcp_url: str) -> Any:
         url = f"{mcp_url.rstrip('/')}/projects/list"
         payload = {
