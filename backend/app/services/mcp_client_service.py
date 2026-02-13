@@ -12,9 +12,10 @@ from backend.app.utils.logging_utils import (
 class MCPStartAnalysisPayload(BaseModel):
     project_id: str = Field(...)
     job_id: str = Field(...)
+    company_id: str = Field(...)
     email: Optional[str] = Field(None)
     nome_projeto: Optional[str] = Field(None)
-    agent_name: Optional[str] = Field(None)
+    analysis_type: Optional[str] = Field(None)
     branch: Optional[str] = Field(None)
     repository: Optional[str] = Field(None)
     comentario_extra: Optional[str] = Field(None)
@@ -44,9 +45,9 @@ class MCPClientService:
         return {
             "project_id": payload.get("project_id"),
             "job_id": payload.get("job_id"),
+            "company_id": payload.get("company_id"),
             "email": payload.get("email"),
             "nome_projeto": payload.get("nome_projeto"),
-            "agent_name": payload.get("agent_name"),
             "analysis_type": payload.get("analysis_type"),
             "branch": payload.get("branch"),
             "repository": payload.get("repository"),
@@ -63,6 +64,7 @@ class MCPClientService:
         url = f"{base}/start"
         job_id = payload.get("job_id")
         project_id = payload.get("project_id")
+        company_id = payload.get("company_id")
         if not job_id:
             log_error(
                 context="MCPClientService.start_analysis",
