@@ -21,7 +21,7 @@ class MongoDBService:
                 if uri is None:
                     uri = secret_manager.get_secret("azure-mongodb-connection-string")
                 if db_name is None:
-                    db_name = secret_manager.get_secret("mongodb-database-name")
+                    db_name = secret_manager.get_secret("azure-mongodb-database-name")
             except Exception as e:
                 self.logger.critical(f"Erro ao obter segredos do MongoDB do Key Vault: {e}")
                 raise
