@@ -220,7 +220,7 @@ async def start_analysis(
     try:
         permission_service = PermissionService(mongo_service)
         has_permission, member_role, error_msg = await permission_service.check_user_project_action_permission(
-            email, project_id, action_type="edit"
+            email, project_id, action_type="edit_project"
         )
         log_validation_step(
             step="check_user_project_action_permission",
