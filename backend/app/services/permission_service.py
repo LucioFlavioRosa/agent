@@ -101,3 +101,53 @@ class PermissionService:
         # 7. Resultado final da verificação de permissão
         self.logger.info(f"[check_user_agent_permission] Permissão concedida para usuário '{email}' usar agente '{agent_name}'.")
         return True, None
+
+    async def check_user_project_action_permission(
+        self,
+        email: str,
+        project_id: str,
+        action_type: str
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        self.logger.info(f"[check_user_project_action_permission] Iniciando validação de permissão para usuário '{email}' no projeto '{project_id}' para ação '{action_type}'.")
+        # 1. Buscar usuário por email
+        user = await self.mongo_service.get_user_by_email(email)
+        if not user:
+            self.logger.warning(f"[check_user_project_action_permission] Usuário '{email}' não encontrado.")
+            return False, None, "Usuário não encontrado."
+        if not user.active:
+            self.logger.warning(f"[check_user_project_action_permission] Usuário '{email}' está inativo.")
+            return False, None, "Usuário inativo."
+        company_id = getattr(user, "company_id", None)
+        if not company_id:
+            self.logger.warning(f"[check_user_project_action_permission] Usuário '{email}' não possui company_id.")
+            return False, None, "Usuário não possui company_id."
+        self.logger.info(f"[check_user_project_action_permission] company_id do usuário: {company_id}")
+        # 2. Buscar projeto por project_id
+        project = await self.mongo_service.get_project_by_id(project_id)
+        if not project:
+            self.logger.warning(f"[check_user_project_action_permission] Projeto '{project_id}' não encontrado.")
+            return False, None, "Projeto não encontrado."
+        self.logger.info(f"[check_user_project_action_permission] Projeto encontrado: {project}")
+        # 3. Verificar se usuário está na lista de membros
+        member_role = None
+        for member in project.members:
+            if member.email == email:
+                member_role = member.role
+                self.logger.info(f"[check_user_project_action_permission] Role do membro '{email}' no projeto '{project_id}': {member_role}")
+                break
+        if not member_role:
+            self.logger.warning(f"[check_user_project_action_permission] Usuário '{email}' não está na lista de membros do projeto '{project_id}'.")
+            return False, None, "Usuário não está na lista de membros do projeto."
+        # 4. Validar se action_type é permitida para a role
+        role_actions = {
+            "owner": {"view", "edit", "delete", "add_member"},
+            "editor": {"view", "edit"},
+            "viewer": {"view"}
+        }
+        allowed_actions = role_actions.get(member_role, set())
+        if action_type not in allowed_actions:
+            self.logger.warning(f"[check_user_project_action_permission] Ação '{action_type}' não permitida para role '{member_role}'.")
+            return False, member_role, f"Ação '{action_type}' não permitida para role '{member_role}'."
+        self.logger.info(f"[check_user_project_action_permission] Ação '{action_type}' permitida para role '{member_role}'.")
+        # 5. Retornar tupla indicando permissão, role e mensagem
+        return True, member_role, None
