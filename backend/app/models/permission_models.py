@@ -29,6 +29,17 @@ class ProjectMember(BaseModel):
     role: str
     added_at: Optional[str] = None
 
+    # Permissões de cada role:
+    # owner: pode adicionar/excluir usuários do projeto, excluir projeto, modificar o projeto (incluindo relatórios), ver o projeto (incluindo relatórios)
+    # editor: pode modificar o projeto (incluindo relatórios), ver o projeto (incluindo relatórios)
+    # viewer: pode ver o projeto (incluindo relatórios)
+    @validator('role')
+    def role_must_be_valid(cls, v):
+        valid_roles = {'owner', 'editor', 'viewer'}
+        if v not in valid_roles:
+            raise ValueError(f"Role inválida: {v}. Deve ser uma das {valid_roles}.")
+        return v
+
 class ProjectPermission(BaseModel):
     id: str = Field(..., alias="_id")
     name: str

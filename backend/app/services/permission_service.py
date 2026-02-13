@@ -7,6 +7,28 @@ class PermissionService:
         self.mongo_service = mongo_service or MongoDBService()
         self.logger = logging.getLogger("PermissionService")
 
+    @staticmethod
+    def validate_project_action_by_role(role: str, action: str) -> Tuple[bool, Optional[str]]:
+        """
+        Valida se uma ação é permitida para uma determinada role.
+        Args:
+            role (str): Role do usuário ('owner', 'editor', 'viewer').
+            action (str): Ação solicitada ('add_member', 'delete_project', 'edit_project', 'view_project').
+        Returns:
+            Tuple[bool, Optional[str]]: (permitido, mensagem de erro caso não seja)
+        """
+        role_action_map = {
+            "owner": {"add_member", "delete_project", "edit_project", "view_project"},
+            "editor": {"edit_project", "view_project"},
+            "viewer": {"view_project"}
+        }
+        allowed_actions = role_action_map.get(role)
+        if allowed_actions is None:
+            return False, f"Role desconhecida: '{role}'."
+        if action not in allowed_actions:
+            return False, f"Ação '{action}' não permitida para role '{role}'."
+        return True, None
+
     async def check_user_project_permission(
         self,
         email: str,
@@ -46,10 +68,15 @@ class PermissionService:
         if not member_role:
             self.logger.warning(f"[check_user_project_permission] Usuário '{email}' não possui permissão no projeto '{project_id}'.")
             return False, None, "Usuário não possui permissão no projeto."
-        # 5. Busca de grupos do usuário
+        # 5. Validação de ação permitida para role
+        permitted, error_msg = self.validate_project_action_by_role(member_role, action_type)
+        if not permitted:
+            self.logger.warning(f"[check_user_project_permission] {error_msg}")
+            return False, member_role, error_msg
+        # 6. Busca de grupos do usuário
         groups = await self.mongo_service.get_user_groups(user.id)
         self.logger.info(f"[check_user_project_permission] Grupos do usuário '{email}': {[g.name for g in groups]}")
-        # 6. Validação de agentes permitidos
+        # 7. Validação de agentes permitidos
         allowed_agents = set()
         for group in groups:
             if hasattr(group, "company_id") and group.company_id != company_id:
@@ -60,10 +87,7 @@ class PermissionService:
         if agent_name not in allowed_agents:
             self.logger.warning(f"[check_user_project_permission] Agente '{agent_name}' não permitido para usuário '{email}'.")
             return False, member_role, "Agente não permitido para o grupo do usuário."
-        if action_type == "write" and member_role == "viewer":
-            self.logger.warning(f"[check_user_project_permission] Usuário '{email}' com role 'viewer' não pode executar ações de escrita.")
-            return False, member_role, "Usuário com role 'viewer' não pode executar ações de escrita."
-        # 7. Resultado final da verificação de permissão
+        # 8. Resultado final da verificação de permissão
         self.logger.info(f"[check_user_project_permission] Permissão concedida para usuário '{email}' no projeto '{project_id}' com agente '{agent_name}' para ação '{action_type}'.")
         return True, member_role, None
 
@@ -138,16 +162,11 @@ class PermissionService:
         if not member_role:
             self.logger.warning(f"[check_user_project_action_permission] Usuário '{email}' não está na lista de membros do projeto '{project_id}'.")
             return False, None, "Usuário não está na lista de membros do projeto."
-        # 4. Validar se action_type é permitida para a role
-        role_actions = {
-            "owner": {"view", "edit", "delete", "add_member"},
-            "editor": {"view", "edit"},
-            "viewer": {"view"}
-        }
-        allowed_actions = role_actions.get(member_role, set())
-        if action_type not in allowed_actions:
-            self.logger.warning(f"[check_user_project_action_permission] Ação '{action_type}' não permitida para role '{member_role}'.")
-            return False, member_role, f"Ação '{action_type}' não permitida para role '{member_role}'."
+        # 4. Validar se action_type é permitida para a role usando validate_project_action_by_role
+        permitted, error_msg = self.validate_project_action_by_role(member_role, action_type)
+        if not permitted:
+            self.logger.warning(f"[check_user_project_action_permission] {error_msg}")
+            return False, member_role, error_msg
         self.logger.info(f"[check_user_project_action_permission] Ação '{action_type}' permitida para role '{member_role}'.")
         # 5. Retornar tupla indicando permissão, role e mensagem
         return True, member_role, None

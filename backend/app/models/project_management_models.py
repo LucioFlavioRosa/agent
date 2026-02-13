@@ -29,3 +29,11 @@ class UpdateProjectMembersRequest(BaseModel):
 class UpdateProjectMembersResponse(BaseModel):
     success: bool = Field(..., description="Indica se a atualização foi bem-sucedida")
     message: Optional[str] = Field(None, description="Mensagem de confirmação ou erro")
+
+class DeleteProjectRequest(BaseModel):
+    requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
+    project_id: str = Field(..., description="Identificador do projeto a ser excluído")
+
+class DeleteProjectResponse(BaseModel):
+    success: bool = Field(..., description="Indica se a exclusão foi bem-sucedida")
+    message: Optional[str] = Field(None, description="Mensagem de confirmação ou erro")
