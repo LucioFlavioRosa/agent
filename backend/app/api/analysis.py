@@ -190,6 +190,7 @@ async def start_analysis(
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
+    mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     # 1. Log recebimento do payload
     payload = {
@@ -304,7 +305,8 @@ async def start_analysis(
         "repository": repository,
         "comentario_extra": comentario_extra,
         "project_id": project_id,
-        "job_id": job_id
+        "job_id": job_id,
+        "company_id": company_id
     }
     log_service_call(
         service="MCPClientService",
