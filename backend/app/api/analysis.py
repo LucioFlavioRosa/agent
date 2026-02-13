@@ -1,7 +1,7 @@
 import logging
 import uuid
 import os
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -184,18 +184,16 @@ async def start_analysis(
     email: Optional[str] = Form(None),
     nome_projeto: Optional[str] = Form(None),
     analysis_type: Optional[str] = Form(None),
-    analysis_type: Optional[str] = Form(None),
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None),
-    mongo_service: MongoDBService = Depends(get_mongo_service)
+    mongo_service: MongoDBService = Depends(lambda request: request.app.state.mongo_service)
 ):
     # 1. Log recebimento do payload
     payload = {
         "email": email,
         "nome_projeto": nome_projeto,
-        "analysis_type": analysis_type,
         "analysis_type": analysis_type,
         "branch": branch,
         "repository": repository,
@@ -220,31 +218,25 @@ async def start_analysis(
 
     # 5. Verifica permissão do usuário para executar ação no projeto
     try:
-        permission_result = await PermissionService(mongo_service).check_user_project_permission(
-            email, project_id, analysis_type, "write"
+        permission_service = PermissionService(mongo_service)
+        has_permission, member_role, error_msg = await permission_service.check_user_project_action_permission(
+            email, project_id, action_type="edit"
         )
-        if not permission_result[0]:
-            log_validation_step(
-                step="check_user_project_permission",
-                status="fail",
-                details=permission_result[2] or "Usuário não possui permissão para executar esta ação no projeto.",
-                job_id=None,
-                project_id=project_id
-            )
-            raise HTTPException(
-                status_code=403, 
-                detail=permission_result[2] or "Usuário não possui permissão para executar esta ação no projeto."
-            )
         log_validation_step(
-            step="check_user_project_permission",
-            status="success",
-            details="Permissão validada para usuário no projeto.",
+            step="check_user_project_action_permission",
+            status="success" if has_permission else "fail",
+            details="Permissão validada para ação de edição no projeto." if has_permission else (error_msg or "Usuário não possui permissão para executar esta ação no projeto."),
             job_id=None,
             project_id=project_id
         )
+        if not has_permission:
+            raise HTTPException(
+                status_code=403,
+                detail=error_msg or "Usuário não possui permissão para executar esta ação no projeto."
+            )
     except HTTPException as exc:
         log_error(
-            context="check_user_project_permission",
+            context="check_user_project_action_permission",
             error_message=str(exc.detail),
             exception=exc,
             job_id=None,
@@ -253,13 +245,13 @@ async def start_analysis(
         raise
     except Exception as e:
         log_error(
-            context="check_user_project_permission",
-            error_message="Erro ao validar permissões do usuário.",
+            context="check_user_project_action_permission",
+            error_message="Erro ao validar permissões de ação do usuário.",
             exception=e,
             job_id=None,
             project_id=project_id
         )
-        logger.error(f"Erro ao validar permissões: {e}")
+        logger.error(f"Erro ao validar permissões de ação: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
     # 6. Busca configuração do agente via MCPConfigService
@@ -296,7 +288,6 @@ async def start_analysis(
     mcp_payload = {
         "email": email,
         "nome_projeto": nome_projeto_final,
-        "analysis_type": analysis_type,
         "analysis_type": analysis_type,
         "branch": branch,
         "repository": repository,
