@@ -27,7 +27,6 @@ ALLOWED_EXTENSIONS = {".docx"}
 class StartAnalysisRequest(BaseModel):
     email: Optional[str] = None
     nome_projeto: Optional[str] = None
-    agent_name: Optional[str] = None
     analysis_type: Optional[str] = None
     branch: Optional[str] = None
     repository: Optional[str] = None
@@ -102,16 +101,16 @@ async def validate_user_and_company(email: Optional[str], mongo_service: MongoDB
     )
     return user, company_id
 
-async def get_or_create_project(nome_projeto: Optional[str], agent_name: Optional[str], email: str, user, company_id, mongo_service: MongoDBService):
-    if not nome_projeto or not agent_name:
+async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Optional[str], email: str, user, company_id, mongo_service: MongoDBService):
+    if not nome_projeto or not analysis_type:
         log_validation_step(
             step="get_or_create_project",
             status="fail",
-            details="Campos obrigatórios ausentes: nome_projeto, agent_name.",
+            details="Campos obrigatórios ausentes: nome_projeto, analysis_type.",
             job_id=None,
             project_id=None
         )
-        raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes: nome_projeto, agent_name.")
+        raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes: nome_projeto, analysis_type.")
     
     def normalize_project_name(name):
         return name.strip().lower().replace(" ", "_")
@@ -121,7 +120,7 @@ async def get_or_create_project(nome_projeto: Optional[str], agent_name: Optiona
     
     if not project:
         permission_service = PermissionService(mongo_service)
-        has_access, error_msg = await permission_service.check_user_agent_permission(email, agent_name)
+        has_access, error_msg = await permission_service.check_user_agent_permission(email, analysis_type)
         if not has_access:
             log_validation_step(
                 step="get_or_create_project",
@@ -184,7 +183,7 @@ async def get_or_create_project(nome_projeto: Optional[str], agent_name: Optiona
 async def start_analysis(
     email: Optional[str] = Form(None),
     nome_projeto: Optional[str] = Form(None),
-    agent_name: Optional[str] = Form(None),
+    analysis_type: Optional[str] = Form(None),
     analysis_type: Optional[str] = Form(None),
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
@@ -196,7 +195,7 @@ async def start_analysis(
     payload = {
         "email": email,
         "nome_projeto": nome_projeto,
-        "agent_name": agent_name,
+        "analysis_type": analysis_type,
         "analysis_type": analysis_type,
         "branch": branch,
         "repository": repository,
@@ -216,13 +215,13 @@ async def start_analysis(
     
     # 4. Criação ou busca de projeto
     project_id, nome_projeto_final = await get_or_create_project(
-        nome_projeto, agent_name, email, user, company_id, mongo_service
+        nome_projeto, analysis_type, email, user, company_id, mongo_service
     )
 
     # 5. Verifica permissão do usuário para executar ação no projeto
     try:
         permission_result = await PermissionService(mongo_service).check_user_project_permission(
-            email, project_id, agent_name, "write"
+            email, project_id, analysis_type, "write"
         )
         if not permission_result[0]:
             log_validation_step(
@@ -264,21 +263,21 @@ async def start_analysis(
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
     # 6. Busca configuração do agente via MCPConfigService
-    agent_cfg = MCPConfigService.get_agent_config(agent_name)
+    agent_cfg = MCPConfigService.get_agent_config(analysis_type)
     if not agent_cfg or not agent_cfg.mcp_service_url:
         log_error(
             context="get_agent_config",
-            error_message=f"Configuração do agente '{agent_name}' inválida ou URL do MCP ausente.",
+            error_message=f"Configuração do agente '{analysis_type}' inválida ou URL do MCP ausente.",
             exception=None,
             job_id=None,
             project_id=project_id
         )
-        logger.error(f"Configuração do agente '{agent_name}' inválida ou URL do MCP ausente.")
-        raise HTTPException(status_code=500, detail=f"Configuração do agente '{agent_name}' não disponível.")
+        logger.error(f"Configuração do agente '{analysis_type}' inválida ou URL do MCP ausente.")
+        raise HTTPException(status_code=500, detail=f"Configuração do agente '{analysis_type}' não disponível.")
     log_validation_step(
         step="get_agent_config",
         status="success",
-        details=f"Configuração do agente '{agent_name}' carregada.",
+        details=f"Configuração do agente '{analysis_type}' carregada.",
         job_id=None,
         project_id=project_id
     )
@@ -297,7 +296,7 @@ async def start_analysis(
     mcp_payload = {
         "email": email,
         "nome_projeto": nome_projeto_final,
-        "agent_name": agent_name,
+        "analysis_type": analysis_type,
         "analysis_type": analysis_type,
         "branch": branch,
         "repository": repository,
