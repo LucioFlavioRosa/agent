@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from backend.app.services.mongodb_service import MongoDBService
+from backend.app.services.permission_service import PermissionService
 from backend.app.models.project_management_models import (
     ListOwnedProjectsResponse,
     OwnedProjectItem,
@@ -54,6 +55,21 @@ async def add_project_member(
 ):
     logger.info(f"[ProjectManagement] Recebida requisição para adicionar membro: project_id={project_id}, requester_email={req.requester_email}, new_member_email={req.new_member_email}, role={req.role}")
     mongo_service = MongoDBService()
+    permission_service = PermissionService(mongo_service)
+    # Validação de permissão de ação
+    try:
+        has_permission, member_role, error_msg = await permission_service.check_user_project_action_permission(
+            req.requester_email, project_id, action_type="add_member"
+        )
+        logger.info(f"[ProjectManagement] Validação de permissão de ação: status={'success' if has_permission else 'fail'}, detalhes={error_msg if not has_permission else 'Permissão validada para adicionar membro.'}")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail=error_msg or "Usuário não possui permissão para adicionar membros neste projeto.")
+    except HTTPException as exc:
+        logger.error(f"[ProjectManagement] Falha na validação de permissão de ação: {exc.detail}")
+        return AddProjectMemberResponse(success=False, message=exc.detail)
+    except Exception as e:
+        logger.error(f"[ProjectManagement] Erro ao validar permissão de ação: {e}")
+        return AddProjectMemberResponse(success=False, message="Erro ao validar permissão de ação.")
     user = await mongo_service.get_user_by_email(req.requester_email)
     if not user:
         logger.error(f"[ProjectManagement] Usuário solicitante não encontrado: {req.requester_email}")
@@ -95,6 +111,21 @@ async def update_project_members(
 ):
     logger.info(f"[ProjectManagement] Recebida requisição para atualizar membros: project_id={project_id}, requester_email={req.requester_email}, members_count={len(req.members)}")
     mongo_service = MongoDBService()
+    permission_service = PermissionService(mongo_service)
+    # Validação de permissão de ação
+    try:
+        has_permission, member_role, error_msg = await permission_service.check_user_project_action_permission(
+            req.requester_email, project_id, action_type="edit"
+        )
+        logger.info(f"[ProjectManagement] Validação de permissão de ação: status={'success' if has_permission else 'fail'}, detalhes={error_msg if not has_permission else 'Permissão validada para editar membros.'}")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail=error_msg or "Usuário não possui permissão para editar membros neste projeto.")
+    except HTTPException as exc:
+        logger.error(f"[ProjectManagement] Falha na validação de permissão de ação: {exc.detail}")
+        return UpdateProjectMembersResponse(success=False, message=exc.detail)
+    except Exception as e:
+        logger.error(f"[ProjectManagement] Erro ao validar permissão de ação: {e}")
+        return UpdateProjectMembersResponse(success=False, message="Erro ao validar permissão de ação.")
     user = await mongo_service.get_user_by_email(req.requester_email)
     if not user:
         logger.error(f"[ProjectManagement] Usuário solicitante não encontrado: {req.requester_email}")
