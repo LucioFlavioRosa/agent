@@ -18,6 +18,7 @@ from backend.app.api.webhooks import router as webhooks_router
 from backend.app.api.user_projects import router as user_projects_router
 from backend.app.services.mongodb_service import MongoDBService
 from backend.app.api.project_management import router as project_management_router
+from backend.app.api.project_actions import router as project_actions_router
 
 load_dotenv(override=False)
 
@@ -45,6 +46,7 @@ app.include_router(session_router, prefix="/session")
 app.include_router(webhooks_router, prefix="/webhooks")
 app.include_router(user_projects_router, prefix="/user")
 app.include_router(project_management_router, prefix="/projects", tags=["Project Management"])
+app.include_router(project_actions_router, prefix="/projects", tags=["Project Actions"])
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
