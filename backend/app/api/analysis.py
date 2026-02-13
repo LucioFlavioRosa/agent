@@ -189,7 +189,7 @@ async def start_analysis(
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
-    arquivo_docx: Optional[UploadFile] = File(None)
+    arquivo_docx: Optional[UploadFile] = File(None),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     # 1. Log recebimento do payload
@@ -211,7 +211,7 @@ async def start_analysis(
 
     logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' para usuário {email}")
 
-    mongo_service = MongoDBService()
+    #mongo_service = MongoDBService()
     
     # 3. Validação de usuário e company_id
     user, company_id = await validate_user_and_company(email, mongo_service)
