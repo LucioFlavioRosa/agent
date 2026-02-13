@@ -149,7 +149,7 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
             "updated_at": datetime.utcnow(),
             "description": None
         }
-        created = await mongo_service.create_project(project_data)
+        created = await mongo_service.create_project(project_data, company_id)
         if not created:
             log_error(
                 context="get_or_create_project",
