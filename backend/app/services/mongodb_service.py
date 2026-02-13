@@ -243,3 +243,19 @@ class MongoDBService:
         except Exception as e:
             self.logger.error(f"[create_project] Erro ao criar projeto: {e}")
             raise
+
+    async def delete_project(self, project_id: str, company_id: str) -> bool:
+        self.logger.info(f"[delete_project] Iniciando exclusão do projeto. project_id: '{project_id}', company_id: '{company_id}'")
+        if not project_id or not isinstance(project_id, str) or not project_id.strip():
+            self.logger.error(f"[delete_project] project_id inválido ou vazio: '{project_id}'")
+            return False
+        if not company_id or not isinstance(company_id, str) or not company_id.strip():
+            self.logger.error(f"[delete_project] company_id inválido ou vazio: '{company_id}'")
+            return False
+        try:
+            result = await self.db.projects.delete_one({"_id": project_id, "company_id": company_id})
+            self.logger.info(f"[delete_project] Resultado da operação: deleted_count={result.deleted_count}")
+            return result.deleted_count > 0
+        except Exception as e:
+            self.logger.error(f"[delete_project] Erro ao excluir projeto '{project_id}': {e}")
+            return False
