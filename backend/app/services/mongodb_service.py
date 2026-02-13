@@ -19,7 +19,7 @@ class MongoDBService:
                     raise EnvironmentError("KEY_VAULT_URL não definido.")
                 secret_manager = AzureSecretManager(key_vault_url)
                 if uri is None:
-                    uri = secret_manager.get_secret("mongodb-uri")
+                    uri = secret_manager.get_secret("azure-mongodb-connection-string")
                 if db_name is None:
                     db_name = secret_manager.get_secret("mongodb-database-name")
             except Exception as e:
