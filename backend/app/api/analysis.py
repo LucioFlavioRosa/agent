@@ -210,8 +210,6 @@ async def start_analysis(
         validate_file_extension(arquivo_docx)
 
     logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' para usuário {email}")
-
-    #mongo_service = MongoDBService()
     
     # 3. Validação de usuário e company_id
     user, company_id = await validate_user_and_company(email, mongo_service)
