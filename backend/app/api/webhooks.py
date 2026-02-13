@@ -8,7 +8,6 @@ logger = logging.getLogger("webhooks_api")
 
 @router.post("/mcp", status_code=status.HTTP_200_OK, tags=["Webhooks"])
 async def mcp_webhook(payload: dict, request: Request):
-    # Extração dos dados
     job_id = payload.get("job_id")
     project_id = payload.get("project_id")
     company_id_recebido = payload.get("company_id")
