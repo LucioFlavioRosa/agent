@@ -77,6 +77,35 @@ class MongoDBService:
             self.logger.error(f"[get_group_allowed_agents] Erro ao buscar agentes permitidos para group_id '{group_id}': {e}")
             return []
 
+    async def get_group_by_id(self, group_id: str) -> Optional[GroupPermission]:
+        self.logger.info(f"[get_group_by_id] Iniciando busca de grupo por id: '{group_id}'")
+        try:
+            doc = await self.db.groups.find_one({"_id": group_id})
+            self.logger.info(f"[get_group_by_id] Resultado da consulta: {doc}")
+            if doc:
+                group = GroupPermission(**doc)
+                self.logger.info(f"[get_group_by_id] Grupo encontrado e instanciado: {group}")
+                return group
+            self.logger.warning(f"[get_group_by_id] Grupo '{group_id}' não encontrado.")
+            return None
+        except Exception as e:
+            self.logger.error(f"[get_group_by_id] Erro ao buscar grupo '{group_id}': {e}")
+            return None
+
+    async def list_groups_by_company(self, company_id: str) -> List[GroupPermission]:
+        self.logger.info(f"[list_groups_by_company] Iniciando busca de grupos para company_id: '{company_id}'")
+        if not company_id or not isinstance(company_id, str) or not company_id.strip():
+            self.logger.warning(f"[list_groups_by_company] company_id inválido ou vazio: '{company_id}'")
+            return []
+        try:
+            cursor = self.db.groups.find({"company_id": company_id})
+            groups = [GroupPermission(**doc) async for doc in cursor]
+            self.logger.info(f"[list_groups_by_company] Grupos encontrados: {[g.name for g in groups]}")
+            return groups
+        except Exception as e:
+            self.logger.error(f"[list_groups_by_company] Erro ao buscar grupos para company_id '{company_id}': {e}")
+            return []
+
     async def get_project_by_id(self, project_id: str) -> Optional[ProjectPermission]:
         self.logger.info(f"[get_project_by_id] Iniciando busca de projeto por id: '{project_id}'")
         try:
