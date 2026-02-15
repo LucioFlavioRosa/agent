@@ -120,6 +120,18 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
     
     if not project:
         permission_service = PermissionService(mongo_service)
+
+        can_create, error_msg_create = await permission_service.check_user_can_create_project(email, company_id)
+        if not can_create:
+            log_validation_step(
+                step="get_or_create_project",
+                status="fail",
+                details=error_msg_create,
+                job_id=None,
+                project_id=None
+            )
+            raise HTTPException(status_code=403, detail=error_msg_create)
+            
         has_access, error_msg = await permission_service.check_user_agent_permission(email, analysis_type)
         if not has_access:
             log_validation_step(
