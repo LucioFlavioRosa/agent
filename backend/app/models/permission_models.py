@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field, validator
-from typing import List, Optional
+from typing import List, Optional, Dict
+from datetime import datetime
 
 class UserPermission(BaseModel):
     id: str = Field(..., alias="_id")
@@ -54,4 +55,31 @@ class ProjectPermission(BaseModel):
     def validate_members(cls, v):
         if not isinstance(v, list):
             raise ValueError('members deve ser uma lista')
+        return v
+
+class UserPermissionCache(BaseModel):
+    email: EmailStr = Field(..., description="Email do usuário")
+    company_id: str = Field(..., description="ID da empresa do usuário")
+    allowed_agents: List[str] = Field(default_factory=list, description="Lista de agentes permitidos para o usuário")
+    project_permissions: Dict[str, str] = Field(default_factory=dict, description="Mapa de project_id para role do usuário no projeto")
+    cached_at: str = Field(..., description="Timestamp ISO de quando o cache foi gerado")
+
+    @validator('email')
+    def email_must_be_valid(cls, v):
+        if not v:
+            raise ValueError('Email é obrigatório')
+        return v
+
+    @validator('company_id')
+    def company_id_must_be_valid(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('company_id é obrigatório e não pode ser vazio')
+        return v
+
+    @validator('cached_at')
+    def cached_at_must_be_iso(cls, v):
+        try:
+            datetime.fromisoformat(v)
+        except Exception:
+            raise ValueError('cached_at deve ser um timestamp ISO válido')
         return v

@@ -13,6 +13,7 @@ from backend.app.models.project_management_models import (
 )
 from datetime import datetime
 import logging
+from backend.app.services.redis_session_service import RedisSessionService
 
 router = APIRouter()
 logger = logging.getLogger("project_management_api")
@@ -59,6 +60,7 @@ async def add_project_member(project_id: str, req: AddProjectMemberRequest = Bod
     logger.info(f"[ProjectManagement] Adicionar membro: project_id={project_id}, requester={req.requester_email}")
     mongo_service = MongoDBService()
     permission_service = PermissionService(mongo_service)
+    redis_session_service = RedisSessionService()
 
     try:
         # 1. Validação de permissão via PermissionService
@@ -85,6 +87,15 @@ async def add_project_member(project_id: str, req: AddProjectMemberRequest = Bod
         }
 
         result = await mongo_service.add_member_to_project(project_id, new_member)
+
+        # Invalida cache de permissões para todos membros do projeto (incluindo o novo)
+        project = await mongo_service.get_project_by_id(project_id)
+        company_id = getattr(project, "company_id", None)
+        affected_emails = [m.email for m in project.members] if project and project.members else []
+        affected_emails.append(req.new_member_email)
+        for email in set(affected_emails):
+            redis_session_service.invalidate_user_permissions(email, company_id)
+
         return AddProjectMemberResponse(success=bool(result), 
                                       message="Membro adicionado!" if result else "Erro ao adicionar.")
     except Exception as e:
@@ -96,6 +107,7 @@ async def update_project_members(project_id: str, req: UpdateProjectMembersReque
     logger.info(f"[ProjectManagement] Atualizar membros: project_id={project_id}")
     mongo_service = MongoDBService()
     permission_service = PermissionService(mongo_service)
+    redis_session_service = RedisSessionService()
 
     try:
         has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
@@ -108,6 +120,14 @@ async def update_project_members(project_id: str, req: UpdateProjectMembersReque
             return UpdateProjectMembersResponse(success=False, message="Usuário não é owner.")
 
         result = await mongo_service.update_project_members(project_id, req.members)
+
+        # Invalida cache de permissões para todos membros do projeto
+        project = await mongo_service.get_project_by_id(project_id)
+        company_id = getattr(project, "company_id", None)
+        affected_emails = [m.get("email") for m in req.members if m.get("email")]
+        for email in set(affected_emails):
+            redis_session_service.invalidate_user_permissions(email, company_id)
+
         return UpdateProjectMembersResponse(success=bool(result), 
                                          message="Membros atualizados!" if result else "Falha na atualização.")
     except Exception as e:
@@ -122,6 +142,7 @@ async def remove_project_member(
 ):
     mongo_service = MongoDBService()
     permission_service = PermissionService(mongo_service)
+    redis_session_service = RedisSessionService()
 
     # 1. Validação via PermissionService (trava multi-tenant e role owner)
     has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
@@ -146,6 +167,13 @@ async def remove_project_member(
     # 3. Executa a remoção no MongoDBService
     success = await mongo_service.remove_member_from_project(project_id, target_email)
     
+    # Invalida cache de permissões para todos membros do projeto (incluindo o removido)
+    company_id = getattr(project, "company_id", None)
+    affected_emails = [m.email for m in project.members] if project and project.members else []
+    affected_emails.append(target_email)
+    for email in set(affected_emails):
+        redis_session_service.invalidate_user_permissions(email, company_id)
+
     if not success:
         raise HTTPException(status_code=500, detail="Falha ao remover membro no banco de dados.")
 
@@ -160,6 +188,7 @@ async def delete_project(project_id: str, req: DeleteProjectRequest = Body(...))
     logger.info(f"[ProjectManagement] Tentativa de exclusão: project_id={project_id}, por={req.requester_email}")
     mongo_service = MongoDBService()
     permission_service = PermissionService(mongo_service)
+    redis_session_service = RedisSessionService()
 
     try:
         # 1. Validação de permissão
@@ -174,6 +203,14 @@ async def delete_project(project_id: str, req: DeleteProjectRequest = Body(...))
         # 2. Execução da exclusão no MongoDB
         # Nota: Acessando a coleção diretamente via mongo_service.db
         result = await mongo_service.db.projects.delete_one({"_id": project_id})
+
+        # Invalida cache de permissões para todos membros do projeto
+        project = await mongo_service.get_project_by_id(project_id)
+        company_id = getattr(project, "company_id", None) if project else None
+        affected_emails = [m.email for m in project.members] if project and project.members else []
+        affected_emails.append(req.requester_email)
+        for email in set(affected_emails):
+            redis_session_service.invalidate_user_permissions(email, company_id)
 
         if result.deleted_count == 1:
             logger.info(f"[ProjectManagement] Projeto {project_id} excluído com sucesso.")

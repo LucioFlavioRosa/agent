@@ -8,6 +8,7 @@ from backend.app.models.session_models import SessionData
 import logging
 from backend.app.models.job_models import JobData
 from backend.app.services.azure_secret_manager import AzureSecretManager
+from backend.app.models.permission_models import UserPermissionCache
 
 class RedisSessionService:
     def __init__(self):
@@ -174,14 +175,17 @@ class RedisSessionService:
     def store_user_permissions(self, email: str, company_id: str, permissions: dict):
         """
         Armazena o mapa de permissões do usuário para uma empresa específica.
-        TTL recomendado: menor que a sessão (ex: 1 hora ou 3600 segundos).
+        TTL recomendado: menor que a sessão (ex: 10 minutos ou 600 segundos).
         """
-        key = f"perms:{email}:{company_id}"
+        key = f"perm:{email}:{company_id}"
         self.logger.info(f"[store_user_permissions] Cacheando permissões para {key}")
         try:
-            # Usando um TTL menor (3600s = 1h) para garantir que mudanças no banco reflitam logo
-            ttl = int(getattr(settings, 'REDIS_PERM_TTL', 3600))
-            self.redis_client.setex(key, ttl, json.dumps(permissions))
+            # Usando um TTL de 600s = 10min
+            ttl = int(getattr(settings, 'REDIS_PERM_TTL', 600))
+            # Valida estrutura com UserPermissionCache
+            cache_obj = UserPermissionCache(**permissions)
+            self.redis_client.setex(key, ttl, cache_obj.json())
+            self.logger.info(f"[store_user_permissions] Permissões cacheadas para {key} com TTL {ttl}s.")
         except Exception as e:
             self.logger.error(f"[store_user_permissions] Erro ao salvar cache: {e}")
 
@@ -189,12 +193,14 @@ class RedisSessionService:
         """
         Busca o mapa de permissões no cache.
         """
-        key = f"perms:{email}:{company_id}"
+        key = f"perm:{email}:{company_id}"
         perms_json = self.redis_client.get(key)
         if perms_json:
             try:
-                return json.loads(perms_json)
-            except Exception:
+                cache_obj = UserPermissionCache.parse_raw(perms_json)
+                return cache_obj.dict()
+            except Exception as e:
+                self.logger.error(f"[get_user_permissions] Erro ao carregar cache para {key}: {e}")
                 return None
         return None
 
@@ -202,6 +208,6 @@ class RedisSessionService:
         """
         Remove o cache. Chame este método sempre que editar um Grupo ou Usuário no Mongo.
         """
-        key = f"perms:{email}:{company_id}"
+        key = f"perm:{email}:{company_id}"
         self.logger.info(f"[invalidate_user_permissions] Limpando cache para {key}")
         self.redis_client.delete(key)
