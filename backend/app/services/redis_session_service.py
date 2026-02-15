@@ -170,3 +170,38 @@ class RedisSessionService:
             self.logger.info(f"[store_error_message_for_job] error_message armazenado com sucesso para job_id '{job_id}'.")
         except Exception as e:
             self.logger.error(f"[store_error_message_for_job] Erro ao armazenar error_message para job '{job_id}': {e}")
+
+    def store_user_permissions(self, email: str, company_id: str, permissions: dict):
+        """
+        Armazena o mapa de permissões do usuário para uma empresa específica.
+        TTL recomendado: menor que a sessão (ex: 1 hora ou 3600 segundos).
+        """
+        key = f"perms:{email}:{company_id}"
+        self.logger.info(f"[store_user_permissions] Cacheando permissões para {key}")
+        try:
+            # Usando um TTL menor (3600s = 1h) para garantir que mudanças no banco reflitam logo
+            ttl = int(getattr(settings, 'REDIS_PERM_TTL', 3600))
+            self.redis_client.setex(key, ttl, json.dumps(permissions))
+        except Exception as e:
+            self.logger.error(f"[store_user_permissions] Erro ao salvar cache: {e}")
+
+    def get_user_permissions(self, email: str, company_id: str) -> Optional[dict]:
+        """
+        Busca o mapa de permissões no cache.
+        """
+        key = f"perms:{email}:{company_id}"
+        perms_json = self.redis_client.get(key)
+        if perms_json:
+            try:
+                return json.loads(perms_json)
+            except Exception:
+                return None
+        return None
+
+    def invalidate_user_permissions(self, email: str, company_id: str):
+        """
+        Remove o cache. Chame este método sempre que editar um Grupo ou Usuário no Mongo.
+        """
+        key = f"perms:{email}:{company_id}"
+        self.logger.info(f"[invalidate_user_permissions] Limpando cache para {key}")
+        self.redis_client.delete(key)
