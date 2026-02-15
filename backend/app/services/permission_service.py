@@ -29,6 +29,43 @@ class PermissionService:
             return False, f"Ação '{action}' não permitida para role '{role}'."
         return True, None
 
+    async def check_user_can_create_project(self, email: str, company_id: str) -> Tuple[bool, Optional[str]]:
+        """
+        Verifica se o usuário pertence a algum grupo DA EMPRESA ESPECÍFICA que tenha permissão 
+        de criação de projetos no campo 'settings'.
+        """
+        self.logger.info(f"[check_user_can_create_project] Validando criação para: {email} na empresa: {company_id}")
+        
+        # 1. Busca o usuário
+        user = await self.mongo_service.get_user_by_email(email)
+        if not user:
+            return False, "Usuário não encontrado."
+    
+        # 2. Verificação de segurança: O usuário pertence à empresa enviada?
+        user_actual_company = getattr(user, "company_id", None)
+        if user_actual_company != company_id:
+            self.logger.error(f"[Security] Conflito de empresa: Usuário {email} pertence a {user_actual_company}, mas tentou ação em {company_id}")
+            return False, "Acesso negado: Divergência de organização."
+    
+        # 3. Busca os grupos do usuário
+        groups = await self.mongo_service.get_user_groups(user.id)
+        
+        for group in groups:
+            # 4. Conferência de Empresa no Grupo: Só valida grupos da mesma empresa
+            group_company = getattr(group, "company_id", None) or group.get("company_id")
+            if group_company != company_id:
+                continue
+    
+            # 5. Acessa o dicionário de settings do grupo
+            group_settings = getattr(group, "settings", {}) if hasattr(group, "settings") else group.get("settings", {})
+            
+            # 6. Verifica a flag específica
+            if group_settings.get("can_create_projects") is True:
+                self.logger.info(f"Permissão de criação confirmada via grupo '{getattr(group, 'name', 'N/A')}' para empresa {company_id}")
+                return True, None
+    
+        return False, "O usuário não tem permissão para criar novos projetos nesta empresa. Verifique as configurações de grupo."
+
     async def check_user_project_permission(
         self,
         email: str,
