@@ -173,7 +173,7 @@ async def delete_project(project_id: str, req: DeleteProjectRequest = Body(...))
 
         # 2. Execução da exclusão no MongoDB
         # Nota: Acessando a coleção diretamente via mongo_service.db
-        result = await mongo_service.db.projects.delete_one({"project_id": project_id})
+        result = await mongo_service.db.projects.delete_one({"_id": project_id})
 
         if result.deleted_count == 1:
             logger.info(f"[ProjectManagement] Projeto {project_id} excluído com sucesso.")
