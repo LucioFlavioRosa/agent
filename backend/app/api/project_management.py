@@ -20,15 +20,11 @@ logger = logging.getLogger("project_management_api")
 # --- Helpers ---
 
 async def verify_user_is_owner(email: str, project_id: str, mongo_service: MongoDBService) -> bool:
-    logger.info(f"[ProjectManagement] Verificando ownership: email={email}, project_id={project_id}")
-    user = await mongo_service.get_user_by_email(email)
-    company_id = getattr(user, "company_id", None)
     
-    owner_projects = await mongo_service.get_projects_where_user_is_owner(email, company_id=company_id)
-    is_owner = any(p["project_id"] == project_id for p in owner_projects)
-    
-    logger.info(f"[ProjectManagement] Ownership verificada: email={email}, project_id={project_id}, is_owner={is_owner}")
-    return is_owner
+    project = await mongo_service.get_project_by_id(project_id)
+    if not project:
+        return False
+    return any(m.email == email and m.role.lower() == "owner" for m in project.members)
 
 # --- Routes ---
 
@@ -118,6 +114,43 @@ async def update_project_members(project_id: str, req: UpdateProjectMembersReque
         logger.error(f"Erro update_project_members: {e}")
         return UpdateProjectMembersResponse(success=False, message=str(e))
 
+@router.delete("/projects/{project_id}/members/{target_email}", tags=["Project Management"])
+async def remove_project_member(
+    project_id: str, 
+    target_email: str, 
+    requester_email: str = Query(..., description="Email de quem está solicitando a remoção")
+):
+    mongo_service = MongoDBService()
+    permission_service = PermissionService(mongo_service)
+
+    # 1. Validação via PermissionService (trava multi-tenant e role owner)
+    has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
+        requester_email, project_id, action_type="remove_member"
+    )
+    if not has_perm:
+        raise HTTPException(status_code=403, detail=error_msg)
+
+    # 2. Busca o projeto para validar a regra do "Último Owner"
+    project = await mongo_service.get_project_by_id(project_id)
+    
+    # Validação: Não permitir remover o último owner
+    target_member = next((m for m in project.members if m.email == target_email), None)
+    if target_member and target_member.role.lower() == "owner":
+        owners = [m for m in project.members if m.role.lower() == "owner"]
+        if len(owners) <= 1:
+            raise HTTPException(
+                status_code=400, 
+                detail="Não é possível remover o único dono do projeto. Adicione outro dono antes de remover este."
+            )
+
+    # 3. Executa a remoção no MongoDBService
+    success = await mongo_service.remove_member_from_project(project_id, target_email)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Falha ao remover membro no banco de dados.")
+
+    return {"success": True, "message": f"Membro {target_email} removido com sucesso."}
+    
 @router.delete("/projects/{project_id}", response_model=DeleteProjectResponse, tags=["Project Management"])
 async def delete_project(project_id: str, req: DeleteProjectRequest = Body(...)):
     """
