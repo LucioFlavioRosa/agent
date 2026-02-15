@@ -18,7 +18,7 @@ class PermissionService:
             Tuple[bool, Optional[str]]: (permitido, mensagem de erro caso não seja)
         """
         role_action_map = {
-            "owner": {"add_member", "delete_project", "edit_project", "view_project"},
+            "owner": {"add_member", "remove_member", "delete_project", "edit_project", "view_project"},
             "editor": {"edit_project", "view_project"},
             "viewer": {"view_project"}
         }
@@ -148,10 +148,11 @@ class PermissionService:
         self.logger.info(f"[check_user_project_action_permission] company_id do usuário: {company_id}")
         # 2. Buscar projeto por project_id
         project = await self.mongo_service.get_project_by_id(project_id)
-        if not project:
-            self.logger.warning(f"[check_user_project_action_permission] Projeto '{project_id}' não encontrado.")
-            return False, None, "Projeto não encontrado."
-        self.logger.info(f"[check_user_project_action_permission] Projeto encontrado: {project}")
+        
+        if getattr(project, "company_id", None) != company_id:
+            self.logger.error(f"[Security] Usuário {email} tentou acessar projeto {project_id} de outra empresa!")
+            return False, None, "Acesso negado: O projeto pertence a outra organização."
+        
         # 3. Verificar se usuário está na lista de membros
         member_role = None
         for member in project.members:
@@ -159,14 +160,18 @@ class PermissionService:
                 member_role = member.role
                 self.logger.info(f"[check_user_project_action_permission] Role do membro '{email}' no projeto '{project_id}': {member_role}")
                 break
+                
         if not member_role:
             self.logger.warning(f"[check_user_project_action_permission] Usuário '{email}' não está na lista de membros do projeto '{project_id}'.")
             return False, None, "Usuário não está na lista de membros do projeto."
+        
+        permitted, error_msg = self.validate_project_action_by_role(member_role.lower(), action_type)
+        
         # 4. Validar se action_type é permitida para a role usando validate_project_action_by_role
-        permitted, error_msg = self.validate_project_action_by_role(member_role, action_type)
         if not permitted:
             self.logger.warning(f"[check_user_project_action_permission] {error_msg}")
             return False, member_role, error_msg
         self.logger.info(f"[check_user_project_action_permission] Ação '{action_type}' permitida para role '{member_role}'.")
+        
         # 5. Retornar tupla indicando permissão, role e mensagem
         return True, member_role, None
