@@ -248,3 +248,36 @@ class PermissionService:
             return True, None
         else:
             return False, "Seu grupo de usuário não tem permissão para criar novos projetos."
+
+    async def get_user_allowed_agents(self, email: str) -> Tuple[List[str], Optional[str]]:
+        """
+        Retorna a lista de agentes permitidos para o usuário.
+        Valida usuário (ativo e com company_id), verifica cache Redis, fallback para Mongo.
+        Retorna (lista_de_agentes, mensagem_de_erro).
+        """
+        self.logger.info(f"[get_user_allowed_agents] Buscando agentes permitidos para usuário '{email}'")
+        user = await self.mongo_service.get_user_by_email(email)
+        if not user:
+            self.logger.warning(f"[get_user_allowed_agents] Usuário '{email}' não encontrado.")
+            return [], "Usuário não encontrado."
+        if not user.active:
+            self.logger.warning(f"[get_user_allowed_agents] Usuário '{email}' está inativo.")
+            return [], "Usuário inativo."
+        company_id = getattr(user, "company_id", None)
+        if not company_id:
+            self.logger.warning(f"[get_user_allowed_agents] Usuário '{email}' não possui company_id.")
+            return [], "Usuário não possui company_id."
+
+        # Verifica cache
+        permissions = self.redis_session_service.get_user_permissions(email, company_id)
+        if permissions:
+            allowed_agents = permissions.get("allowed_agents", [])
+            self.logger.info(f"[get_user_allowed_agents] Cache hit para {email}:{company_id}. Agentes: {allowed_agents}")
+            return allowed_agents, None
+
+        # Cache miss: reconstrói e salva
+        permissions_dict = await self._build_complete_permissions(email, company_id)
+        self.redis_session_service.store_user_permissions(email, company_id, permissions_dict)
+        allowed_agents = permissions_dict.get("allowed_agents", [])
+        self.logger.info(f"[get_user_allowed_agents] Cache miss. Agentes reconstruídos: {allowed_agents}")
+        return allowed_agents, None
