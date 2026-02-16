@@ -160,31 +160,43 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
             "updated_at": datetime.utcnow(),
             "description": None
         }
-        created = await mongo_service.create_project(project_data, company_id)
-        if not created:
-            log_error(
-                context="get_or_create_project",
-                error_message=f"Falha ao criar projeto {nome_projeto} para usuário {email}",
-                exception=None,
-                job_id=None,
+        created_id = await mongo_service.create_project(project_data, company_id)
+        
+        if not created_id:
+    
+            project_db = await mongo_service.get_project_by_normalized_name(nome_projeto_normalized, company_id)
+            
+            if not project_db:
+                # Caso crítico: falhou ao criar e não foi encontrado na busca
+                log_error(
+                    context="get_or_create_project",
+                    error_message=f"Conflito de duplicidade e falha ao recuperar projeto {nome_projeto}",
+                    project_id=project_id_gen
+                )
+                raise HTTPException(status_code=500, detail="Erro de concorrência ao acessar o projeto.")
+
+            project_id = getattr(project_db, "id", None) or project_db.get("_id")
+            log_validation_step(
+                step="get_or_create_project",
+                status="success",
+                details=f"Conflito de duplicidade resolvido. Projeto recuperado: {project_id}"
+            )
+        else:
+            # Projeto criado com sucesso (primeira vez)
+            project_id = created_id
+            log_validation_step(
+                step="get_or_create_project",
+                status="success",
+                details=f"Projeto criado: {project_id}",
                 project_id=project_id
             )
-            logger.error(f"Falha ao criar projeto {nome_projeto} para usuário {email}")
-            raise HTTPException(status_code=500, detail="Falha ao criar projeto no MongoDB.")
-        log_validation_step(
-            step="get_or_create_project",
-            status="success",
-            details=f"Projeto criado: {project_id}",
-            job_id=None,
-            project_id=project_id
-        )
     else:
+        # O projeto já foi encontrado na busca inicial (antes de tentar criar)
         project_id = getattr(project, "id", None) or project.get("_id")
         log_validation_step(
             step="get_or_create_project",
             status="success",
             details=f"Projeto encontrado: {project_id}",
-            job_id=None,
             project_id=project_id
         )
     
