@@ -1,6 +1,7 @@
-import logging
-import uuid
 import os
+import uuid
+import logging
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -10,6 +11,7 @@ from backend.app.services.mcp_client_service import MCPClientService
 from backend.app.services.mcp_config_service import MCPConfigService
 from backend.app.services.permission_service import PermissionService
 from backend.app.services.mongodb_service import MongoDBService
+from backend.app.utils.string_utils import normalize_string_general
 from backend.app.utils.logging_utils import (
     log_request_received,
     log_validation_step,
@@ -112,10 +114,7 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
         )
         raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes: nome_projeto, analysis_type.")
     
-    def normalize_project_name(name):
-        return name.strip().lower().replace(" ", "_")
-    
-    nome_projeto_normalized = normalize_project_name(nome_projeto)
+    nome_projeto_normalized = normalize_string_general(nome_projeto)
     project = await mongo_service.get_project_by_normalized_name(nome_projeto_normalized, company_id)
     
     if not project:
