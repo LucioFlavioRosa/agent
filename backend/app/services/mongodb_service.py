@@ -214,65 +214,109 @@ class MongoDBService:
             return []
 
     async def add_member_to_project(self, project_id: str, new_member: dict) -> bool:
-        self.logger.info(f"[add_member_to_project] Iniciando adição de membro ao projeto '{project_id}'. Dados do membro: {new_member}")
+        self.logger.info(f"[add_member_to_project] Adicionando membro '{new_member.get('email')}' ao projeto '{project_id}'.")
         try:
+            # Busca o projeto primeiro para pegar o company_id (necessário para a chave do Redis)
+            project_doc = await self.db.projects.find_one({"_id": project_id})
+            if not project_doc:
+                return False
+            
+            company_id = project_doc.get("company_id")
+
             result = await self.db.projects.update_one(
                 {"_id": project_id},
                 {"$addToSet": {"members": new_member}}
             )
-            self.logger.info(f"[add_member_to_project] Resultado da operação: modified_count={result.modified_count}")
-            # Cache invalidation: todos membros do projeto + novo membro
+            
             if result.modified_count > 0:
-                project_doc = await self.db.projects.find_one({"_id": project_id})
-                company_id = project_doc.get("company_id") if project_doc else None
-                affected_emails = [m.get("email") for m in project_doc.get("members", []) if m.get("email")] if project_doc else []
-                affected_emails.append(new_member.get("email"))
-                for email in set(affected_emails):
-                    RedisSessionService().invalidate_user_permissions(email, company_id)
+                # OTIMIZAÇÃO: Invalida APENAS o usuário que entrou.
+                # Os outros membros continuam com seus roles inalterados.
+                email_novo_membro = new_member.get("email")
+                if email_novo_membro:
+                    RedisSessionService().invalidate_user_permissions(email_novo_membro, company_id)
+                    self.logger.info(f"[Cache] Invalidado apenas para o novo membro: {email_novo_membro}")
+            
             return result.modified_count > 0
         except Exception as e:
-            self.logger.error(f"[add_member_to_project] Erro ao adicionar membro ao projeto '{project_id}': {e}")
+            self.logger.error(f"[add_member_to_project] Erro: {e}")
             return False
 
     async def update_project_members(self, project_id: str, members: List[dict]) -> bool:
-        self.logger.info(f"[update_project_members] Iniciando atualização de membros do projeto '{project_id}'. Lista de membros: {members}")
+        self.logger.info(f"[update_project_members] Iniciando atualização de membros do projeto '{project_id}'.")
+        
         try:
+            # 1. Busca o estado ATUAL (antes do update) para comparação
+            # Isso é necessário para saber quem foi removido e para pegar o company_id
+            current_project_doc = await self.db.projects.find_one({"_id": project_id})
+            
+            if not current_project_doc:
+                self.logger.warning(f"[update_project_members] Projeto {project_id} não encontrado.")
+                return False
+
+            company_id = current_project_doc.get("company_id")
+            old_members_list = current_project_doc.get("members", [])
+
+            # 2. Executa a atualização no Banco de Dados
             result = await self.db.projects.update_one(
                 {"_id": project_id},
                 {"$set": {"members": members}}
             )
+            
             self.logger.info(f"[update_project_members] Resultado da operação: modified_count={result.modified_count}")
-            # Cache invalidation: todos membros do projeto
+
+            # 3. Lógica Inteligente de Invalidação de Cache (Diff)
             if result.modified_count > 0:
-                project_doc = await self.db.projects.find_one({"_id": project_id})
-                company_id = project_doc.get("company_id") if project_doc else None
-                affected_emails = [m.get("email") for m in members if m.get("email")]
-                for email in set(affected_emails):
-                    RedisSessionService().invalidate_user_permissions(email, company_id)
+                redis_service = RedisSessionService()
+                
+                # Transforma listas em Dicionários {email: role} para comparação rápida
+                # Normalizamos para evitar erros com None
+                old_map = {m.get("email"): m.get("role") for m in old_members_list if m.get("email")}
+                new_map = {m.get("email"): m.get("role") for m in members if m.get("email")}
+                
+                # Conjunto de todos os emails envolvidos (antes e depois)
+                all_emails = set(old_map.keys()) | set(new_map.keys())
+                
+                invalidated_count = 0
+                for email in all_emails:
+                    old_role = old_map.get(email)
+                    new_role = new_map.get(email)
+
+                    # Se o role mudou, ou se entrou/saiu (um dos roles será None), invalida!
+                    if old_role != new_role:
+                        redis_service.invalidate_user_permissions(email, company_id)
+                        invalidated_count += 1
+                
+                self.logger.info(f"[Cache] Cache invalidado para {invalidated_count} usuários que tiveram alterações de permissão.")
+
             return result.modified_count > 0
+
         except Exception as e:
             self.logger.error(f"[update_project_members] Erro ao atualizar membros do projeto '{project_id}': {e}")
             return False
 
     async def remove_member_from_project(self, project_id: str, target_email: str) -> bool:
-        self.logger.info(f"[remove_member_from_project] Iniciando remoção de membro '{target_email}' do projeto '{project_id}'.")
+        self.logger.info(f"[remove_member_from_project] Removendo '{target_email}' do projeto '{project_id}'.")
         try:
             project_doc = await self.db.projects.find_one({"_id": project_id})
-            company_id = project_doc.get("company_id") if project_doc else None
+            if not project_doc:
+                return False
+                
+            company_id = project_doc.get("company_id")
+
             result = await self.db.projects.update_one(
                 {"_id": project_id},
                 {"$pull": {"members": {"email": target_email}}}
             )
-            self.logger.info(f"[remove_member_from_project] Resultado da operação: modified_count={result.modified_count}")
-            # Cache invalidation: todos membros do projeto + removido
+
             if result.modified_count > 0:
-                affected_emails = [m.get("email") for m in project_doc.get("members", []) if m.get("email")] if project_doc else []
-                affected_emails.append(target_email)
-                for email in set(affected_emails):
-                    RedisSessionService().invalidate_user_permissions(email, company_id)
+                # OTIMIZAÇÃO: Invalida APENAS o usuário removido.
+                # Ele precisa perder o acesso no Redis imediatamente.
+                RedisSessionService().invalidate_user_permissions(target_email, company_id)
+                self.logger.info(f"[Cache] Invalidado apenas para o membro removido: {target_email}")
+            
             return result.modified_count > 0
         except Exception as e:
-            self.logger.error(f"[remove_member_from_project] Erro ao remover membro '{target_email}' do projeto '{project_id}': {e}")
+            self.logger.error(f"[remove_member_from_project] Erro: {e}")
             return False
 
     async def get_project_by_normalized_name(self, nome_projeto: str, company_id: str) -> Optional[ProjectPermission]:
