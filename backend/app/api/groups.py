@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Query, Path, Depends
+from fastapi import APIRouter, HTTPException, Query, Path, Depends, Body
 from backend.app.services.mongodb_service import MongoDBService
 from backend.app.utils.logging_utils import log_request_received, log_response_sent
+from backend.app.services.redis_session_service import RedisSessionService
 import logging
 from typing import List, Optional
 
@@ -53,3 +54,67 @@ async def list_groups_by_company(
         logger.error(f"[Groups] Erro ao listar grupos: {e}")
         log_response_sent(endpoint="/groups", response={"detail": str(e)})
         raise HTTPException(status_code=500, detail="Erro interno ao listar grupos.")
+
+@router.post("/groups", tags=["Groups"])
+async def create_group(
+    group_data: dict = Body(...),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    log_request_received(endpoint="/groups", payload=group_data)
+    logger.info(f"[Groups] Requisição recebida para criação de grupo: {group_data}")
+    group_id = await mongo_service.create_group(group_data)
+    if not group_id:
+        logger.error(f"[Groups] Falha ao criar grupo.")
+        raise HTTPException(status_code=500, detail="Falha ao criar grupo.")
+    # Cache invalidation: todos usuários do grupo
+    users_cursor = mongo_service.db.users.find({"group_ids": group_id})
+    async for user_doc in users_cursor:
+        email = user_doc.get("email")
+        company_id = user_doc.get("company_id")
+        if email and company_id:
+            RedisSessionService().invalidate_user_permissions(email, company_id)
+    log_response_sent(endpoint="/groups", response={"group_id": group_id})
+    return {"group_id": group_id}
+
+@router.put("/groups/{group_id}", tags=["Groups"])
+async def update_group(
+    group_id: str = Path(..., description="ID do grupo a ser atualizado"),
+    group_data: dict = Body(...),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    log_request_received(endpoint=f"/groups/{group_id}", payload=group_data)
+    logger.info(f"[Groups] Requisição recebida para atualização de grupo: group_id={group_id}, data={group_data}")
+    success = await mongo_service.update_group(group_id, group_data)
+    if not success:
+        logger.error(f"[Groups] Falha ao atualizar grupo.")
+        raise HTTPException(status_code=500, detail="Falha ao atualizar grupo.")
+    # Cache invalidation: todos usuários do grupo
+    users_cursor = mongo_service.db.users.find({"group_ids": group_id})
+    async for user_doc in users_cursor:
+        email = user_doc.get("email")
+        company_id = user_doc.get("company_id")
+        if email and company_id:
+            RedisSessionService().invalidate_user_permissions(email, company_id)
+    log_response_sent(endpoint=f"/groups/{group_id}", response={"success": True})
+    return {"success": True}
+
+@router.delete("/groups/{group_id}", tags=["Groups"])
+async def delete_group(
+    group_id: str = Path(..., description="ID do grupo a ser deletado"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    log_request_received(endpoint=f"/groups/{group_id}", payload={"group_id": group_id})
+    logger.info(f"[Groups] Requisição recebida para exclusão de grupo: group_id={group_id}")
+    success = await mongo_service.delete_group(group_id)
+    if not success:
+        logger.error(f"[Groups] Falha ao excluir grupo.")
+        raise HTTPException(status_code=500, detail="Falha ao excluir grupo.")
+    # Cache invalidation: todos usuários do grupo
+    users_cursor = mongo_service.db.users.find({"group_ids": group_id})
+    async for user_doc in users_cursor:
+        email = user_doc.get("email")
+        company_id = user_doc.get("company_id")
+        if email and company_id:
+            RedisSessionService().invalidate_user_permissions(email, company_id)
+    log_response_sent(endpoint=f"/groups/{group_id}", response={"success": True})
+    return {"success": True}

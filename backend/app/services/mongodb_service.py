@@ -4,6 +4,7 @@ from pymongo.errors import DuplicateKeyError
 from typing import Optional, List
 from backend.app.core.config import settings
 from backend.app.services.azure_secret_manager import AzureSecretManager
+from backend.app.services.redis_session_service import RedisSessionService
 from datetime import datetime
 import uuid
 import logging
@@ -36,7 +37,6 @@ class MongoDBService:
     async def create_indexes(self):
         """Cria índices únicos para garantir integridade dos dados."""
         try:
-            # Garante que NOME + EMPRESA seja uma combinação única
             await self.db.projects.create_index(
                 [("name_normalized", 1), ("company_id", 1)],
                 unique=True,
@@ -221,6 +221,14 @@ class MongoDBService:
                 {"$addToSet": {"members": new_member}}
             )
             self.logger.info(f"[add_member_to_project] Resultado da operação: modified_count={result.modified_count}")
+            # Cache invalidation: todos membros do projeto + novo membro
+            if result.modified_count > 0:
+                project_doc = await self.db.projects.find_one({"_id": project_id})
+                company_id = project_doc.get("company_id") if project_doc else None
+                affected_emails = [m.get("email") for m in project_doc.get("members", []) if m.get("email")] if project_doc else []
+                affected_emails.append(new_member.get("email"))
+                for email in set(affected_emails):
+                    RedisSessionService().invalidate_user_permissions(email, company_id)
             return result.modified_count > 0
         except Exception as e:
             self.logger.error(f"[add_member_to_project] Erro ao adicionar membro ao projeto '{project_id}': {e}")
@@ -234,9 +242,37 @@ class MongoDBService:
                 {"$set": {"members": members}}
             )
             self.logger.info(f"[update_project_members] Resultado da operação: modified_count={result.modified_count}")
+            # Cache invalidation: todos membros do projeto
+            if result.modified_count > 0:
+                project_doc = await self.db.projects.find_one({"_id": project_id})
+                company_id = project_doc.get("company_id") if project_doc else None
+                affected_emails = [m.get("email") for m in members if m.get("email")]
+                for email in set(affected_emails):
+                    RedisSessionService().invalidate_user_permissions(email, company_id)
             return result.modified_count > 0
         except Exception as e:
             self.logger.error(f"[update_project_members] Erro ao atualizar membros do projeto '{project_id}': {e}")
+            return False
+
+    async def remove_member_from_project(self, project_id: str, target_email: str) -> bool:
+        self.logger.info(f"[remove_member_from_project] Iniciando remoção de membro '{target_email}' do projeto '{project_id}'.")
+        try:
+            project_doc = await self.db.projects.find_one({"_id": project_id})
+            company_id = project_doc.get("company_id") if project_doc else None
+            result = await self.db.projects.update_one(
+                {"_id": project_id},
+                {"$pull": {"members": {"email": target_email}}}
+            )
+            self.logger.info(f"[remove_member_from_project] Resultado da operação: modified_count={result.modified_count}")
+            # Cache invalidation: todos membros do projeto + removido
+            if result.modified_count > 0:
+                affected_emails = [m.get("email") for m in project_doc.get("members", []) if m.get("email")] if project_doc else []
+                affected_emails.append(target_email)
+                for email in set(affected_emails):
+                    RedisSessionService().invalidate_user_permissions(email, company_id)
+            return result.modified_count > 0
+        except Exception as e:
+            self.logger.error(f"[remove_member_from_project] Erro ao remover membro '{target_email}' do projeto '{project_id}': {e}")
             return False
 
     async def get_project_by_normalized_name(self, nome_projeto: str, company_id: str) -> Optional[ProjectPermission]:
@@ -262,23 +298,16 @@ class MongoDBService:
 
     async def create_project(self, project_data: dict, company_id: str) -> Optional[str]:
         self.logger.info(f"[create_project] Iniciando criação de projeto. Dados: {project_data}, company_id: '{company_id}'")
-        
         if not company_id or not isinstance(company_id, str) or not company_id.strip():
             self.logger.error(f"[create_project] company_id inválido ou vazio: '{company_id}'")
             raise ValueError("company_id é obrigatório e não pode ser vazio.")
-        
         try:
-            # Usamos o ID vindo da API ou geramos um novo
             project_id = project_data.get("_id") or str(uuid.uuid4())
             nome_projeto = project_data.get("name")
-            
-            # Garantimos que a normalização aplicada aqui é a mesma da busca
             name_normalized = normalize_string_general(nome_projeto)
-            
             description = project_data.get("description")
             members = project_data.get("members", [])
             now = datetime.utcnow()
-            
             doc = {
                 "_id": project_id,
                 "name": nome_projeto,
@@ -289,16 +318,16 @@ class MongoDBService:
                 "created_at": now,
                 "updated_at": now
             }
-    
             await self.db.projects.insert_one(doc)
             self.logger.info(f"[create_project] Projeto criado com sucesso: {project_id}")
+            # Cache invalidation: todos membros do projeto
+            affected_emails = [m.get("email") for m in members if m.get("email")]
+            for email in set(affected_emails):
+                RedisSessionService().invalidate_user_permissions(email, company_id)
             return project_id
-    
         except DuplicateKeyError:
-            # Este erro acontece se o índice único (name_normalized + company_id) for violado
             self.logger.warning(f"[create_project] Tentativa de criar projeto duplicado: '{name_normalized}' para a empresa '{company_id}'")
             return None
-            
         except Exception as e:
             self.logger.error(f"[create_project] Erro inesperado ao criar projeto: {e}")
             raise
@@ -312,9 +341,71 @@ class MongoDBService:
             self.logger.error(f"[delete_project] company_id inválido ou vazio: '{company_id}'")
             return False
         try:
+            project_doc = await self.db.projects.find_one({"_id": project_id, "company_id": company_id})
             result = await self.db.projects.delete_one({"_id": project_id, "company_id": company_id})
             self.logger.info(f"[delete_project] Resultado da operação: deleted_count={result.deleted_count}")
+            # Cache invalidation: todos membros do projeto
+            if result.deleted_count > 0 and project_doc:
+                affected_emails = [m.get("email") for m in project_doc.get("members", []) if m.get("email")]
+                for email in set(affected_emails):
+                    RedisSessionService().invalidate_user_permissions(email, company_id)
             return result.deleted_count > 0
         except Exception as e:
             self.logger.error(f"[delete_project] Erro ao excluir projeto '{project_id}': {e}")
+            return False
+
+    async def create_group(self, group_data: dict) -> Optional[str]:
+        self.logger.info(f"[create_group] Iniciando criação de grupo. Dados: {group_data}")
+        try:
+            group_id = group_data.get("_id") or str(uuid.uuid4())
+            group_data["_id"] = group_id
+            await self.db.groups.insert_one(group_data)
+            self.logger.info(f"[create_group] Grupo criado com sucesso: {group_id}")
+            # Cache invalidation: todos usuários do grupo
+            users_cursor = self.db.users.find({"group_ids": group_id})
+            async for user_doc in users_cursor:
+                email = user_doc.get("email")
+                company_id = user_doc.get("company_id")
+                if email and company_id:
+                    RedisSessionService().invalidate_user_permissions(email, company_id)
+            return group_id
+        except Exception as e:
+            self.logger.error(f"[create_group] Erro ao criar grupo: {e}")
+            return None
+
+    async def update_group(self, group_id: str, group_data: dict) -> bool:
+        self.logger.info(f"[update_group] Iniciando atualização de grupo '{group_id}'. Dados: {group_data}")
+        try:
+            result = await self.db.groups.update_one({"_id": group_id}, {"$set": group_data})
+            self.logger.info(f"[update_group] Resultado da operação: modified_count={result.modified_count}")
+            # Cache invalidation: todos usuários do grupo
+            if result.modified_count > 0:
+                users_cursor = self.db.users.find({"group_ids": group_id})
+                async for user_doc in users_cursor:
+                    email = user_doc.get("email")
+                    company_id = user_doc.get("company_id")
+                    if email and company_id:
+                        RedisSessionService().invalidate_user_permissions(email, company_id)
+            return result.modified_count > 0
+        except Exception as e:
+            self.logger.error(f"[update_group] Erro ao atualizar grupo '{group_id}': {e}")
+            return False
+
+    async def delete_group(self, group_id: str) -> bool:
+        self.logger.info(f"[delete_group] Iniciando exclusão de grupo '{group_id}'.")
+        try:
+            group_doc = await self.db.groups.find_one({"_id": group_id})
+            result = await self.db.groups.delete_one({"_id": group_id})
+            self.logger.info(f"[delete_group] Resultado da operação: deleted_count={result.deleted_count}")
+            # Cache invalidation: todos usuários do grupo
+            if result.deleted_count > 0:
+                users_cursor = self.db.users.find({"group_ids": group_id})
+                async for user_doc in users_cursor:
+                    email = user_doc.get("email")
+                    company_id = user_doc.get("company_id")
+                    if email and company_id:
+                        RedisSessionService().invalidate_user_permissions(email, company_id)
+            return result.deleted_count > 0
+        except Exception as e:
+            self.logger.error(f"[delete_group] Erro ao excluir grupo '{group_id}': {e}")
             return False
