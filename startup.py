@@ -5,7 +5,6 @@ import logging
 # Carrega variáveis de ambiente do arquivo .env na raiz do backend
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
-# Importa o serviço de carregamento de segredos
 from backend.app.services.config_loader_service import ConfigLoaderService
 
 # Aqui pode-se adicionar validações de configuração, logs de inicialização, ou outras rotinas necessárias
@@ -13,6 +12,7 @@ from backend.app.services.config_loader_service import ConfigLoaderService
 def validate_env_vars():
     required_vars = [
         'KEY_VAULT_URL',
+        'REDIS_PERM_TTL'
     ]
     missing = [var for var in required_vars if not os.getenv(var)]
     if missing:
