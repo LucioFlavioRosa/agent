@@ -80,23 +80,32 @@ def setup_logging():
     logger.addHandler(handler)
 
 @app.on_event("startup")
-def on_startup():
+async def on_startup():  # Mudamos para async
     setup_logging()
     logging.info("🚀 Iniciando Backend Peers CodeAI...")
     logging.info("[Startup] Iniciando carregamento de segredos do Key Vault...")
-    # Carrega segredos do Key Vault (incluindo Redis)
+    
+    # 1. Carrega segredos do Key Vault
     try:
         ConfigLoaderService().load_secrets_from_key_vault()
-        logging.info("[Startup] ConfigLoaderService: Segredos carregados do Key Vault com sucesso.")
+        logging.info("[Startup] ConfigLoaderService: Segredos carregados com sucesso.")
     except Exception as e:
-        logging.error(f"⚠️ [Startup] Falha ao carregar segredos do Key Vault: {str(e)}")
-        raise RuntimeError(f"Falha ao carregar segredos do Key Vault: {str(e)}")
-    # Removida validação de settings.MONGODB_URI e settings.MONGODB_DATABASE_NAME
+        logging.error(f"⚠️ [Startup] Falha ao carregar segredos: {str(e)}")
+        raise RuntimeError(f"Falha ao carregar segredos: {str(e)}")
+
+    # 2. Inicializa MongoDBService e cria Índices
     try:
         logging.info("[Startup] Inicializando MongoDBService...")
-        app.state.mongo_service = MongoDBService()
-        logging.info("[Startup] MongoDBService inicializado com sucesso.")
+        mongo_service = MongoDBService()
+        app.state.mongo_service = mongo_service
+        
+        # AQUI A MUDANÇA: Garante que os índices existam antes da API subir
+        logging.info("[Startup] Verificando índices do MongoDB...")
+        await mongo_service.create_indexes()
+        
+        logging.info("[Startup] MongoDBService e índices configurados com sucesso.")
     except Exception as e:
-        logging.critical(f"[Startup] Erro ao inicializar MongoDBService: {str(e)}")
+        logging.critical(f"[Startup] Erro crítico no MongoDB: {str(e)}")
         raise
+
     logging.info("[Startup] Aplicação pronta para receber requisições.")
