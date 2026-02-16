@@ -227,3 +227,38 @@ class PermissionService:
         self.logger.info(f"[check_user_project_action_permission] Permissões completas armazenadas no Redis para {email}:{company_id}")
         self.logger.info(f"[check_user_project_action_permission] Permissão concedida para usuário '{email}' no projeto '{project_id}' para ação '{action_type}'.")
         return True, member_role, None
+
+# Adicione este método à classe PermissionService
+    async def check_user_can_create_project(self, email: str, company_id: str) -> Tuple[bool, Optional[str]]:
+        self.logger.info(f"[check_user_can_create_project] Verificando permissão de criação para '{email}'.")
+        
+        # 1. Busca o usuário
+        user = await self.mongo_service.get_user_by_email(email)
+        if not user:
+            return False, "Usuário não encontrado."
+            
+        # 2. Verifica se o usuário tem grupos
+        if not hasattr(user, "group_ids") or not user.group_ids:
+            # Se não tem grupo, assumimos False (segurança por padrão) ou True dependendo da sua regra de negócio.
+            # Aqui estou assumindo que sem grupo = sem permissão especial.
+            return False, "Usuário não pertence a nenhum grupo com permissão de criação."
+
+        # 3. Itera sobre os grupos para achar a flag 'can_create_projects'
+        can_create = False
+        
+        for group_id in user.group_ids:
+            group = await self.mongo_service.get_group_by_id(group_id)
+            if group and hasattr(group, "settings"):
+                # Busca a chave 'can_create_projects' dentro de settings
+                # Exemplo de settings: {"max_daily_tokens": 100000, "can_create_projects": True}
+                settings_dict = group.settings if isinstance(group.settings, dict) else group.settings.dict()
+                
+                if settings_dict.get("can_create_projects") is True:
+                    can_create = True
+                    self.logger.info(f"[check_user_can_create_project] Permissão concedida pelo grupo '{group.name}'.")
+                    break
+        
+        if can_create:
+            return True, None
+        else:
+            return False, "Seu grupo de usuário não tem permissão para criar novos projetos."
