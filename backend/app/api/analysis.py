@@ -120,31 +120,22 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
     if not project:
         permission_service = PermissionService(mongo_service)
 
+        # 1. Verifica permissão de criação
         can_create, error_msg_create = await permission_service.check_user_can_create_project(email, company_id)
         if not can_create:
-            log_validation_step(
-                step="get_or_create_project",
-                status="fail",
-                details=error_msg_create,
-                job_id=None,
-                project_id=None
-            )
+            log_validation_step(step="get_or_create_project", status="fail", details=error_msg_create)
             raise HTTPException(status_code=403, detail=error_msg_create)
             
+        # 2. Verifica permissão do agente
         has_access, error_msg = await permission_service.check_user_agent_permission(email, analysis_type)
         if not has_access:
-            log_validation_step(
-                step="get_or_create_project",
-                status="fail",
-                details=error_msg or "Usuário não possui permissão para usar este agente.",
-                job_id=None,
-                project_id=None
-            )
+            log_validation_step(step="get_or_create_project", status="fail", details=error_msg or "Usuário não possui permissão para usar este agente.")
             raise HTTPException(status_code=403, detail=error_msg or "Usuário não possui permissão para usar este agente.")
         
-        project_id = str(uuid.uuid4())
+        # 3. Preparação dos dados
+        new_project_id = str(uuid.uuid4()) # Definindo explicitamente o ID gerado
         project_data = {
-            "_id": project_id,
+            "_id": new_project_id,
             "name": nome_projeto,
             "name_normalized": nome_projeto_normalized,
             "company_id": company_id,
@@ -160,21 +151,23 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
             "updated_at": datetime.utcnow(),
             "description": None
         }
+        
+        # 4. Tentativa de criação
         created_id = await mongo_service.create_project(project_data, company_id)
         
         if not created_id:
-    
+            # Conflito de concorrência detectado pelo índice único do MongoDB
             project_db = await mongo_service.get_project_by_normalized_name(nome_projeto_normalized, company_id)
             
             if not project_db:
-                # Caso crítico: falhou ao criar e não foi encontrado na busca
                 log_error(
                     context="get_or_create_project",
                     error_message=f"Conflito de duplicidade e falha ao recuperar projeto {nome_projeto}",
-                    project_id=project_id_gen
+                    project_id=new_project_id
                 )
                 raise HTTPException(status_code=500, detail="Erro de concorrência ao acessar o projeto.")
 
+            # Recupera o ID do projeto que já existe
             project_id = getattr(project_db, "id", None) or project_db.get("_id")
             log_validation_step(
                 step="get_or_create_project",
@@ -182,7 +175,6 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
                 details=f"Conflito de duplicidade resolvido. Projeto recuperado: {project_id}"
             )
         else:
-            # Projeto criado com sucesso (primeira vez)
             project_id = created_id
             log_validation_step(
                 step="get_or_create_project",
@@ -191,7 +183,7 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
                 project_id=project_id
             )
     else:
-        # O projeto já foi encontrado na busca inicial (antes de tentar criar)
+        # Projeto já existia na primeira busca
         project_id = getattr(project, "id", None) or project.get("_id")
         log_validation_step(
             step="get_or_create_project",
