@@ -32,6 +32,19 @@ class MongoDBService:
         self.client = AsyncIOMotorClient(self.mongo_uri)
         self.db = self.client[self.db_name]
 
+    async def create_indexes(self):
+        """Cria índices únicos para garantir integridade dos dados."""
+        try:
+            # Garante que NOME + EMPRESA seja uma combinação única
+            await self.db.projects.create_index(
+                [("name_normalized", 1), ("company_id", 1)],
+                unique=True,
+                name="unique_project_name_per_company"
+            )
+            self.logger.info("[Indexes] Índice único de projetos criado/verificado com sucesso.")
+        except Exception as e:
+            self.logger.error(f"[Indexes] Erro ao criar índices: {e}")
+
     async def get_user_by_email(self, email: str) -> Optional[UserPermission]:
         self.logger.info(f"[get_user_by_email] Iniciando busca de usuário por email: '{email}'")
         try:
