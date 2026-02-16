@@ -1,5 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from backend.app.models.permission_models import UserPermission, GroupPermission, ProjectPermission, ProjectMember
+from pymongo.errors import DuplicateKeyError
 from typing import Optional, List
 from backend.app.core.config import settings
 from backend.app.services.azure_secret_manager import AzureSecretManager
@@ -259,18 +260,25 @@ class MongoDBService:
             self.logger.error(f"[get_project_by_normalized_name] Erro ao buscar projeto '{nome_projeto_normalizado}': {e}")
             return None
 
-    async def create_project(self, project_data: dict, company_id: str) -> str:
+    async def create_project(self, project_data: dict, company_id: str) -> Optional[str]:
         self.logger.info(f"[create_project] Iniciando criação de projeto. Dados: {project_data}, company_id: '{company_id}'")
+        
         if not company_id or not isinstance(company_id, str) or not company_id.strip():
             self.logger.error(f"[create_project] company_id inválido ou vazio: '{company_id}'")
             raise ValueError("company_id é obrigatório e não pode ser vazio.")
+        
         try:
-            project_id = str(uuid.uuid4())
+            # Usamos o ID vindo da API ou geramos um novo
+            project_id = project_data.get("_id") or str(uuid.uuid4())
             nome_projeto = project_data.get("name")
+            
+            # Garantimos que a normalização aplicada aqui é a mesma da busca
             name_normalized = normalize_string_general(nome_projeto)
+            
             description = project_data.get("description")
             members = project_data.get("members", [])
             now = datetime.utcnow()
+            
             doc = {
                 "_id": project_id,
                 "name": nome_projeto,
@@ -281,11 +289,18 @@ class MongoDBService:
                 "created_at": now,
                 "updated_at": now
             }
+    
             await self.db.projects.insert_one(doc)
-            self.logger.info(f"[create_project] Projeto criado com sucesso: {doc}")
+            self.logger.info(f"[create_project] Projeto criado com sucesso: {project_id}")
             return project_id
+    
+        except DuplicateKeyError:
+            # Este erro acontece se o índice único (name_normalized + company_id) for violado
+            self.logger.warning(f"[create_project] Tentativa de criar projeto duplicado: '{name_normalized}' para a empresa '{company_id}'")
+            return None
+            
         except Exception as e:
-            self.logger.error(f"[create_project] Erro ao criar projeto: {e}")
+            self.logger.error(f"[create_project] Erro inesperado ao criar projeto: {e}")
             raise
 
     async def delete_project(self, project_id: str, company_id: str) -> bool:
