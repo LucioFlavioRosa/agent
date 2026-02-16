@@ -65,21 +65,47 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 def setup_logging():
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-    logger = logging.getLogger()
-    logger.setLevel(log_level)
-    if logger.hasHandlers(): logger.handlers.clear()
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    
+    # Limpa handlers anteriores
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
+        
     class JsonFormatter(logging.Formatter):
         def format(self, record):
+            # 1. Campos base
             log_record = {
                 "timestamp": self.formatTime(record, self.datefmt),
                 "level": record.levelname,
                 "msg": record.getMessage(),
-                "func": record.funcName
+                "func": record.funcName,
+                "module": record.module, # Útil para saber de onde veio
             }
+            
+            # 2. O PULO DO GATO: Se vierem campos no 'extra', adicione-os ao JSON raiz
+            # Campos padrão do LogRecord que queremos ignorar para não poluir
+            ignore_keys = {
+                'args', 'asctime', 'created', 'exc_info', 'exc_text', 'filename',
+                'funcName', 'levelname', 'levelno', 'lineno', 'module',
+                'msecs', 'message', 'msg', 'name', 'pathname', 'process',
+                'processName', 'relativeCreated', 'stack_info', 'thread', 'threadName'
+            }
+            
+            # Itera sobre o __dict__ do record para pegar o que veio no 'extra'
+            for key, value in record.__dict__.items():
+                if key not in ignore_keys:
+                    log_record[key] = value
+            
+            # Tratamento de exceção se houver
+            if record.exc_info:
+                log_record["exception"] = self.formatException(record.exc_info)
+
             return json.dumps(log_record)
+
     handler = logging.StreamHandler()
     handler.setFormatter(JsonFormatter())
-    logger.addHandler(handler)
+    root_logger.addHandler(handler)
 
 @app.on_event("startup")
 async def on_startup():  # Mudamos para async
