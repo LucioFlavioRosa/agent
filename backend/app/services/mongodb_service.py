@@ -7,6 +7,8 @@ from datetime import datetime
 import uuid
 import logging
 
+from backend.app.utils.string_utils import normalize_string_general
+
 class MongoDBService:
     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
         self.logger = logging.getLogger("MongoDBService")
@@ -228,7 +230,7 @@ class MongoDBService:
         if not company_id or not isinstance(company_id, str) or not company_id.strip():
             self.logger.error(f"[get_project_by_normalized_name] company_id inválido ou vazio: '{company_id}'")
             raise ValueError("company_id é obrigatório e não pode ser vazio.")
-        nome_projeto_normalizado = nome_projeto.lower().strip()
+        nome_projeto_normalizado = normalize_string_general(nome_projeto)
         try:
             doc = await self.db.projects.find_one({"name_normalized": nome_projeto_normalizado, "company_id": company_id})
             self.logger.info(f"[get_project_by_normalized_name] Resultado da consulta: {doc}")
@@ -252,7 +254,7 @@ class MongoDBService:
         try:
             project_id = str(uuid.uuid4())
             nome_projeto = project_data.get("name")
-            name_normalized = nome_projeto.lower().strip() if nome_projeto else ""
+            name_normalized = normalize_string_general(nome_projeto)
             description = project_data.get("description")
             members = project_data.get("members", [])
             now = datetime.utcnow()
