@@ -1,28 +1,18 @@
 {
+  // DOCUMENTAÇÃO: Grupos com "allowed_agents": ["*"] concedem acesso a TODOS os agentes listados neste arquivo. Use com cautela para grupos que devem acessar todos os agentes disponíveis.
   "agents": {
-    "agent_code_generation": {
-      "analysis_type": "agent_code_generation",
-      "mcp_service_url": "https://mcp-code-gen.azurewebsites.net/api/v1/analysis",
-      "report_fields": ["code_report"],
-      "report_mapping": {
-        "code_report": "Código Gerado"
-      }
+    "agent1": {
+      "agent_name": "agent1",
+      "mcp_service_url": "https://mcp-agent1.example.com",
+      "report_fields": ["field1", "field2"],
+      "report_mapping": {"field1": "Field 1", "field2": "Field 2"}
     },
-    "agent_refactoring": {
-      "analysis_type": "agent_refactoring",
-      "mcp_service_url": "https://mcp-refactoring.azurewebsites.net/api/v1/analysis",
-      "report_fields": ["refactor_report"],
-      "report_mapping": {
-        "refactor_report": "Refatoração"
-      }
-    },
-    "agent_unit_tests": {
-      "analysis_type": "agent_unit_tests",
-      "mcp_service_url": "https://mcp-unit-tests.azurewebsites.net/api/v1/analysis",
-      "report_fields": ["unit_test_report"],
-      "report_mapping": {
-        "unit_test_report": "Testes Unitários"
-      }
+    "agent2": {
+      "agent_name": "agent2",
+      "mcp_service_url": "https://mcp-agent2.example.com",
+      "report_fields": ["fieldA", "fieldB"],
+      "report_mapping": {"fieldA": "Field A", "fieldB": "Field B"}
     }
+    // ... demais agentes ...
   }
 }
