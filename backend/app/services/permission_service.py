@@ -1,5 +1,6 @@
 from backend.app.services.mongodb_service import MongoDBService
 from backend.app.services.redis_session_service import RedisSessionService
+from backend.app.services.mcp_config_service import MCPConfigService
 from typing import Tuple, Optional, Set, List
 import logging
 
@@ -48,14 +49,24 @@ class PermissionService:
         
         # Busca todos agentes permitidos via grupos
         user = await self.mongo_service.get_user_by_email(email)
-        allowed_agents = set()
+        allowed_agents_set = set()
+        universal_access = False
         if user and hasattr(user, "group_ids"):
             for group_id in user.group_ids:
                 group = await self.mongo_service.get_group_by_id(group_id)
                 if group and hasattr(group, "allowed_agents"):
-                    allowed_agents.update(group.allowed_agents)
+                    group_agents = group.allowed_agents
+                    if isinstance(group_agents, list) and "*" in group_agents:
+                        universal_access = True
+                        break
+                    allowed_agents_set.update(group_agents)
+        if universal_access:
+            # Busca todos os agentes disponíveis no sistema
+            mcp_config = MCPConfigService.load_config()
+            all_agents = list(mcp_config.agents.keys())
+            allowed_agents_set = set(all_agents)
         return {
-            "allowed_agents": list(allowed_agents),
+            "allowed_agents": list(allowed_agents_set),
             "project_permissions": project_permissions
         }
 
@@ -207,19 +218,22 @@ class PermissionService:
         permissions = self.redis_session_service.get_user_permissions(email, company_id)
         if permissions:
             allowed_agents = permissions.get("allowed_agents", set())
+            # Wildcard universal: se '*' está presente, retorna True
+            if isinstance(allowed_agents, list) and "*" in allowed_agents:
+                return True, None
             if agent_name in allowed_agents:
                 return True, None
-       
             return False, "Usuário não possui permissão para usar este agente."
 
         # Cache Miss - Constroi e Salva
         permissions_dict = await self._build_complete_permissions(email, company_id)
         self.redis_session_service.store_user_permissions(email, company_id, permissions_dict)
-        
         allowed_agents = permissions_dict.get("allowed_agents", [])
+        # Wildcard universal: se '*' está presente, retorna True
+        if isinstance(allowed_agents, list) and "*" in allowed_agents:
+            return True, None
         if agent_name in allowed_agents:
             return True, None
-        
         return False, "Usuário não possui permissão para usar este agente."
 
     async def check_user_can_create_project(self, email: str, company_id: str) -> Tuple[bool, Optional[str]]:
