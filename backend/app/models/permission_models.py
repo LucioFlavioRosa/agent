@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, validator
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from datetime import datetime
 
 class UserPermission(BaseModel):
@@ -9,7 +9,7 @@ class UserPermission(BaseModel):
     company_id: str
     active: bool = True
     group_ids: List[str] = Field(default_factory=list)
-    created_at: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     @validator('email')
     def email_must_be_valid(cls, v):
@@ -28,12 +28,10 @@ class ProjectMember(BaseModel):
     user_id: str
     email: EmailStr
     role: str
-    added_at: Optional[str] = None
+    # CORREÇÃO AQUI: Aceita ambos, pois seu código gera string ISO, 
+    # mas o Mongo pode salvar/retornar datetime.
+    added_at: Optional[Union[datetime, str]] = None
 
-    # Permissões de cada role:
-    # owner: pode adicionar/excluir usuários do projeto, excluir projeto, modificar o projeto (incluindo relatórios), ver o projeto (incluindo relatórios)
-    # editor: pode modificar o projeto (incluindo relatórios), ver o projeto (incluindo relatórios)
-    # viewer: pode ver o projeto (incluindo relatórios)
     @validator('role')
     def role_must_be_valid(cls, v):
         valid_roles = {'owner', 'editor', 'viewer'}
@@ -48,8 +46,9 @@ class ProjectPermission(BaseModel):
     company_id: str
     blob_path: Optional[str] = None
     members: List[ProjectMember] = Field(default_factory=list)
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    # CORREÇÃO AQUI: Aceita datetime nativo do Mongo
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     @validator('members', pre=True, always=True)
     def validate_members(cls, v):
@@ -79,6 +78,7 @@ class UserPermissionCache(BaseModel):
     @validator('cached_at')
     def cached_at_must_be_iso(cls, v):
         try:
+            # Apenas valida se é uma string ISO válida, não altera o tipo
             datetime.fromisoformat(v)
         except Exception:
             raise ValueError('cached_at deve ser um timestamp ISO válido')
