@@ -101,23 +101,67 @@ async def update_project_members(project_id: str, req: UpdateProjectMembersReque
     mongo_service = MongoDBService()
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
+    
     try:
+        # 1. Verifica permissão básica de edição
         has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
-            req.requester_email, project_id, action_type="edit"
+            req.requester_email, project_id, action_type="edit_project" # Nota: ajustado para "edit_project" conforme mapeamento
         )
         if not has_perm:
             return UpdateProjectMembersResponse(success=False, message=error_msg)
+
+        # 2. Verifica se quem pede é Owner
         if not await verify_user_is_owner(req.requester_email, project_id, mongo_service):
-            return UpdateProjectMembersResponse(success=False, message="Usuário não é owner.")
+            return UpdateProjectMembersResponse(success=False, message="Apenas Owners podem gerenciar membros.")
+        
+        # Identifica os owners na NOVA lista que está chegando
+        incoming_owners = [m for m in req.members if m.get("role", "").lower() == "owner"]
+        
+        # Regra 1: O projeto não pode ficar sem nenhum owner
+        if not incoming_owners:
+            return UpdateProjectMembersResponse(
+                success=False, 
+                message="Ação negada: A lista de membros deve conter pelo menos um Owner."
+            )
+
+        # Busca como o requisitante ficou na NOVA lista
+        requester_in_new_list = next(
+            (m for m in req.members if m.get("email") == req.requester_email), None
+        )
+
+        # Regra 2: O Owner não pode se remover via update (deve usar endpoint de sair/remover)
+        if not requester_in_new_list:
+             return UpdateProjectMembersResponse(
+                success=False, 
+                message="Você não pode se remover da lista via atualização. Use a função de sair do projeto."
+            )
+
+        # Regra 3: Se o requisitante está se rebaixando (não é mais owner na nova lista),
+        if requester_in_new_list.get("role", "").lower() != "owner":
+            # Filtra owners que NÃO são o requisitante
+            other_owners = [m for m in incoming_owners if m.get("email") != req.requester_email]
+            if not other_owners:
+                return UpdateProjectMembersResponse(
+                    success=False, 
+                    message="Você não pode alterar seu nível para Editor/Viewer sem antes promover outro membro a Owner."
+                )
+        # 3. Executa a atualização
         result = await mongo_service.update_project_members(project_id, req.members)
-        # Cache invalidation: todos membros do projeto antes da modificação + todos membros novos
+        
+        # 4. Invalidação de Cache Inteligente
         project = await mongo_service.get_project_by_id(project_id)
         company_id = getattr(project, "company_id", None)
+        
+        # Invalida cache de todos na nova lista
         affected_emails = [m.get("email") for m in req.members if m.get("email")]
         for email in set(affected_emails):
             redis_session_service.invalidate_user_permissions(email, company_id)
-        return UpdateProjectMembersResponse(success=bool(result), 
-                                         message="Membros atualizados!" if result else "Falha na atualização.")
+
+        return UpdateProjectMembersResponse(
+            success=bool(result), 
+            message="Membros atualizados com sucesso!" if result else "Falha na atualização."
+        )
+
     except Exception as e:
         logger.error(f"Erro update_project_members: {e}")
         return UpdateProjectMembersResponse(success=False, message=str(e))
