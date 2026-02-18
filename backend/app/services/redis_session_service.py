@@ -13,33 +13,23 @@ from backend.app.models.permission_models import UserPermissionCache
 class RedisSessionService:
     def __init__(self):
         self.logger = logging.getLogger("RedisSessionService")
-        try:
-            key_vault_url = getattr(settings, "KEY_VAULT_URL", None)
-            if not key_vault_url:
-                self.logger.critical("KEY_VAULT_URL não definido nas configurações.")
-                raise EnvironmentError("KEY_VAULT_URL não definido.")
-            secret_manager = AzureSecretManager(key_vault_url)
-            redis_host = secret_manager.get_secret("redis-host")
-            redis_port = int(secret_manager.get_secret("redis-port"))
-            redis_password = secret_manager.get_secret("redis-password")
-            redis_db = int(secret_manager.get_secret("redis-db"))
-            redis_use_ssl = secret_manager.get_secret("redis-use-ssl")
-            redis_ssl_cert_reqs = secret_manager.get_secret("redis-ssl-cert-reqs")
-            if isinstance(redis_use_ssl, str):
-                redis_use_ssl = redis_use_ssl.lower() in ["true", "1", "yes"]
-        except Exception as e:
-            self.logger.critical(f"Erro ao obter segredos do Redis do Key Vault: {e}")
-            raise
+        
+        # Lê direto do settings carregado na memória
+        # Nota: Converta string "true"/"false" para bool se necessário, ou deixe o Pydantic tratar
+        redis_use_ssl_val = settings.REDIS_USE_SSL
+        if isinstance(redis_use_ssl_val, str):
+             redis_use_ssl_val = redis_use_ssl_val.lower() in ["true", "1", "yes"]
+
         self.redis_client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            password=redis_password,
-            db=redis_db,
-            decode_responses=True,
-            ssl=redis_use_ssl,
-            ssl_cert_reqs=redis_ssl_cert_reqs
+            host=settings.REDIS_HOST,
+            port=int(settings.REDIS_PORT or 6379),
+            password=settings.REDIS_PASSWORD,
+            db=int(settings.REDIS_DB or 0),
+            ssl=redis_use_ssl_val,
+            ssl_cert_reqs=settings.REDIS_SSL_CERT_REQS,
+            decode_responses=True
         )
-        self.session_ttl = int(getattr(settings, 'REDIS_SESSION_TTL', 86400))
+        self.session_ttl = settings.REDIS_PERM_TTL
 
     def _serialize_session(self, session_data: dict) -> str:
         return json.dumps(session_data)
