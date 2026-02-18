@@ -23,6 +23,14 @@
       "report_mapping": {
         "unit_test_report": "Testes Unitários"
       }
+    },
+    "agent_epics_generator_digital": {
+      "analysis_type": "agent_epics_generator_digital",
+      "mcp_service_url": "https://mcp-epics.azurewebsites.net/api/v1/analysis", 
+      "report_fields": ["epics_report"],
+      "report_mapping": {
+        "epics_report": "Gerador de Épicos"
+      }
     }
   }
 }
