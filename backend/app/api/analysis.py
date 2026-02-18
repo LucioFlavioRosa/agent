@@ -2,7 +2,7 @@ import os
 import uuid
 import logging
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Request
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -41,6 +41,9 @@ class StartAnalysisResponse(BaseModel):
     job_id: Optional[str] = None
     nome_projeto: Optional[str] = None
 
+def get_mongo_service(request: Request) -> MongoDBService:
+    return request.app.state.mongo_service
+    
 def validate_file_extension(file: UploadFile):
     """Valida se o arquivo enviado possui uma extensão permitida."""
     extension = os.path.splitext(file.filename)[1].lower()
@@ -162,7 +165,7 @@ async def start_analysis(
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None),
-    mongo_service: MongoDBService = Depends(lambda request: request.app.state.mongo_service)
+    mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     # 1. Log recebimento do payload
     payload = {
