@@ -14,23 +14,15 @@ from backend.app.utils.string_utils import normalize_string_general
 class MongoDBService:
     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
         self.logger = logging.getLogger("MongoDBService")
-        # Extração dos segredos do Key Vault se não fornecidos
-        if uri is None or db_name is None:
-            try:
-                key_vault_url = getattr(settings, "KEY_VAULT_URL", None)
-                if not key_vault_url:
-                    self.logger.critical("KEY_VAULT_URL não definido nas configurações.")
-                    raise EnvironmentError("KEY_VAULT_URL não definido.")
-                secret_manager = AzureSecretManager(key_vault_url)
-                if uri is None:
-                    uri = secret_manager.get_secret("azure-mongodb-connection-string")
-                if db_name is None:
-                    db_name = secret_manager.get_secret("azure-mongodb-database-name")
-            except Exception as e:
-                self.logger.critical(f"Erro ao obter segredos do MongoDB do Key Vault: {e}")
-                raise
-        self.mongo_uri = uri
-        self.db_name = db_name
+        # Tenta pegar dos argumentos, se não tiver, pega do settings (já carregado no startup)
+        self.mongo_uri = uri or settings.AZURE_MONGODB_CONNECTION_STRING
+        self.db_name = db_name or settings.AZURE_MONGODB_DATABASE_NAME
+
+        if not self.mongo_uri or not self.db_name:
+             # Só entra aqui se o startup falhou silenciosamente ou não carregou
+             self.logger.critical("MongoDB URI ou DB Name não definidos.")
+             raise ValueError("Configuração do MongoDB ausente.")
+
         self.client = AsyncIOMotorClient(self.mongo_uri)
         self.db = self.client[self.db_name]
 
