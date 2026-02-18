@@ -9,7 +9,7 @@ class UserPermission(BaseModel):
     company_id: str
     active: bool = True
     group_ids: List[str] = Field(default_factory=list)
-    created_at: Optional[datetime] = None
+    created_at: Optional[Union[datetime, str]] = None
 
     @validator('email')
     def email_must_be_valid(cls, v):
