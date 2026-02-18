@@ -12,15 +12,14 @@ from backend.app.services.config_loader_service import ConfigLoaderService
 from backend.app.core.config import settings
 from backend.app.api.auth import router as auth_router
 from backend.app.api.analysis import router as analysis_router
-from backend.app.api.projects import router as projects_router
 from backend.app.api.session import router as session_router
 from backend.app.api.webhooks import router as webhooks_router
 from backend.app.api.user_projects import router as user_projects_router
 from backend.app.services.mongodb_service import MongoDBService
-from backend.app.api.project_management import router as project_management_router
 from backend.app.api.project_actions import router as project_actions_router
 from backend.app.api.groups import router as groups_router
 from backend.app.api.user_agents import router as user_agents_router
+from backend.app.api.project_management import router as project_management_router
 
 load_dotenv(override=False)
 
