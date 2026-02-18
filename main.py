@@ -92,7 +92,6 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/auth")
 app.include_router(analysis_router, prefix="/analysis")
-app.include_router(projects_router, prefix="/projects")
 app.include_router(session_router, prefix="/session")
 app.include_router(webhooks_router, prefix="/webhooks")
 app.include_router(user_projects_router, prefix="/user")
