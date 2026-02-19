@@ -72,7 +72,7 @@ async def create_group(
         email = user_doc.get("email")
         company_id = user_doc.get("company_id")
         if email and company_id:
-            RedisSessionService().invalidate_user_permissions(email, company_id)
+            await RedisSessionService().invalidate_user_permissions(email, company_id)
     log_response_sent(endpoint="/groups", response={"group_id": group_id})
     return {"group_id": group_id}
 
@@ -94,7 +94,7 @@ async def update_group(
         email = user_doc.get("email")
         company_id = user_doc.get("company_id")
         if email and company_id:
-            RedisSessionService().invalidate_user_permissions(email, company_id)
+            await RedisSessionService().invalidate_user_permissions(email, company_id)
     log_response_sent(endpoint=f"/groups/{group_id}", response={"success": True})
     return {"success": True}
 
@@ -115,6 +115,6 @@ async def delete_group(
         email = user_doc.get("email")
         company_id = user_doc.get("company_id")
         if email and company_id:
-            RedisSessionService().invalidate_user_permissions(email, company_id)
+            await RedisSessionService().invalidate_user_permissions(email, company_id)
     log_response_sent(endpoint=f"/groups/{group_id}", response={"success": True})
     return {"success": True}
