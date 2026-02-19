@@ -3,6 +3,7 @@ from backend.app.services.mongodb_service import MongoDBService
 from backend.app.services.permission_service import PermissionService
 from backend.app.models.project_management_models import (
     ListOwnedProjectsResponse,
+    ProjectWithRoleItem,
     OwnedProjectItem,
     AddProjectMemberRequest,
     AddProjectMemberResponse,
@@ -33,7 +34,26 @@ async def verify_user_is_owner(email: str, project_id: str, mongo_service: Mongo
     return any(m.email == email and m.role.lower() == "owner" for m in project.members)
 
 # --- Routes ---
-
+@router.get("/projects/list", response_model=List[ProjectWithRoleItem], tags=["Project Management"])
+async def list_all_user_projects(
+    email: str = Query(..., description="Email do usuário"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """
+    Lista TODOS os projetos que o usuário tem acesso.
+    Retorna também o 'role' (nível de acesso) específico do usuário naquele projeto.
+    """
+    logger.info(f"[ProjectList] Buscando projetos para: {email}")
+    
+    # O Service já retorna uma lista de dicionários com chaves:
+    # project_id, project_name, role, description, created_at
+    projects = await mongo_service.get_user_projects_with_access(email)
+    
+    if not projects:
+        return []
+        
+    return projects
+    
 @router.get("/projects/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
 async def list_owned_projects(email: str = Query(..., description="Email do usuário owner")):
     logger.info(f"[ProjectManagement] Recebida requisição para /projects/owned com email={email}")
