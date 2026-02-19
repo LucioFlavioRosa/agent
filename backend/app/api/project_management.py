@@ -114,7 +114,7 @@ async def add_project_member(
         new_member = {
             "user_id": str(new_user.id),
             "email": req.new_member_email,
-            "role": req.role,
+            "role": req.role.value,
             "added_at": datetime.utcnow().isoformat()
         }
         result = await mongo_service.add_member_to_project(project_id, new_member)
@@ -300,4 +300,4 @@ async def _verify_user_is_owner_helper(email: str, project_id: str, mongo_servic
     project = await mongo_service.get_project_by_id(project_id)
     if not project:
         return False
-    return any(m.email == email and m.role.lower() == "owner" for m in project.members)
+    return any(m.email == email and m.role == ProjectRole.OWNER for m in project.members)
