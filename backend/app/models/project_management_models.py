@@ -1,6 +1,12 @@
-from pydantic import BaseModel, EmailStr, Field, validator
-from typing import List, Optional
+from enum import Enum
 from datetime import datetime
+from typing import List, Optional
+from pydantic import BaseModel, EmailStr, Field, validator
+
+class ProjectRole(str, Enum):
+    OWNER = "owner"
+    EDITOR = "editor"
+    VIEWER = "viewer"
 
 class ProjectIdentifierRequest(BaseModel):
     project_name: str = Field(..., description="Nome do projeto para identificação")
@@ -75,6 +81,6 @@ class DeleteProjectResponse(BaseModel):
 class ProjectWithRoleItem(BaseModel):
     project_id: str
     project_name: str
-    role: str = Field(..., description="Nível de acesso do usuário: owner, editor ou viewer")
+    role: ProjectRole
     description: Optional[str] = None
     created_at: Optional[datetime] = None
