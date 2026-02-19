@@ -16,9 +16,9 @@ class PermissionService:
     @staticmethod
     def validate_project_action_by_role(role: str, action: str) -> Tuple[bool, Optional[str]]:
         role_action_map = {
-            "owner": {"add_member", "remove_member", "delete_project", "edit_project", "view_project"},
-            "editor": {"edit_project", "view_project"},
-            "viewer": {"view_project"}
+            ProjectRole.OWNER.value: {"add_member", "remove_member", "delete_project", "edit_project", "view_project"},
+            ProjectRole.EDITOR.value: {"edit_project", "view_project"},
+            ProjectRole.VIEWER.value: {"view_project"}
         }
         allowed_actions = role_action_map.get(role)
         if allowed_actions is None:
