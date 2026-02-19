@@ -35,7 +35,6 @@ async def create_user(
     mongo_service: MongoDBService = Depends(get_mongo_service), # Injetado!
     redis_service: RedisSessionService = Depends(get_redis_service) # Injetado!
 ):
-    # Removemos as instâncias manuais que ficavam aqui
     user_data = request.dict()
     
     try:
