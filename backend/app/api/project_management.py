@@ -14,7 +14,8 @@ from backend.app.models.project_management_models import (
     UpdateProjectMembersRequest,
     UpdateProjectMembersResponse,
     DeleteProjectRequest,
-    DeleteProjectResponse
+    DeleteProjectResponse,
+    ProjectRole
 )
 from backend.app.services.redis_session_service import RedisSessionService
 
@@ -241,7 +242,7 @@ async def remove_project_member(
             )
     success = await mongo_service.remove_member_from_project(project_id, target_email)
     company_id = getattr(project, "company_id", None)
-    redis_session_service.invalidate_user_permissions(target_email, company_id)
+    await redis_session_service.invalidate_user_permissions(target_email, company_id)
     await redis_session_service.invalidate_user_permissions(req.requester_email, company_id)
     if not success:
         raise HTTPException(status_code=500, detail="Falha ao remover membro no banco de dados.")
