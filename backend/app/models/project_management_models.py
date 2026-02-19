@@ -1,6 +1,22 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, validator
 from typing import List, Optional
 from datetime import datetime
+
+class ProjectIdentifierRequest(BaseModel):
+    project_name: str = Field(..., description="Nome do projeto para identificação")
+    company_id: str = Field(..., description="Identificador da empresa associada ao projeto")
+
+    @validator('project_name')
+    def project_name_not_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_name é obrigatório e não pode ser vazio')
+        return v
+
+    @validator('company_id')
+    def company_id_not_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('company_id é obrigatório e não pode ser vazio')
+        return v
 
 class OwnedProjectItem(BaseModel):
     project_id: str = Field(..., description="Identificador único do projeto")
@@ -13,9 +29,15 @@ class ListOwnedProjectsResponse(BaseModel):
 
 class AddProjectMemberRequest(BaseModel):
     requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
-    project_id: str = Field(..., description="Identificador do projeto")
+    project_name: str = Field(..., description="Nome do projeto")
     new_member_email: EmailStr = Field(..., description="Email do novo membro a ser adicionado")
     role: str = Field(..., description="Permissão do novo membro: viewer ou editor")
+
+    @validator('project_name')
+    def project_name_not_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_name é obrigatório e não pode ser vazio')
+        return v
 
 class AddProjectMemberResponse(BaseModel):
     success: bool = Field(..., description="Indica se a adição foi bem-sucedida")
@@ -23,8 +45,14 @@ class AddProjectMemberResponse(BaseModel):
 
 class UpdateProjectMembersRequest(BaseModel):
     requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
-    project_id: str = Field(..., description="Identificador do projeto")
+    project_name: str = Field(..., description="Nome do projeto")
     members: List[dict] = Field(..., description="Lista completa de membros a ser salva no projeto")
+
+    @validator('project_name')
+    def project_name_not_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_name é obrigatório e não pode ser vazio')
+        return v
 
 class UpdateProjectMembersResponse(BaseModel):
     success: bool = Field(..., description="Indica se a atualização foi bem-sucedida")
@@ -32,7 +60,13 @@ class UpdateProjectMembersResponse(BaseModel):
 
 class DeleteProjectRequest(BaseModel):
     requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
-    project_id: str = Field(..., description="Identificador do projeto a ser excluído")
+    project_name: str = Field(..., description="Nome do projeto a ser excluído")
+
+    @validator('project_name')
+    def project_name_not_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_name é obrigatório e não pode ser vazio')
+        return v
 
 class DeleteProjectResponse(BaseModel):
     success: bool = Field(..., description="Indica se a exclusão foi bem-sucedida")
