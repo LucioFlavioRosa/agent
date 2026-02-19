@@ -5,8 +5,6 @@ from backend.app.services.mongodb_service import MongoDBService
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.models.project_management_models import ProjectRole
 
-
-
 class PermissionService:
     def __init__(self, mongo_service: Optional[MongoDBService] = None, redis_session_service: Optional[RedisSessionService] = None):
         self.mongo_service = mongo_service or MongoDBService()
@@ -91,8 +89,9 @@ class PermissionService:
             self.logger.warning(f"[_resolve_project_access] Usuário '{email}' não possui company_id.")
             return False, None, None, "Usuário não possui company_id."
 
-        # 2. Verifica Cache (Redis)
-        permissions = self.redis_session_service.get_user_permissions(email, company_id)
+        # 2. Verifica Cache (Redis) - ADICIONADO AWAIT AQUI
+        permissions = await self.redis_session_service.get_user_permissions(email, company_id)
+        
         if permissions:
             self.logger.info(f"[_resolve_project_access] Cache hit para {email}:{company_id}")
             project_perm = permissions.get("project_permissions", {}).get(project_id)
@@ -144,7 +143,10 @@ class PermissionService:
 
         # Reconstrói permissões completas e salva no Cache
         permissions_dict = await self._build_complete_permissions(email, company_id)
-        self.redis_session_service.store_user_permissions(email, company_id, permissions_dict)
+        
+        # ADICIONADO AWAIT AQUI
+        await self.redis_session_service.store_user_permissions(email, company_id, permissions_dict)
+        
         self.logger.info(f"[_resolve_project_access] Permissões atualizadas no Redis.")
 
         allowed_agents = set(permissions_dict.get("allowed_agents", []))
@@ -208,7 +210,8 @@ class PermissionService:
             return False, "Usuário não possui company_id."
 
         # Tenta Cache
-        permissions = self.redis_session_service.get_user_permissions(email, company_id)
+        permissions = await self.redis_session_service.get_user_permissions(email, company_id)
+        
         if permissions:
             allowed_agents = permissions.get("allowed_agents", set())
             if agent_name in allowed_agents:
@@ -218,7 +221,8 @@ class PermissionService:
 
         # Cache Miss - Constroi e Salva
         permissions_dict = await self._build_complete_permissions(email, company_id)
-        self.redis_session_service.store_user_permissions(email, company_id, permissions_dict)
+        
+        await self.redis_session_service.store_user_permissions(email, company_id, permissions_dict)
         
         allowed_agents = permissions_dict.get("allowed_agents", [])
         if agent_name in allowed_agents:
