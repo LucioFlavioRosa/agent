@@ -1,7 +1,11 @@
+import logging
+from typing import Tuple, Optional, Set, List
+
 from backend.app.services.mongodb_service import MongoDBService
 from backend.app.services.redis_session_service import RedisSessionService
-from typing import Tuple, Optional, Set, List
-import logging
+from backend.app.models.project_management_models import ProjectRole
+
+
 
 class PermissionService:
     def __init__(self, mongo_service: Optional[MongoDBService] = None, redis_session_service: Optional[RedisSessionService] = None):
