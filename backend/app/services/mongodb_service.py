@@ -14,12 +14,10 @@ from backend.app.utils.string_utils import normalize_string_general
 class MongoDBService:
     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
         self.logger = logging.getLogger("MongoDBService")
-        # Tenta pegar dos argumentos, se não tiver, pega do settings (já carregado no startup)
         self.mongo_uri = uri or settings.AZURE_MONGODB_CONNECTION_STRING
         self.db_name = db_name or settings.AZURE_MONGODB_DATABASE_NAME
 
         if not self.mongo_uri or not self.db_name:
-             # Só entra aqui se o startup falhou silenciosamente ou não carregou
              self.logger.critical("MongoDB URI ou DB Name não definidos.")
              raise ValueError("Configuração do MongoDB ausente.")
 
@@ -225,7 +223,7 @@ class MongoDBService:
                 # Os outros membros continuam com seus roles inalterados.
                 email_novo_membro = new_member.get("email")
                 if email_novo_membro:
-                    RedisSessionService().invalidate_user_permissions(email_novo_membro, company_id)
+                    await RedisSessionService().invalidate_user_permissions(email_novo_membro, company_id)
                     self.logger.info(f"[Cache] Invalidado apenas para o novo membro: {email_novo_membro}")
             
             return result.modified_count > 0
@@ -275,7 +273,7 @@ class MongoDBService:
 
                     # Se o role mudou, ou se entrou/saiu (um dos roles será None), invalida!
                     if old_role != new_role:
-                        redis_service.invalidate_user_permissions(email, company_id)
+                        await redis_service.invalidate_user_permissions(email, company_id)
                         invalidated_count += 1
                 
                 self.logger.info(f"[Cache] Cache invalidado para {invalidated_count} usuários que tiveram alterações de permissão.")
@@ -303,7 +301,7 @@ class MongoDBService:
             if result.modified_count > 0:
                 # OTIMIZAÇÃO: Invalida APENAS o usuário removido.
                 # Ele precisa perder o acesso no Redis imediatamente.
-                RedisSessionService().invalidate_user_permissions(target_email, company_id)
+                await RedisSessionService().invalidate_user_permissions(target_email, company_id)
                 self.logger.info(f"[Cache] Invalidado apenas para o membro removido: {target_email}")
             
             return result.modified_count > 0
@@ -359,7 +357,7 @@ class MongoDBService:
             # Cache invalidation: todos membros do projeto
             affected_emails = [m.get("email") for m in members if m.get("email")]
             for email in set(affected_emails):
-                RedisSessionService().invalidate_user_permissions(email, company_id)
+                await RedisSessionService().invalidate_user_permissions(email, company_id)
             return project_id
         except DuplicateKeyError:
             self.logger.warning(f"[create_project] Tentativa de criar projeto duplicado: '{name_normalized}' para a empresa '{company_id}'")
@@ -384,7 +382,7 @@ class MongoDBService:
             if result.deleted_count > 0 and project_doc:
                 affected_emails = [m.get("email") for m in project_doc.get("members", []) if m.get("email")]
                 for email in set(affected_emails):
-                    RedisSessionService().invalidate_user_permissions(email, company_id)
+                    await RedisSessionService().invalidate_user_permissions(email, company_id)
             return result.deleted_count > 0
         except Exception as e:
             self.logger.error(f"[delete_project] Erro ao excluir projeto '{project_id}': {e}")
@@ -403,7 +401,7 @@ class MongoDBService:
                 email = user_doc.get("email")
                 company_id = user_doc.get("company_id")
                 if email and company_id:
-                    RedisSessionService().invalidate_user_permissions(email, company_id)
+                    await RedisSessionService().invalidate_user_permissions(email, company_id)
             return group_id
         except Exception as e:
             self.logger.error(f"[create_group] Erro ao criar grupo: {e}")
@@ -421,7 +419,7 @@ class MongoDBService:
                     email = user_doc.get("email")
                     company_id = user_doc.get("company_id")
                     if email and company_id:
-                        RedisSessionService().invalidate_user_permissions(email, company_id)
+                        await RedisSessionService().invalidate_user_permissions(email, company_id)
             return result.modified_count > 0
         except Exception as e:
             self.logger.error(f"[update_group] Erro ao atualizar grupo '{group_id}': {e}")
@@ -440,7 +438,7 @@ class MongoDBService:
                     email = user_doc.get("email")
                     company_id = user_doc.get("company_id")
                     if email and company_id:
-                        RedisSessionService().invalidate_user_permissions(email, company_id)
+                        await RedisSessionService().invalidate_user_permissions(email, company_id)
             return result.deleted_count > 0
         except Exception as e:
             self.logger.error(f"[delete_group] Erro ao excluir grupo '{group_id}': {e}")
