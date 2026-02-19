@@ -12,7 +12,6 @@ logger = logging.getLogger("project_actions_api")
 def get_mongo_service():
     return MongoDBService()
 
-# 1. Rota corrigida: Removido o '/projects' do início
 @router.post("/{project_id}/actions/validate", response_model=ProjectActionResponse, tags=["Project Actions"])
 async def validate_project_action(
     project_id: str,
