@@ -37,7 +37,7 @@ class AddProjectMemberRequest(BaseModel):
     requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
     project_name: str = Field(..., description="Nome do projeto")
     new_member_email: EmailStr = Field(..., description="Email do novo membro a ser adicionado")
-    role: str = Field(..., description="Permissão do novo membro: viewer ou editor")
+    role: ProjectRole = Field(..., description="Permissão do novo membro: owner, editor ou viewer")
 
     @validator('project_name')
     def project_name_not_empty(cls, v):
