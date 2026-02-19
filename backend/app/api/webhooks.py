@@ -1,13 +1,20 @@
 import logging
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status, Depends
 from backend.app.services.redis_session_service import RedisSessionService
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
 
+def get_redis_service() -> RedisSessionService:
+    return RedisSessionService()
+
 @router.post("/mcp", status_code=status.HTTP_200_OK, tags=["Webhooks"])
-async def mcp_webhook(payload: dict, request: Request):
+async def mcp_webhook(
+    payload: dict, 
+    request: Request,
+    redis_service: RedisSessionService = Depends(get_redis_service) # <-- Redis Injetado!
+):
     job_id = payload.get("job_id")
     project_id = payload.get("project_id")
     company_id_recebido = payload.get("company_id")
@@ -25,11 +32,12 @@ async def mcp_webhook(payload: dict, request: Request):
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail="Campos obrigatórios ausentes: job_id, project_id, status e company_id."
         )
-    redis_service = RedisSessionService()
+    
+    # A linha "redis_service = RedisSessionService()" foi removida daqui, pois agora vem pelo Depends
 
     try:
         # 2. Atualização de Status
-        redis_service.update_job_status(job_id, status_val)
+        await redis_service.update_job_status(job_id, status_val) # <-- ADICIONADO AWAIT
         msg = f"Job {job_id} atualizado para {status_val}"
 
         # 3. Armazenamento com "Carimbo" de Empresa
@@ -40,12 +48,12 @@ async def mcp_webhook(payload: dict, request: Request):
                 "finalized_at": datetime.utcnow().isoformat(),
                 "project_id": project_id
             }
-            redis_service.store_report_data_for_job(job_id, enriched_report)
+            await redis_service.store_report_data_for_job(job_id, enriched_report) # <-- ADICIONADO AWAIT
             msg += " - relatório armazenado com vínculo de empresa."
 
         elif status_val == "error":
             err_msg = error_message or "Erro desconhecido processado pelo MCP."
-            redis_service.store_error_message_for_job(job_id, err_msg)
+            await redis_service.store_error_message_for_job(job_id, err_msg) # <-- ADICIONADO AWAIT
             msg += " - erro registrado."
 
         logger.info(f"[Webhook] Finalizado com sucesso: {msg}")
