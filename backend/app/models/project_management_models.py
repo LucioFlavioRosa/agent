@@ -37,3 +37,10 @@ class DeleteProjectRequest(BaseModel):
 class DeleteProjectResponse(BaseModel):
     success: bool = Field(..., description="Indica se a exclusão foi bem-sucedida")
     message: Optional[str] = Field(None, description="Mensagem de confirmação ou erro")
+
+class ProjectWithRoleItem(BaseModel):
+    project_id: str
+    project_name: str
+    role: str = Field(..., description="Nível de acesso do usuário: owner, editor ou viewer")
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
