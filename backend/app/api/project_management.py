@@ -122,7 +122,7 @@ async def add_project_member(
         project = await mongo_service.get_project_by_id(project_id)
         if project:
             company_id = getattr(project, "company_id", None)
-            redis_session_service.invalidate_user_permissions(req.new_member_email, company_id)
+            await redis_session_service.invalidate_user_permissions(req.new_member_email, company_id)
         return AddProjectMemberResponse(
             success=bool(result), 
             message="Membro adicionado!" if result else "Erro ao adicionar."
@@ -188,7 +188,7 @@ async def update_project_members(
             company_id = getattr(project, "company_id", None)
             affected_emails = [m.get("email") for m in req.members if m.get("email")]
             for email in set(affected_emails):
-                redis_session_service.invalidate_user_permissions(email, company_id)
+                await redis_session_service.invalidate_user_permissions(email, company_id)
         return UpdateProjectMembersResponse(
             success=bool(result), 
             message="Membros atualizados com sucesso!" if result else "Falha na atualização."
@@ -242,7 +242,7 @@ async def remove_project_member(
     success = await mongo_service.remove_member_from_project(project_id, target_email)
     company_id = getattr(project, "company_id", None)
     redis_session_service.invalidate_user_permissions(target_email, company_id)
-    redis_session_service.invalidate_user_permissions(req.requester_email, company_id)
+    await redis_session_service.invalidate_user_permissions(req.requester_email, company_id)
     if not success:
         raise HTTPException(status_code=500, detail="Falha ao remover membro no banco de dados.")
     return {"success": True, "message": f"Membro {target_email} removido com sucesso."}
@@ -284,8 +284,8 @@ async def delete_project(
         # 4. Limpa Cache
         if success:
             for email in set(affected_emails):
-                redis_session_service.invalidate_user_permissions(email, company_id)
-            redis_session_service.invalidate_user_permissions(req.requester_email, company_id)
+                await redis_session_service.invalidate_user_permissions(email, company_id)
+            await redis_session_service.invalidate_user_permissions(req.requester_email, company_id)
             logger.info(f"[ProjectManagement] Projeto {project_id} excluído com sucesso.")
             return DeleteProjectResponse(success=True, message="Projeto excluído com sucesso.")
         return DeleteProjectResponse(success=False, message="Erro ao excluir projeto ou projeto já excluído.")
