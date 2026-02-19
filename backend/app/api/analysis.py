@@ -150,7 +150,7 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
             project_id = getattr(project_db, "id", None) or project_db.get("_id")
         else:
             project_id = created_id
-            RedisSessionService().invalidate_user_permissions(email, company_id)
+            await RedisSessionService().invalidate_user_permissions(email, company_id)
     else:
         project_id = getattr(project, "id", None) or project.get("_id")
     
