@@ -30,7 +30,7 @@ class RedisSessionService:
             socket_connect_timeout=3.0, 
             socket_timeout=3.0
         )
-        self.session_ttl = settings.REDIS_PERM_TTL
+        self.session_ttl = int(getattr(settings, 'REDIS_PERM_TTL', 600))
 
     # --- Métodos Auxiliares Síncronos (Apenas CPU, sem I/O de rede) ---
     def _serialize_session(self, session_data: dict) -> str:
