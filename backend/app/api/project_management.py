@@ -1,4 +1,8 @@
+import logging
+from datetime import datetime
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, Body, Depends, status
+
 from backend.app.services.mongodb_service import MongoDBService
 from backend.app.services.permission_service import PermissionService
 from backend.app.models.project_management_models import (
@@ -12,8 +16,6 @@ from backend.app.models.project_management_models import (
     DeleteProjectRequest,
     DeleteProjectResponse
 )
-from datetime import datetime
-import logging
 from backend.app.services.redis_session_service import RedisSessionService
 
 router = APIRouter()
