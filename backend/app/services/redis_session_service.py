@@ -26,7 +26,9 @@ class RedisSessionService:
             db=int(settings.REDIS_DB or 0),
             ssl=redis_use_ssl_val,
             ssl_cert_reqs=settings.REDIS_SSL_CERT_REQS,
-            decode_responses=True
+            decode_responses=True,
+            socket_connect_timeout=3.0, 
+            socket_timeout=3.0
         )
         self.session_ttl = settings.REDIS_PERM_TTL
 
