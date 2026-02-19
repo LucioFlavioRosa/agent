@@ -1,7 +1,8 @@
 {
   "agents": {
     "agent_code_generation": {
-      "agent_name": "agent_code_generation",
+      "analysis_type": "agent_code_generation",
+      "agent_name": "Gerador de Código",
       "mcp_service_url": "https://mcp-code-gen.azurewebsites.net/api/v1/analysis",
       "report_fields": ["code_report"],
       "report_mapping": {
@@ -9,7 +10,8 @@
       }
     },
     "agent_refactoring": {
-      "agent_name": "agent_refactoring",
+      "analysis_type": "agent_refactoring",
+      "agent_name": "Refatorador",
       "mcp_service_url": "https://mcp-refactoring.azurewebsites.net/api/v1/analysis",
       "report_fields": ["refactor_report"],
       "report_mapping": {
@@ -17,7 +19,8 @@
       }
     },
     "agent_unit_tests": {
-      "agent_name": "agent_unit_tests",
+      "analysis_type": "agent_unit_tests",
+      "agent_name": "Testes Unitários",
       "mcp_service_url": "https://mcp-unit-tests.azurewebsites.net/api/v1/analysis",
       "report_fields": ["unit_test_report"],
       "report_mapping": {
@@ -25,7 +28,8 @@
       }
     },
     "agent_epics_generator_digital": {
-      "agent_name": "agent_epics_generator_digital",
+      "analysis_type": "agent_epics_generator_digital",
+      "agent_name": "Gerador de Épicos",
       "mcp_service_url": "https://mcp-epics.azurewebsites.net/api/v1/analysis", 
       "report_fields": ["epics_report"],
       "report_mapping": {
