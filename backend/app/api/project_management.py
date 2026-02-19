@@ -21,6 +21,9 @@ from backend.app.services.redis_session_service import RedisSessionService
 router = APIRouter()
 logger = logging.getLogger("project_management_api")
 
+def get_mongo_service():
+    return MongoDBService()
+
 async def get_project_members_emails(mongo_service, project_id):
     project = await mongo_service.get_project_by_id(project_id)
     if project and project.members:
