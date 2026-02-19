@@ -29,7 +29,7 @@ async def get_project_reports(
     redis_service = RedisSessionService()
     
     logger.info(f"[Session] Buscando envelope no Redis para job_id={job_id}")
-    envelope = redis_service.get_report_data_for_job(job_id)
+    envelope = await redis_service.get_report_data_for_job(job_id)
 
     if envelope:
         # Validação de Ownership (Segurança)
@@ -55,7 +55,7 @@ async def get_project_reports(
 
     else:
         # Verifica se há erro registrado no Redis para este job
-        error_msg = redis_service.get_error_message_for_job(job_id)
+        error_msg = await redis_service.get_error_message_for_job(job_id)
         if error_msg:
             return JSONResponse(
                 content={"status": "error", "message": error_msg, "job_id": job_id},
