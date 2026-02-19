@@ -39,7 +39,7 @@ async def verify_user_is_owner(email: str, project_id: str, mongo_service: Mongo
     return any(m.email == email and m.role.lower() == "owner" for m in project.members)
 
 # --- Routes ---
-@router.get("/projects/list", response_model=List[ProjectWithRoleItem], tags=["Project Management"])
+@router.get("/list", response_model=List[ProjectWithRoleItem], tags=["Project Management"])
 async def list_all_user_projects(
     email: str = Query(..., description="Email do usuário"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
@@ -59,7 +59,7 @@ async def list_all_user_projects(
         
     return projects
     
-@router.get("/projects/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
+@router.get("/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
 async def list_owned_projects(email: str = Query(..., description="Email do usuário owner")):
     logger.info(f"[ProjectManagement] Recebida requisição para /projects/owned com email={email}")
     mongo_service = MongoDBService()
@@ -80,10 +80,9 @@ async def list_owned_projects(email: str = Query(..., description="Email do usu�
     ) for p in projects]
     return ListOwnedProjectsResponse(projects=items)
 
-@router.post("/projects/{project_id}/members", response_model=AddProjectMemberResponse, tags=["Project Management"])
+@router.post("/{project_id}/members", response_model=AddProjectMemberResponse, tags=["Project Management"])
 async def add_project_member(project_id: str, req: AddProjectMemberRequest = Body(...)):
     logger.info(f"[ProjectManagement] Adicionar membro: project_id={project_id}, requester={req.requester_email}")
-    mongo_service = MongoDBService()
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
     try:
