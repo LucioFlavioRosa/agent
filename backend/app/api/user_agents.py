@@ -34,7 +34,7 @@ async def get_user_agents(
 
         # 2. Busca no Redis
         redis_service = RedisSessionService()
-        permissions = redis_service.get_user_permissions(email, user_company_id)
+        permissions = await redis_service.get_user_permissions(email, user_company_id)
         if permissions and permissions.get("allowed_agents") is not None:
             allowed_agents = permissions.get("allowed_agents", [])
             logger.info(f"[UserAgents] Cache hit: agentes encontrados no Redis para {email}:{user_company_id}: {allowed_agents}")
@@ -58,7 +58,7 @@ async def get_user_agents(
             "project_permissions": {},
             "cached_at": datetime.utcnow().isoformat()
         }
-        redis_service.store_user_permissions(email, user_company_id, permissions_dict)
+        await redis_service.store_user_permissions(email, user_company_id, permissions_dict)
         logger.info(f"[UserAgents] Cache atualizado no Redis para {email}:{user_company_id} com agentes: {allowed_agents}")
 
         return UserAgentsResponse(allowed_agents=allowed_agents)
