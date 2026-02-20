@@ -187,6 +187,7 @@ async def start_analysis(
     
     # 3. Validação de usuário e company_id
     user, company_id = await validate_user_and_company(email, mongo_service)
+    grupos_do_usuario = getattr(user, "group_ids", [])
     
     # 4. Criação ou busca de projeto
     project_id, nome_projeto_final = await get_or_create_project(
@@ -271,7 +272,8 @@ async def start_analysis(
         "comentario_extra": comentario_extra,
         "project_id": project_id,
         "job_id": job_id,
-        "company_id": company_id
+        "company_id": company_id,
+        "group_ids": grupos_do_usuario
     }
     log_service_call(
         service="MCPClientService",
