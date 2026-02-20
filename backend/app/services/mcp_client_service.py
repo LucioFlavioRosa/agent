@@ -1,6 +1,8 @@
-import logging
+import json
 import httpx
-from typing import Any, Dict, Optional
+import logging
+
+from typing import Any, Dict, Optional, List
 from pydantic import BaseModel, Field
 from backend.app.core.config import settings
 from fastapi import UploadFile
@@ -13,6 +15,7 @@ class MCPStartAnalysisPayload(BaseModel):
     project_id: str = Field(...)
     job_id: str = Field(...)
     company_id: str = Field(...)
+    group_ids: Optional[List[str]] = Field(default_factory=list)
     email: Optional[str] = Field(None)
     nome_projeto: Optional[str] = Field(None)
     analysis_type: Optional[str] = Field(None)
@@ -42,10 +45,13 @@ class MCPClientService:
             job_id=payload.get("job_id"),
             project_id=payload.get("project_id")
         )
+        raw_groups = payload.get("group_ids", [])
+        group_ids_str = json.dumps(raw_groups) if isinstance(raw_groups, list) else raw_groups
         return {
             "project_id": payload.get("project_id"),
             "job_id": payload.get("job_id"),
             "company_id": payload.get("company_id"),
+            "group_ids": group_ids_str,
             "email": payload.get("email"),
             "nome_projeto": payload.get("nome_projeto"),
             "analysis_type": payload.get("analysis_type"),
