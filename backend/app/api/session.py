@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, status, Query
 from fastapi.responses import JSONResponse
 from backend.app.services.redis_session_service import RedisSessionService
-from backend.app.models.job_models import JobData
+from backend.app.services.mcp_client_service import MCPClientService
+from backend.app.core.config import settings
 import logging
+import json
 
 router = APIRouter()
 logger = logging.getLogger("session_api")
@@ -16,7 +18,7 @@ async def get_project_reports(
 ):
     logger.info(f"[Session] Requisição: project_id={project_id}, job_id={job_id}, email={email}, empresa={empresa}")
 
-    # --- VALIDAÇÕES ORIGINAIS REINTEGRADAS (Críticas para Estabilidade) ---
+    # 1. VALIDAÇÕES BÁSICAS DE ENTRADA
     if not project_id or not isinstance(project_id, str) or not project_id.strip():
         logger.error(f"[Session] project_id inválido ou ausente: {project_id}")
         raise HTTPException(status_code=400, detail="project_id inválido ou ausente.")
@@ -25,43 +27,43 @@ async def get_project_reports(
         logger.error(f"[Session] job_id inválido ou ausente: {job_id}")
         raise HTTPException(status_code=400, detail="job_id inválido ou ausente.")
 
-    # --- LÓGICA DE NEGÓCIO E SEGURANÇA MULTI-TENANT ---
     redis_service = RedisSessionService()
     
-    logger.info(f"[Session] Buscando envelope no Redis para job_id={job_id}")
-    envelope = await redis_service.get_report_data_for_job(job_id)
+    # 2. BUSCAR METADADOS DO JOB NO REDIS (Apenas dados de controle, super leve)
+    logger.info(f"[Session] Buscando metadados do job no Redis para job_id={job_id}")
+    job = await redis_service.get_job(job_id)
 
-    if envelope:
-        # Validação de Ownership (Segurança)
-        company_owner = envelope.get("company_id")
-        
-        if company_owner and company_owner != empresa:
-            logger.error(f"[Session] ACESSO NEGADO: {email} ({empresa}) tentou ler job de {company_owner}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="Acesso negado: Este relatório pertence a outra organização."
-            )
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado.")
 
-        logger.info(f"[Session] Sucesso: Relatório liberado.")
-        return JSONResponse(
-            content={
-                "report_data": envelope.get("content"), # Extraímos apenas o conteúdo
-                "job_id": job_id,
-                "project_id": project_id,
-                "status": "success"
-            },
-            status_code=status.HTTP_200_OK
+    # 3. VALIDAÇÃO DE OWNERSHIP (Segurança Multi-tenant - Nível Empresa)
+    if job.empresa and job.empresa != empresa:
+        logger.error(f"[Session] ACESSO NEGADO: {email} ({empresa}) tentou ler job de {job.empresa}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Acesso negado: Este relatório pertence a outra organização."
         )
 
-    else:
-        # Verifica se há erro registrado no Redis para este job
-        error_msg = await redis_service.get_error_message_for_job(job_id)
-        if error_msg:
-            return JSONResponse(
-                content={"status": "error", "message": error_msg, "job_id": job_id},
-                status_code=status.HTTP_200_OK
-            )
+    # 4. VALIDAÇÃO DE PERMISSÃO (Segurança RBAC - Nível Usuário/Projeto)
+    logger.info(f"[Session] Verificando permissões do usuário {email} para o projeto {project_id}")
+    user_perms = await redis_service.get_user_permissions(email=email, company_id=empresa)
+    
+    if not user_perms or project_id not in user_perms.get("project_permissions", {}):
+        logger.error(f"[Session] ACESSO NEGADO: {email} não tem role vinculada ao projeto {project_id}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Acesso negado: Você não é membro (owner, editor ou viewer) deste projeto."
+        )
 
+    # 5. VERIFICAR STATUS DO PROCESSAMENTO
+    if job.status == 'error':
+        error_msg = await redis_service.get_error_message_for_job(job_id)
+        return JSONResponse(
+            content={"status": "error", "message": error_msg, "job_id": job_id},
+            status_code=status.HTTP_200_OK
+        )
+        
+    if job.status in ['pending', 'processing']:
         logger.info(f"[Session] Job {job_id} ainda em processamento.")
         return JSONResponse(
             content={
@@ -71,4 +73,49 @@ async def get_project_reports(
                 "message": "O relatório ainda está sendo processado pelo MCP."
             },
             status_code=status.HTTP_202_ACCEPTED
+        )
+
+    # 6. JOB CONCLUÍDO: DELEGAR LEITURA PARA O MCP
+    logger.info(f"[Session] Job {job_id} concluído. Solicitando relatório ao MCP...")
+    
+    # Busca dinamicamente qual a URL do App Service que tem o agente que fez esse job
+    agents_config = getattr(settings, 'agents', getattr(settings, 'AGENTS', {}))
+    if isinstance(agents_config, str):
+        try:
+            agents_config = json.loads(agents_config)
+        except Exception:
+            agents_config = {}
+            
+    agente_info = agents_config.get(job.analysis_type, {})
+    mcp_url = agente_info.get("mcp_service_url", getattr(settings, 'MCP_SERVER_BASE_URL', ''))
+
+    if not mcp_url:
+        logger.error(f"[Session] Não foi possível determinar a URL do MCP para o tipo: {job.analysis_type}")
+        raise HTTPException(status_code=500, detail="Configuração de URL do MCP ausente.")
+
+    mcp_client = MCPClientService()
+    
+    try:
+        # Repassa a chamada para o MCP (que vai ler do Blob Storage)
+        report_data = await mcp_client.get_report(
+            project_id=project_id, 
+            job_id=job_id, 
+            mcp_url=mcp_url
+        )
+        
+        logger.info(f"[Session] Sucesso: Relatório recuperado do MCP e pronto para envio.")
+        return JSONResponse(
+            content={
+                "report_data": report_data, 
+                "job_id": job_id,
+                "project_id": project_id,
+                "status": "success"
+            },
+            status_code=status.HTTP_200_OK
+        )
+    except Exception as e:
+        logger.error(f"[Session] Erro ao buscar relatório no MCP: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, 
+            detail="Falha ao obter o relatório do serviço de agentes (MCP)."
         )
