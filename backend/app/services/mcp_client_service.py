@@ -113,7 +113,8 @@ class MCPClientService:
                 if files:
                     response = await client.post(url, data=data, files=files)
                 else:
-                    response = await client.post(url, json=data)
+                    # Usar data=data força o envio como application/x-www-form-urlencoded
+                    response = await client.post(url, data=data) 
 
                 log_service_call(
                     service="MCPClientService",
@@ -124,10 +125,7 @@ class MCPClientService:
                 )
                 response.raise_for_status()
                 data_resp = response.json()
-                return MCPStartAnalysisResponse(
-                    project_id=data_resp.get("project_id", payload.get("project_id")),
-                    job_id=data_resp.get("job_id", job_id)
-                )
+                
         except Exception as exc:
             log_error(
                 context="MCPClientService.start_analysis",
