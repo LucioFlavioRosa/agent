@@ -48,12 +48,24 @@ async def get_project_reports(
     logger.info(f"[Session] Verificando permissões do usuário {email} para o projeto {project_id}")
     user_perms = await redis_service.get_user_permissions(email=email, company_id=empresa)
     
+    # 4.1 Verifica se o usuário tem acesso ao projeto
     if not user_perms or project_id not in user_perms.get("project_permissions", {}):
         logger.error(f"[Session] ACESSO NEGADO: {email} não tem role vinculada ao projeto {project_id}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Acesso negado: Você não é membro (owner, editor ou viewer) deste projeto."
         )
+
+    # 4.2 Verifica se o usuário tem acesso ao agente específico deste job
+    agentes_permitidos = user_perms.get("allowed_agents", [])
+    if job.analysis_type not in agentes_permitidos:
+        logger.error(f"[Session] ACESSO NEGADO: {email} não tem permissão para o agente {job.analysis_type}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Acesso negado: Seu perfil não tem permissão para acessar relatórios do agente '{job.analysis_type}'."
+        )
+
+    
 
     # 5. VERIFICAR STATUS DO PROCESSAMENTO
     if job.status == 'error':
