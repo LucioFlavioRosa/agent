@@ -176,9 +176,19 @@ class RedisSessionService:
         self.logger.info(f"[store_user_permissions] Cacheando permissões para {key}")
         try:
             ttl = int(getattr(settings, 'REDIS_PERM_TTL', 600))
-            cache_obj = UserPermissionCache(**permissions)
             
-            await self.redis_client.setex(key, ttl, cache_obj.json()) # AWAIT AQUI
+            # 1. Copiamos o dicionário para não alterar a variável original por acidente
+            cache_data = permissions.copy()
+            
+            # 2. Injetamos os campos obrigatórios exigidos pelo Pydantic
+            cache_data["email"] = email
+            cache_data["company_id"] = company_id
+            cache_data["cached_at"] = datetime.utcnow().isoformat()
+            
+            # 3. Instanciamos o modelo (agora com todos os dados!)
+            cache_obj = UserPermissionCache(**cache_data)
+            
+            await self.redis_client.setex(key, ttl, cache_obj.json())
             self.logger.info(f"[store_user_permissions] Permissões cacheadas com TTL {ttl}s.")
         except Exception as e:
             self.logger.error(f"[store_user_permissions] Erro ao salvar cache: {e}")
