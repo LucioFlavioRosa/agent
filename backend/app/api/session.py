@@ -65,8 +65,6 @@ async def get_project_reports(
             detail=f"Acesso negado: Seu perfil não tem permissão para acessar relatórios do agente '{job.analysis_type}'."
         )
 
-    
-
     # 5. VERIFICAR STATUS DO PROCESSAMENTO
     if job.status == 'error':
         error_msg = await redis_service.get_error_message_for_job(job_id)
