@@ -60,7 +60,7 @@ class UserPermissionCache(BaseModel):
     email: EmailStr = Field(..., description="Email do usuário")
     company_id: str = Field(..., description="ID da empresa do usuário")
     allowed_agents: List[str] = Field(default_factory=list, description="Lista de agentes permitidos para o usuário")
-    project_permissions: Dict[str, str] = Field(default_factory=dict, description="Mapa de project_id para role do usuário no projeto")
+    project_permissions: Dict[str, dict] = Field(default_factory=dict, description="Mapa de project_id para role e ações do usuário no projeto")
     cached_at: str = Field(..., description="Timestamp ISO de quando o cache foi gerado")
 
     @validator('email')
