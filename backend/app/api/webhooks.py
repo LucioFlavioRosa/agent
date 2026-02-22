@@ -41,23 +41,38 @@ async def mcp_job_complete_webhook(
         msg = f"Job {job_id} atualizado para {payload.status}."
 
         if payload.status == "done":
-            # 2. MongoDB (Ledger): Insere histórico
+            # --- NOVO: Busca metadados do job no Redis ---
+            job_meta = await redis_service.get_job(job_id)
+            analysis_type = getattr(job_meta, "analysis_type", "unknown") if job_meta else "unknown"
+            created_by_email = getattr(job_meta, "email", "unknown") if job_meta else "unknown"
+
+            # --- NOVO: Lógica para calcular a NOVA VERSÃO dinamicamente ---
+            history_count = await mongo_service.db.project_reports_history.count_documents({
+                "project_id": payload.project_id,
+                "report_category": payload.category
+            })
+            nova_versao = history_count + 1
+
+            # 2. MongoDB (Ledger): Insere histórico detalhado
             report_history_record = {
                 "job_id": job_id,
                 "project_id": payload.project_id,
                 "company_id": payload.company_id,
-                "category": payload.category,
+                "report_category": payload.category,     # ex: 'epics'
+                "analysis_type": analysis_type,          # ex: 'agent_epics_generator_digital'
+                "version": nova_versao,                  # 1, 2, 3...
+                "status": "done",
                 "blob_path": payload.blob_path,
-                "version": "1.0",
+                "created_by_email": created_by_email,
                 "created_at": datetime.utcnow()
             }
             await mongo_service.db.project_reports_history.insert_one(report_history_record)
-            msg += " | Ledger salvo."
+            msg += f" | Ledger salvo (Versão {nova_versao})."
 
             # 3. MongoDB (Ponteiro): Atualiza latest_reports no projeto
             update_field = f"latest_reports.{payload.category}"
             await mongo_service.db.projects.update_one(
-                {"_id": payload.project_id},
+                {"_id": payload.project_id}, # Ajuste para ObjectId(payload.project_id) se você não armazena como string
                 {"$set": {update_field: job_id, "updated_at": datetime.utcnow()}}
             )
             msg += " | Ponteiro do projeto atualizado."
