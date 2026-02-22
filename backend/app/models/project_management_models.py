@@ -1,6 +1,6 @@
 from enum import Enum
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr, Field, validator
 
 class ProjectRole(str, Enum):
@@ -84,3 +84,16 @@ class ProjectWithRoleItem(BaseModel):
     role: ProjectRole
     description: Optional[str] = None
     created_at: Optional[datetime] = None
+
+class LatestReports(BaseModel):
+    epics: Optional[str] = None
+    features: Optional[str] = None
+    timeline: Optional[str] = None
+    risks: Optional[str] = None
+
+class ProjectDetailsResponse(BaseModel):
+    project_id: str
+    name: str
+    description: Optional[str] = None
+    company_id: str
+    latest_reports: Optional[LatestReports] = None
