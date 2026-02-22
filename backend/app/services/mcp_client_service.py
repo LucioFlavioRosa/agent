@@ -113,18 +113,21 @@ class MCPClientService:
                 if files:
                     response = await client.post(url, data=data, files=files)
                 else:
-                    # Usar data=data força o envio como application/x-www-form-urlencoded
                     response = await client.post(url, data=data) 
 
                 log_service_call(
                     service="MCPClientService",
                     action="http_response",
-                    response={"status_code": response.status_code, "body": response.text},
+                    response={"status_code": response.status_code}, # Removi o body daqui para não poluir o log se o retorno for gigante
                     job_id=job_id,
                     project_id=project_id
                 )
                 response.raise_for_status()
+                
+                # O retorno não é estritamente necessário processar aqui se o Webhook já cuida do status
+                # mas mantemos para evitar quebrar chamadores anteriores
                 data_resp = response.json()
+                return MCPStartAnalysisResponse(project_id=project_id, job_id=job_id)
                 
         except Exception as exc:
             log_error(
@@ -136,29 +139,27 @@ class MCPClientService:
             )
             logging.error(f"❌ [MCP Client] Falha ao chamar [{url}]: {str(exc)}")
             raise Exception(f"Erro na comunicação com MCP: {str(exc)}")
-            
-    async def get_projects(self, email: str, empresa: str, mcp_url: str) -> Any:
-        url = f"{mcp_url.rstrip('/')}/projects/list"
-        payload = {
-            "email": email,
-            "empresa": empresa
-        }
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                return response.json()
-        except Exception as exc:
-            logging.error(f"Erro ao buscar projetos do MCP: {str(exc)}")
-            raise Exception(f"Erro ao buscar projetos do MCP: {str(exc)}")
 
+    # MUDANÇA: Otimização do método de resgate do relatório para aceitar Markdown ou JSON
     async def get_report(self, project_id: str, job_id: str, mcp_url: str) -> Any:
         url = f"{mcp_url.rstrip('/')}/project/{project_id}/{job_id}/reports"
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.get(url)
                 response.raise_for_status()
-                return response.json()
+                
+                content_type = response.headers.get("content-type", "").lower()
+                
+                # Se o MCP responder com JSON {"conteudo": "..."}
+                if "application/json" in content_type:
+                    return response.json()
+                # Se o MCP responder diretamente com o arquivo cru (Markdown/Texto)
+                else:
+                    return {"content": response.text}
+                    
+        except httpx.HTTPStatusError as exc:
+            logging.error(f"Erro HTTP {exc.response.status_code} ao buscar relatório do MCP: {exc.response.text}")
+            raise Exception(f"Falha ao obter relatório: Status {exc.response.status_code}")
         except Exception as exc:
-            logging.error(f"Erro ao buscar relatório do MCP: {str(exc)}")
-            raise Exception(f"Erro ao buscar relatório do MCP: {str(exc)}")
+            logging.error(f"Erro de conexão ao buscar relatório do MCP: {str(exc)}")
+            raise Exception(f"Erro ao comunicar com o agente MCP: {str(exc)}")
