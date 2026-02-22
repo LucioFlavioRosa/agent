@@ -70,7 +70,7 @@ async def mcp_job_complete_webhook(
             msg += f" | Ledger salvo (Versão {nova_versao})."
 
             # 3. MongoDB (Ponteiro): Atualiza latest_reports no projeto
-            update_field = f"latest_reports.{payload.category}"
+            update_field = f"latest_reports.{analysis_type}"
             await mongo_service.db.projects.update_one(
                 {"_id": payload.project_id}, # Ajuste para ObjectId(payload.project_id) se você não armazena como string
                 {"$set": {update_field: job_id, "updated_at": datetime.utcnow()}}
