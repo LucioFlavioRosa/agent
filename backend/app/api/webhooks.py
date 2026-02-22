@@ -1,7 +1,11 @@
 import logging
 from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Request, status, Depends
+
 from backend.app.services.redis_session_service import RedisSessionService
+from backend.app.services.mongodb_service import MongoDBService
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
@@ -9,63 +13,65 @@ logger = logging.getLogger("webhooks_api")
 def get_redis_service() -> RedisSessionService:
     return RedisSessionService()
 
-@router.post("/mcp", status_code=status.HTTP_200_OK, tags=["Webhooks"])
-async def mcp_webhook(
-    payload: dict, 
+async def get_mongo_service(request: Request) -> MongoDBService:
+    return request.app.state.mongo_service
+
+# Contrato esperado do Callback do MCP
+class JobCompletePayload(BaseModel):
+    project_id: str
+    company_id: str
+    status: str
+    category: str # ex: 'epics', 'features', etc.
+    blob_path: Optional[str] = None
+    error_message: Optional[str] = None
+
+@router.post("/internal/jobs/{job_id}/complete", status_code=status.HTTP_200_OK, tags=["Webhooks"])
+async def mcp_job_complete_webhook(
+    job_id: str,
+    payload: JobCompletePayload,
     request: Request,
-    redis_service: RedisSessionService = Depends(get_redis_service) # <-- Redis Injetado!
+    redis_service: RedisSessionService = Depends(get_redis_service),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    job_id = payload.get("job_id")
-    project_id = payload.get("project_id")
-    company_id_recebido = payload.get("company_id")
-    status_val = payload.get("status")
-    report_data = payload.get("report_data")
-    error_message = payload.get("error_message")
-
-    logger.info(f"[Webhook] Recebido do MCP: job_id={job_id}, status={status_val}, company_id={company_id_recebido}")
-
-    # 1. Validação Criteriosa (Fail Fast)
-    required_fields = [job_id, project_id, status_val, company_id_recebido]
-    if not all(required_fields):
-        logger.error(f"[Webhook] Payload incompleto: {payload}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Campos obrigatórios ausentes: job_id, project_id, status e company_id."
-        )
-    
-    # A linha "redis_service = RedisSessionService()" foi removida daqui, pois agora vem pelo Depends
+    logger.info(f"[Webhook] Callback recebido: job_id={job_id}, status={payload.status}, company={payload.company_id}")
 
     try:
-        # 2. Atualização de Status
-        await redis_service.update_job_status(job_id, status_val) # <-- ADICIONADO AWAIT
-        msg = f"Job {job_id} atualizado para {status_val}"
+        # 1. Redis: Atualiza de pending para done (ou error)
+        await redis_service.update_job_status(job_id, payload.status)
+        msg = f"Job {job_id} atualizado para {payload.status}."
 
-        # 3. Armazenamento com "Carimbo" de Empresa
-        if status_val == "done" and report_data is not None:
-            enriched_report = {
-                "content": report_data,
-                "company_id": company_id_recebido, # Vínculo de segurança
-                "finalized_at": datetime.utcnow().isoformat(),
-                "project_id": project_id
+        if payload.status == "done":
+            # 2. MongoDB (Ledger): Insere histórico
+            report_history_record = {
+                "job_id": job_id,
+                "project_id": payload.project_id,
+                "company_id": payload.company_id,
+                "category": payload.category,
+                "blob_path": payload.blob_path,
+                "version": "1.0",
+                "created_at": datetime.utcnow()
             }
-            await redis_service.store_report_data_for_job(job_id, enriched_report) # <-- ADICIONADO AWAIT
-            msg += " - relatório armazenado com vínculo de empresa."
+            await mongo_service.db.project_reports_history.insert_one(report_history_record)
+            msg += " | Ledger salvo."
 
-        elif status_val == "error":
-            err_msg = error_message or "Erro desconhecido processado pelo MCP."
-            await redis_service.store_error_message_for_job(job_id, err_msg) # <-- ADICIONADO AWAIT
-            msg += " - erro registrado."
+            # 3. MongoDB (Ponteiro): Atualiza latest_reports no projeto
+            update_field = f"latest_reports.{payload.category}"
+            await mongo_service.db.projects.update_one(
+                {"_id": payload.project_id},
+                {"$set": {update_field: job_id, "updated_at": datetime.utcnow()}}
+            )
+            msg += " | Ponteiro do projeto atualizado."
+
+        elif payload.status == "error":
+            err_msg = payload.error_message or "Erro desconhecido processado pelo MCP."
+            await redis_service.store_error_message_for_job(job_id, err_msg)
+            msg += " | Erro registrado."
 
         logger.info(f"[Webhook] Finalizado com sucesso: {msg}")
-        return {
-            "status": "ok", 
-            "job_id": job_id, 
-            "msg": msg
-        }
+        return {"status": "ok", "job_id": job_id, "msg": msg}
 
     except Exception as e:
-        logger.error(f"[Webhook] Erro ao processar Redis para job {job_id}: {str(e)}")
-        # Retornamos 500 para sinalizar ao MCP que o servidor está com problemas e ele pode tentar o retry
+        logger.error(f"[Webhook] Erro na orquestração de dados para job {job_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail="Erro interno ao persistir dados do webhook."
