@@ -1,6 +1,8 @@
 import logging
+
 from datetime import datetime
 from typing import List, Optional
+from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Query, Body, Depends, status
 
 from backend.app.services.mongodb_service import MongoDBService
@@ -17,7 +19,9 @@ from backend.app.models.project_management_models import (
     DeleteProjectResponse,
     ProjectRole,
     ProjectDetailsResponse,
-    LatestReports
+    LatestReports,
+    ReportHistoryItem,
+    ReportHistoryResponse
 )
 from backend.app.services.redis_session_service import RedisSessionService
 
@@ -357,3 +361,60 @@ async def _verify_user_is_owner_helper(email: str, project_id: str, mongo_servic
     if not project:
         return False
     return any(m.email == email and m.role.lower() == ProjectRole.OWNER.value for m in project.members)
+
+@router.get("/{project_id}/reports/history", response_model=ReportHistoryResponse, tags=["Project Management"])
+async def get_report_history(
+    project_id: str = Path(..., description="ID do projeto"),
+    category: str = Query(..., description="Categoria do relatório (ex: epics, features)"),
+    email: str = Query(..., description="Email do usuário solicitante"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """
+    Lista o histórico de versões de uma categoria de relatório (ex: epics) para um projeto específico.
+    """
+    logger.info(f"[ProjectManagement] Buscando histórico de '{category}' para o projeto {project_id} (User: {email})")
+
+    # 1. Validação de Segurança Básica: O projeto existe e o usuário tem acesso?
+    project = await mongo_service.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    # Trata 'members' lidando tanto com dicionários quanto com objetos do Pydantic
+    members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
+    is_member = any(
+        (getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email 
+        for m in members
+    )
+    
+    if not is_member:
+        logger.warning(f"[ProjectManagement] Acesso negado: {email} tentou ver histórico do projeto {project_id}")
+        raise HTTPException(status_code=403, detail="Você não tem permissão para visualizar este projeto.")
+
+    # 2. Conversão segura para ObjectId
+    try:
+        obj_project_id = ObjectId(project_id)
+    except Exception:
+        logger.warning(f"[ProjectManagement] project_id '{project_id}' não é um ObjectId válido. Usando como string.")
+        obj_project_id = project_id
+
+    # 3. Busca na coleção de histórico ordenando da versão mais nova para a mais velha
+    cursor = mongo_service.db.project_reports_history.find({
+        "project_id": obj_project_id,
+        "report_category": category,
+        "status": "done" 
+    }).sort("version", -1)
+
+    historico = []
+    async for doc in cursor:
+        historico.append(ReportHistoryItem(
+            job_id=doc.get("job_id"),
+            project_id=str(doc.get("project_id")), # Converte o ObjectId de volta para string
+            report_category=doc.get("report_category"),
+            analysis_type=doc.get("analysis_type"),
+            version=doc.get("version", 1), # Default 1 caso venha vazio por algum motivo
+            status=doc.get("status"),
+            created_by_email=doc.get("created_by_email", "Desconhecido"),
+            created_at=doc.get("created_at")
+        ))
+
+    return ReportHistoryResponse(history=historico)
