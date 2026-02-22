@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, EmailStr, Field, validator
 
+
 class ProjectRole(str, Enum):
     OWNER = "owner"
     EDITOR = "editor"
@@ -97,3 +98,16 @@ class ProjectDetailsResponse(BaseModel):
     description: Optional[str] = None
     company_id: str
     latest_reports: Optional[LatestReports] = None
+
+class ReportHistoryItem(BaseModel):
+    job_id: str
+    project_id: str
+    report_category: str
+    analysis_type: str
+    version: int
+    status: str
+    created_by_email: str
+    created_at: datetime
+
+class ReportHistoryResponse(BaseModel):
+    history: List[ReportHistoryItem]
