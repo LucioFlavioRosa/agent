@@ -49,16 +49,19 @@ async def get_user_agents(
                 allowed_agents_set.update(agents)
         allowed_agents = sorted(list(allowed_agents_set))
 
-        # 4. Armazena no Redis
+        # 4. Armazena no Redis com tipagem Pydantic
         from datetime import datetime
-        permissions_dict = {
-            "email": email,
-            "company_id": user_company_id,
-            "allowed_agents": allowed_agents,
-            "project_permissions": {},
-            "cached_at": datetime.utcnow().isoformat()
-        }
-        await redis_service.store_user_permissions(email, user_company_id, permissions_dict)
+        from backend.app.models.permission_models import UserPermissionCache
+
+        permissions_cache = UserPermissionCache(
+            email=email,
+            company_id=user_company_id,
+            allowed_agents=allowed_agents,
+            project_permissions={},
+            cached_at=datetime.utcnow().isoformat()
+        )
+        
+        await redis_service.store_user_permissions(email, user_company_id, permissions_cache.dict())
         logger.info(f"[UserAgents] Cache atualizado no Redis para {email}:{user_company_id} com agentes: {allowed_agents}")
 
         return UserAgentsResponse(allowed_agents=allowed_agents)
