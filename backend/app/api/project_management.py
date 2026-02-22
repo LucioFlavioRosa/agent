@@ -15,7 +15,9 @@ from backend.app.models.project_management_models import (
     UpdateProjectMembersResponse,
     DeleteProjectRequest,
     DeleteProjectResponse,
-    ProjectRole
+    ProjectRole,
+    ProjectDetailsResponse,
+    LatestReports
 )
 from backend.app.services.redis_session_service import RedisSessionService
 
@@ -50,6 +52,59 @@ async def list_all_user_projects(
         return []
         
     return projects
+
+@router.get("/{project_id}", response_model=ProjectDetailsResponse, tags=["Project Management"])
+async def get_project_details(
+    project_id: str = Path(..., description="ID do projeto"),
+    email: str = Query(..., description="Email do usuário solicitante"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """
+    Retorna os detalhes de um projeto específico, incluindo o ponteiro para os relatórios mais recentes.
+    """
+    logger.info(f"[ProjectManagement] Buscando detalhes do projeto {project_id} para {email}")
+
+    # 1. Busca o projeto no banco
+    project = await mongo_service.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    # 2. Segurança: Verifica se o usuário pertence a este projeto
+    # Trata de forma segura caso 'project' venha como Dicionário ou como Objeto (Pydantic)
+    members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
+    
+    is_member = False
+    for m in members:
+        m_email = getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")
+        if m_email == email:
+            is_member = True
+            break
+
+    if not is_member:
+        logger.warning(f"[ProjectManagement] Acesso negado: {email} tentou ler o projeto {project_id}")
+        raise HTTPException(status_code=403, detail="Você não tem permissão para visualizar este projeto.")
+
+    # 3. Extração segura de dados (lidando com ObjectId e diferenças estruturais)
+    proj_id_str = str(getattr(project, "id", None) or getattr(project, "_id", project_id)) if not isinstance(project, dict) else str(project.get("_id", project_id))
+    comp_id_str = str(getattr(project, "company_id", "")) if not isinstance(project, dict) else str(project.get("company_id", ""))
+    name = getattr(project, "name", "") if not isinstance(project, dict) else project.get("name", "")
+    desc = getattr(project, "description", None) if not isinstance(project, dict) else project.get("description")
+    
+    # Busca o ponteiro de relatórios
+    reports_data = getattr(project, "latest_reports", {}) if not isinstance(project, dict) else project.get("latest_reports", {})
+    if not reports_data:
+        reports_data = {}
+    elif not isinstance(reports_data, dict):
+        reports_data = reports_data.dict() # Converte caso o banco devolva um modelo interno
+
+    # 4. Retorna no formato esperado pelo Front-end
+    return ProjectDetailsResponse(
+        project_id=proj_id_str,
+        name=name,
+        description=desc,
+        company_id=comp_id_str,
+        latest_reports=LatestReports(**reports_data)
+    )
     
 @router.get("/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
 async def list_owned_projects(
