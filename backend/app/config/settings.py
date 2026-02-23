@@ -2,12 +2,16 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 
 class Settings(BaseSettings):
-    AZURE_KEYVAULT_INFRASTRUCTURE_URL: str = Field(..., env="AZURE_KEYVAULT_INFRASTRUCTURE_URL")
-    AZURE_KEYVAULT_LLM_URL: str = Field(..., env="AZURE_KEYVAULT_LLM_URL")
-    AZURE_KEYVAULT_INTEGRATIONS_URL: str = Field(..., env="AZURE_KEYVAULT_INTEGRATIONS_URL")
-    AZURE_STORAGE_QUEUE_CONNECTION_STRING: str = Field(..., env="AZURE_STORAGE_QUEUE_CONNECTION_STRING")
+    # As URLs dos cofres virão obrigatoriamente do ambiente
+    AZURE_INFRA_VAULT_URL: str = Field(..., env="AZURE_INFRA_VAULT_URL")
+    AZURE_LLM_VAULT_URL: str = Field(..., env="AZURE_LLM_VAULT_URL")
+    AZURE_PROJECTS_VAULT_URL: str = Field(..., env="AZURE_PROJECTS_VAULT_URL")
+    
+    # Nome da fila
+    QUEUE_NAME: str = Field("mcp-tasks-queue", env="QUEUE_NAME")
 
     class Config:
+        env_file = ".env"
         case_sensitive = True
 
 settings = Settings()
