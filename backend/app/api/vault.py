@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 # Supondo que VaultService está implementado em outro módulo
-from backend.app.services.vault_service import vault_service, VaultSecretNotFoundError
+from backend.app.services.vault_service import vault_service
 
 router = APIRouter()
 
@@ -28,7 +28,5 @@ def test_secret(req: VaultKeyRequest):
         )
         preview = (secret_value[:4] + '***') if secret_value else '***'
         return VaultKeyResponse(key_name=req.key_name, value_preview=preview)
-    except VaultSecretNotFoundError:
-        raise HTTPException(status_code=404, detail="Secret not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
