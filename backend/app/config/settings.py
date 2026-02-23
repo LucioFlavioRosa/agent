@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     
     # Nome da fila
     QUEUE_NAME: str = Field("mcp-tasks-queue", env="QUEUE_NAME")
+    # Container padrão para documentos
+    DEFAULT_BLOB_CONTAINER: str = Field('mcp-documents', env='DEFAULT_BLOB_CONTAINER')
 
     class Config:
         env_file = ".env"
