@@ -10,10 +10,6 @@ from fastapi.responses import JSONResponse
 from azure.storage.queue.aio import QueueClient
 from azure.storage.blob.aio import BlobServiceClient
 
-# Importando do nosso próprio código (assumindo que estão nos arquivos acima)
-# from settings import settings
-# from vault_service import VaultService
-
 logger = logging.getLogger("mcp_worker")
 
 # Instância global do VaultService
