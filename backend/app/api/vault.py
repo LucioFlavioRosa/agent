@@ -16,17 +16,3 @@ class VaultKeyRequest(BaseModel):
 class VaultKeyResponse(BaseModel):
     key_name: str
     value_preview: str  # Apenas os primeiros 4 caracteres + '***'
-
-@router.post("/api/v1/vault/test-secret", response_model=VaultKeyResponse)
-def test_secret(req: VaultKeyRequest):
-    try:
-        secret_value = vault_service.get_secret(
-            vault_type=req.vault_type,
-            key_name=req.key_name,
-            company_id=req.company_id,
-            group_id=req.group_id
-        )
-        preview = (secret_value[:4] + '***') if secret_value else '***'
-        return VaultKeyResponse(key_name=req.key_name, value_preview=preview)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
