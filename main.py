@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from azure.storage.queue.aio import QueueClient
 from azure.storage.blob.aio import BlobServiceClient
 
+from backend.app.services.blob_storage_service import BlobStorageService
+
 logger = logging.getLogger("mcp_worker")
 
 # Instância global do VaultService
@@ -19,6 +21,7 @@ vault_urls = [
     settings.AZURE_PROJECTS_VAULT_URL
 ]
 vault_service = VaultService(vault_urls)
+blob_storage_service = BlobStorageService()
 
 # --- WORKER ---
 async def process_queue_messages():
@@ -93,18 +96,21 @@ async def start_analysis(
 
     # 1. Upload do Arquivo
     if arquivo_docx:
-        async with BlobServiceClient.from_connection_string(blob_conn_str) as blob_service_client:
-            container_client = blob_service_client.get_container_client(blob_container)
-            
-            if not await container_client.exists():
-                await container_client.create_container()
-                
-            blob_name = f"{job_id}_{arquivo_docx.filename}"
-            blob_client = container_client.get_blob_client(blob_name)
-            
-            conteudo = await arquivo_docx.read()
-            await blob_client.upload_blob(conteudo, overwrite=True)
-            blob_temp_path = f"{blob_container}/{blob_name}"
+        if email is None or str(email).strip() == '':
+            return JSONResponse(status_code=400, content={"error": "Email é obrigatório para upload do documento."})
+        try:
+            blob_temp_path = await blob_storage_service.upload_document(
+                blob_conn_str=blob_conn_str,
+                blob_container=blob_container,
+                company_id=company_id,
+                email=email,
+                project_id=project_id,
+                job_id=job_id,
+                file=arquivo_docx
+            )
+        except Exception as e:
+            logger.error(f"Erro ao fazer upload do arquivo: {e}")
+            return JSONResponse(status_code=500, content={"error": f"Falha ao fazer upload do documento: {str(e)}"})
 
     # 2. Montar a "ficha" para a fila com todos os parâmetros
     task_payload = {
