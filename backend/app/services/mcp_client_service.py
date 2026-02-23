@@ -158,8 +158,13 @@ class MCPClientService:
                     return {"content": response.text}
                     
         except httpx.HTTPStatusError as exc:
-            logging.error(f"Erro HTTP {exc.response.status_code} ao buscar relatório do MCP: {exc.response.text}")
-            raise Exception(f"Falha ao obter relatório: Status {exc.response.status_code}")
+            erro_mcp = exc.response.text
+            log_error(
+                context="MCPClientService.start_analysis",
+                error_message=f"Erro HTTP {exc.response.status_code} no MCP: {erro_mcp}",
+                exception=exc, job_id=job_id, project_id=project_id
+            )
+            raise Exception(f"O agente MCP recusou a requisição ({exc.response.status_code}): {erro_mcp}")
         except Exception as exc:
             logging.error(f"Erro de conexão ao buscar relatório do MCP: {str(exc)}")
             raise Exception(f"Erro ao comunicar com o agente MCP: {str(exc)}")
