@@ -10,9 +10,45 @@ from fastapi.responses import JSONResponse
 from azure.storage.queue.aio import QueueClient
 from azure.storage.blob.aio import BlobServiceClient
 
+from backend.app.config.settings import settings
+
 logger = logging.getLogger("mcp_worker")
 
+# --- Helper para geração de caminhos e upload de arquivos ---
+ANALYSIS_TYPE_MAPPING = {
+    "agent_epics_generator_digital": "epics",
+    "agent_epics_reviwer_digital": "epics",
+    "agent_features_generator_digital": "features",
+    "agent_featuares_reviwer_digital": "features",
+    "agent_timeline_generator_digital": "timeline",
+    "agent_timeline_reviwer_digital": "timeline",
+    "agent_risks_generator_digital": "risks",
+    "agent_risks_reviwer_digital": "risks"
+}
+
+def generate_blob_path(company_id: str, email: str, project_id: str, job_id: str, report_type: str, filename: str) -> str:
+    return f"{company_id}/{email}/{project_id}/{job_id}/{report_type}.{filename}"
+
+async def upload_file_to_blob(blob_conn_str: str, blob_container: str, blob_path: str, content: bytes):
+    async with BlobServiceClient.from_connection_string(blob_conn_str) as blob_service_client:
+        container_client = blob_service_client.get_container_client(blob_container)
+        if not await container_client.exists():
+            await container_client.create_container()
+        blob_client = container_client.get_blob_client(blob_path)
+        await blob_client.upload_blob(content, overwrite=True)
+
+async def save_markdown_report(blob_conn_str: str, blob_container: str, blob_path: str, report_content: str):
+    await upload_file_to_blob(blob_conn_str, blob_container, blob_path, report_content.encode("utf-8"))
+
+class DocumentStorageService:
+    @staticmethod
+    async def save_analysis_report(company_id: str, email: str, project_id: str, job_id: str, analysis_type: str, report_content: str, blob_conn_str: str, blob_container: str):
+        report_type = ANALYSIS_TYPE_MAPPING.get(analysis_type, "report")
+        blob_path = f"{company_id}/{email}/{project_id}/{job_id}/{report_type}.md"
+        await save_markdown_report(blob_conn_str, blob_container, blob_path, report_content)
+
 # Instância global do VaultService
+from backend.app.services.vault_service import VaultService
 vault_urls = [
     settings.AZURE_INFRA_VAULT_URL,
     settings.AZURE_LLM_VAULT_URL,
@@ -29,7 +65,6 @@ async def process_queue_messages():
         logger.error("❌ Abortando worker: Sem connection string da fila.")
         return
 
-    # Usando async with para o QueueClient
     async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=settings.QUEUE_NAME) as queue_client:
         try:
             await queue_client.create_queue()
@@ -45,6 +80,38 @@ async def process_queue_messages():
                     
                     logger.info(f"🔥 Iniciando job: {task_data.get('job_id')}")
                     await asyncio.sleep(2) # Simulando IA
+                    
+                    # --- Salvar relatório gerado pela IA ---
+                    company_id = task_data.get('company_id')
+                    email = task_data.get('email') or "unknown"
+                    project_id = task_data.get('project_id') or "unknown"
+                    job_id = task_data.get('job_id') or "unknown"
+                    analysis_type = task_data.get('analysis_type') or "unknown"
+                    group_ids = task_data.get('group_ids')
+
+                    # Buscar credenciais do Blob
+                    blob_conn_str = await vault_service.get_secret('blobstorage-connection-string', company_id, group_ids)
+                    blob_container = await vault_service.get_secret('blobstorage-container-name', company_id, group_ids)
+                    if not blob_container:
+                        blob_container = settings.DEFAULT_BLOB_CONTAINER
+                    if not blob_conn_str:
+                        logger.error("❌ Falha de credenciais do Blob Storage. Relatório não será salvo.")
+                    else:
+                        report_content = "# Relatório de Análise\n\nConteúdo gerado pela IA..."
+                        try:
+                            await DocumentStorageService.save_analysis_report(
+                                company_id=company_id,
+                                email=email,
+                                project_id=project_id,
+                                job_id=job_id,
+                                analysis_type=analysis_type,
+                                report_content=report_content,
+                                blob_conn_str=blob_conn_str,
+                                blob_container=blob_container
+                            )
+                            logger.info(f"📄 Relatório salvo em Blob Storage para job {job_id}.")
+                        except Exception as e:
+                            logger.error(f"❌ Erro ao salvar relatório no Blob Storage: {e}")
                     
                     await queue_client.delete_message(msg)
                     logger.info(f"✅ Job {task_data.get('job_id')} finalizado e removido da fila.")
@@ -87,6 +154,8 @@ async def start_analysis(
     # Busca credenciais do Azure Blob no Key Vault
     blob_conn_str = await vault_service.get_secret('blobstorage-connection-string', company_id, group_ids)
     blob_container = await vault_service.get_secret('blobstorage-container-name', company_id, group_ids)
+    if not blob_container:
+        blob_container = settings.DEFAULT_BLOB_CONTAINER
     
     if not blob_conn_str or not blob_container:
         return JSONResponse(status_code=500, content={"error": "Falha de credenciais do Blob Storage."})
