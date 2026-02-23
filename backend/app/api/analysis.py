@@ -254,7 +254,7 @@ async def start_analysis(
 
     # 7. Gera job_id único para rastreamento da execução
     job_id = str(uuid.uuid4())
-    
+    redis_service = RedisSessionService()
     job_id = await redis_service.create_job(
         project_id=project_id,
         analysis_type=analysis_type,
