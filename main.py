@@ -8,7 +8,10 @@ from typing import Optional
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from azure.storage.queue.aio import QueueClient
-from azure.storage.blob.aio import BlobServiceClient
+# Removido BlobServiceClient direto
+
+from backend.app.services.vault_service import vault_service
+from backend.app.services.blob_service import BlobService
 
 logger = logging.getLogger("mcp_worker")
 
@@ -19,6 +22,7 @@ vault_urls = [
     settings.AZURE_PROJECTS_VAULT_URL
 ]
 vault_service = VaultService(vault_urls)
+blob_service = BlobService(vault_service)
 
 # --- WORKER ---
 async def process_queue_messages():
@@ -29,7 +33,6 @@ async def process_queue_messages():
         logger.error("❌ Abortando worker: Sem connection string da fila.")
         return
 
-    # Usando async with para o QueueClient
     async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=settings.QUEUE_NAME) as queue_client:
         try:
             await queue_client.create_queue()
@@ -59,7 +62,6 @@ async def lifespan(app: FastAPI):
     worker_task = asyncio.create_task(process_queue_messages())
     yield
     worker_task.cancel()
-    # Espera a tarefa cancelar graciosamente
     try:
         await worker_task
     except asyncio.CancelledError:
@@ -83,28 +85,24 @@ async def start_analysis(
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
     blob_temp_path = None
-    
-    # Busca credenciais do Azure Blob no Key Vault
-    blob_conn_str = await vault_service.get_secret('blobstorage-connection-string', company_id, group_ids)
-    blob_container = await vault_service.get_secret('blobstorage-container-name', company_id, group_ids)
-    
-    if not blob_conn_str or not blob_container:
-        return JSONResponse(status_code=500, content={"error": "Falha de credenciais do Blob Storage."})
-
-    # 1. Upload do Arquivo
+    # --- NOVA LÓGICA DE UPLOAD DE DOCUMENTO ---
     if arquivo_docx:
-        async with BlobServiceClient.from_connection_string(blob_conn_str) as blob_service_client:
-            container_client = blob_service_client.get_container_client(blob_container)
-            
-            if not await container_client.exists():
-                await container_client.create_container()
-                
-            blob_name = f"{job_id}_{arquivo_docx.filename}"
-            blob_client = container_client.get_blob_client(blob_name)
-            
-            conteudo = await arquivo_docx.read()
-            await blob_client.upload_blob(conteudo, overwrite=True)
-            blob_temp_path = f"{blob_container}/{blob_name}"
+        if not email:
+            return JSONResponse(status_code=400, content={"error": "Email é obrigatório para upload de documento."})
+        try:
+            file_content = await arquivo_docx.read()
+            blob_temp_path = await blob_service.upload_document(
+                company_id=company_id,
+                email=email,
+                project_id=project_id,
+                job_id=job_id,
+                file_content=file_content,
+                filename=arquivo_docx.filename
+            )
+        except Exception as e:
+            logger.error(f"Erro ao fazer upload do documento: {e}")
+            return JSONResponse(status_code=500, content={"error": "Falha ao salvar documento no Blob Storage."})
+    # --- FIM DA NOVA LÓGICA ---
 
     # 2. Montar a "ficha" para a fila com todos os parâmetros
     task_payload = {
