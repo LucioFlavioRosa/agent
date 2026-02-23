@@ -1,3 +1,5 @@
+import os
+import json
 import logging
 from datetime import datetime
 from typing import Optional
@@ -10,6 +12,19 @@ from backend.app.services.mongodb_service import MongoDBService
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
 
+# ---------------------------------------------------------
+# 1. CARREGAR O ARQUIVO DE MAPEAMENTO DE AGENTES
+# ---------------------------------------------------------
+CAMINHO_JSON = os.path.join(os.path.dirname(__file__), "../../../config/agent_to_report_mapping.json")
+
+try:
+    with open(CAMINHO_JSON, 'r') as f:
+        AGENT_TO_CATEGORY = json.load(f)
+    logger.info(f"[Webhook] Mapeamento de agentes carregado com sucesso: {len(AGENT_TO_CATEGORY)} agentes.")
+except Exception as e:
+    logger.error(f"[Webhook] Erro ao carregar mapeamento de agentes: {e}")
+    AGENT_TO_CATEGORY = {}
+
 def get_redis_service() -> RedisSessionService:
     return RedisSessionService()
 
@@ -21,7 +36,7 @@ class JobCompletePayload(BaseModel):
     project_id: str
     company_id: str
     status: str
-    category: str # ex: 'epics', 'features', etc.
+    category: str # ex: 'epics', 'features', etc. (Enviado pelo MCP como fallback)
     blob_path: Optional[str] = None
     error_message: Optional[str] = None
 
@@ -41,24 +56,31 @@ async def mcp_job_complete_webhook(
         msg = f"Job {job_id} atualizado para {payload.status}."
 
         if payload.status == "done":
-            # --- NOVO: Busca metadados do job no Redis ---
+            # --- Busca metadados do job no Redis ---
             job_meta = await redis_service.get_job(job_id)
             analysis_type = getattr(job_meta, "analysis_type", "unknown") if job_meta else "unknown"
             created_by_email = getattr(job_meta, "email", "unknown") if job_meta else "unknown"
 
-            # --- NOVO: Lógica para calcular a NOVA VERSÃO dinamicamente ---
+            # ---------------------------------------------------------
+            # 2. A MÁGICA DO MAPEAMENTO ACONTECE AQUI
+            # ---------------------------------------------------------
+            # Busca a categoria correta no JSON baseada no analysis_type. 
+            # Se não achar, usa a 'category' que veio no payload como plano B.
+            report_category = AGENT_TO_CATEGORY.get(analysis_type, payload.category)
+
+            # --- Lógica para calcular a NOVA VERSÃO dinamicamente ---
             history_count = await mongo_service.db.project_reports_history.count_documents({
                 "project_id": payload.project_id,
-                "report_category": payload.category
+                "report_category": report_category # Filtra pela categoria mapeada
             })
             nova_versao = history_count + 1
 
-            # 2. MongoDB (Ledger): Insere histórico detalhado
+            # 3. MongoDB (Ledger): Insere histórico detalhado
             report_history_record = {
                 "job_id": job_id,
                 "project_id": payload.project_id,
                 "company_id": payload.company_id,
-                "report_category": payload.category,     # ex: 'epics'
+                "report_category": report_category,      # ex: 'epics' (Usando o mapeamento)
                 "analysis_type": analysis_type,          # ex: 'agent_epics_generator_digital'
                 "version": nova_versao,                  # 1, 2, 3...
                 "status": "done",
@@ -69,8 +91,8 @@ async def mcp_job_complete_webhook(
             await mongo_service.db.project_reports_history.insert_one(report_history_record)
             msg += f" | Ledger salvo (Versão {nova_versao})."
 
-            # 3. MongoDB (Ponteiro): Atualiza latest_reports no projeto
-            update_field = f"latest_reports.{analysis_type}"
+            # 4. MongoDB (Ponteiro): Atualiza latest_reports no projeto
+            update_field = f"latest_reports.{report_category}" # Atualiza o ponteiro correto (ex: latest_reports.epics)
             await mongo_service.db.projects.update_one(
                 {"_id": payload.project_id}, # Ajuste para ObjectId(payload.project_id) se você não armazena como string
                 {"$set": {update_field: job_id, "updated_at": datetime.utcnow()}}
