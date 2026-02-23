@@ -17,11 +17,64 @@ from azure.storage.blob.aio import BlobServiceClient
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("mcp_worker")
 
-# --- CONFIGURAÇÕES DO AZURE ---
-# Em produção, o Azure Key Vault injeta isso nas variáveis de ambiente
-AZURE_STORAGE_CONN_STR = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "sua_connection_string_aqui")
+# --- SERVIÇO DE COFRE DE SEGREDOS ---
+from azure.identity.aio import DefaultAzureCredential
+from azure.keyvault.secrets.aio import SecretClient
+
+class VaultService:
+    def __init__(self, vault_urls):
+        self.vault_urls = vault_urls
+        self.credential = DefaultAzureCredential()
+        self.clients = {url: SecretClient(vault_url=url, credential=self.credential) for url in vault_urls}
+
+    async def get_secret(self, base_name, company_id, group_ids):
+        # Tenta buscar com company_id e group_ids
+        secret_name = f"{base_name}-{company_id}-{group_ids}" if group_ids else f"{base_name}-{company_id}"
+        for url in self.vault_urls:
+            client = self.clients[url]
+            try:
+                secret = await client.get_secret(secret_name)
+                logger.info(f"🔑 [VAULT] Segredo encontrado: {secret_name} em {url}")
+                return secret.value
+            except Exception:
+                logger.info(f"🔑 [VAULT] Segredo não encontrado: {secret_name} em {url}")
+                continue
+        # Tenta buscar apenas com company_id
+        if group_ids:
+            fallback_secret_name = f"{base_name}-{company_id}"
+            for url in self.vault_urls:
+                client = self.clients[url]
+                try:
+                    secret = await client.get_secret(fallback_secret_name)
+                    logger.info(f"🔑 [VAULT] Segredo fallback encontrado: {fallback_secret_name} em {url}")
+                    return secret.value
+                except Exception:
+                    logger.info(f"🔑 [VAULT] Segredo fallback não encontrado: {fallback_secret_name} em {url}")
+                    continue
+        logger.error(f"❌ [VAULT] Nenhum segredo encontrado para {base_name} com company_id={company_id} group_ids={group_ids}")
+        return None
+
+    async def get_queue_connection_string(self):
+        # A conexão da fila é fixa, busca apenas pelo nome padrão no primeiro cofre
+        secret_name = "queue-connection-string"
+        url = self.vault_urls[0]
+        client = self.clients[url]
+        try:
+            secret = await client.get_secret(secret_name)
+            logger.info(f"🔑 [VAULT] Segredo da fila encontrado: {secret_name} em {url}")
+            return secret.value
+        except Exception as e:
+            logger.error(f"❌ [VAULT] Falha ao buscar segredo da fila: {secret_name} em {url} - {e}")
+            return None
+
+# --- CONFIGURAÇÕES DOS COFRES ---
+# URLs dos cofres (exemplo, substitua pelos reais ou injete via env)
+VAULT_URLS = [
+    os.getenv("AZURE_INFRA_VAULT_URL", "https://infra-vault.vault.azure.net/"),
+    os.getenv("AZURE_LLM_VAULT_URL", "https://llm-vault.vault.azure.net/"),
+    os.getenv("AZURE_PROJECTS_VAULT_URL", "https://projects-vault.vault.azure.net/")
+]
 QUEUE_NAME = "mcp-tasks-queue"
-TEMP_BLOB_CONTAINER = "mcp-temp-docs" # Container para os arquivos .docx temporários
 
 # ---------------------------------------------------------
 # WORKER: O "Trabalhador" que lê da Fila em background
@@ -30,8 +83,13 @@ async def process_queue_messages():
     """Fica rodando em loop puxando tarefas da fila e processando."""
     logger.info("👷 Worker iniciado e escutando a fila do Azure...")
     
-    # Inicia o cliente da fila
-    queue_client = QueueClient.from_connection_string(conn_str=AZURE_STORAGE_CONN_STR, queue_name=QUEUE_NAME)
+    vault_service = VaultService(VAULT_URLS)
+    queue_conn_str = await vault_service.get_queue_connection_string()
+    if not queue_conn_str:
+        logger.error("❌ [WORKER] Não foi possível obter a conexão da fila do Vault.")
+        return
+
+    queue_client = QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=QUEUE_NAME)
     
     try:
         await queue_client.create_queue()
@@ -41,45 +99,21 @@ async def process_queue_messages():
     async with queue_client:
         while True:
             try:
-                # Puxa até 5 mensagens, invisíveis para outros por 5 minutos (300s)
                 messages = queue_client.receive_messages(max_messages=5, visibility_timeout=300)
-                
                 async for msg in messages:
-                    # 1. Decodifica a mensagem Base64 -> JSON
                     decoded_str = base64.b64decode(msg.content).decode('utf-8')
                     task_data = json.loads(decoded_str)
-                    
                     job_id = task_data.get('job_id')
                     project_id = task_data.get('project_id')
                     analysis_type = task_data.get('analysis_type')
-                    
                     logger.info(f"🔥 [WORKER] Pegou a tarefa! Iniciando job: {job_id} | Agente: {analysis_type}")
-                    
-                    # ==========================================
-                    # 2. AQUI ENTRA A SUA LÓGICA DE IA
-                    # Você tem acesso a todos os parâmetros aqui:
-                    # task_data.get('comentario_extra')
-                    # task_data.get('email')
-                    # task_data.get('documento_blob_path') -> Caminho para baixar o .docx se precisar
-                    # ==========================================
-                    
                     await asyncio.sleep(5) # Simulando o processamento demorado da IA...
-                    
-                    # 3. SALVARIA O MARKDOWN FINAL NO BLOB
                     logger.info(f"✅ [WORKER] IA finalizou o job {job_id}.")
-                    
-                    # 4. CHAMARIA O WEBHOOK DO BACKEND
-                    # payload = {"project_id": project_id, "company_id": task_data.get("company_id"), "status": "done", "category": "...", "blob_path": "..."}
-                    # requests.post(webhook_url, json=payload)
                     logger.info(f"🔔 [WORKER] Webhook disparado para o backend (job: {job_id}).")
-                    
-                    # 5. Apaga a mensagem da fila (sucesso)
                     await queue_client.delete_message(msg)
                     logger.info(f"🗑️ [WORKER] Mensagem do job {job_id} apagada da fila com sucesso.")
-
             except Exception as e:
                 logger.error(f"Erro no loop do worker da fila: {e}")
-                
             await asyncio.sleep(3)
 
 # --- LIFESPAN DO FASTAPI ---
@@ -116,35 +150,29 @@ async def start_analysis(
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
     logger.info(f"📥 [RECEPCIONISTA] Requisição recebida do backend para o job: {job_id}")
-
     blob_temp_path = None
-
+    vault_service = VaultService(VAULT_URLS)
+    blob_conn_str = await vault_service.get_secret('blobstorage-connection-string', company_id, group_ids)
+    blob_container = await vault_service.get_secret('blobstorage-container-name', company_id, group_ids)
+    if not blob_conn_str or not blob_container:
+        logger.error("❌ [RECEPCIONISTA] Não foi possível obter credenciais do Blob Storage do Vault.")
+        return JSONResponse(status_code=500, content={"error": "Falha ao obter credenciais do Blob Storage."})
     # 1. TRATAR O ARQUIVO (Upload pro Azure Blob Storage)
     if arquivo_docx:
         try:
-            blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONN_STR)
-            container_client = blob_service_client.get_container_client(TEMP_BLOB_CONTAINER)
-            
-            # Cria o container de temporários se não existir
+            blob_service_client = BlobServiceClient.from_connection_string(blob_conn_str)
+            container_client = blob_service_client.get_container_client(blob_container)
             if not await container_client.exists():
                 await container_client.create_container()
-
-            # Salva no blob com um nome único: jobid_nomearquivo.docx
             blob_name = f"{job_id}_{arquivo_docx.filename}"
             blob_client = container_client.get_blob_client(blob_name)
-            
-            # Lê os bytes e faz o upload
             conteudo = await arquivo_docx.read()
             await blob_client.upload_blob(conteudo, overwrite=True)
-            
-            blob_temp_path = f"{TEMP_BLOB_CONTAINER}/{blob_name}"
+            blob_temp_path = f"{blob_container}/{blob_name}"
             logger.info(f"☁️ [RECEPCIONISTA] Arquivo salvo no Blob em: {blob_temp_path}")
-            
         except Exception as e:
             logger.error(f"Erro ao salvar arquivo no Blob Storage: {e}")
-            # Você pode decidir se quer travar a requisição aqui ou continuar sem o arquivo
             return JSONResponse(status_code=500, content={"error": f"Erro ao salvar arquivo no storage: {str(e)}"})
-
     # 2. MONTAR A "FICHA" PARA A FILA COM TODOS OS PARÂMETROS
     task_payload = {
         "job_id": job_id,
@@ -157,26 +185,23 @@ async def start_analysis(
         "branch": branch,
         "repository": repository,
         "comentario_extra": comentario_extra,
-        "documento_blob_path": blob_temp_path # A IA vai usar isso para baixar o arquivo depois
+        "documento_blob_path": blob_temp_path
     }
-
     # 3. ENVIAR PARA A FILA DO AZURE
     try:
-        queue_client = QueueClient.from_connection_string(conn_str=AZURE_STORAGE_CONN_STR, queue_name=QUEUE_NAME)
-        
-        # Converte o dicionário para JSON String e depois para Base64 (Exigência do Azure)
+        queue_conn_str = await vault_service.get_queue_connection_string()
+        if not queue_conn_str:
+            logger.error("❌ [RECEPCIONISTA] Não foi possível obter conexão da fila do Vault.")
+            return JSONResponse(status_code=500, content={"error": "Falha ao obter conexão da fila."})
+        queue_client = QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=QUEUE_NAME)
         message_str = json.dumps(task_payload)
         message_b64 = base64.b64encode(message_str.encode('utf-8')).decode('utf-8')
-        
         async with queue_client:
             await queue_client.send_message(message_b64)
-            
         logger.info(f"🎟️ [RECEPCIONISTA] Ficha do job {job_id} enviada para a Fila do Azure com todos os parâmetros!")
-        
     except Exception as e:
         logger.error(f"Erro ao colocar na fila: {e}")
         return JSONResponse(status_code=500, content={"error": "Falha ao enfileirar tarefa de análise."})
-
     # 4. DEVOLVER A RESPOSTA RAPIDAMENTE (202 Accepted)
     return JSONResponse(
         status_code=202,
