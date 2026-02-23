@@ -71,10 +71,16 @@ app = FastAPI(title="MCP Queue Worker", lifespan=lifespan)
 @app.post("/api/v1/analysis/start")
 async def start_analysis(
     job_id: str = Form(...),
+    project_id: str = Form(...),
     company_id: str = Form(...),
     group_ids: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    nome_projeto: Optional[str] = Form(None),
+    analysis_type: Optional[str] = Form(None),
+    branch: Optional[str] = Form(None),
+    repository: Optional[str] = Form(None),
+    comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
-    # ... adicione os outros campos Form aqui ...
 ):
     blob_temp_path = None
     
@@ -100,12 +106,37 @@ async def start_analysis(
             await blob_client.upload_blob(conteudo, overwrite=True)
             blob_temp_path = f"{blob_container}/{blob_name}"
 
-    # 2. Enviar para a Fila
-    task_payload = {"job_id": job_id, "documento_blob_path": blob_temp_path} # Adicione os outros
+    # 2. Montar a "ficha" para a fila com todos os parâmetros
+    task_payload = {
+        "job_id": job_id,
+        "project_id": project_id,
+        "company_id": company_id,
+        "group_ids": group_ids,
+        "email": email,
+        "nome_projeto": nome_projeto,
+        "analysis_type": analysis_type,
+        "branch": branch,
+        "repository": repository,
+        "comentario_extra": comentario_extra,
+        "documento_blob_path": blob_temp_path
+    }
+    
+    # 3. Enviar para a Fila do Azure
     queue_conn_str = await vault_service.get_queue_connection_string()
+    
+    if not queue_conn_str:
+        return JSONResponse(status_code=500, content={"error": "Falha ao obter conexão da fila do Azure."})
     
     async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=settings.QUEUE_NAME) as queue_client:
         message_b64 = base64.b64encode(json.dumps(task_payload).encode('utf-8')).decode('utf-8')
         await queue_client.send_message(message_b64)
 
-    return JSONResponse(status_code=202, content={"status": "queued", "job_id": job_id})
+    # 4. Retornar status 202
+    return JSONResponse(
+        status_code=202, 
+        content={
+            "status": "queued", 
+            "job_id": job_id,
+            "message": "Tarefa adicionada à fila de processamento."
+        }
+    )
