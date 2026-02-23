@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-# Supondo que VaultService está implementado em outro módulo
 from backend.app.services.vault_service import vault_service
 
 router = APIRouter()
