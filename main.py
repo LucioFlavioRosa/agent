@@ -1,95 +1,149 @@
 import logging
 import json
+import base64
+import asyncio
+import os
+from contextlib import asynccontextmanager
 from typing import Optional
-from fastapi import FastAPI, Form, UploadFile, File, Request
+
+from fastapi import FastAPI, Form, UploadFile, File, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 
-# --- CONFIGURAÇÃO DE LOGGING PARA AZURE APP SERVICE ---
-# O Azure App Service captura logs emitidos para stdout automaticamente
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("mcp_debug_logger")
+# Importação assíncrona do Azure
+from azure.storage.queue.aio import QueueClient
 
-app = FastAPI(
-    title="MCP - Debug de Payload",
-    description="Serviço temporário para imprimir os payloads recebidos do backend.",
-    version="1.0.0"
-)
+# --- CONFIGURAÇÃO DE LOGGING ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("mcp_worker")
 
-# Adicionamos as duas rotas para garantir que vai capturar indepentente da URL base configurada
-@app.post("/api/v1/analysis/start", tags=["Debug"])
-@app.post("/start", tags=["Debug"])
-async def start_analysis_debug(
-    request: Request,
+# --- CONFIGURAÇÕES DO AZURE ---
+AZURE_STORAGE_CONN_STR = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "sua_connection_string_aqui")
+QUEUE_NAME = "mcp-tasks-queue"
+
+# ---------------------------------------------------------
+# WORKER: O "Trabalhador" que lê da Fila em background
+# ---------------------------------------------------------
+async def process_queue_messages():
+    """Fica rodando em loop infinito puxando tarefas da fila e processando."""
+    logger.info("👷 Worker iniciado e escutando a fila do Azure...")
+    
+    # Inicia o cliente da fila
+    queue_client = QueueClient.from_connection_string(conn_str=AZURE_STORAGE_CONN_STR, queue_name=QUEUE_NAME)
+    
+    # Cria a fila se ela não existir
+    try:
+        await queue_client.create_queue()
+    except Exception:
+        pass # Fila já existe
+
+    async with queue_client:
+        while True:
+            try:
+                # Puxa até 5 mensagens por vez, escondendo-as de outros workers por 5 minutos (300 seg)
+                # O tempo de invisibilidade deve ser maior que o tempo máximo que a IA demora para responder
+                messages = queue_client.receive_messages(max_messages=5, visibility_timeout=300)
+                
+                async for msg in messages:
+                    # 1. Decodifica a mensagem (O Azure usa Base64 por padrão)
+                    decoded_str = base64.b64decode(msg.content).decode('utf-8')
+                    task_data = json.loads(decoded_str)
+                    
+                    job_id = task_data.get('job_id')
+                    logger.info(f"🔥 [WORKER] Pegou a tarefa na fila! Iniciando processamento do job: {job_id}")
+                    
+                    # ==========================================
+                    # 2. AQUI ENTRA A SUA LÓGICA DE IA (OPENAI, ETC)
+                    # ==========================================
+                    await asyncio.sleep(5) # Simulando o tempo de processamento da IA...
+                    
+                    # 3. SALVARIA NO BLOB STORAGE AQUI
+                    logger.info(f"✅ [WORKER] IA finalizou! Arquivo markdown gerado e salvo no Blob para o job: {job_id}.")
+                    
+                    # 4. CHAMARIA O WEBHOOK DO BACKEND AQUI
+                    # requests.post(webhook_url, json={...})
+                    logger.info(f"🔔 [WORKER] Webhook disparado para o backend (job: {job_id}).")
+                    
+                    # ==========================================
+                    
+                    # 5. Missão cumprida: Deleta a mensagem da fila para não ser processada de novo
+                    await queue_client.delete_message(msg)
+                    logger.info(f"🗑️ [WORKER] Mensagem do job {job_id} apagada da fila com sucesso.")
+
+            except Exception as e:
+                logger.error(f"Erro no loop do worker da fila: {e}")
+                
+            # Espera 3 segundos antes de checar a fila novamente se ela estiver vazia
+            await asyncio.sleep(3)
+
+
+# --- LIFESPAN DO FASTAPI ---
+# Isso garante que o worker inicie junto com o servidor e morra quando o servidor parar
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Liga o Worker no background
+    worker_task = asyncio.create_task(process_queue_messages())
+    yield
+    # Desliga o Worker suavemente
+    worker_task.cancel()
+
+app = FastAPI(title="MCP - Azure Queue Worker", lifespan=lifespan)
+
+
+# ---------------------------------------------------------
+# RECEPCIONISTA: A Rota que recebe os dados do Backend
+# ---------------------------------------------------------
+@app.post("/api/v1/analysis/start", tags=["Analysis"])
+@app.post("/start", tags=["Analysis"])
+async def start_analysis(
     project_id: str = Form(...),
     job_id: str = Form(...),
     company_id: str = Form(...),
-    group_ids: Optional[str] = Form(None),
-    email: Optional[str] = Form(None),
-    nome_projeto: Optional[str] = Form(None),
     analysis_type: Optional[str] = Form(None),
-    branch: Optional[str] = Form(None),
-    repository: Optional[str] = Form(None),
-    comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
+    # ... outros campos
 ):
-    logger.info("========== NOVO INÍCIO DE ANÁLISE RECEBIDO ==========")
-    
-    # 1. Log dos campos obrigatórios e strings simples
-    logger.info(f"JOB_ID: {job_id}")
-    logger.info(f"PROJECT_ID: {project_id}")
-    logger.info(f"COMPANY_ID: {company_id}")
-    logger.info(f"EMAIL: {email}")
-    logger.info(f"NOME_PROJETO: {nome_projeto}")
-    logger.info(f"ANALYSIS_TYPE: {analysis_type}")
-    logger.info(f"BRANCH: {branch}")
-    logger.info(f"REPOSITORY: {repository}")
-    logger.info(f"COMENTARIO_EXTRA: {comentario_extra}")
-    
-    # 2. Inspecionando o group_ids detalhadamente
-    logger.info(f"GROUP_IDS (RAW): '{group_ids}' | Tipo recebido: {type(group_ids)}")
-    if group_ids:
-        try:
-            # Tenta decodificar o JSON string para ver se o backend mandou certinho
-            parsed_groups = json.loads(group_ids)
-            logger.info(f"GROUP_IDS (PARSED): {parsed_groups} | Tipo convertido: {type(parsed_groups)}")
-        except json.JSONDecodeError as e:
-            logger.warning(f"GROUP_IDS não é um JSON válido. Erro de parse: {e}")
-    else:
-        logger.info("GROUP_IDS: Nenhum grupo recebido (vazio ou None).")
+    logger.info(f"📥 [RECEPCIONISTA] Requisição recebida do backend para o job: {job_id}")
 
-    # 3. Verificando o arquivo (se foi enviado)
+    # 1. TRATAR O ARQUIVO ANTES DE IR PRA FILA
+    blob_temp_path = None
     if arquivo_docx:
-        logger.info(f"ARQUIVO: Recebido! Nome: '{arquivo_docx.filename}' | Content-Type: '{arquivo_docx.content_type}'")
-        try:
-            # Lê apenas os primeiros 50 bytes para provar que o conteúdo chegou sem travar a memória
-            conteudo_teste = await arquivo_docx.read(50)
-            logger.info(f"ARQUIVO (Primeiros bytes): {conteudo_teste}")
-        except Exception as e:
-            logger.error(f"ARQUIVO: Erro ao tentar ler os bytes: {e}")
-    else:
-        logger.info("ARQUIVO: Nenhum arquivo .docx foi anexado na requisição.")
+        # AQUI VOCÊ DEVE SALVAR O ARQUIVO NO BLOB STORAGE E GUARDAR O CAMINHO
+        blob_temp_path = f"temp_docs/{job_id}_{arquivo_docx.filename}"
+        logger.info(f"☁️ [RECEPCIONISTA] Arquivo salvo temporariamente no Blob em: {blob_temp_path}")
 
-    logger.info("=====================================================")
+    # 2. MONTAR A "FICHA" PARA A FILA (O Payload)
+    task_payload = {
+        "job_id": job_id,
+        "project_id": project_id,
+        "company_id": company_id,
+        "analysis_type": analysis_type,
+        "documento_blob_path": blob_temp_path
+    }
 
-    # Retorna 202 para o backend saber que a requisição bateu aqui com sucesso
+    # 3. ENVIAR PARA A FILA DO AZURE
+    try:
+        queue_client = QueueClient.from_connection_string(conn_str=AZURE_STORAGE_CONN_STR, queue_name=QUEUE_NAME)
+        
+        # O Azure Queue exige (ou recomenda fortemente) que strings sejam Base64 encoded
+        message_str = json.dumps(task_payload)
+        message_b64 = base64.b64encode(message_str.encode('utf-8')).decode('utf-8')
+        
+        async with queue_client:
+            await queue_client.send_message(message_b64)
+            
+        logger.info(f"🎟️ [RECEPCIONISTA] Ficha do job {job_id} enviada para a Fila do Azure!")
+        
+    except Exception as e:
+        logger.error(f"Erro ao colocar na fila: {e}")
+        # Retorne 500 para o backend saber que falhou e marcar como erro no Redis dele
+        return JSONResponse(status_code=500, content={"error": "Falha ao enfileirar tarefa."})
+
+    # 4. DEVOLVE A RESPOSTA RAPIDINHO
     return JSONResponse(
         status_code=202,
         content={
-            "message": "Payload recebido pelo MCP. Verifique os logs do App Service.",
+            "message": "Tarefa adicionada à fila de processamento.",
             "job_id": job_id,
-            "status": "debug_success"
+            "status": "queued"
         }
     )
-
-@app.get("/health", tags=["Health"])
-async def health_check():
-    return {"status": "ok", "message": "MCP Debugger is running"}
-
-if __name__ == "__main__":
-    import uvicorn
-    # Inicia o servidor localmente na porta 8080 (o Azure costuma usar a variável PORT ou default 8000/8080)
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
