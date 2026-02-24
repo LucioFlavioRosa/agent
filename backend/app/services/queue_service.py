@@ -50,6 +50,7 @@ class QueueService:
         # 🚀 NOVO 4: Instanciamos o Agente passando o Registro de LLMs
         self.agent_service = AgentService(
             context_retrieval_service=self.context_retrieval_service,
+            blob_storage_service=self.blob_storage_service,
             llm_services=llm_registry
         )
 
