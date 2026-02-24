@@ -5,11 +5,35 @@ from typing import Optional
 
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
-from backend.app.services.blob_storage_service import blob_storage_service
+
+# --- IMPORTAÇÃO DE CLASSES E CONFIGURAÇÕES ---
 from backend.app.config.settings import settings
-from backend.app.services.queue_service import queue_service
+from backend.app.services.vault_service import VaultService
+from backend.app.services.blob_storage_service import BlobStorageService
+from backend.app.services.queue_service import QueueService
 
 logger = logging.getLogger("mcp_worker")
+
+# --- INSTANCIAÇÃO DOS SERVIÇOS (ORQUESTRAÇÃO DAS DEPENDÊNCIAS) ---
+# 1. Montamos as URLs dos cofres a partir do settings
+vault_urls = [
+    settings.AZURE_INFRA_VAULT_URL,
+    settings.AZURE_LLM_VAULT_URL,
+    settings.AZURE_PROJECTS_VAULT_URL
+]
+
+# 2. Instanciamos o Vault
+vault_service = VaultService(vault_urls=vault_urls)
+
+# 3. Instanciamos o Blob Storage
+blob_storage_service = BlobStorageService()
+
+# 4. Instanciamos a Fila, injetando o vault e o nome da fila
+queue_service = QueueService(
+    vault_service=vault_service,
+    queue_name=settings.QUEUE_NAME
+)
+
 
 # --- LIFESPAN ---
 @asynccontextmanager
@@ -62,7 +86,7 @@ async def start_analysis(
             company_id=company_id,
             project_id=project_id,
             job_id=job_id,
-            file_data=file_stream, # Variável renomeada para refletir sua nova natureza
+            file_data=file_stream, 
             filename=nome_arquivo,
             group_id=group_ids
         )
