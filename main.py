@@ -12,6 +12,7 @@ from backend.app.config.settings import settings
 from backend.app.services.vault_service import VaultService
 from backend.app.services.blob_storage_service import BlobStorageService
 from backend.app.services.queue_service import QueueService
+from backend.app.core.config import settings
 
 logger = logging.getLogger("mcp_worker")
 
