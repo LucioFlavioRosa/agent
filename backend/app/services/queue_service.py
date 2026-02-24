@@ -31,7 +31,7 @@ class QueueService:
             job_id = task_data.get('job_id')
             company_id = task_data.get('company_id')
             group_ids = task_data.get('group_ids')
-            blob_path = task_data.get('blob_path') # O caminho do arquivo que veio lá do main.py
+            blob_path = task_data.get('blob_path')
             
             logger.info(f"🔥 [Worker-{worker_id}] Iniciando job: {job_id}")
             
