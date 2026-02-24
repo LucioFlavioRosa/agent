@@ -5,6 +5,7 @@ import logging
 from typing import Optional
 from azure.storage.queue.aio import QueueClient
 from backend.app.services.vault_service import VaultService
+from backend.app.services.blob_storage_service import BlobStorageService
 
 logger = logging.getLogger("mcp_queue_service")
 
