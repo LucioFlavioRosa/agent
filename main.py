@@ -74,6 +74,7 @@ async def start_analysis(
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
+    context_used: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
     nome_arquivo = None
@@ -95,6 +96,13 @@ async def start_analysis(
             group_id=group_ids
         )
 
+    parsed_context = {}
+    if context_used:
+        try:
+            parsed_context = json.loads(context_used)
+        except Exception as e:
+            logger.error(f"Erro ao fazer parse do context_used: {e}")
+
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
@@ -107,7 +115,8 @@ async def start_analysis(
         "repository": repository,
         "comentario_extra": comentario_extra,
         "nome_arquivo_recebido": nome_arquivo,
-        "blob_path": blob_path # MUDANÇA: Adicionado o caminho no payload da fila
+        "blob_path": blob_path,
+        "context_used": parsed_context,
     }
 
     try:
