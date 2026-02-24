@@ -2,7 +2,7 @@ import json
 import logging
 import sys
 from typing import Optional
-import aioboto3  # 🚀 Usado para AWS Assíncrono no FastAPI/Starlette
+import aioboto3
 from azure.keyvault.secrets.aio import SecretClient
 
 from backend.app.services.vault_service import VaultService
@@ -12,59 +12,33 @@ logger = logging.getLogger("mcp_claude_aws")
 class ClaudeAWSService:
     def __init__(self, vault_service: VaultService):
         self.vault_service = vault_service
-        self.aws_access_key_id: Optional[str] = None
-        self.aws_secret_access_key: Optional[str] = None
-        self.aws_region: str = "us-east-1"
-        self._is_initialized = False
+        # Não guardamos mais as credenciais na classe (self) para não misturar clientes!
 
-    async def _initialize_credentials(self):
-        """Busca as credenciais no Key Vault apenas uma vez."""
-        if self._is_initialized:
-            return
-
-        logger.info("[Claude AWS] Buscando credenciais do Amazon Bedrock no Vault...")
+    async def gerar_texto(self, prompt: str, modelo: str, company_id: str, group_id: Optional[str] = None) -> str:
+        """
+        Gera texto usando AWS Bedrock, buscando as credenciais dinamicamente 
+        para a empresa (company_id) que solicitou a análise.
+        """
+        logger.info(f"[Claude AWS] Buscando credenciais para company_id='{company_id}'")
         
-        for url in self.vault_service.vault_urls:
-            try:
-                async with SecretClient(vault_url=url, credential=self.vault_service.credential) as secret_client:
-                    # NOTA: Ajuste esses nomes se no seu Vault eles estiverem diferentes (ex: AWS-ACCESS-KEY-ID)
-                    ak_secret = await secret_client.get_secret("aws-access-key-id")
-                    self.aws_access_key_id = ak_secret.value
-                    
-                    sk_secret = await secret_client.get_secret("aws-secret-access-key")
-                    self.aws_secret_access_key = sk_secret.value
-                    
-                    try:
-                        region_secret = await secret_client.get_secret("aws-region")
-                        self.aws_region = region_secret.value
-                    except Exception:
-                        pass # Usa us-east-1 como default
+        # 1. Busca as credenciais usando o padrão do seu VaultService (company/group)
+        # O vault_service já cuida do fallback (com ou sem group_id) e do cache!
+        aws_access_key_id = await self.vault_service.get_secret("aws-access-key-id", company_id, group_id)
+        aws_secret_access_key = await self.vault_service.get_secret("aws-secret-access-key", company_id, group_id)
+        
+        if not aws_access_key_id or not aws_secret_access_key:
+            logger.error(f"❌ [Claude AWS] Credenciais ausentes para company_id='{company_id}'")
+            raise ValueError(f"Credenciais AWS ausentes no Key Vault para a empresa {company_id}.")
 
-                    logger.info(f"🔑 [Claude AWS] Credenciais da AWS carregadas com sucesso de {url}")
-                    self._is_initialized = True
-                    break
-                    
-            except Exception:
-                continue 
+        # Tenta buscar a região, se não existir usa o fallback padrão
+        aws_region = await self.vault_service.get_secret("aws-region", company_id, group_id)
+        if not aws_region:
+            aws_region = "us-east-1"
 
-        if not self._is_initialized:
-            logger.error("❌ [Claude AWS] Falha ao carregar credenciais da AWS.")
-            raise ValueError("Credenciais AWS ausentes no Key Vault.")
-
-    async def gerar_texto(self, prompt: str, modelo: str) -> str:
-        """
-        Contrato padrão esperado pelo AgentService.
-        Usa aioboto3 para invocar o Bedrock de forma não-bloqueante.
-        """
-        await self._initialize_credentials()
-
-        # Se o modelo não for enviado pelo mapping, usa o default cross-region do Claude 3.5
+        # 2. Prepara o payload do modelo
         model_id = modelo or "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        logger.info(f"🧠 [Claude AWS] Iniciando invoke_model no Bedrock... Model: {model_id} | Região: {aws_region}")
 
-        logger.info(f"🧠 [Claude AWS] Iniciando invoke_model no Bedrock... Model: {model_id} | Região: {self.aws_region}")
-
-        # O prompt_sistema (comportamento) já foi mesclado ao 'prompt' gigante no AgentService.
-        # Por isso, não precisamos passar "system" separado aqui.
         body = {
             "anthropic_version": "bedrock-2023-05-31",
             "messages": [
@@ -77,16 +51,15 @@ class ClaudeAWSService:
             "temperature": 0.2,
         }
 
+        # 3. Invoca o Bedrock de forma isolada e segura para este request
         try:
-            # 🚀 Criação do cliente Boto3 Assíncrono (aioboto3)
             session = aioboto3.Session(
-                aws_access_key_id=self.aws_access_key_id,
-                aws_secret_access_key=self.aws_secret_access_key,
-                region_name=self.aws_region
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                region_name=aws_region
             )
 
             async with session.client('bedrock-runtime') as bedrock_client:
-                # O 'await' aqui é a chave! Ele libera o worker para outras tarefas enquanto a AWS pensa.
                 response = await bedrock_client.invoke_model(
                     modelId=model_id,
                     contentType='application/json',
@@ -94,7 +67,6 @@ class ClaudeAWSService:
                     body=json.dumps(body)
                 )
 
-                # Processa a resposta (Stream assíncrono do corpo)
                 response_body_bytes = await response['body'].read()
                 response_body = json.loads(response_body_bytes)
                 
@@ -103,7 +75,7 @@ class ClaudeAWSService:
                 
                 usage = response_body.get('usage', {})
                 logger.info(
-                    f"✅ [Claude AWS] Sucesso. Tokens -> In: {usage.get('input_tokens')} | Out: {usage.get('output_tokens')}"
+                    f"✅ [Claude AWS] Sucesso. Tokens -> In: {usage.get('input_tokens', 0)} | Out: {usage.get('output_tokens', 0)}"
                 )
                 
                 return result
