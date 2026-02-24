@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
+# Import corrigido para refletir seu app
 from backend.app.services.blob_storage_service import blob_storage_service
 from backend.app.config.settings import settings
 from backend.app.services.queue_service import queue_service
@@ -24,6 +25,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="MCP Queue Worker", lifespan=lifespan)
 
+# --- FUNÇÃO GERADORA DE STREAM ---
+async def get_file_stream(upload_file: UploadFile, chunk_size: int = 4 * 1024 * 1024):
+    """
+    Lê o arquivo recebido em pedaços (chunks) de 4MB, 
+    evitando que arquivos grandes estourem a memória RAM.
+    """
+    while True:
+        chunk = await upload_file.read(chunk_size)
+        if not chunk:
+            break
+        yield chunk
+
 # --- ENDPOINTS ---
 @app.post("/api/v1/analysis/start")
 async def start_analysis(
@@ -42,12 +55,15 @@ async def start_analysis(
     nome_arquivo = None
     if arquivo_docx:
         nome_arquivo = arquivo_docx.filename
-        conteudo = await arquivo_docx.read()
+        
+        # Passamos a função geradora no lugar do conteúdo inteiro lido na RAM
+        file_stream = get_file_stream(arquivo_docx)
+        
         await blob_storage_service.save_document(
             company_id=company_id,
             project_id=project_id,
             job_id=job_id,
-            file_content=conteudo,
+            file_data=file_stream, # Variável renomeada para refletir sua nova natureza
             filename=nome_arquivo,
             group_id=group_ids
         )
