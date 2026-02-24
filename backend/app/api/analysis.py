@@ -27,6 +27,17 @@ logger = logging.getLogger("analysis_api")
 # Configuração de segurança para arquivos
 ALLOWED_EXTENSIONS = {".docx"}
 
+ANALYSIS_CONTEXT_CONFIG = {
+    "agent_epics_generator_digital": [],
+    "agent_epics_reviwer_digital": ["epics"],
+    "agent_features_generator_digital": ["epics"],
+    "agent_features_reviwer_digital": ["epics", "features"], 
+    "agent_timeline_generator_digital": ["epics", "features"],
+    "agent_timeline_reviwer_digital": ["epics", "features", "timeline"],
+    "agent_risks_generator_digital": ["epics", "features", "timeline"],
+    "agent_risks_reviwer_digital": ["epics", "features", "timeline", "risks"]  
+}
+
 class StartAnalysisRequest(BaseModel):
     email: Optional[str] = None
     nome_projeto: Optional[str] = None
@@ -176,6 +187,7 @@ async def start_analysis(
         "branch": branch,
         "repository": repository,
         "comentario_extra": comentario_extra,
+        "base_job_id": base_job_id,
         "arquivo_docx": arquivo_docx.filename if arquivo_docx else None
     }
     log_request_received(endpoint="/analysis/start", payload=payload)
@@ -232,6 +244,25 @@ async def start_analysis(
         )
         logger.error(f"Erro ao validar permissões de ação: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
+
+    agent_cfg = MCPConfigService.get_agent_config(analysis_type)
+    if not agent_cfg or not agent_cfg.mcp_service_url:
+        log_error(
+            context="get_agent_config",
+            error_message=f"Configuração do agente '{analysis_type}' inválida ou URL do MCP ausente.",
+            exception=None,
+            job_id=None,
+            project_id=project_id
+        )
+        raise HTTPException(status_code=500, detail=f"Configuração do agente '{analysis_type}' não disponível.")
+    
+    log_validation_step(
+        step="get_agent_config",
+        status="success",
+        details=f"Configuração do agente '{analysis_type}' carregada.",
+        job_id=None,
+        project_id=project_id
+    )
 
     # ==========================================
     # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
@@ -290,7 +321,8 @@ async def start_analysis(
         project_id=project_id,
         analysis_type=analysis_type,
         email=email,
-        empresa=company_id
+        empresa=company_id,
+        context_used=context_used
     )
     
     log_validation_step(
@@ -312,7 +344,8 @@ async def start_analysis(
         "project_id": project_id,
         "job_id": job_id,
         "company_id": company_id,
-        "group_ids": grupos_do_usuario
+        "group_ids": grupos_do_usuario,
+        "context_used": context_used
     }
     log_service_call(
         service="MCPClientService",
