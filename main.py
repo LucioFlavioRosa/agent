@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from azure.storage.queue.aio import QueueClient
-from backend.app.services.blob_storage_service import blob_storage_service  # Import do novo serviço
+from backend.app.services.blob_storage_service import blob_storage_service
 
 logger = logging.getLogger("mcp_worker")
 
