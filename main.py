@@ -5,7 +5,6 @@ from typing import Optional
 
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
-# Import corrigido para refletir seu app
 from backend.app.services.blob_storage_service import blob_storage_service
 from backend.app.config.settings import settings
 from backend.app.services.queue_service import queue_service
