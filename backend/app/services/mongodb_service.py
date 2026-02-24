@@ -443,3 +443,67 @@ class MongoDBService:
         except Exception as e:
             self.logger.error(f"[delete_group] Erro ao excluir grupo '{group_id}': {e}")
             return False
+
+    async def get_report_context_tree(self, project_id: str, job_id: str, category: str) -> dict:
+        """
+        Dada uma categoria e um job_id específico, reconstrói o contexto 
+        olhando para o passado (o que gerou ele) e para o futuro (o que ele gerou).
+        """
+        # 1. Busca o relatório alvo (ex: Features V2)
+        target_report = await self.db.project_reports_history.find_one({"job_id": job_id})
+        if not target_report:
+            return None
+
+        context_used = target_report.get("context_used", {})
+        
+        # Estrutura de resposta
+        tree = {
+            "epics": None,
+            "features": None,
+            "timeline": None,
+            "risks": None
+        }
+        
+        # Coloca o alvo no lugar certo
+        tree[category] = target_report
+
+        # 2. OLHANDO PARA O PASSADO (Ancestrais)
+        # Se eu sou Feature, preciso do Épico exato que me gerou
+        if category in ["features", "timeline", "risks"] and context_used.get("epics_job_id"):
+            tree["epics"] = await self.db.project_reports_history.find_one({"job_id": context_used["epics_job_id"]})
+            
+        if category in ["timeline", "risks"] and context_used.get("features_job_id"):
+             tree["features"] = await self.db.project_reports_history.find_one({"job_id": context_used["features_job_id"]})
+             
+        if category == "risks" and context_used.get("timeline_job_id"):
+             tree["timeline"] = await self.db.project_reports_history.find_one({"job_id": context_used["timeline_job_id"]})
+
+        # 3. OLHANDO PARA O FUTURO (Descendentes Mais Recentes)
+        # Se eu sou Feature, quais Timelines e Riscos mais novos foram gerados a partir de mim?
+        if category == "epics":
+            # Busca a feature mais recente que usou este épico específico
+            tree["features"] = await self._get_latest_descendant("features", "epics_job_id", job_id)
+            
+        if category in ["epics", "features"]:
+            # Busca a timeline mais recente que usou esta feature (ou épico se não houver feature)
+            child_job = tree["features"]["job_id"] if tree["features"] else job_id
+            child_field = "features_job_id" if tree["features"] else "epics_job_id"
+            tree["timeline"] = await self._get_latest_descendant("timeline", child_field, child_job)
+            
+        if category in ["epics", "features", "timeline"]:
+            child_job = tree["timeline"]["job_id"] if tree["timeline"] else (tree["features"]["job_id"] if tree["features"] else job_id)
+            child_field = "timeline_job_id" if tree["timeline"] else ("features_job_id" if tree["features"] else "epics_job_id")
+            tree["risks"] = await self._get_latest_descendant("risks", child_field, child_job)
+
+        return tree
+
+    # Helper interno
+    async def _get_latest_descendant(self, target_category: str, dependency_field: str, dependency_job_id: str):
+        cursor = self.db.project_reports_history.find({
+            "report_category": target_category,
+            f"context_used.{dependency_field}": dependency_job_id,
+            "status": "done"
+        }).sort("version", -1).limit(1)
+        
+        docs = await cursor.to_list(length=1)
+        return docs[0] if docs else None
