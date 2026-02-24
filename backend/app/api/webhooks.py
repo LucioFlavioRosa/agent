@@ -58,20 +58,25 @@ async def mcp_job_complete_webhook(
         if payload.status == "done":
             # --- Busca metadados do job no Redis ---
             job_meta = await redis_service.get_job(job_id)
-            analysis_type = getattr(job_meta, "analysis_type", "unknown") if job_meta else "unknown"
-            created_by_email = getattr(job_meta, "email", "unknown") if job_meta else "unknown"
+            
+            # (Se o job_meta for um Pydantic Model, converta para dict ou use getattr)
+            # Como a implementação exata de get_job() está no redis_session_service.py, 
+            # vou tratar como um dicionário ou objeto que tenha os atributos abaixo.
+            analysis_type = job_meta.get("analysis_type", "unknown") if isinstance(job_meta, dict) else getattr(job_meta, "analysis_type", "unknown")
+            created_by_email = job_meta.get("email", "unknown") if isinstance(job_meta, dict) else getattr(job_meta, "email", "unknown")
+            
+            # 🚀 NOVO: Resgata o contexto congelado do Redis
+            context_used = job_meta.get("context_used", {}) if isinstance(job_meta, dict) else getattr(job_meta, "context_used", {})
 
             # ---------------------------------------------------------
             # 2. A MÁGICA DO MAPEAMENTO ACONTECE AQUI
             # ---------------------------------------------------------
-            # Busca a categoria correta no JSON baseada no analysis_type. 
-            # Se não achar, usa a 'category' que veio no payload como plano B.
             report_category = AGENT_TO_CATEGORY.get(analysis_type, payload.category)
 
             # --- Lógica para calcular a NOVA VERSÃO dinamicamente ---
             history_count = await mongo_service.db.project_reports_history.count_documents({
                 "project_id": payload.project_id,
-                "report_category": report_category # Filtra pela categoria mapeada
+                "report_category": report_category 
             })
             nova_versao = history_count + 1
 
@@ -80,24 +85,44 @@ async def mcp_job_complete_webhook(
                 "job_id": job_id,
                 "project_id": payload.project_id,
                 "company_id": payload.company_id,
-                "report_category": report_category,      # ex: 'epics' (Usando o mapeamento)
-                "analysis_type": analysis_type,          # ex: 'agent_epics_generator_digital'
-                "version": nova_versao,                  # 1, 2, 3...
+                "report_category": report_category,      
+                "analysis_type": analysis_type,          
+                "version": nova_versao,                  
                 "status": "done",
                 "blob_path": payload.blob_path,
                 "created_by_email": created_by_email,
-                "created_at": datetime.utcnow()
+                "created_at": datetime.utcnow(),
+                
+                # 🚀 NOVO: Salva a linhagem congelada neste registro histórico!
+                "context_used": context_used
             }
             await mongo_service.db.project_reports_history.insert_one(report_history_record)
             msg += f" | Ledger salvo (Versão {nova_versao})."
 
             # 4. MongoDB (Ponteiro): Atualiza latest_reports no projeto
-            update_field = f"latest_reports.{report_category}" # Atualiza o ponteiro correto (ex: latest_reports.epics)
+            # 🚀 NOVO: Se este relatório foi gerado usando contexto do passado, 
+            # o projeto inteiro deve retroceder para esses ponteiros antigos também.
+            
+            # Prepara o objeto de atualização
+            update_data = {
+                f"latest_reports.{report_category}": job_id,
+                "updated_at": datetime.utcnow()
+            }
+            
+            # Se existia contexto, nós empurramos ele para o latest_reports também.
+            # Ex: Se risks usou a Timeline V2, o latest_reports.timeline do projeto vira a V2.
+            for key, past_job_id in context_used.items():
+                if key.endswith("_job_id"):
+                    # Extrai a categoria da chave (ex: de "epics_job_id" tira "epics")
+                    dep_category = key.replace("_job_id", "")
+                    update_data[f"latest_reports.{dep_category}"] = past_job_id
+
+            # Executa o update no projeto com todos os campos de uma vez
             await mongo_service.db.projects.update_one(
-                {"_id": payload.project_id}, # Ajuste para ObjectId(payload.project_id) se você não armazena como string
-                {"$set": {update_field: job_id, "updated_at": datetime.utcnow()}}
+                {"_id": payload.project_id}, 
+                {"$set": update_data}
             )
-            msg += " | Ponteiro do projeto atualizado."
+            msg += " | Ponteiro do projeto (e seu contexto) atualizados."
 
         elif payload.status == "error":
             err_msg = payload.error_message or "Erro desconhecido processado pelo MCP."
