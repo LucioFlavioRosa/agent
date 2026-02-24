@@ -9,8 +9,15 @@ from backend.app.services.vault_service import VaultService
 logger = logging.getLogger("mcp_queue_service")
 
 class QueueService:
-    def __init__(self, vault_service: VaultService, queue_name: str, max_concurrent_workers: int = 5):
+    def __init__(
+        self, 
+        vault_service: VaultService, 
+        blob_storage_service: BlobStorageService, 
+        queue_name: str, 
+        max_concurrent_workers: int = 5
+    ):
         self.vault_service = vault_service
+        self.blob_storage_service = blob_storage_service
         self.queue_name = queue_name
         self.max_concurrent_workers = max_concurrent_workers
         self.internal_queue = asyncio.Queue(maxsize=max_concurrent_workers * 2)
@@ -20,11 +27,37 @@ class QueueService:
         try:
             decoded_str = base64.b64decode(msg.content).decode('utf-8')
             task_data = json.loads(decoded_str)
+            
             job_id = task_data.get('job_id')
+            company_id = task_data.get('company_id')
+            group_ids = task_data.get('group_ids')
+            blob_path = task_data.get('blob_path') # O caminho do arquivo que veio lá do main.py
             
             logger.info(f"🔥 [Worker-{worker_id}] Iniciando job: {job_id}")
             
+            # 2. ATUALIZAÇÃO: Fazer o download do arquivo para a RAM, se existir
+            file_bytes = None
+            if blob_path:
+                logger.info(f"📥 [Worker-{worker_id}] Baixando arquivo do Blob Storage para memória...")
+                file_bytes = await self.blob_storage_service.download_document(
+                    company_id=company_id,
+                    blob_path=blob_path,
+                    group_id=group_ids
+                )
+                logger.info(f"✅ [Worker-{worker_id}] Download concluído ({len(file_bytes)} bytes).")
+
+            
             # --- SUA LÓGICA DE PROCESSAMENTO (IA, etc) AQUI ---
+            # 3. ATUALIZAÇÃO: Agora você tem o file_bytes na mão!
+            # Você passará este 'file_bytes' para o seu Agente de IA. 
+            # O Agente de IA é quem vai chamar aquela função de extrair o texto do DOCX.
+            
+            # Exemplo de como seria a chamada para o Agente:
+            # await agent_service.analisar_documento(
+            #     task_data=task_data, 
+            #     file_bytes=file_bytes
+            # )
+            
             await asyncio.sleep(2)  # Simulando processamento
             # --------------------------------------------------
             
