@@ -7,6 +7,10 @@ from azure.storage.queue.aio import QueueClient
 from backend.app.services.vault_service import VaultService
 from backend.app.services.blob_storage_service import BlobStorageService
 
+# 🚀 NOVO: Importamos os serviços do Agente e de Contexto
+from backend.app.services.context_retrieval_service import ContextRetrievalService
+from backend.app.services.agent_service import AgentService
+
 logger = logging.getLogger("mcp_queue_service")
 
 class QueueService:
@@ -22,6 +26,15 @@ class QueueService:
         self.queue_name = queue_name
         self.max_concurrent_workers = max_concurrent_workers
         self.internal_queue = asyncio.Queue(maxsize=max_concurrent_workers * 2)
+        
+        # 🚀 NOVO: Instanciamos a inteligência do Agente e do Contexto AQUI
+        # Eles ficarão vivos na memória do QueueService, prontos para processar as mensagens.
+        self.context_retrieval_service = ContextRetrievalService(
+            blob_storage_service=self.blob_storage_service
+        )
+        self.agent_service = AgentService(
+            context_retrieval_service=self.context_retrieval_service
+        )
 
     async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
         """Processa uma única mensagem e a remove da fila do Azure em caso de sucesso."""
@@ -36,31 +49,35 @@ class QueueService:
             
             logger.info(f"🔥 [Worker-{worker_id}] Iniciando job: {job_id}")
             
-            # 2. ATUALIZAÇÃO: Fazer o download do arquivo para a RAM, se existir
+            # 2. ATUALIZAÇÃO: Fazer o download do arquivo ATUAL (o .docx que o usuário enviou) para a RAM, se existir
             file_bytes = None
+            texto_extraido = ""
             if blob_path:
-                logger.info(f"📥 [Worker-{worker_id}] Baixando arquivo do Blob Storage para memória...")
+                logger.info(f"📥 [Worker-{worker_id}] Baixando documento atual do Blob Storage para memória...")
                 file_bytes = await self.blob_storage_service.download_document(
                     company_id=company_id,
                     blob_path=blob_path,
                     group_id=group_ids
                 )
                 logger.info(f"✅ [Worker-{worker_id}] Download concluído ({len(file_bytes)} bytes).")
+                
+                # Supondo que você tem uma função no AgentService para extrair texto do DOCX:
+                # texto_extraido = await self.agent_service.extrair_texto_docx(file_bytes)
 
             
-            # --- SUA LÓGICA DE PROCESSAMENTO (IA, etc) AQUI ---
-            # 3. ATUALIZAÇÃO: Agora você tem o file_bytes na mão!
-            # Você passará este 'file_bytes' para o seu Agente de IA. 
-            # O Agente de IA é quem vai chamar aquela função de extrair o texto do DOCX.
+            # 3. 🚀 ATUALIZAÇÃO: Chamar o Agente de IA com o payload completo!
+            logger.info(f"🧠 [Worker-{worker_id}] Iniciando análise com IA...")
             
-            # Exemplo de como seria a chamada para o Agente:
-            # await agent_service.analisar_documento(
-            #     task_data=task_data, 
-            #     file_bytes=file_bytes
-            # )
+            # Passamos o task_data (que contém o context_used que veio da rota /start)
+            # E passamos o texto_extraido (o documento atual, se houver)
+            resultado_markdown = await self.agent_service.executar_analise(
+                task_payload=task_data,
+                texto_extraido=texto_extraido
+            )
             
-            await asyncio.sleep(2)  # Simulando processamento
-            # --------------------------------------------------
+            # 4. (Futuro) Aqui você salvaria o resultado_markdown de volta no Blob Storage 
+            # com o nome do job_id, e chamaria o Webhook do backend avisando que terminou.
+            # ...
             
             # Deleta a mensagem após o processamento com sucesso
             await queue_client.delete_message(msg)
@@ -68,6 +85,7 @@ class QueueService:
             
         except Exception as e:
             logger.error(f"❌ [Worker-{worker_id}] Erro ao processar mensagem: {e}")
+            # Lógica de Retry/Dead Letter Queue entraria aqui
 
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         """Loop infinito de cada worker local que consome da fila interna."""
