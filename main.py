@@ -9,6 +9,8 @@ from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from azure.storage.queue.aio import QueueClient
 from backend.app.services.blob_storage_service import blob_storage_service
+from backend.app.services.vault_service import VaultService
+from backend.app.config.settings import settings
 
 logger = logging.getLogger("mcp_worker")
 
