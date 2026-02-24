@@ -82,19 +82,25 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
-    # 1. Upload do Arquivo
+    # 1. Variável apenas para o nome do arquivo (já resolve o problema do Optional)
+    nome_arquivo = None
+
+    # 2. Upload do Arquivo (Ignoramos o retorno do caminho, pois é previsível)
     if arquivo_docx:
+        nome_arquivo = arquivo_docx.filename
         conteudo = await arquivo_docx.read()
-        blob_temp_path = await blob_storage_service.save_document(
+        
+        # O serviço cuida de tudo, não precisamos armazenar o retorno
+        await blob_storage_service.save_document(
             company_id=company_id,
             project_id=project_id,
             job_id=job_id,
             file_content=conteudo,
-            filename=arquivo_docx.filename,
+            filename=nome_arquivo,
             group_id=group_ids
         )
 
-    # 2. Montar a "ficha" para a fila com todos os parâmetros
+    # 3. Montar a "ficha" para a fila (Payload)
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
@@ -106,10 +112,12 @@ async def start_analysis(
         "branch": branch,
         "repository": repository,
         "comentario_extra": comentario_extra,
-        "documento_blob_path": blob_temp_path
+        
+        # Mandamos apenas o nome do arquivo (ou None se não houver upload)
+        "nome_arquivo_recebido": nome_arquivo 
     }
     
-    # 3. Enviar para a Fila do Azure
+    # 4. Enviar para a Fila do Azure
     queue_conn_str = await vault_service.get_queue_connection_string()
     
     if not queue_conn_str:
@@ -119,7 +127,7 @@ async def start_analysis(
         message_b64 = base64.b64encode(json.dumps(task_payload).encode('utf-8')).decode('utf-8')
         await queue_client.send_message(message_b64)
 
-    # 4. Retornar status 202
+    # 5. Retornar status 202
     return JSONResponse(
         status_code=202, 
         content={
