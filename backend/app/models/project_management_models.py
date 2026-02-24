@@ -108,6 +108,7 @@ class ReportHistoryItem(BaseModel):
     status: str
     created_by_email: str
     created_at: datetime
+    context_used: Optional[Dict[str, str]] = Field(default_factory=dict)
 
 class ReportHistoryResponse(BaseModel):
     history: List[ReportHistoryItem]
