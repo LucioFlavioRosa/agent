@@ -1,67 +1,22 @@
 import asyncio
-import json
-import base64
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
-from azure.storage.queue.aio import QueueClient
 from backend.app.services.blob_storage_service import blob_storage_service
-from backend.app.services.vault_service import VaultService
 from backend.app.config.settings import settings
+from backend.app.services.queue_service import queue_service
 
 logger = logging.getLogger("mcp_worker")
-
-# Instância global do VaultService
-vault_urls = [
-    settings.AZURE_INFRA_VAULT_URL,
-    settings.AZURE_LLM_VAULT_URL,
-    settings.AZURE_PROJECTS_VAULT_URL
-]
-vault_service = VaultService(vault_urls)
-
-# --- WORKER ---
-async def process_queue_messages():
-    logger.info("👷 Worker iniciado...")
-    
-    queue_conn_str = await vault_service.get_queue_connection_string()
-    if not queue_conn_str:
-        logger.error("❌ Abortando worker: Sem connection string da fila.")
-        return
-
-    # Usando async with para o QueueClient
-    async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=settings.QUEUE_NAME) as queue_client:
-        try:
-            await queue_client.create_queue()
-        except Exception:
-            pass # Fila já existe
-
-        while True:
-            try:
-                messages = queue_client.receive_messages(max_messages=5, visibility_timeout=300)
-                async for msg in messages:
-                    decoded_str = base64.b64decode(msg.content).decode('utf-8')
-                    task_data = json.loads(decoded_str)
-                    
-                    logger.info(f"🔥 Iniciando job: {task_data.get('job_id')}")
-                    await asyncio.sleep(2) # Simulando IA
-                    
-                    await queue_client.delete_message(msg)
-                    logger.info(f"✅ Job {task_data.get('job_id')} finalizado e removido da fila.")
-            except Exception as e:
-                logger.error(f"Erro no loop do worker: {e}")
-            
-            await asyncio.sleep(3)
 
 # --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    worker_task = asyncio.create_task(process_queue_messages())
+    worker_task = asyncio.create_task(queue_service.start_worker())
     yield
     worker_task.cancel()
-    # Espera a tarefa cancelar graciosamente
     try:
         await worker_task
     except asyncio.CancelledError:
@@ -84,15 +39,10 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
-    # 1. Variável apenas para o nome do arquivo (já resolve o problema do Optional)
     nome_arquivo = None
-
-    # 2. Upload do Arquivo (Ignoramos o retorno do caminho, pois é previsível)
     if arquivo_docx:
         nome_arquivo = arquivo_docx.filename
         conteudo = await arquivo_docx.read()
-        
-        # O serviço cuida de tudo, não precisamos armazenar o retorno
         await blob_storage_service.save_document(
             company_id=company_id,
             project_id=project_id,
@@ -102,7 +52,6 @@ async def start_analysis(
             group_id=group_ids
         )
 
-    # 3. Montar a "ficha" para a fila (Payload)
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
@@ -114,26 +63,19 @@ async def start_analysis(
         "branch": branch,
         "repository": repository,
         "comentario_extra": comentario_extra,
-        
-        # Mandamos apenas o nome do arquivo (ou None se não houver upload)
-        "nome_arquivo_recebido": nome_arquivo 
+        "nome_arquivo_recebido": nome_arquivo
     }
-    
-    # 4. Enviar para a Fila do Azure
-    queue_conn_str = await vault_service.get_queue_connection_string()
-    
-    if not queue_conn_str:
-        return JSONResponse(status_code=500, content={"error": "Falha ao obter conexão da fila do Azure."})
-    
-    async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=settings.QUEUE_NAME) as queue_client:
-        message_b64 = base64.b64encode(json.dumps(task_payload).encode('utf-8')).decode('utf-8')
-        await queue_client.send_message(message_b64)
 
-    # 5. Retornar status 202
+    try:
+        await queue_service.send_message(task_payload)
+    except Exception as e:
+        logger.error(f"Erro ao enviar mensagem para a fila: {e}")
+        return JSONResponse(status_code=500, content={"error": "Falha ao enviar tarefa para a fila de processamento."})
+
     return JSONResponse(
-        status_code=202, 
+        status_code=202,
         content={
-            "status": "queued", 
+            "status": "queued",
             "job_id": job_id,
             "message": "Tarefa adicionada à fila de processamento."
         }
