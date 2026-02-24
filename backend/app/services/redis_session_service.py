@@ -78,10 +78,15 @@ class RedisSessionService:
         await self.redis_client.setex(key, self.session_ttl, self._serialize_session(session_data))
         return project_id
 
-    async def create_job(self, project_id: str, analysis_type: str, email: str = None, empresa: str = None) -> str:
+    # Adicionamos context_used: dict = None na assinatura
+    async def create_job(self, project_id: str, analysis_type: str, email: str = None, empresa: str = None, context_used: dict = None) -> str:
         self.logger.info(f"[create_job] Iniciando criação de job para project_id '{project_id}'...")
         job_id = str(uuid.uuid4())
         now = datetime.utcnow()
+        
+        # Garantimos que seja um dicionário vazio se vier None
+        safe_context = context_used or {}
+        
         job = JobData(
             job_id=job_id,
             project_id=project_id,
@@ -93,7 +98,8 @@ class RedisSessionService:
             response_timestamp=None,
             completed_at=None,
             email=email,
-            empresa=empresa
+            empresa=empresa,
+            context_used=safe_context  # 🚀 NOVO: Passando o contexto para o modelo
         )
         key = f"job:{job_id}"
         
