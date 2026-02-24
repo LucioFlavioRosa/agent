@@ -1,71 +1,66 @@
-import asyncio
 import json
-import base64
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
-from azure.storage.queue.aio import QueueClient
-from azure.storage.blob.aio import BlobServiceClient
+
+# --- IMPORTAÇÃO DE CLASSES E CONFIGURAÇÕES ---
+from backend.app.services.vault_service import VaultService
+from backend.app.services.blob_storage_service import BlobStorageService
+from backend.app.services.queue_service import QueueService
+from backend.app.config.settings import settings
 
 logger = logging.getLogger("mcp_worker")
 
-# Instância global do VaultService
+# --- INSTANCIAÇÃO DOS SERVIÇOS (ORQUESTRAÇÃO DAS DEPENDÊNCIAS) ---
+# 1. Montamos as URLs dos cofres a partir do settings
 vault_urls = [
     settings.AZURE_INFRA_VAULT_URL,
     settings.AZURE_LLM_VAULT_URL,
     settings.AZURE_PROJECTS_VAULT_URL
 ]
-vault_service = VaultService(vault_urls)
 
-# --- WORKER ---
-async def process_queue_messages():
-    logger.info("👷 Worker iniciado...")
-    
-    queue_conn_str = await vault_service.get_queue_connection_string()
-    if not queue_conn_str:
-        logger.error("❌ Abortando worker: Sem connection string da fila.")
-        return
+# 2. Instanciamos o Vault
+vault_service = VaultService(vault_urls=vault_urls)
 
-    # Usando async with para o QueueClient
-    async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=settings.QUEUE_NAME) as queue_client:
-        try:
-            await queue_client.create_queue()
-        except Exception:
-            pass # Fila já existe
+# 3. MUDANÇA: Passamos o vault para o Blob Storage
+blob_storage_service = BlobStorageService(vault_service=vault_service)
 
-        while True:
-            try:
-                messages = queue_client.receive_messages(max_messages=5, visibility_timeout=300)
-                async for msg in messages:
-                    decoded_str = base64.b64decode(msg.content).decode('utf-8')
-                    task_data = json.loads(decoded_str)
-                    
-                    logger.info(f"🔥 Iniciando job: {task_data.get('job_id')}")
-                    await asyncio.sleep(2) # Simulando IA
-                    
-                    await queue_client.delete_message(msg)
-                    logger.info(f"✅ Job {task_data.get('job_id')} finalizado e removido da fila.")
-            except Exception as e:
-                logger.error(f"Erro no loop do worker: {e}")
-            
-            await asyncio.sleep(3)
+# 4. MUDANÇA: Passamos o vault e o blob_storage para a Fila
+queue_service = QueueService(
+    vault_service=vault_service,
+    blob_storage_service=blob_storage_service,
+    queue_name=settings.QUEUE_NAME
+)
+
 
 # --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    worker_task = asyncio.create_task(process_queue_messages())
+    worker_task = asyncio.create_task(queue_service.start_worker())
     yield
     worker_task.cancel()
-    # Espera a tarefa cancelar graciosamente
     try:
         await worker_task
     except asyncio.CancelledError:
         logger.info("👷 Worker parado com sucesso.")
 
 app = FastAPI(title="MCP Queue Worker", lifespan=lifespan)
+
+# --- FUNÇÃO GERADORA DE STREAM ---
+async def get_file_stream(upload_file: UploadFile, chunk_size: int = 4 * 1024 * 1024):
+    """
+    Lê o arquivo recebido em pedaços (chunks) de 4MB, 
+    evitando que arquivos grandes estourem a memória RAM.
+    """
+    while True:
+        chunk = await upload_file.read(chunk_size)
+        if not chunk:
+            break
+        yield chunk
 
 # --- ENDPOINTS ---
 @app.post("/api/v1/analysis/start")
@@ -80,33 +75,35 @@ async def start_analysis(
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
+    context_used: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
-    blob_temp_path = None
+    nome_arquivo = None
+    blob_path = None # MUDANÇA: Variável para guardar o caminho retornado
     
-    # Busca credenciais do Azure Blob no Key Vault
-    blob_conn_str = await vault_service.get_secret('blobstorage-connection-string', company_id, group_ids)
-    blob_container = await vault_service.get_secret('blobstorage-container-name', company_id, group_ids)
-    
-    if not blob_conn_str or not blob_container:
-        return JSONResponse(status_code=500, content={"error": "Falha de credenciais do Blob Storage."})
-
-    # 1. Upload do Arquivo
     if arquivo_docx:
-        async with BlobServiceClient.from_connection_string(blob_conn_str) as blob_service_client:
-            container_client = blob_service_client.get_container_client(blob_container)
-            
-            if not await container_client.exists():
-                await container_client.create_container()
-                
-            blob_name = f"{job_id}_{arquivo_docx.filename}"
-            blob_client = container_client.get_blob_client(blob_name)
-            
-            conteudo = await arquivo_docx.read()
-            await blob_client.upload_blob(conteudo, overwrite=True)
-            blob_temp_path = f"{blob_container}/{blob_name}"
+        nome_arquivo = arquivo_docx.filename
+        
+        # Passamos a função geradora no lugar do conteúdo inteiro lido na RAM
+        file_stream = get_file_stream(arquivo_docx)
+        
+        # MUDANÇA: Capturamos o retorno nesta variável
+        blob_path = await blob_storage_service.save_document(
+            company_id=company_id,
+            project_id=project_id,
+            job_id=job_id,
+            file_data=file_stream, 
+            filename=nome_arquivo,
+            group_id=group_ids
+        )
 
-    # 2. Montar a "ficha" para a fila com todos os parâmetros
+    parsed_context = {}
+    if context_used:
+        try:
+            parsed_context = json.loads(context_used)
+        except Exception as e:
+            logger.error(f"Erro ao fazer parse do context_used: {e}")
+
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
@@ -118,24 +115,21 @@ async def start_analysis(
         "branch": branch,
         "repository": repository,
         "comentario_extra": comentario_extra,
-        "documento_blob_path": blob_temp_path
+        "nome_arquivo_recebido": nome_arquivo,
+        "blob_path": blob_path,
+        "context_used": parsed_context,
     }
-    
-    # 3. Enviar para a Fila do Azure
-    queue_conn_str = await vault_service.get_queue_connection_string()
-    
-    if not queue_conn_str:
-        return JSONResponse(status_code=500, content={"error": "Falha ao obter conexão da fila do Azure."})
-    
-    async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=settings.QUEUE_NAME) as queue_client:
-        message_b64 = base64.b64encode(json.dumps(task_payload).encode('utf-8')).decode('utf-8')
-        await queue_client.send_message(message_b64)
 
-    # 4. Retornar status 202
+    try:
+        await queue_service.send_message(task_payload)
+    except Exception as e:
+        logger.error(f"Erro ao enviar mensagem para a fila: {e}")
+        return JSONResponse(status_code=500, content={"error": "Falha ao enviar tarefa para a fila de processamento."})
+
     return JSONResponse(
-        status_code=202, 
+        status_code=202,
         content={
-            "status": "queued", 
+            "status": "queued",
             "job_id": job_id,
             "message": "Tarefa adicionada à fila de processamento."
         }
