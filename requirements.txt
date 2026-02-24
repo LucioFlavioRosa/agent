@@ -21,3 +21,4 @@ azure-storage-blob>=12.19.0
 cachetools>=5.3.0
 python-docx
 aiohttp>=3.9.0
+aioboto3
