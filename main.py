@@ -82,15 +82,6 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
-    blob_temp_path = None
-    
-    # Busca credenciais do Azure Blob no Key Vault
-    blob_conn_str = await vault_service.get_secret('blobstorage-connection-string', company_id, group_ids)
-    blob_container = await vault_service.get_secret('blobstorage-container-name', company_id, group_ids)
-    
-    if not blob_conn_str or not blob_container:
-        return JSONResponse(status_code=500, content={"error": "Falha de credenciais do Blob Storage."})
-
     # 1. Upload do Arquivo
     if arquivo_docx:
         conteudo = await arquivo_docx.read()
