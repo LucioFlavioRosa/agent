@@ -63,7 +63,7 @@ async def get_file_stream(upload_file: UploadFile, chunk_size: int = 4 * 1024 * 
         yield chunk
 
 # --- ENDPOINTS ---
-@app.post("/api/v1/analysis/start")
+@app.post("/start")
 async def start_analysis(
     job_id: str = Form(...),
     project_id: str = Form(...),
