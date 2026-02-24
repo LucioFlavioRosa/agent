@@ -1,76 +1,114 @@
-import os
-import uuid
-import anthropic
-from datetime import datetime
-from typing import Optional, Dict, Any
-from services.azure_secret_manager import AzureSecretManager, VaultType
+import json
+import logging
+import sys
+from typing import Optional
+import aioboto3  # 🚀 Usado para AWS Assíncrono no FastAPI/Starlette
+from azure.keyvault.secrets.aio import SecretClient
 
-class ClaudeAWSService():
-    
-    def __init__(self, secret_manager: Optional[AzureSecretManager] = None):
-        
-        # Se recebeu da factory, usa. Se não, cria um novo.
-        self.secret_manager = secret_manager or AzureSecretManager(vault_type=VaultType.LLM)
-        
-        print("Configurando o cliente da Anthropic (Claude)...")
-        try:
-            anthropic_api_key = self.secret_manager.get_secret("ANTHROPICAPIKEY")
-            self.anthropic_client = anthropic.Anthropic(api_key=anthropic_api_key)
-            print("Cliente da Anthropic (Claude) configurado com sucesso.")
-        except Exception as e:
-            print(f"ERRO CRÍTICO ao configurar o cliente da Anthropic: {e}")
-            raise
+from backend.app.services.vault_service import VaultService
 
-    def executar_prompt(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        usar_rag: bool = False,
-        model_name: Optional[str] = None,
-        max_token_out: int = 20000,
-        job_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-       
+logger = logging.getLogger("mcp_claude_aws")
+
+class ClaudeAWSService:
+    def __init__(self, vault_service: VaultService):
+        self.vault_service = vault_service
+        self.aws_access_key_id: Optional[str] = None
+        self.aws_secret_access_key: Optional[str] = None
+        self.aws_region: str = "us-east-1"
+        self._is_initialized = False
+
+    async def _initialize_credentials(self):
+        """Busca as credenciais no Key Vault apenas uma vez."""
+        if self._is_initialized:
+            return
+
+        logger.info("[Claude AWS] Buscando credenciais do Amazon Bedrock no Vault...")
+        
+        for url in self.vault_service.vault_urls:
+            try:
+                async with SecretClient(vault_url=url, credential=self.vault_service.credential) as secret_client:
+                    # NOTA: Ajuste esses nomes se no seu Vault eles estiverem diferentes (ex: AWS-ACCESS-KEY-ID)
+                    ak_secret = await secret_client.get_secret("aws-access-key-id")
+                    self.aws_access_key_id = ak_secret.value
+                    
+                    sk_secret = await secret_client.get_secret("aws-secret-access-key")
+                    self.aws_secret_access_key = sk_secret.value
+                    
+                    try:
+                        region_secret = await secret_client.get_secret("aws-region")
+                        self.aws_region = region_secret.value
+                    except Exception:
+                        pass # Usa us-east-1 como default
+
+                    logger.info(f"🔑 [Claude AWS] Credenciais da AWS carregadas com sucesso de {url}")
+                    self._is_initialized = True
+                    break
+                    
+            except Exception:
+                continue 
+
+        if not self._is_initialized:
+            logger.error("❌ [Claude AWS] Falha ao carregar credenciais da AWS.")
+            raise ValueError("Credenciais AWS ausentes no Key Vault.")
+
+    async def gerar_texto(self, prompt: str, modelo: str) -> str:
+        """
+        Contrato padrão esperado pelo AgentService.
+        Usa aioboto3 para invocar o Bedrock de forma não-bloqueante.
+        """
+        await self._initialize_credentials()
+
+        # Se o modelo não for enviado pelo mapping, usa o default cross-region do Claude 3.5
+        model_id = modelo or "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+
+        logger.info(f"🧠 [Claude AWS] Iniciando invoke_model no Bedrock... Model: {model_id} | Região: {self.aws_region}")
+
+        # O prompt_sistema (comportamento) já foi mesclado ao 'prompt' gigante no AgentService.
+        # Por isso, não precisamos passar "system" separado aqui.
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": prompt}]
+                }
+            ],
+            "max_tokens": 8000,
+            "temperature": 0.2,
+        }
+
         try:
-            print(f"[Claude Handler] Chamando o modelo: '{modelo_final}'")
-            response = self.anthropic_client.messages.create(
-                model=modelo_final,
-                system=prompt_sistema,  
-                messages=mensagens,
-                max_tokens=max_token_out,
-                temperature=0.3,
-                timeout=900.0
+            # 🚀 Criação do cliente Boto3 Assíncrono (aioboto3)
+            session = aioboto3.Session(
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_secret_access_key,
+                region_name=self.aws_region
             )
-            conteudo_resposta = response.content[0].text
-            tokens_entrada = response.usage.input_tokens
-            tokens_saida = response.usage.output_tokens
-            projeto = model_name or "claude"
-            data_atual = datetime.utcnow().strftime("%Y-%m-%d")
-            hora_atual = datetime.utcnow().strftime("%H:%M:%S")
-            return {
-                'reposta_final': conteudo_resposta,
-                'tokens_entrada': tokens_entrada,
-                'tokens_saida': tokens_saida
-            }
+
+            async with session.client('bedrock-runtime') as bedrock_client:
+                # O 'await' aqui é a chave! Ele libera o worker para outras tarefas enquanto a AWS pensa.
+                response = await bedrock_client.invoke_model(
+                    modelId=model_id,
+                    contentType='application/json',
+                    accept='application/json',
+                    body=json.dumps(body)
+                )
+
+                # Processa a resposta (Stream assíncrono do corpo)
+                response_body_bytes = await response['body'].read()
+                response_body = json.loads(response_body_bytes)
+                
+                content = response_body.get('content', [])
+                result = content[0].get('text', '') if content else ""
+                
+                usage = response_body.get('usage', {})
+                logger.info(
+                    f"✅ [Claude AWS] Sucesso. Tokens -> In: {usage.get('input_tokens')} | Out: {usage.get('output_tokens')}"
+                )
+                
+                return result
+
         except Exception as e:
-            print(f"ERRO: Falha na chamada à API da Anthropic para análise '{tipo_tarefa}'. Causa: {e}")
-            raise RuntimeError(f"Erro ao comunicar com a API da Anthropic: {e}") from e
-    
-    def executar_prompt_com_modelo(
-        self,
-        tipo_tarefa: str,
-        prompt_principal: str,
-        instrucoes_extras: str = "",
-        model_name: Optional[str] = None,
-        max_token_out: int = 15000,
-        job_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        return self.executar_prompt(
-            tipo_tarefa=tipo_tarefa,
-            prompt_principal=prompt_principal,
-            instrucoes_extras=instrucoes_extras,
-            model_name=model_name,
-            max_token_out=max_token_out,
-            job_id=job_id
-        )
+            logger.error(f"❌ [Claude AWS] ERRO CRÍTICO NO BEDROCK: {str(e)}")
+            sys.stdout.flush()
+            raise RuntimeError(f"Erro ao comunicar com AWS Bedrock: {e}") from e
