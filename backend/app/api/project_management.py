@@ -408,13 +408,14 @@ async def get_report_history(
     async for doc in cursor:
         historico.append(ReportHistoryItem(
             job_id=doc.get("job_id"),
-            project_id=str(doc.get("project_id")), # Converte o ObjectId de volta para string
+            project_id=str(doc.get("project_id")), 
             report_category=doc.get("report_category"),
             analysis_type=doc.get("analysis_type"),
-            version=doc.get("version", 1), # Default 1 caso venha vazio por algum motivo
+            version=doc.get("version", 1),
             status=doc.get("status"),
             created_by_email=doc.get("created_by_email", "Desconhecido"),
-            created_at=doc.get("created_at")
+            created_at=doc.get("created_at"),
+            context_used=doc.get("context_used", {})
         ))
 
     return ReportHistoryResponse(history=historico)
