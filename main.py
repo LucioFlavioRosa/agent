@@ -8,7 +8,6 @@ from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 
 # --- IMPORTAÇÃO DE CLASSES E CONFIGURAÇÕES ---
-from backend.app.config.settings import settings
 from backend.app.services.vault_service import VaultService
 from backend.app.services.blob_storage_service import BlobStorageService
 from backend.app.services.queue_service import QueueService
