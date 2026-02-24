@@ -25,12 +25,13 @@ vault_urls = [
 # 2. Instanciamos o Vault
 vault_service = VaultService(vault_urls=vault_urls)
 
-# 3. Instanciamos o Blob Storage
-blob_storage_service = BlobStorageService()
+# 3. MUDANÇA: Passamos o vault para o Blob Storage
+blob_storage_service = BlobStorageService(vault_service=vault_service)
 
-# 4. Instanciamos a Fila, injetando o vault e o nome da fila
+# 4. MUDANÇA: Passamos o vault e o blob_storage para a Fila
 queue_service = QueueService(
     vault_service=vault_service,
+    blob_storage_service=blob_storage_service,
     queue_name=settings.QUEUE_NAME
 )
 
@@ -76,13 +77,16 @@ async def start_analysis(
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
     nome_arquivo = None
+    blob_path = None # MUDANÇA: Variável para guardar o caminho retornado
+    
     if arquivo_docx:
         nome_arquivo = arquivo_docx.filename
         
         # Passamos a função geradora no lugar do conteúdo inteiro lido na RAM
         file_stream = get_file_stream(arquivo_docx)
         
-        await blob_storage_service.save_document(
+        # MUDANÇA: Capturamos o retorno nesta variável
+        blob_path = await blob_storage_service.save_document(
             company_id=company_id,
             project_id=project_id,
             job_id=job_id,
@@ -102,7 +106,8 @@ async def start_analysis(
         "branch": branch,
         "repository": repository,
         "comentario_extra": comentario_extra,
-        "nome_arquivo_recebido": nome_arquivo
+        "nome_arquivo_recebido": nome_arquivo,
+        "blob_path": blob_path # MUDANÇA: Adicionado o caminho no payload da fila
     }
 
     try:
