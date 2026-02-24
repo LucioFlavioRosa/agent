@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from azure.storage.queue.aio import QueueClient
-from azure.storage.blob.aio import BlobServiceClient
+from backend.app.services.blob_storage_service import blob_storage_service  # Import do novo serviço
 
 logger = logging.getLogger("mcp_worker")
 
@@ -93,18 +93,15 @@ async def start_analysis(
 
     # 1. Upload do Arquivo
     if arquivo_docx:
-        async with BlobServiceClient.from_connection_string(blob_conn_str) as blob_service_client:
-            container_client = blob_service_client.get_container_client(blob_container)
-            
-            if not await container_client.exists():
-                await container_client.create_container()
-                
-            blob_name = f"{job_id}_{arquivo_docx.filename}"
-            blob_client = container_client.get_blob_client(blob_name)
-            
-            conteudo = await arquivo_docx.read()
-            await blob_client.upload_blob(conteudo, overwrite=True)
-            blob_temp_path = f"{blob_container}/{blob_name}"
+        conteudo = await arquivo_docx.read()
+        blob_temp_path = await blob_storage_service.save_document(
+            company_id=company_id,
+            project_id=project_id,
+            job_id=job_id,
+            file_content=conteudo,
+            filename=arquivo_docx.filename,
+            group_id=group_ids
+        )
 
     # 2. Montar a "ficha" para a fila com todos os parâmetros
     task_payload = {
