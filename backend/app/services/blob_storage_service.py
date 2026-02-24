@@ -2,11 +2,14 @@ import logging
 from typing import Optional, AsyncIterable, Union
 from azure.storage.blob.aio import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
-from backend.app.services.vault_service import vault_service
+from backend.app.services.vault_service import VaultService
 
 logger = logging.getLogger("mcp_blob_storage")
 
 class BlobStorageService:
+    def __init__(self, vault_service: VaultService):
+        self.vault_service = vault_service
+        
     async def save_document(
         self,
         company_id: str,
@@ -26,7 +29,7 @@ class BlobStorageService:
         
         try:
             logger.info(f"[BlobStorageService] Obtendo connection string para company_id={company_id}, group_id={group_id}")
-            conn_str = await vault_service.get_secret('blobstorage-connection-string', company_id, group_id)
+            conn_str = await self.vault_service.get_secret('blobstorage-connection-string', company_id, group_id)
             if not conn_str:
                 logger.error(f"[BlobStorageService] Connection string não encontrada para company_id={company_id}")
                 raise Exception("Connection string do Blob Storage não encontrada.")
@@ -55,4 +58,37 @@ class BlobStorageService:
             logger.error(f"[BlobStorageService] Falha ao salvar documento: {e}")
             raise
 
-blob_storage_service = BlobStorageService()
+    async def download_document(
+        self, 
+        company_id: str, 
+        blob_path: str, 
+        group_id: Optional[str] = None
+    ) -> bytes:
+        """
+        Baixa o documento do Azure Blob Storage e retorna em bytes para a memória RAM.
+        company_id atua como o container.
+        """
+        try:
+            logger.info(f"[BlobStorageService] Baixando blob '{blob_path}' do container '{company_id}'")
+            conn_str = await self.vault_service.get_secret('blobstorage-connection-string', company_id, group_id)
+            
+            if not conn_str:
+                raise Exception("Connection string do Blob Storage não encontrada.")
+
+            async with BlobServiceClient.from_connection_string(conn_str) as blob_service_client:
+                blob_client = blob_service_client.get_blob_client(container=company_id, blob=blob_path)
+                
+                # Faz o download do blob
+                stream = await blob_client.download_blob()
+                file_bytes = await stream.readall()
+                
+                logger.info(f"[BlobStorageService] Download concluído: {len(file_bytes)} bytes.")
+                return file_bytes
+                
+        except ResourceNotFoundError:
+            logger.error(f"[BlobStorageService] Arquivo não encontrado no Blob Storage: {blob_path}")
+            raise
+        except Exception as e:
+            logger.error(f"[BlobStorageService] Erro ao baixar documento: {e}")
+            raise
+        
