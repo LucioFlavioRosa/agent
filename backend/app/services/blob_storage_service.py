@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, AsyncIterable, Union
 from azure.storage.blob.aio import BlobServiceClient
-from azure.core.exceptions import ResourceExistsError
+from azure.core.exceptions import ResourceNotFoundError
 from backend.app.services.vault_service import vault_service
 
 logger = logging.getLogger("mcp_blob_storage")
@@ -17,8 +17,9 @@ class BlobStorageService:
         group_id: Optional[str] = None
     ) -> str:
         """
-        Salva um documento no Azure Blob Storage usando Streaming ou Bytes inteiros.
-        - Tenta criar o container, ignorando erro se já existir (Otimização de request).
+        Salva um documento no Azure Blob Storage.
+        - Tenta fazer o upload direto (Caminho feliz).
+        - Se falhar por falta de container, cria o container e tenta novamente.
         """
         blob_path = f"{project_id}/{job_id}/{filename}"
         full_blob_path = f"{company_id}/{blob_path}"
@@ -32,21 +33,22 @@ class BlobStorageService:
 
             async with BlobServiceClient.from_connection_string(conn_str) as blob_service_client:
                 container_client = blob_service_client.get_container_client(company_id)
-                
-                # --- OTIMIZAÇÃO: Tenta criar e trata o erro ao invés de usar exists() ---
-                try:
-                    await container_client.create_container()
-                    logger.info(f"[BlobStorageService] Container '{company_id}' criado com sucesso.")
-                except ResourceExistsError:
-                    # O container já existe, não precisamos fazer nada
-                    pass
-                
                 blob_client = container_client.get_blob_client(blob_path)
                 
-                # O Azure Blob SDK entende nativamente um AsyncIterable e faz o upload em chunks
-                await blob_client.upload_blob(file_data, overwrite=True)
-                
-                logger.info(f"[BlobStorageService] Documento salvo em: {full_blob_path}")
+                # --- OTIMIZAÇÃO: Tenta o upload direto (EAFP) ---
+                try:
+                    await blob_client.upload_blob(file_data, overwrite=True)
+                    logger.info(f"[BlobStorageService] Documento salvo direto em: {full_blob_path}")
+                    
+                except ResourceNotFoundError:
+                    # Caiu aqui? O container dessa empresa ainda não existe.
+                    logger.info(f"[BlobStorageService] Container '{company_id}' não encontrado. Criando...")
+                    await container_client.create_container()
+                    
+                    # Tenta o upload novamente após criar o container
+                    await blob_client.upload_blob(file_data, overwrite=True)
+                    logger.info(f"[BlobStorageService] Documento salvo em: {full_blob_path} (após criar container)")
+
                 return full_blob_path
                 
         except Exception as e:
