@@ -9,17 +9,21 @@ from backend.app.config.agent_mapping import AGENT_CONFIG
 logger = logging.getLogger("mcp_agent")
 
 class AgentService:
-    def __init__(self, context_retrieval_service: ContextRetrievalService, *args, **kwargs):
+    def __init__(self, context_retrieval_service: ContextRetrievalService, llm_services: dict, *args, **kwargs):
         """
         Inicializa o serviço do agente.
         Recebe o ContextRetrievalService injetado para buscar relatórios antigos no Blob Storage.
+        Recebe llm_services, um dicionário mapeando nomes de serviços para suas instâncias.
+        Ex: {"claude_aws_service": instancia_claude, "azure_openai_service": instancia_azure}
         """
         self.context_retrieval = context_retrieval_service
-        
-        # ... (Outras inicializações de clientes LLM, Azure OpenAI, etc que você já tinha) ...
-        # self.llm_client = kwargs.get("llm_client")
+        self.llm_services = llm_services
 
     def _obter_prompt_base(self, analysis_type: Optional[str]) -> str:
+        """
+        Lê o arquivo Markdown correspondente ao tipo de análise na pasta 'prompts'.
+        Este arquivo dita as regras de negócio e o comportamento geral da IA.
+        """
         prompt_padrao = "Você é um assistente de IA corporativo. Faça uma análise do documento fornecido."
         
         if not analysis_type or analysis_type not in AGENT_CONFIG:
@@ -39,10 +43,6 @@ class AgentService:
             else:
                 logger.warning(f"⚠️ [AgentService] Prompt '{caminho_arquivo.name}' não encontrado fisicamente.")
                 return prompt_padrao
-                
-        except Exception as e:
-            logger.error(f"❌ [AgentService] Erro ao ler prompt base: {e}")
-            return prompt_padrao
                 
         except Exception as e:
             logger.error(f"❌ [AgentService] Erro ao ler prompt base '{caminho_arquivo}': {e}")
@@ -91,29 +91,44 @@ class AgentService:
         
         return prompt
 
-    # ------------------------------------------------------------------------
-    # EXEMPLO DE COMO SUAS FUNÇÕES PRINCIPAIS DEVERÃO CHAMAR O _montar_prompt
-    # ------------------------------------------------------------------------
-    
     async def executar_analise(self, task_payload: dict, texto_extraido: str) -> str:
         """
-        Função principal que orquestra a chamada do LLM.
+        Função principal que orquestra a chamada do LLM consultando o AGENT_CONFIG.
         """
-        logger.info(f"[AgentService] Iniciando análise para o job {task_payload.get('job_id')}")
+        job_id = task_payload.get('job_id')
+        analysis_type = task_payload.get("analysis_type")
+        logger.info(f"[AgentService] Iniciando análise para o job {job_id}")
         
-        # 1. Monta o super prompt (ATENÇÃO: Agora com o 'await'!)
+        # 1. Monta o super prompt
         mega_prompt = await self._montar_prompt(
             texto_documento=texto_extraido,
-            analysis_type=task_payload.get("analysis_type"),
+            analysis_type=analysis_type,
             comentario_extra=task_payload.get("comentario_extra"),
             company_id=task_payload.get("company_id"),
             project_id=task_payload.get("project_id"),
-            context_used=task_payload.get("context_used", {}), # Injeta o contexto da fila!
+            context_used=task_payload.get("context_used", {}), 
             group_ids=task_payload.get("group_ids")
         )
         
-        # 2. Chama o LLM (Azure OpenAI, por exemplo)
-        # resposta_llm = await self._chamar_llm(mega_prompt)
-        # return resposta_llm
+        # 2. 🚀 ROTEAMENTO DINÂMICO DA LLM (Usando o AGENT_CONFIG)
+        config_agente = AGENT_CONFIG.get(analysis_type)
+        if not config_agente:
+            raise ValueError(f"Tipo de análise '{analysis_type}' não encontrado no AGENT_CONFIG.")
+
+        nome_servico = config_agente.get("service")
+        nome_modelo = config_agente.get("llm_model")
+
+        # Buscamos a instância do serviço (injetada no __init__)
+        llm_service = self.llm_services.get(nome_servico)
+        if not llm_service:
+            raise ValueError(f"Serviço LLM '{nome_servico}' não foi registrado no llm_services do AgentService.")
+
+        logger.info(f"🧠 [AgentService] Delegando job {job_id} para o serviço '{nome_servico}' com modelo '{nome_modelo}'")
+
+        # 3. Chama o serviço especialista passando o prompt final e qual modelo ele deve usar
+        resposta_llm = await llm_service.gerar_texto(
+            prompt=mega_prompt, 
+            modelo=nome_modelo
+        )
         
-        return mega_prompt # Retornando o prompt apenas para fins didáticos neste exemplo
+        return resposta_llm
