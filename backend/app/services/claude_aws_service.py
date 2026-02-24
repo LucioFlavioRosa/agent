@@ -33,16 +33,7 @@ class AnthropicClaudeProvider(ILLMProvider):
         max_token_out: int = 20000,
         job_id: Optional[str] = None
     ) -> Dict[str, Any]:
-        modelo_final = model_name or "claude-3-opus-20240229"
-        # ... resto do código continua igual ...
-        job_id_final = job_id or str(uuid.uuid4())
-        prompt_sistema = carregar_prompt(tipo_tarefa)
-        
-        mensagens = [
-            {"role": "user", "content": f"--- CÓDIGO PARA ANÁLISE ---\n{prompt_principal}"},
-        ]
-        if instrucoes_extras.strip():
-            mensagens.append({"role": "user", "content": f"--- INSTRUÇÕES EXTRAS ---\n{instrucoes_extras}"})
+       
         try:
             print(f"[Claude Handler] Chamando o modelo: '{modelo_final}'")
             response = self.anthropic_client.messages.create(
