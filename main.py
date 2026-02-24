@@ -20,7 +20,7 @@ logger = logging.getLogger("mcp_worker")
 vault_urls = [
     settings.AZURE_INFRA_VAULT_URL,
     settings.AZURE_LLM_VAULT_URL,
-    settings.AZURE_PROJECTS_VAULT_URL
+    #settings.AZURE_PROJECTS_VAULT_URL
 ]
 
 # 2. Instanciamos o Vault
