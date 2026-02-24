@@ -7,9 +7,13 @@ from azure.storage.queue.aio import QueueClient
 from backend.app.services.vault_service import VaultService
 from backend.app.services.blob_storage_service import BlobStorageService
 
-# 🚀 NOVO: Importamos os serviços do Agente e de Contexto
+# Importamos os serviços do Agente e de Contexto
 from backend.app.services.context_retrieval_service import ContextRetrievalService
 from backend.app.services.agent_service import AgentService
+
+# 🚀 NOVO 1: Importamos os provedores de LLM
+# Crie este arquivo/classe depois para implementar a chamada real para a AWS
+from backend.app.services.claude_aws_service import ClaudeAWSService 
 
 logger = logging.getLogger("mcp_queue_service")
 
@@ -27,13 +31,26 @@ class QueueService:
         self.max_concurrent_workers = max_concurrent_workers
         self.internal_queue = asyncio.Queue(maxsize=max_concurrent_workers * 2)
         
-        # 🚀 NOVO: Instanciamos a inteligência do Agente e do Contexto AQUI
-        # Eles ficarão vivos na memória do QueueService, prontos para processar as mensagens.
+        # 🚀 NOVO 2: Instanciar os provedores de LLM
+        # Passamos o vault para ele caso ele precise buscar chaves da AWS lá
+        self.claude_service = ClaudeAWSService(vault_service=self.vault_service)
+        
+        # 🚀 NOVO 3: Criar o "Registro de LLMs"
+        # As chaves deste dicionário DEVEM bater exatamente com a string "service" no seu AGENT_CONFIG
+        llm_registry = {
+            "claude_aws_service": self.claude_service,
+            # "azure_openai_service": AzureOpenAIService(...) -> Para o futuro!
+        }
+
+        # Instanciamos a inteligência de Contexto
         self.context_retrieval_service = ContextRetrievalService(
             blob_storage_service=self.blob_storage_service
         )
+        
+        # 🚀 NOVO 4: Instanciamos o Agente passando o Registro de LLMs
         self.agent_service = AgentService(
-            context_retrieval_service=self.context_retrieval_service
+            context_retrieval_service=self.context_retrieval_service,
+            llm_services=llm_registry
         )
 
     async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
@@ -49,7 +66,7 @@ class QueueService:
             
             logger.info(f"🔥 [Worker-{worker_id}] Iniciando job: {job_id}")
             
-            # 2. ATUALIZAÇÃO: Fazer o download do arquivo ATUAL (o .docx que o usuário enviou) para a RAM, se existir
+            # Baixa o arquivo ATUAL (o .docx que o usuário enviou) para a RAM, se existir
             file_bytes = None
             texto_extraido = ""
             if blob_path:
@@ -65,19 +82,16 @@ class QueueService:
                 # texto_extraido = await self.agent_service.extrair_texto_docx(file_bytes)
 
             
-            # 3. 🚀 ATUALIZAÇÃO: Chamar o Agente de IA com o payload completo!
+            # Chamar o Agente de IA com o payload completo
             logger.info(f"🧠 [Worker-{worker_id}] Iniciando análise com IA...")
             
-            # Passamos o task_data (que contém o context_used que veio da rota /start)
-            # E passamos o texto_extraido (o documento atual, se houver)
             resultado_markdown = await self.agent_service.executar_analise(
                 task_payload=task_data,
                 texto_extraido=texto_extraido
             )
             
-            # 4. (Futuro) Aqui você salvaria o resultado_markdown de volta no Blob Storage 
-            # com o nome do job_id, e chamaria o Webhook do backend avisando que terminou.
-            # ...
+            # (Futuro) Aqui você vai salvar 'resultado_markdown' de volta no Blob Storage 
+            # com o nome do output_filename e chamar o Webhook avisando que terminou.
             
             # Deleta a mensagem após o processamento com sucesso
             await queue_client.delete_message(msg)
