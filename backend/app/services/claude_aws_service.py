@@ -3,9 +3,7 @@ import uuid
 import anthropic
 from datetime import datetime
 from typing import Optional, Dict, Any
-from domain.interfaces.llm_provider_interface import ILLMProvider
 from services.azure_secret_manager import AzureSecretManager, VaultType
-from tools.prompt_utils import carregar_prompt
 
 class AnthropicClaudeProvider(ILLMProvider):
     
