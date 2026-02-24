@@ -32,23 +32,32 @@ class VaultService:
         self.cache = VaultCache()
 
     async def get_secret(self, base_name: str, company_id: str, group_id: Optional[str] = None) -> Optional[str]:
-        # Define as duas chaves que vamos tentar buscar
+        """
+        Busca um segredo no Key Vault usando fallback entre company_id e group_id.
+        - Tenta buscar o segredo com nome: base_name-company_id-group_id (se group_id fornecido)
+        - Se não encontrar, tenta base_name-company_id
+        - Busca em todos os cofres disponíveis (self.vault_urls)
+        - Usa cache para otimizar chamadas
+        - Retorna o valor do segredo ou None se não encontrado
+        """
         secret_name_full = f"{base_name}-{company_id}-{group_id}" if group_id else f"{base_name}-{company_id}"
         fallback_secret_name = f"{base_name}-{company_id}"
-        
         names_to_try = [secret_name_full]
         if group_id:
             names_to_try.append(fallback_secret_name)
+
+        logger.debug(f"[VaultService] Tentando buscar segredo: {secret_name_full} e fallback: {fallback_secret_name}")
 
         for secret_name in names_to_try:
             # 1. Tenta no Cache primeiro
             cached_value = self.cache.get(secret_name)
             if cached_value:
+                logger.info(f"[VaultService] Segredo '{secret_name}' encontrado no cache.")
                 return cached_value
 
             # 2. Se não está no cache, tenta em todos os cofres
             for url in self.vault_urls:
-                # Usando async with para garantir que a conexão feche corretamente
+                logger.debug(f"[VaultService] Tentando buscar segredo '{secret_name}' em '{url}'")
                 async with SecretClient(vault_url=url, credential=self.credential) as client:
                     try:
                         secret = await client.get_secret(secret_name)
@@ -56,6 +65,7 @@ class VaultService:
                         self.cache.set(secret_name, secret.value)
                         return secret.value
                     except ResourceNotFoundError:
+                        logger.debug(f"[VaultService] Segredo '{secret_name}' não encontrado em '{url}'")
                         continue # Não achou neste cofre, tenta o próximo
                     except Exception as e:
                         logger.error(f"❌ [VAULT] Erro ao buscar em {url}: {e}")
