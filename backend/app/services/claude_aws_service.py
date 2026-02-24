@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from services.azure_secret_manager import AzureSecretManager, VaultType
 
-class AnthropicClaudeProvider(ILLMProvider):
+class ClaudeAWSService():
     
     def __init__(self, secret_manager: Optional[AzureSecretManager] = None):
         
