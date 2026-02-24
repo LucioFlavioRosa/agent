@@ -165,6 +165,7 @@ async def start_analysis(
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None),
+    base_job_id: Optional[str] = Form(None), 
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     # 1. Log recebimento do payload
@@ -232,25 +233,55 @@ async def start_analysis(
         logger.error(f"Erro ao validar permissões de ação: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
-    # 6. Busca configuração do agente via MCPConfigService
-    agent_cfg = MCPConfigService.get_agent_config(analysis_type)
-    if not agent_cfg or not agent_cfg.mcp_service_url:
-        log_error(
-            context="get_agent_config",
-            error_message=f"Configuração do agente '{analysis_type}' inválida ou URL do MCP ausente.",
-            exception=None,
-            job_id=None,
-            project_id=project_id
-        )
-        logger.error(f"Configuração do agente '{analysis_type}' inválida ou URL do MCP ausente.")
-        raise HTTPException(status_code=500, detail=f"Configuração do agente '{analysis_type}' não disponível.")
-    log_validation_step(
-        step="get_agent_config",
-        status="success",
-        details=f"Configuração do agente '{analysis_type}' carregada.",
-        job_id=None,
-        project_id=project_id
-    )
+    # ==========================================
+    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
+    # ==========================================
+    reports_to_read = ANALYSIS_CONTEXT_CONFIG.get(analysis_type, [])
+    context_used = {}
+    if base_job_id:
+        # ---------------------------------------------------------
+        # CENÁRIO A: VIAGEM NO TEMPO (Usuário escolheu um relatório antigo)
+        # ---------------------------------------------------------
+        past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
+        if not past_report:
+            raise HTTPException(status_code=404, detail="Relatório base histórico não encontrado.")
+            
+        # Pega o contexto exato que foi usado para gerar aquele relatório antigo
+        past_context = past_report.get("context_used", {})
+        
+        for category in reports_to_read:
+            # Se a categoria que eu preciso ler é a mesma do relatório que o usuário selecionou, uso o próprio ID dele
+            if category == past_report.get("report_category"):
+                context_used[f"{category}_job_id"] = base_job_id
+            else:
+                # Senão, pego do passado congelado
+                dependency_job_id = past_context.get(f"{category}_job_id")
+                if not dependency_job_id:
+                     raise HTTPException(
+                        status_code=400, 
+                        detail=f"O relatório histórico selecionado não possui a dependência de '{category}'."
+                    )
+                context_used[f"{category}_job_id"] = dependency_job_id
+
+    else:
+        # ---------------------------------------------------------
+        # CENÁRIO B: FLUXO NORMAL (Pega o mais recente do projeto)
+        # ---------------------------------------------------------
+        project_doc = await mongo_service.get_project_by_id(project_id)
+        latest_reports = getattr(project_doc, "latest_reports", {})
+        if not isinstance(latest_reports, dict) and hasattr(latest_reports, "dict"):
+            latest_reports = latest_reports.dict()
+        elif not latest_reports:
+            latest_reports = {}
+
+        for category in reports_to_read:
+            dependency_job_id = latest_reports.get(category)
+            if not dependency_job_id:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Não é possível iniciar '{analysis_type}'. O relatório '{category}' ainda não foi gerado."
+                )
+            context_used[f"{category}_job_id"] = dependency_job_id
 
     # 7. Gera job_id único para rastreamento da execução
     job_id = str(uuid.uuid4())
