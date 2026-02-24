@@ -128,7 +128,9 @@ class AgentService:
         # 3. Chama o serviço especialista passando o prompt final e qual modelo ele deve usar
         resposta_llm = await llm_service.gerar_texto(
             prompt=mega_prompt, 
-            modelo=nome_modelo
+            modelo=nome_modelo,
+            company_id=task_payload.get("company_id"), 
+            group_id=task_payload.get("group_ids")
         )
         
         return resposta_llm
