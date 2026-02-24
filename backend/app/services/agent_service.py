@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Optional
 import re
 
-# Supondo que você salvou o serviço que criamos no passo anterior neste caminho:
 from backend.app.services.context_retrieval_service import ContextRetrievalService
 
 logger = logging.getLogger("mcp_agent")
