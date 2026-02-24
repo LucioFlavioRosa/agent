@@ -4,6 +4,7 @@ from typing import Optional
 import re
 
 from backend.app.services.context_retrieval_service import ContextRetrievalService
+from backend.app.config.agent_mapping import AGENT_CONFIG
 
 logger = logging.getLogger("mcp_agent")
 
@@ -19,29 +20,29 @@ class AgentService:
         # self.llm_client = kwargs.get("llm_client")
 
     def _obter_prompt_base(self, analysis_type: Optional[str]) -> str:
-        """
-        Lê o arquivo Markdown correspondente ao tipo de análise na pasta 'prompts'.
-        Este arquivo dita as regras de negócio e o comportamento geral da IA.
-        """
         prompt_padrao = "Você é um assistente de IA corporativo. Faça uma análise do documento fornecido."
         
-        if not analysis_type:
+        if not analysis_type or analysis_type not in AGENT_CONFIG:
+            logger.warning(f"⚠️ [AgentService] Agente '{analysis_type}' não mapeado. Usando fallback.")
             return prompt_padrao
 
-        # Sanitização contra Path Traversal
-        nome_seguro = re.sub(r'[^a-zA-Z0-9_-]', '', analysis_type)
+        # 🚀 Puxa o nome do arquivo do nosso mapeamento
+        nome_arquivo_prompt = AGENT_CONFIG[analysis_type]["prompt_file"]
         
-        # Descobre o caminho da pasta prompts (backend/app/prompts/)
         diretorio_base = Path(__file__).resolve().parent.parent
-        caminho_arquivo = diretorio_base / "prompts" / f"{nome_seguro}.md"
+        caminho_arquivo = diretorio_base / "prompts" / nome_arquivo_prompt
         
         try:
             if caminho_arquivo.exists() and caminho_arquivo.is_file():
-                logger.info(f"[AgentService] Carregando prompt base (comportamento) de: {caminho_arquivo.name}")
+                logger.info(f"[AgentService] Carregando prompt base: {caminho_arquivo.name}")
                 return caminho_arquivo.read_text(encoding="utf-8")
             else:
-                logger.warning(f"⚠️ [AgentService] Prompt base não encontrado: {caminho_arquivo.name}. Usando fallback.")
+                logger.warning(f"⚠️ [AgentService] Prompt '{caminho_arquivo.name}' não encontrado fisicamente.")
                 return prompt_padrao
+                
+        except Exception as e:
+            logger.error(f"❌ [AgentService] Erro ao ler prompt base: {e}")
+            return prompt_padrao
                 
         except Exception as e:
             logger.error(f"❌ [AgentService] Erro ao ler prompt base '{caminho_arquivo}': {e}")
