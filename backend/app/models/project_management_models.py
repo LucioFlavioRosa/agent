@@ -85,6 +85,7 @@ class ProjectWithRoleItem(BaseModel):
     role: ProjectRole
     description: Optional[str] = None
     created_at: Optional[datetime] = None
+    latest_reports: dict
 
 class LatestReports(BaseModel):
     epics: Optional[str] = None
