@@ -104,6 +104,29 @@ async def start_analysis(
     context_used: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
+    # 🚀 ADIÇÃO: Imprimindo TODAS as variáveis recebidas no payload do Log
+    logger.log_evento(
+        level="INFO",
+        event="api_request_recebido",
+        mensagem="Requisição /start recebida",
+        job_id=job_id,
+        company_id=company_id,
+        project_id=project_id,
+        extra={
+            "payload_recebido": {
+                "group_ids": group_ids,
+                "email": email,
+                "nome_projeto": nome_projeto,
+                "analysis_type": analysis_type,
+                "branch": branch,
+                "repository": repository,
+                "comentario_extra": comentario_extra,
+                "context_used": context_used,
+                "has_file": bool(arquivo_docx),
+                "filename": arquivo_docx.filename if arquivo_docx else None
+            }
+        }
+    )
     logger.log_evento(
         level="INFO",
         event="api_request_recebido",
