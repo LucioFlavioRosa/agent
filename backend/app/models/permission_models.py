@@ -46,9 +46,9 @@ class ProjectPermission(BaseModel):
     company_id: str
     blob_path: Optional[str] = None
     members: List[ProjectMember] = Field(default_factory=list)
-    # CORREÇÃO AQUI: Aceita datetime nativo do Mongo
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    latest_reports: Dict[str, Any] = {}
 
     @validator('members', pre=True, always=True)
     def validate_members(cls, v):
