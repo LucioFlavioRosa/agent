@@ -1,15 +1,21 @@
+
+import io
 import os
-import asyncio
+import docx
 import json
+import httpx
 import base64
-import httpx  # 🚀 IMPORT NOVO (Lembre-se de adicionar no requirements.txt)
+import asyncio
+
 from typing import Optional
 from azure.storage.queue.aio import QueueClient
+
 from backend.app.services.vault_service import VaultService
 from backend.app.services.blob_storage_service import BlobStorageService
 from backend.app.services.context_retrieval_service import ContextRetrievalService
 from backend.app.services.agent_service import AgentService
 from backend.app.services.claude_aws_service import ClaudeAWSService
+
 from backend.app.utils.log_formatter import StructuredLogger
 from backend.app.config.agent_mapping import AGENT_CONFIG
 
@@ -101,12 +107,23 @@ class QueueService:
             
             file_bytes = None
             texto_extraido = ""
+            
             if blob_path_recebido:
                 file_bytes = await self.blob_storage_service.download_document(
                     company_id=company_id,
                     blob_path=blob_path_recebido,
                     group_id=group_ids
                 )
+                try:
+                    doc = docx.Document(io.BytesIO(file_bytes))
+                    # Junta todos os parágrafos do documento separando por quebra de linha
+                    texto_extraido = "\n".join([paragrafo.text for paragrafo in doc.paragraphs])
+                    
+                    logger.log_info_negocio("job_extracao_docx", f"Texto extraído ({len(texto_extraido)} caracteres)", job_id=job_id)
+                except Exception as e:
+                    logger.log_erro("job_extracao_docx_erro", f"Falha ao ler DOCX: {e}", job_id=job_id)
+                    raise Exception(f"Arquivo DOCX corrompido ou formato inválido: {e}")
+                    
             
             logger.log_info_negocio("job_inicio_processamento", f"Iniciando processamento do job", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
