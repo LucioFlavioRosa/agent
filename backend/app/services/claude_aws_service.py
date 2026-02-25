@@ -33,12 +33,13 @@ class ClaudeAWSService:
         model_id = modelo or "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
         
         # ==========================================================
-        # 🚀 CÁLCULO DE TOKENS CORRIGIDO
-        # Usando a variável 'prompt' corretamente e o logger padrão
+        # 🚀 PRINTS RAIZ PARA GARANTIR A VISUALIZAÇÃO NO LOG
         # ==========================================================
         tamanho_texto = len(str(prompt))
         estimativa_tokens_entrada = tamanho_texto // 4
-        logger.info(f"bedrock_request_iniciado | company_id={company_id} | estimativa_entrada_tokens={estimativa_tokens_entrada} | tamanho_texto_chars={tamanho_texto}")
+        
+        print(f"📊 [TOKENS] Tamanho do texto: {tamanho_texto} caracteres | Estimativa de Entrada: ~{estimativa_tokens_entrada} tokens", flush=True)
+        print(f"⏳ [AWS BEDROCK] Iniciando processamento no Claude. Aguardando... (Pode levar de 2 a 5 minutos)", flush=True)
 
         body = {
             "anthropic_version": "bedrock-2023-05-31",
@@ -52,13 +53,9 @@ class ClaudeAWSService:
             "temperature": 0.2,
         }
         
-        # ==========================================================
-        # 🚀 CONFIGURAÇÃO DE TIMEOUT ESTENDIDO (5 MINUTOS)
-        # Impede o erro "Read timeout on endpoint URL"
-        # ==========================================================
         aws_config = Config(
-            read_timeout=300,  # O tempo máximo esperando a resposta da IA (300 segundos)
-            connect_timeout=60, # O tempo para abrir a conexão inicial
+            read_timeout=300, 
+            connect_timeout=60,
             retries={'max_attempts': 1}
         )
 
@@ -69,7 +66,6 @@ class ClaudeAWSService:
                 region_name=aws_region
             )
             
-            # 🚀 PASSANDO O CONFIG PARA O CLIENTE DO BEDROCK AQUI
             async with session.client('bedrock-runtime', config=aws_config) as bedrock_client:
                 response = await bedrock_client.invoke_model(
                     modelId=model_id,
@@ -77,22 +73,25 @@ class ClaudeAWSService:
                     accept='application/json',
                     body=json.dumps(body)
                 )
+                
+                # Se passou da linha de cima, o Claude respondeu!
                 response_body_bytes = await response['body'].read()
                 response_body = json.loads(response_body_bytes)
                 
                 content = response_body.get('content', [])
                 result = content[0].get('text', '') if content else ""
                 
-                # Coletando a quantidade real de tokens que a AWS faturou
                 usage = response_body.get('usage', {})
                 input_tokens = usage.get('input_tokens', 0)
                 output_tokens = usage.get('output_tokens', 0)
                 
-                logger.info(f"llm_invocacao_sucesso | company_id={company_id} | modelo={model_id} | region={aws_region} | input_tokens_reais={input_tokens} | output_tokens_reais={output_tokens}")
+                print(f"✅ [AWS SUCESSO] O Claude terminou o relatório! Tokens Faturados -> Entrada: {input_tokens} | Saída: {output_tokens}", flush=True)
                 
                 return result
                 
         except Exception as e:
+            print(f"❌ [AWS ERRO FATAL] Falha na comunicação com o Bedrock: {e}", flush=True)
+            raise RuntimeError(f"Erro ao comunicar com AWS Bedrock: {e}") from e
             logger.error(f"llm_invocacao_erro | company_id={company_id} | modelo={model_id} | region={aws_region} | erro={str(e)}")
             sys.stdout.flush()
             raise RuntimeError(f"Erro ao comunicar com AWS Bedrock: {e}") from e
