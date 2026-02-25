@@ -40,7 +40,7 @@ class QueueService:
             blob_storage_service=self.blob_storage_service,
             llm_services=llm_registry
         )
-
+        
     async def _notificar_backend(
         self, 
         job_id: str, 
@@ -86,7 +86,7 @@ class QueueService:
         except Exception as e:
             logger.log_erro("webhook_erro_rede", f"Falha de rede ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
 
-   async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
+    async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
         try:
             decoded_str = base64.b64decode(msg.content).decode('utf-8')
             task_data = json.loads(decoded_str)
@@ -132,8 +132,6 @@ class QueueService:
             
         except Exception as e:
             logger.log_erro("erro_processamento_job", f"Erro ao processar mensagem: {e}", extra={"worker_id": worker_id})
-            
-            # 🚀 CHAMA O WEBHOOK AVISANDO DO ERRO FATAL
             try:
                 task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
                 await self._notificar_backend(
@@ -146,7 +144,7 @@ class QueueService:
                 )
             except Exception:
                 pass
-
+    
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
         while True:
