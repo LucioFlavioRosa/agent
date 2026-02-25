@@ -1,4 +1,3 @@
-
 import io
 import os
 import docx
@@ -109,20 +108,22 @@ class QueueService:
             texto_extraido = ""
             
             if blob_path_recebido:
+                # 1. Baixa os bytes
                 file_bytes = await self.blob_storage_service.download_document(
                     company_id=company_id,
                     blob_path=blob_path_recebido,
                     group_id=group_ids
                 )
-                try:
-                    doc = docx.Document(io.BytesIO(file_bytes))
-                    # Junta todos os parágrafos do documento separando por quebra de linha
-                    texto_extraido = "\n".join([paragrafo.text for paragrafo in doc.paragraphs])
-                    
-                    logger.log_info_negocio("job_extracao_docx", f"Texto extraído ({len(texto_extraido)} caracteres)", job_id=job_id)
-                except Exception as e:
-                    logger.log_erro("job_extracao_docx_erro", f"Falha ao ler DOCX: {e}", job_id=job_id)
-                    raise Exception(f"Arquivo DOCX corrompido ou formato inválido: {e}")
+                
+                # 2. Extrai o texto (sem o try/except interno, deixa o except geral capturar)
+                doc = docx.Document(io.BytesIO(file_bytes))
+                texto_extraido = "\n".join([paragrafo.text for paragrafo in doc.paragraphs])
+                
+                # Se o arquivo não tiver texto nenhum, avisamos o log
+                if not texto_extraido.strip():
+                    logger.log_info_negocio("job_extracao_docx_vazio", "DOCX baixado não continha texto legível.", job_id=job_id)
+                else:
+                    logger.log_info_negocio("job_extracao_docx", f"Texto extraído com sucesso ({len(texto_extraido)} caracteres)", job_id=job_id)
                     
             
             logger.log_info_negocio("job_inicio_processamento", f"Iniciando processamento do job", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
