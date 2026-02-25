@@ -67,9 +67,10 @@ class VaultService:
                         self.cache.set(secret_name, secret.value)
                         logger.info(f"vault_secret_encontrado | secret_name={secret_name} | vault_url={url}")
                         return secret.value
-                except ResourceNotFoundError:
+               except ResourceNotFoundError:
                     continue
-                except Exception:
+                except Exception as e:
+                    logger.error(f"vault_secret_erro_acesso | secret_name={secret_name} | vault_url={url} | erro={str(e)}")
                     continue
         logger.info(f"vault_secret_nao_encontrado | base_name={base_name} | company_id={company_id} | group_id={group_id}")
         return None
