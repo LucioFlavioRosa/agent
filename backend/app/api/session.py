@@ -1,10 +1,14 @@
+import json
+import logging
+
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, status, Query
 from fastapi.responses import JSONResponse
+
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.mcp_client_service import MCPClientService
 from backend.app.core.config import settings
-import logging
-import json
+
 
 router = APIRouter()
 logger = logging.getLogger("session_api")
@@ -88,21 +92,41 @@ async def get_project_reports(
     # 6. JOB CONCLUÍDO: DELEGAR LEITURA PARA O MCP
     logger.info(f"[Session] Job {job_id} concluído. Solicitando relatório ao MCP...")
     
-    # Busca dinamicamente qual a URL do App Service que tem o agente que fez esse job
-    agents_config = getattr(settings, 'agents', getattr(settings, 'AGENTS', {}))
-    if isinstance(agents_config, str):
-        try:
-            agents_config = json.loads(agents_config)
-        except Exception:
-            agents_config = {}
+    # ==========================================================
+    # 🚀 LÊ A URL DIRETO DO ARQUIVO mcp_agents.json
+    # ==========================================================
+    agents_config = {}
+    try:
+        # Resolve o caminho absoluto (sobe 3 pastas: api -> app -> backend -> entra em config)
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        config_file_path = base_dir / "config" / "mcp_agents.json"
+        
+        if config_file_path.exists():
+            with open(config_file_path, "r", encoding="utf-8") as f:
+                json_data = json.load(f)
+                # O JSON tem a raiz "agents", então extraímos ela
+                agents_config = json_data.get("agents", {})
+        else:
+            logger.warning(f"[Session] Arquivo não encontrado: {config_file_path}. Tentando fallback.")
             
+    except Exception as e:
+        logger.error(f"[Session] Erro ao ler mcp_agents.json: {e}")
+
+    # Pega as informações específicas do agente que rodou este job
     agente_info = agents_config.get(job.analysis_type, {})
-    mcp_url = agente_info.get("mcp_service_url", getattr(settings, 'MCP_SERVER_BASE_URL', ''))
+    mcp_url = agente_info.get("mcp_service_url")
+
+    # Fallback final de segurança para variável de ambiente (caso o JSON falhe)
+    if not mcp_url:
+        mcp_url = getattr(settings, 'MCP_SERVER_BASE_URL', None)
 
     if not mcp_url:
         logger.error(f"[Session] Não foi possível determinar a URL do MCP para o tipo: {job.analysis_type}")
         raise HTTPException(status_code=500, detail="Configuração de URL do MCP ausente.")
 
+    # ==========================================================
+    # 🚀 FAZ A REQUISIÇÃO PARA O MCP
+    # ==========================================================
     mcp_client = MCPClientService()
     
     try:
