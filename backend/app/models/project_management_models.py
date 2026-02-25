@@ -109,6 +109,7 @@ class ReportHistoryItem(BaseModel):
     created_by_email: str
     created_at: datetime
     context_used: Optional[Dict[str, str]] = Field(default_factory=dict)
+    blob_path: Optional[str] = None
 
 class ReportHistoryResponse(BaseModel):
     history: List[ReportHistoryItem]
