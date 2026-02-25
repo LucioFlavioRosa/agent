@@ -166,7 +166,8 @@ class MongoDBService:
                     "project_name": project_name,
                     "role": role,
                     "description": description,
-                    "created_at": created_at
+                    "created_at": created_at,
+                    "latest_reports": project_doc.get("latest_reports", {})
                 }
             projects = [await _build_project_dict(project_doc, email) async for project_doc in cursor]
             self.logger.info(f"[get_user_projects_with_access] Projetos encontrados: {projects}")
