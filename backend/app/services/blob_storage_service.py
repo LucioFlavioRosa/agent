@@ -66,7 +66,7 @@ class BlobStorageService:
                 caminho_real_blob = blob_path.replace(f"{company_id}/", "", 1)
                 
             async with BlobServiceClient.from_connection_string(conn_str) as blob_service_client:
-                blob_client = blob_service_client.get_blob_client(container=company_id, blob=blob_path)
+                blob_client = blob_service_client.get_blob_client(container=company_id, blob=caminho_real_blob)
                 stream = await blob_client.download_blob()
                 file_bytes = await stream.readall()
                 file_size = len(file_bytes)
