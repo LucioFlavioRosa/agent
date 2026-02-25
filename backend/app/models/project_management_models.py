@@ -1,7 +1,7 @@
 from enum import Enum
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, validator, ConfigDict
 
 
 class ProjectRole(str, Enum):
@@ -88,6 +88,7 @@ class ProjectWithRoleItem(BaseModel):
     latest_reports: dict
 
 class LatestReports(BaseModel):
+    model_config = ConfigDict(extra='allow')
     epics: Optional[str] = None
     features: Optional[str] = None
     timeline: Optional[str] = None
