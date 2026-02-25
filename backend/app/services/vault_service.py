@@ -44,61 +44,53 @@ class VaultService:
         """
         if not name:
             return name
-        # Substitui qualquer coisa que NÃO seja letra, número ou hífen por um hífen '-'
         sanitized = re.sub(r'[^0-9a-zA-Z-]+', '-', name)
-        # Remove hífens sobrando no começo ou no fim
         return sanitized.strip('-')
 
     async def get_secret(self, base_name: str, company_id: str, group_id: Optional[str] = None) -> Optional[str]:
-        # 1. Sanitização das variáveis para evitar erro do Azure
+        logger.info(f"[VaultService] get_secret chamado: base_name='{base_name}', company_id='{company_id}', group_id='{group_id}'")
         safe_company_id = self._sanitize_name(company_id)
         safe_group_id = self._sanitize_name(group_id) if group_id else None
-
-        # 2. Construção dos nomes
         secret_name_full = f"{base_name}-{safe_company_id}-{safe_group_id}" if safe_group_id else f"{base_name}-{safe_company_id}"
         fallback_secret_name = f"{base_name}-{safe_company_id}"
-        
         names_to_try = [secret_name_full]
         if safe_group_id:
             names_to_try.append(fallback_secret_name)
-
-        logger.debug(f"[VaultService] Tentando buscar segredo: {secret_name_full} e fallback: {fallback_secret_name}")
-
+        logger.debug(f"[VaultService] Nomes de segredo para tentar: {names_to_try}")
         for secret_name in names_to_try:
-            # Tenta no Cache primeiro
             cached_value = self.cache.get(secret_name)
             if cached_value:
                 logger.info(f"[VaultService] Segredo '{secret_name}' encontrado no cache.")
                 return cached_value
-
-            # Se não está no cache, tenta em todos os cofres
             for url in self.vault_urls:
-                logger.debug(f"[VaultService] Tentando buscar segredo '{secret_name}' em '{url}'")
+                logger.info(f"[VaultService] Tentando buscar segredo '{secret_name}' em '{url}'")
                 async with SecretClient(vault_url=url, credential=self.credential) as client:
                     try:
                         secret = await client.get_secret(secret_name)
-                        logger.info(f"🔑 [VAULT] Segredo encontrado: {secret_name} em {url}")
+                        logger.info(f"[VaultService] Segredo '{secret_name}' encontrado em '{url}'. Valor: (oculto por segurança)")
                         self.cache.set(secret_name, secret.value)
                         return secret.value
                     except ResourceNotFoundError:
-                        logger.debug(f"[VaultService] Segredo '{secret_name}' não encontrado em '{url}'")
-                        continue 
-                    except Exception as e:
-                        logger.error(f"❌ [VAULT] Erro ao buscar em {url}: {e}")
+                        logger.warning(f"[VaultService] Segredo '{secret_name}' NÃO encontrado em '{url}' (ResourceNotFoundError)")
                         continue
-        
-        logger.warning(f"⚠️ [VAULT] Segredo não encontrado em nenhum cofre para {base_name}.")
+                    except Exception as e:
+                        logger.error(f"[VaultService] Erro ao buscar segredo '{secret_name}' em '{url}': {e}")
+                        continue
+        logger.warning(f"[VaultService] Segredo '{base_name}' não encontrado em nenhum cofre para company_id='{company_id}', group_id='{group_id}'.")
         return None
 
     async def get_queue_connection_string(self) -> Optional[str]:
+        logger.info("[VaultService] get_queue_connection_string chamado. Iniciando busca da connection string da fila.")
         cached = self.cache.get("queue-connection-string")
-        if cached: return cached
-
+        if cached:
+            logger.info("[VaultService] Connection string da fila encontrada no cache.")
+            return cached
         async with SecretClient(vault_url=self.vault_urls[0], credential=self.credential) as client:
             try:
                 secret = await client.get_secret("queue-connection-string")
+                logger.info("[VaultService] Connection string da fila encontrada no Key Vault.")
                 self.cache.set("queue-connection-string", secret.value, ttl=3600)
                 return secret.value
             except Exception as e:
-                logger.error(f"❌ [VAULT] Falha ao buscar connection string da fila: {e}")
+                logger.error(f"[VaultService] Falha ao buscar connection string da fila: {e}")
                 return None
