@@ -6,7 +6,7 @@ AGENT_CONFIG = {
         "service": "claude_aws_service"
     },
     "agent_epics_reviwer_digital": {
-        "prompt_file": "review_epics.md",
+        "prompt_file": "epics.md",
         "output_filename": "epics.md",      
         "llm_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "service": "claude_aws_service"
