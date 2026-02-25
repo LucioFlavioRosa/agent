@@ -415,7 +415,8 @@ async def get_report_history(
             status=doc.get("status"),
             created_by_email=doc.get("created_by_email", "Desconhecido"),
             created_at=doc.get("created_at"),
-            context_used=doc.get("context_used", {})
+            context_used=doc.get("context_used", {}),
+            blob_path=doc.get("blob_path")
         ))
 
     return ReportHistoryResponse(history=historico)
