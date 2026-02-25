@@ -1,6 +1,8 @@
+import os
 import asyncio
 import json
 import base64
+import httpx  # 🚀 IMPORT NOVO (Lembre-se de adicionar no requirements.txt)
 from typing import Optional
 from azure.storage.queue.aio import QueueClient
 from backend.app.services.vault_service import VaultService
@@ -38,15 +40,47 @@ class QueueService:
             llm_services=llm_registry
         )
 
+    # 🚀 NOVO MÉTODO DE NOTIFICAÇÃO
+    async def _notificar_backend(self, job_id: str, company_id: str, project_id: str, status: str):
+        """
+        Envia um POST assíncrono para o Backend avisando que o processamento terminou.
+        """
+        webhook_url = os.getenv("BACKEND_WEBHOOK_URL", "https://sua-url-do-backend.com/api/webhook/job-status")
+        
+        if "sua-url-do-backend" in webhook_url:
+            logger.log_info_negocio("webhook_ignorado", "URL de webhook não configurada no env, pulando notificação.", job_id=job_id, company_id=company_id)
+            return
+
+        payload = {
+            "job_id": job_id,
+            "company_id": company_id,
+            "project_id": project_id,
+            "status": status # "done" ou "error"
+        }
+
+        logger.log_info_negocio("webhook_iniciado", f"Enviando status '{status}' para o backend", job_id=job_id, company_id=company_id)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(webhook_url, json=payload, timeout=15.0)
+                response.raise_for_status() 
+                logger.log_info_negocio("webhook_sucesso", "Backend notificado com sucesso", job_id=job_id, company_id=company_id)
+                
+        except Exception as e:
+            logger.log_erro("webhook_erro", f"Falha ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
+
     async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
         try:
             decoded_str = base64.b64decode(msg.content).decode('utf-8')
             task_data = json.loads(decoded_str)
             job_id = task_data.get('job_id')
             company_id = task_data.get('company_id')
+            project_id = task_data.get('project_id')
             group_ids = task_data.get('group_ids')
             blob_path = task_data.get('blob_path')
+            
             logger.log_info_negocio("job_recebido_fila", f"Job recebido da fila", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
+            
             file_bytes = None
             texto_extraido = ""
             if blob_path:
@@ -55,15 +89,41 @@ class QueueService:
                     blob_path=blob_path,
                     group_id=group_ids
                 )
+            
             logger.log_info_negocio("job_inicio_processamento", f"Iniciando processamento do job", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
+            
             resultado_markdown = await self.agent_service.executar_analise(
                 task_payload=task_data,
                 texto_extraido=texto_extraido
             )
+            
             logger.log_info_negocio("job_finalizado", f"Job finalizado com sucesso", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
+            
+            # 1. Apaga a mensagem da fila para não reprocessar
             await queue_client.delete_message(msg)
+            
+            # 2. 🚀 Notifica o Backend (Status: done)
+            await self._notificar_backend(
+                job_id=job_id,
+                company_id=company_id,
+                project_id=project_id,
+                status="done"
+            )
+            
         except Exception as e:
             logger.log_erro("erro_processamento_job", f"Erro ao processar mensagem: {e}", extra={"worker_id": worker_id})
+            
+            # 🚀 Tenta extrair os dados da mensagem para avisar o backend do erro!
+            try:
+                task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
+                await self._notificar_backend(
+                    job_id=task_data.get("job_id"),
+                    company_id=task_data.get("company_id"),
+                    project_id=task_data.get("project_id"),
+                    status="error"
+                )
+            except Exception:
+                pass # Se der erro na leitura do JSON, ignora e segue
 
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
