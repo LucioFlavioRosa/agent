@@ -106,8 +106,14 @@ async def mcp_job_complete_webhook(
                     update_data[f"latest_reports.{dep_category}"] = past_job_id
 
             # Executa o update no projeto com todos os campos de uma vez
+            try:
+                obj_project_id = ObjectId(payload.project_id)
+            except Exception:
+                obj_project_id = payload.project_id
+
+            # Executa o update no projeto com todos os campos de uma vez
             await mongo_service.db.projects.update_one(
-                {"_id": payload.project_id}, 
+                {"_id": obj_project_id}, 
                 {"$set": update_data}
             )
             msg += " | Ponteiro do projeto (e seu contexto) atualizados."
