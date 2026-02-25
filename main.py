@@ -1,8 +1,11 @@
-import json
-import asyncio
 import os
+import re
 import sys
 import time
+import json
+import asyncio
+import unicodedata
+
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -32,6 +35,15 @@ queue_service = QueueService(
     blob_storage_service=blob_storage_service,
     queue_name=settings.QUEUE_NAME
 )
+
+def sanitize_filename(filename: str) -> str:
+    if not filename:
+        return "documento_base.docx"
+        
+    nfkd_form = unicodedata.normalize('NFKD', filename)
+    sem_acento = u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
+    limpo = re.sub(r'[^a-zA-Z0-9_.-]', '_', sem_acento)
+    return re.sub(r'_+', '_', limpo).lower()
 
 # --- LIFESPAN ---
 @asynccontextmanager
@@ -133,7 +145,7 @@ async def start_analysis(
     blob_path = None
     
     if arquivo_docx:
-        nome_arquivo = arquivo_docx.filename
+        nome_arquivo = sanitize_filename(arquivo_docx.filename)
         logger.log_evento(
             level="INFO",
             event="api_file_upload_iniciado",
