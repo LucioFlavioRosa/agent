@@ -60,6 +60,11 @@ class BlobStorageService:
             if not conn_str:
                 logger.error(f"blob_download_erro | company_id={company_id} | blob_path={blob_path} | motivo=connection_string_nao_encontrada")
                 raise Exception("Connection string do Blob Storage não encontrada.")
+
+            caminho_real_blob = blob_path
+            if blob_path.startswith(f"{company_id}/"):
+                caminho_real_blob = blob_path.replace(f"{company_id}/", "", 1)
+                
             async with BlobServiceClient.from_connection_string(conn_str) as blob_service_client:
                 blob_client = blob_service_client.get_blob_client(container=company_id, blob=blob_path)
                 stream = await blob_client.download_blob()
