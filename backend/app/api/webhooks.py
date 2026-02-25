@@ -91,22 +91,25 @@ async def mcp_job_complete_webhook(
             # 🚀 NOVO: Se este relatório foi gerado usando contexto do passado, 
             # o projeto inteiro deve retroceder para esses ponteiros antigos também.
             
-            # Prepara o objeto de atualização
+            # Prepara o objeto de atualização com a VERSÃO NOVA gerada agora
             update_data = {
                 f"latest_reports.{report_category}": job_id,
                 "updated_at": datetime.utcnow()
             }
             
             # Se existia contexto, nós empurramos ele para o latest_reports também.
-            # Ex: Se risks usou a Timeline V2, o latest_reports.timeline do projeto vira a V2.
             for key, past_job_id in context_used.items():
                 if key.endswith("_job_id"):
-                    # Extrai a categoria da chave (ex: de "epics_job_id" tira "epics")
+                    # Extrai a categoria da chave (ex: de "features_job_id" tira "features")
                     dep_category = key.replace("_job_id", "")
-                    update_data[f"latest_reports.{dep_category}"] = past_job_id
+                    
+                    # 🚀 A CORREÇÃO: Nunca sobrescrever a categoria atual com a versão do passado!
+                    if dep_category != report_category:
+                        update_data[f"latest_reports.{dep_category}"] = past_job_id
 
-            # Executa o update no projeto com todos os campos de uma vez
+            # Conversão segura para ObjectId caso o banco o exija
             try:
+                from bson import ObjectId
                 obj_project_id = ObjectId(payload.project_id)
             except Exception:
                 obj_project_id = payload.project_id
