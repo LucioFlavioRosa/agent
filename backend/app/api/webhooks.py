@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, status, Depends
 
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.mongodb_service import MongoDBService
-from backend.app.config.agent_mapping import AGENT_TO_CATEGORY
+from backend.config.agent_mapping import AGENT_TO_CATEGORY
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
