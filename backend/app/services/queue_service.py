@@ -55,7 +55,7 @@ class QueueService:
         Envia o payload EXATO que o JobCompletePayload do FastAPI espera.
         """
         # Agora pegamos apenas a BASE_URL nas variáveis de ambiente
-        backend_base_url = os.getenv("BACKEND_BASE_URL", "http://host.docker.internal:8000").rstrip('/')
+        backend_base_url = os.getenv("BACKEND_WEBHOOK_URL", "http://host.docker.internal:8000").rstrip('/')
         
         # Montamos a URL exata da rota do backend
         webhook_url = f"{backend_base_url}/internal/jobs/{job_id}/complete"
