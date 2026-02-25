@@ -9,12 +9,14 @@ from azure.keyvault.secrets.aio import SecretClient
 from backend.app.services.vault_service import VaultService
 
 logger = logging.getLogger("mcp_claude_aws")
+logger.setLevel(logging.INFO)
 
 class ClaudeAWSService:
     def __init__(self, vault_service: VaultService):
         self.vault_service = vault_service
 
     async def gerar_texto(self, prompt: str, modelo: str, company_id: str, group_id: Optional[str] = None) -> str:
+        print(f"🚀 [TESTE DEBUG] Chegou na função da AWS! Empresa: {company_id}", flush=True)
         logger.info(f"llm_invocacao_iniciada | company_id={company_id} | group_id={group_id} | modelo={modelo}")
         
         aws_access_key_id = await self.vault_service.get_secret("aws-access-key-id", company_id, group_id)
