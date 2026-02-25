@@ -1,4 +1,5 @@
-import redis.asyncio as redis  # Importação da versão assíncrona
+import redis.asyncio as redis
+from redis.asyncio.cluster import RedisCluster
 import uuid
 import json
 from datetime import datetime
@@ -12,13 +13,11 @@ from backend.app.models.permission_models import UserPermissionCache
 class RedisSessionService:
     def __init__(self):
         self.logger = logging.getLogger("RedisSessionService")
-        
-        # Lê direto do settings carregado na memória
         redis_use_ssl_val = settings.REDIS_USE_SSL
         if isinstance(redis_use_ssl_val, str):
              redis_use_ssl_val = redis_use_ssl_val.lower() in ["true", "1", "yes"]
 
-        self.redis_client = redis.Redis(
+        self.redis_client = RedisCluster(
             host=settings.REDIS_HOST,
             port=int(settings.REDIS_PORT or 6379),
             password=settings.REDIS_PASSWORD,
