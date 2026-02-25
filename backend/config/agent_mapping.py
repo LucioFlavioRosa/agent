@@ -1,4 +1,3 @@
-
 AGENT_TO_CATEGORY = {
     "agent_epics_generator_digital": "epics",
     "agent_epics_reviwer_digital": "epics",
