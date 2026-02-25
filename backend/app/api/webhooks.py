@@ -8,22 +8,10 @@ from fastapi import APIRouter, HTTPException, Request, status, Depends
 
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.mongodb_service import MongoDBService
+from backend.app.config.agent_mapping import AGENT_TO_CATEGORY
 
 router = APIRouter()
 logger = logging.getLogger("webhooks_api")
-
-# ---------------------------------------------------------
-# 1. CARREGAR O ARQUIVO DE MAPEAMENTO DE AGENTES
-# ---------------------------------------------------------
-CAMINHO_JSON = os.path.join(os.path.dirname(__file__), "../../../config/agent_to_report_mapping.json")
-
-try:
-    with open(CAMINHO_JSON, 'r') as f:
-        AGENT_TO_CATEGORY = json.load(f)
-    logger.info(f"[Webhook] Mapeamento de agentes carregado com sucesso: {len(AGENT_TO_CATEGORY)} agentes.")
-except Exception as e:
-    logger.error(f"[Webhook] Erro ao carregar mapeamento de agentes: {e}")
-    AGENT_TO_CATEGORY = {}
 
 def get_redis_service() -> RedisSessionService:
     return RedisSessionService()
