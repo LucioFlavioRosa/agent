@@ -1,7 +1,5 @@
 import json
 import asyncio
-import logging
-import logging.config
 import os
 import sys
 import time
@@ -11,67 +9,10 @@ from typing import Optional
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 
-# --- CONFIGURAÇÃO DE LOGGING ESTRUTURADO ---
-class StructuredLogger(logging.Logger):
-    def _log_struct(self, event, extra=None, level=logging.INFO, **kwargs):
-        log_record = {
-            "event": event,
-            "level": logging.getLevelName(level),
-            "timestamp": time.strftime('%Y-%m-%dT%H:%M:%S%z'),
-        }
-        if extra:
-            log_record.update(extra)
-        self.log(level, json.dumps(log_record), **kwargs)
+from backend.app.utils.log_formatter import StructuredLogger
 
-    def info_struct(self, event, extra=None):
-        self._log_struct(event, extra=extra, level=logging.INFO)
-
-    def error_struct(self, event, extra=None):
-        self._log_struct(event, extra=extra, level=logging.ERROR)
-
-    def debug_struct(self, event, extra=None):
-        self._log_struct(event, extra=extra, level=logging.DEBUG)
-
-# --- Definição do formato estruturado global ---
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-LOG_FORMAT = '{"timestamp": "%(asctime)s", "level": "%(levelname)s", "logger": "%(name)s", "message": %(message)s}'
-
-logging_config = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "structured": {
-            "format": LOG_FORMAT,
-            "datefmt": "%Y-%m-%dT%H:%M:%S%z"
-        }
-    },
-    "handlers": {
-        "stdout": {
-            "class": "logging.StreamHandler",
-            "formatter": "structured",
-            "stream": sys.stdout
-        }
-    },
-    "root": {
-        "handlers": ["stdout"],
-        "level": LOG_LEVEL
-    },
-    "loggers": {
-        "mcp_worker": {
-            "handlers": ["stdout"],
-            "level": LOG_LEVEL,
-            "propagate": False
-        },
-        "uvicorn": {
-            "handlers": ["stdout"],
-            "level": LOG_LEVEL,
-            "propagate": False
-        }
-    }
-}
-logging.config.dictConfig(logging_config)
-logging.setLoggerClass(StructuredLogger)
-logger = logging.getLogger("mcp_worker")
+# Instanciamos o logger passando o nome do módulo
+logger = StructuredLogger("mcp_worker")
 
 # --- IMPORTAÇÃO DE CLASSES E CONFIGURAÇÕES ---
 from backend.app.services.vault_service import VaultService
@@ -95,16 +36,19 @@ queue_service = QueueService(
 # --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info_struct("worker_task_iniciado")
+    # Usando o método log_evento da sua classe oficial
+    logger.log_evento("INFO", "worker_task_iniciado", "Iniciando worker em background")
     worker_task = asyncio.create_task(queue_service.start_worker())
+    
     yield
-    logger.info_struct("worker_task_cancelando")
+    
+    logger.log_evento("INFO", "worker_task_cancelando", "Sinal de parada recebido")
     worker_task.cancel()
     try:
         await worker_task
-        logger.info_struct("worker_task_finalizado")
+        logger.log_evento("INFO", "worker_task_finalizado", "Worker finalizado com sucesso")
     except asyncio.CancelledError:
-        logger.info_struct("worker_task_cancelled_success")
+        logger.log_evento("INFO", "worker_task_cancelled_success", "Worker cancelado com sucesso")
 
 app = FastAPI(title="MCP Queue Worker", lifespan=lifespan)
 
@@ -112,17 +56,21 @@ app = FastAPI(title="MCP Queue Worker", lifespan=lifespan)
 @app.middleware("http")
 async def log_request_middleware(request: Request, call_next):
     start_time = time.time()
-    logger.info_struct(
-        "http_request_iniciada",
-        extra={
-            "method": request.method,
-            "path": request.url.path
-        }
+    
+    logger.log_evento(
+        level="INFO",
+        event="http_request_iniciada",
+        mensagem=f"Recebendo requisição HTTP",
+        extra={"method": request.method, "path": request.url.path}
     )
+    
     response = await call_next(request)
+    
     process_time = round((time.time() - start_time) * 1000, 2)
-    logger.info_struct(
-        "http_request_finalizada",
+    logger.log_evento(
+        level="INFO",
+        event="http_request_finalizada",
+        mensagem="Requisição HTTP concluída",
         extra={
             "method": request.method,
             "path": request.url.path,
@@ -156,22 +104,27 @@ async def start_analysis(
     context_used: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
-    logger.info_struct(
-        "api_request_recebido",
-        extra={
-            "job_id": job_id,
-            "company_id": company_id,
-            "analysis_type": analysis_type,
-            "has_file": bool(arquivo_docx)
-        }
+    logger.log_evento(
+        level="INFO",
+        event="api_request_recebido",
+        mensagem="Requisição /start recebida",
+        job_id=job_id,
+        company_id=company_id,
+        project_id=project_id,
+        extra={"analysis_type": analysis_type, "has_file": bool(arquivo_docx)}
     )
+    
     nome_arquivo = None
     blob_path = None
+    
     if arquivo_docx:
         nome_arquivo = arquivo_docx.filename
-        logger.info_struct(
-            "api_file_upload_iniciado",
-            extra={"job_id": job_id, "filename": nome_arquivo}
+        logger.log_evento(
+            level="INFO",
+            event="api_file_upload_iniciado",
+            mensagem=f"Iniciando upload do arquivo {nome_arquivo}",
+            job_id=job_id,
+            company_id=company_id
         )
         try:
             file_stream = get_file_stream(arquivo_docx)
@@ -183,14 +136,20 @@ async def start_analysis(
                 filename=nome_arquivo,
                 group_id=group_ids
             )
-            logger.info_struct(
-                "api_file_upload_sucesso",
-                extra={"job_id": job_id, "filename": nome_arquivo, "blob_path": blob_path}
+            logger.log_evento(
+                level="INFO",
+                event="api_file_upload_sucesso",
+                mensagem="Arquivo salvo no Blob Storage",
+                job_id=job_id,
+                company_id=company_id,
+                extra={"blob_path": blob_path}
             )
         except Exception as e:
-            logger.error_struct(
-                "api_file_upload_erro",
-                extra={"job_id": job_id, "filename": nome_arquivo, "error": str(e)}
+            logger.log_erro(
+                event="api_file_upload_erro",
+                mensagem=f"Erro ao salvar arquivo no Blob: {e}",
+                job_id=job_id,
+                company_id=company_id
             )
             return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivo no Blob Storage."})
 
@@ -216,23 +175,34 @@ async def start_analysis(
         "blob_path": blob_path,
         "context_used": parsed_context,
     }
-    logger.info_struct(
-        "api_task_enfileirada",
-        extra={"job_id": job_id, "company_id": company_id, "blob_path": blob_path}
+    
+    logger.log_evento(
+        level="INFO",
+        event="api_task_enfileirada",
+        mensagem="Enviando tarefa para a fila",
+        job_id=job_id,
+        company_id=company_id
     )
+    
     try:
         await queue_service.send_message(task_payload)
     except Exception as e:
-        logger.error_struct(
-            "api_task_enfileirada_erro",
-            extra={"job_id": job_id, "error": str(e)}
+        logger.log_erro(
+            event="api_task_enfileirada_erro",
+            mensagem=f"Falha ao enviar para a fila: {e}",
+            job_id=job_id,
+            company_id=company_id
         )
         return JSONResponse(status_code=500, content={"error": "Falha ao enviar tarefa para a fila de processamento."})
 
-    logger.info_struct(
-        "api_request_finalizado",
-        extra={"job_id": job_id, "status": "queued"}
+    logger.log_evento(
+        level="INFO",
+        event="api_request_finalizado",
+        mensagem="Tarefa adicionada à fila com sucesso",
+        job_id=job_id,
+        company_id=company_id
     )
+    
     return JSONResponse(
         status_code=202,
         content={
