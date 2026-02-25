@@ -138,13 +138,21 @@ class QueueService:
             
             await queue_client.delete_message(msg)
             
-            nome_arquivo_saida = AGENT_CONFIG.get(analysis_type, {}).get("output_filename", f"{analysis_type}.md")
+            # Pega as configurações do agente ou usa dicionários vazios como fallback
+            config_do_agente = AGENT_CONFIG.get(analysis_type, {})
+            nome_arquivo_saida = config_do_agente.get("output_filename", f"{analysis_type}.md")
+            
+            categoria_limpa = config_do_agente.get("category")
+            if not categoria_limpa:
+                # Se não tiver 'category' no config, tentamos deduzir pelo nome do arquivo (ex: 'epics.md' -> 'epics')
+                categoria_limpa = nome_arquivo_saida.replace(".md", "")
+            
             await self._notificar_backend(
                 job_id=job_id,
                 company_id=company_id,
                 project_id=project_id,
                 status="done",
-                category=analysis_type, 
+                category=categoria_limpa, # ✅ AGORA VAI SEMPRE LIMPO!
                 blob_path=f"{company_id}/{project_id}/{job_id}/{nome_arquivo_saida}"
             )
             
