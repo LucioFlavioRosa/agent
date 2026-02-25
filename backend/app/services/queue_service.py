@@ -11,6 +11,7 @@ from backend.app.services.context_retrieval_service import ContextRetrievalServi
 from backend.app.services.agent_service import AgentService
 from backend.app.services.claude_aws_service import ClaudeAWSService
 from backend.app.utils.log_formatter import StructuredLogger
+from backend.app.config.agent_mapping import AGENT_CONFIG
 
 logger = StructuredLogger("queue_service")
 
@@ -40,36 +41,52 @@ class QueueService:
             llm_services=llm_registry
         )
 
-    # 🚀 NOVO MÉTODO DE NOTIFICAÇÃO
-    async def _notificar_backend(self, job_id: str, company_id: str, project_id: str, status: str):
+    async def _notificar_backend(
+        self, 
+        job_id: str, 
+        company_id: str, 
+        project_id: str, 
+        status: str,
+        category: str,
+        blob_path: Optional[str] = None,
+        error_message: Optional[str] = None
+    ):
         """
-        Envia um POST assíncrono para o Backend avisando que o processamento terminou.
+        Envia o payload EXATO que o JobCompletePayload do FastAPI espera.
         """
-        webhook_url = os.getenv("BACKEND_WEBHOOK_URL", "https://sua-url-do-backend.com/api/webhook/job-status")
+        # Agora pegamos apenas a BASE_URL nas variáveis de ambiente
+        backend_base_url = os.getenv("BACKEND_BASE_URL", "http://host.docker.internal:8000").rstrip('/')
         
-        if "sua-url-do-backend" in webhook_url:
-            logger.log_info_negocio("webhook_ignorado", "URL de webhook não configurada no env, pulando notificação.", job_id=job_id, company_id=company_id)
-            return
-
+        # Montamos a URL exata da rota do backend
+        webhook_url = f"{backend_base_url}/internal/jobs/{job_id}/complete"
+        
+        # Montamos o dicionário seguindo ESTRITAMENTE o modelo JobCompletePayload
         payload = {
-            "job_id": job_id,
-            "company_id": company_id,
             "project_id": project_id,
-            "status": status # "done" ou "error"
+            "company_id": company_id,
+            "status": status,
+            "category": category, # Exigido pelo Pydantic do backend
+            "blob_path": blob_path,
+            "error_message": error_message
         }
 
-        logger.log_info_negocio("webhook_iniciado", f"Enviando status '{status}' para o backend", job_id=job_id, company_id=company_id)
+        logger.log_info_negocio("webhook_iniciado", f"Chamando webhook: POST {webhook_url}", job_id=job_id, company_id=company_id)
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(webhook_url, json=payload, timeout=15.0)
-                response.raise_for_status() 
-                logger.log_info_negocio("webhook_sucesso", "Backend notificado com sucesso", job_id=job_id, company_id=company_id)
                 
+                # Se o backend devolver 404, 422, 500, isso vai estourar o erro e cair no except
+                response.raise_for_status() 
+                
+                logger.log_info_negocio("webhook_sucesso", f"Backend atualizado com status '{status}'", job_id=job_id, company_id=company_id)
+                
+        except httpx.HTTPStatusError as exc:
+            logger.log_erro("webhook_erro_http", f"O backend rejeitou o webhook. HTTP {exc.response.status_code} - {exc.response.text}", job_id=job_id, company_id=company_id)
         except Exception as e:
-            logger.log_erro("webhook_erro", f"Falha ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
+            logger.log_erro("webhook_erro_rede", f"Falha de rede ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
 
-    async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
+   async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
         try:
             decoded_str = base64.b64decode(msg.content).decode('utf-8')
             task_data = json.loads(decoded_str)
@@ -77,21 +94,23 @@ class QueueService:
             company_id = task_data.get('company_id')
             project_id = task_data.get('project_id')
             group_ids = task_data.get('group_ids')
-            blob_path = task_data.get('blob_path')
+            blob_path_recebido = task_data.get('blob_path') # Esse é o .docx de entrada
+            analysis_type = task_data.get("analysis_type", "unknown")
             
             logger.log_info_negocio("job_recebido_fila", f"Job recebido da fila", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
             file_bytes = None
             texto_extraido = ""
-            if blob_path:
+            if blob_path_recebido:
                 file_bytes = await self.blob_storage_service.download_document(
                     company_id=company_id,
-                    blob_path=blob_path,
+                    blob_path=blob_path_recebido,
                     group_id=group_ids
                 )
             
             logger.log_info_negocio("job_inicio_processamento", f"Iniciando processamento do job", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
+            # O agente executa e salva o documento no Blob
             resultado_markdown = await self.agent_service.executar_analise(
                 task_payload=task_data,
                 texto_extraido=texto_extraido
@@ -99,31 +118,34 @@ class QueueService:
             
             logger.log_info_negocio("job_finalizado", f"Job finalizado com sucesso", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
-            # 1. Apaga a mensagem da fila para não reprocessar
             await queue_client.delete_message(msg)
             
-            # 2. 🚀 Notifica o Backend (Status: done)
+           nome_arquivo_saida = AGENT_CONFIG.get(analysis_type, {}).get("output_filename", f"{analysis_type}.md")
             await self._notificar_backend(
                 job_id=job_id,
                 company_id=company_id,
                 project_id=project_id,
-                status="done"
+                status="done",
+                category=analysis_type, 
+                blob_path=f"{company_id}/{project_id}/{job_id}/{nome_arquivo_saida}"
             )
             
         except Exception as e:
             logger.log_erro("erro_processamento_job", f"Erro ao processar mensagem: {e}", extra={"worker_id": worker_id})
             
-            # 🚀 Tenta extrair os dados da mensagem para avisar o backend do erro!
+            # 🚀 CHAMA O WEBHOOK AVISANDO DO ERRO FATAL
             try:
                 task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
                 await self._notificar_backend(
                     job_id=task_data.get("job_id"),
                     company_id=task_data.get("company_id"),
                     project_id=task_data.get("project_id"),
-                    status="error"
+                    status="error",
+                    category=task_data.get("analysis_type", "unknown"),
+                    error_message=str(e)
                 )
             except Exception:
-                pass # Se der erro na leitura do JSON, ignora e segue
+                pass
 
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
