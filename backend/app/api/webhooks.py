@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from bson import ObjectId
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
@@ -109,7 +110,6 @@ async def mcp_job_complete_webhook(
 
             # Conversão segura para ObjectId caso o banco o exija
             try:
-                from bson import ObjectId
                 obj_project_id = ObjectId(payload.project_id)
             except Exception:
                 obj_project_id = payload.project_id
