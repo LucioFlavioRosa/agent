@@ -80,14 +80,6 @@ async def log_request_middleware(request: Request, call_next):
     )
     return response
 
-# --- FUNÇÃO GERADORA DE STREAM ---
-async def get_file_stream(upload_file: UploadFile, chunk_size: int = 4 * 1024 * 1024):
-    while True:
-        chunk = await upload_file.read(chunk_size)
-        if not chunk:
-            break
-        yield chunk
-
 # --- ENDPOINTS ---
 @app.post("/start")
 async def start_analysis(
@@ -150,12 +142,14 @@ async def start_analysis(
             company_id=company_id
         )
         try:
-            file_stream = get_file_stream(arquivo_docx)
+            # 🚀 A MÁGICA ACONTECE AQUI: Lemos os bytes reais do arquivo de uma vez
+            file_bytes = await arquivo_docx.read()
+            
             blob_path = await blob_storage_service.save_document(
                 company_id=company_id,
                 project_id=project_id,
                 job_id=job_id,
-                file_data=file_stream,
+                file_data=file_bytes, # 🚀 Enviamos os bytes diretamente para o serviço!
                 filename=nome_arquivo,
                 group_id=group_ids
             )
