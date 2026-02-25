@@ -120,7 +120,7 @@ class QueueService:
             
             await queue_client.delete_message(msg)
             
-           nome_arquivo_saida = AGENT_CONFIG.get(analysis_type, {}).get("output_filename", f"{analysis_type}.md")
+            nome_arquivo_saida = AGENT_CONFIG.get(analysis_type, {}).get("output_filename", f"{analysis_type}.md")
             await self._notificar_backend(
                 job_id=job_id,
                 company_id=company_id,
