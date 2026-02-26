@@ -161,3 +161,9 @@ async def get_project_reports(
             },
             status_code=status.HTTP_200_OK
         )
+    except Exception as e:
+        logger.error(f"[Session] Erro ao buscar relatório no MCP: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, 
+            detail="Falha ao obter o relatório do serviço de agentes (MCP)."
+        )
