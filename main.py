@@ -13,15 +13,14 @@ from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 
 from backend.app.utils.log_formatter import StructuredLogger
-
-# Instanciamos o logger passando o nome do módulo
-logger = StructuredLogger("mcp_worker")
-
-# --- IMPORTAÇÃO DE CLASSES E CONFIGURAÇÕES ---
 from backend.app.services.vault_service import VaultService
 from backend.app.services.blob_storage_service import BlobStorageService
 from backend.app.services.queue_service import QueueService
 from backend.app.config.settings import settings
+from backend.app.api.reports import router as reports_router
+
+# Instanciamos o logger passando o nome do módulo
+logger = StructuredLogger("mcp_worker")
 
 # --- INSTANCIAÇÃO DOS SERVIÇOS (ORQUESTRAÇÃO DAS DEPENDÊNCIAS) ---
 vault_urls = [
@@ -63,6 +62,9 @@ async def lifespan(app: FastAPI):
         logger.log_evento("INFO", "worker_task_cancelled_success", "Worker cancelado com sucesso")
 
 app = FastAPI(title="MCP Queue Worker", lifespan=lifespan)
+
+app.state.blob_storage_service = blob_storage_service
+app.include_router(reports_router, prefix="/reports", tags=["Reports"])
 
 # --- MIDDLEWARE DE LOG AUTOMÁTICO ---
 @app.middleware("http")
