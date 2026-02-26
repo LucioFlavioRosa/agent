@@ -39,7 +39,27 @@ async def get_project_reports(
     job = await redis_service.get_job(job_id)
 
     if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado.")
+        logger.warning(f"[Session] Job {job_id} expirou no Redis. Buscando no histórico do MongoDB...")
+        
+        # Instancia o serviço do Mongo para olhar o passado
+        from backend.app.services.mongodb_service import MongoDBService
+        mongo_service = MongoDBService()
+        
+        # Procura o job na coleção oficial de histórico
+        historico_job = await mongo_service.db.project_reports_history.find_one({"job_id": job_id})
+        
+        if historico_job:
+            # Se achou no Mongo, criamos um "Job Fantasma" para enganar o resto da rota e ela continuar funcionando
+            class JobRecuperado:
+                status = historico_job.get("status", "done")
+                empresa = empresa # Usamos a empresa da requisição atual
+                analysis_type = historico_job.get("analysis_type")
+            
+            job = JobRecuperado()
+            logger.info(f"[Session] Job {job_id} recuperado com sucesso do MongoDB!")
+        else:
+            # Se não tá no Redis nem no Mongo, aí sim o Job não existe de verdade
+            raise HTTPException(status_code=404, detail="Job não encontrado nem em processamento, nem no histórico.")
 
     # 3. VALIDAÇÃO DE OWNERSHIP (Segurança Multi-tenant - Nível Empresa)
     if job.empresa and job.empresa != empresa:
