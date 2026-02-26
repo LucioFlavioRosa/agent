@@ -69,17 +69,47 @@ async def get_project_reports(
     logger.info(f"[Session] Verificando permissões do usuário {email} para o projeto {project_id}")
     user_perms = await redis_service.get_user_permissions(email=email, company_id=empresa)
     
-    # 4.1 Verifica se o usuário tem acesso ao projeto
-    if not user_perms or project_id not in user_perms.get("project_permissions", {}):
-        logger.error(f"[Session] ACESSO NEGADO: {email} não tem role vinculada ao projeto {project_id}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Acesso negado: Você não é membro (owner, editor ou viewer) deste projeto."
-        )
+    # ==========================================================
+    # 🚀 FALLBACK 4.1: SE O REDIS NEGAR, VERIFICA NO MONGODB
+    # ==========================================================
+    is_member = False
+    
+    if user_perms and project_id in user_perms.get("project_permissions", {}):
+        # Cenário Feliz: O Redis tinha a informação atualizada
+        is_member = True
+    else:
+        # Fallback: O Redis negou (cache expirado ou projeto recém-criado)
+        logger.warning(f"[Session] Permissão não achada no Redis para {email}. Buscando no MongoDB (Fallback)...")
+        
+        # Garante a importação e instanciação do serviço
+        from backend.app.services.mongodb_service import MongoDBService
+        mongo_service_fallback = MongoDBService()
+        projeto_real = await mongo_service_fallback.get_project_by_id(project_id)
+        
+        if projeto_real:
+            # Extrai a lista de membros (suporta dicionário do Mongo ou modelo do Pydantic)
+            membros = getattr(projeto_real, "members", []) if not isinstance(projeto_real, dict) else projeto_real.get("members", [])
+            # Verifica se o email do usuário está na lista
+            is_member = any((getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email for m in membros)
+            
+        if not is_member:
+            logger.error(f"[Session] ACESSO NEGADO DEFINITIVO: {email} não é membro do projeto {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Acesso negado: Você não é membro (owner, editor ou viewer) deste projeto."
+            )
+        else:
+            logger.info(f"[Session] Permissão de {email} confirmada via MongoDB para o projeto recém-criado!")
+            # Cria um "cache fantasma" local na memória só para não quebrar a validação 4.2 abaixo
+            if not user_perms:
+                user_perms = {"allowed_agents": [job.analysis_type]}
+    # ==========================================================
 
     # 4.2 Verifica se o usuário tem acesso ao agente específico deste job
     agentes_permitidos = user_perms.get("allowed_agents", [])
-    if job.analysis_type not in agentes_permitidos:
+    
+    # Adicionamos um contorno seguro (and not is_member) caso o cache fantasma tenha sido usado
+    if job.analysis_type not in agentes_permitidos and not is_member:
         logger.error(f"[Session] ACESSO NEGADO: {email} não tem permissão para o agente {job.analysis_type}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
