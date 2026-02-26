@@ -141,27 +141,36 @@ class MCPClientService:
             logging.error(f"❌ [MCP Client] Falha ao chamar [{url}]: {str(exc)}")
             raise Exception(f"Erro na comunicação com MCP: {str(exc)}")
 
-    # MUDANÇA: Otimização do método de resgate do relatório para aceitar Markdown ou JSON
-    async def get_report(self, project_id: str, job_id: str, mcp_url: str) -> Any:
-        url = f"{mcp_url.rstrip('/')}/project/{project_id}/{job_id}/reports"
+    # MUDANÇA: Atualizado para a nova rota do MCP, enviando company_id e suportando nome de arquivo dinâmico
+    async def get_report(self, project_id: str, job_id: str, mcp_url: str, company_id: str, filename: str = "epics.md") -> Any:
+        # A URL agora bate exatamente com o prefixo "/reports" do MCP
+        url = f"{mcp_url.rstrip('/')}/reports/{project_id}/{job_id}"
+        
+        # Os parâmetros exigidos pela nossa nova rota no MCP
+        params = {
+            "company_id": company_id,
+            "filename": filename
+        }
+        
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(url)
+                # Dispara o GET passando os parâmetros na URL
+                response = await client.get(url, params=params)
                 response.raise_for_status()
                 
                 content_type = response.headers.get("content-type", "").lower()
                 
-                # Se o MCP responder com JSON {"conteudo": "..."}
+                # Se o MCP responder com JSON {"report": "..."}
                 if "application/json" in content_type:
                     return response.json()
                 # Se o MCP responder diretamente com o arquivo cru (Markdown/Texto)
                 else:
-                    return {"content": response.text}
+                    return {"report": response.text}
                     
         except httpx.HTTPStatusError as exc:
             erro_mcp = exc.response.text
             log_error(
-                context="MCPClientService.start_analysis",
+                context="MCPClientService.get_report",
                 error_message=f"Erro HTTP {exc.response.status_code} no MCP: {erro_mcp}",
                 exception=exc, job_id=job_id, project_id=project_id
             )
