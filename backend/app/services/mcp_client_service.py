@@ -35,7 +35,8 @@ class MCPStartAnalysisResponse(BaseModel):
 
 class MCPClientService:
     def __init__(self, base_url: str = None):
-        self.base_url = base_url or settings.MCP_SERVER_BASE_URL.rstrip('/')
+        fallback_url = getattr(settings, 'MCP_SERVER_BASE_URL', '')
+        self.base_url = base_url or fallback_url.rstrip('/') if fallback_url else ''
 
     def _build_payload(self, payload: dict) -> dict:
         log_service_call(
