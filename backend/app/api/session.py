@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.mcp_client_service import MCPClientService
+from backend.config.agent_mapping import AGENT_TO_CATEGORY
 from backend.app.core.config import settings
 
 
@@ -125,19 +126,32 @@ async def get_project_reports(
         raise HTTPException(status_code=500, detail="Configuração de URL do MCP ausente.")
 
     # ==========================================================
-    # 🚀 FAZ A REQUISIÇÃO PARA O MCP
+    # 🚀 FAZ A REQUISIÇÃO PARA O MCP (USANDO O SEU MAPPING)
     # ==========================================================
     mcp_client = MCPClientService()
     
+    # 1. Busca a categoria exata no seu arquivo de configuração
+    categoria = AGENT_TO_CATEGORY.get(job.analysis_type)
+    
+    # 2. Adiciona o .md no final (ou usa um fallback de segurança se esquecerem de mapear um agente novo)
+    if categoria:
+        nome_arquivo_dinamico = f"{categoria}.md"
+    else:
+        logger.warning(f"[Session] Agente '{job.analysis_type}' não mapeado em AGENT_TO_CATEGORY. Usando nome próprio.")
+        nome_arquivo_dinamico = f"{job.analysis_type}.md"
+
     try:
-        # Repassa a chamada para o MCP (que vai ler do Blob Storage)
+        # Repassa a chamada para o MCP enviando o nome do arquivo montado perfeitamente
         report_data = await mcp_client.get_report(
             project_id=project_id, 
             job_id=job_id, 
-            mcp_url=mcp_url
+            mcp_url=mcp_url,
+            company_id=empresa, 
+            filename=nome_arquivo_dinamico # 🚀 "epics.md", "features.md", etc.
         )
         
-        logger.info(f"[Session] Sucesso: Relatório recuperado do MCP e pronto para envio.")
+        logger.info(f"[Session] Sucesso: Arquivo {nome_arquivo_dinamico} recuperado do MCP.")
+        
         return JSONResponse(
             content={
                 "report_data": report_data, 
@@ -146,10 +160,4 @@ async def get_project_reports(
                 "status": "success"
             },
             status_code=status.HTTP_200_OK
-        )
-    except Exception as e:
-        logger.error(f"[Session] Erro ao buscar relatório no MCP: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, 
-            detail="Falha ao obter o relatório do serviço de agentes (MCP)."
         )
