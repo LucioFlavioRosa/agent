@@ -115,3 +115,9 @@ class ReportHistoryItem(BaseModel):
 
 class ReportHistoryResponse(BaseModel):
     history: List[ReportHistoryItem]
+
+class ReportLineageResponse(BaseModel):
+    epics: Optional[ReportHistoryItem] = Field(None, description="O relatório de Epics associado nesta linhagem")
+    features: Optional[ReportHistoryItem] = Field(None, description="O relatório de Features associado nesta linhagem")
+    timeline: Optional[ReportHistoryItem] = Field(None, description="O relatório de Timeline associado nesta linhagem")
+    risks: Optional[ReportHistoryItem] = Field(None, description="O relatório de Riscos associado nesta linhagem")
