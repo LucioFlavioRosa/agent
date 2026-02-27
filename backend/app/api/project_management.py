@@ -418,5 +418,54 @@ async def get_report_history(
             context_used=doc.get("context_used", {}),
             blob_path=doc.get("blob_path")
         ))
-
     return ReportHistoryResponse(history=historico)
+
+@router.get("/{project_id}/reports/{job_id}/lineage", response_model=ReportLineageResponse, tags=["Project Management"])
+async def get_report_lineage(
+    project_id: str = Path(..., description="ID do projeto"),
+    job_id: str = Path(..., description="ID do Job base para buscar a linhagem"),
+    category: str = Query(..., description="A categoria do relatório atual (ex: epics, features, timeline, risks)"),
+    email: str = Query(..., description="Email do usuário solicitante"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """
+    Retorna a árvore genealógica (Ancestrais e Descendentes) de um relatório específico.
+    Isso permite rastrear qual 'Epics' gerou qual 'Feature', que gerou qual 'Timeline', etc.
+    """
+    logger.info(f"[ProjectManagement] Buscando linhagem do Job {job_id} (Categoria: {category}) no projeto {project_id} para {email}")
+
+    project = await mongo_service.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
+    is_member = any(
+        (getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email 
+        for m in members
+    )
+    
+    if not is_member:
+        logger.warning(f"[ProjectManagement] Acesso negado: {email} tentou ver linhagem no projeto {project_id}")
+        raise HTTPException(status_code=403, detail="Você não tem permissão para visualizar este projeto.")
+
+    tree_data = await mongo_service.get_report_context_tree(project_id, job_id, category)
+    
+    if not tree_data:
+        raise HTTPException(status_code=404, detail="Relatório base não encontrado no histórico.")
+
+    def format_history_item(doc: dict) -> Optional[dict]:
+        if not doc:
+            return None
+        doc.pop("_id", None)
+        if "project_id" in doc and not isinstance(doc["project_id"], str):
+            doc["project_id"] = str(doc["project_id"])
+        if "created_by_email" not in doc:
+            doc["created_by_email"] = "Desconhecido"
+        return doc
+
+    return ReportLineageResponse(
+        epics=format_history_item(tree_data.get("epics")),
+        features=format_history_item(tree_data.get("features")),
+        timeline=format_history_item(tree_data.get("timeline")),
+        risks=format_history_item(tree_data.get("risks"))
+    )
