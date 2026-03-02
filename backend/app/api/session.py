@@ -87,8 +87,8 @@ async def get_project_reports(
         # Fallback: O Redis negou (cache expirado ou projeto recém-criado)
         logger.warning(f"[Session] Permissão não achada no Redis para {email}. Buscando no MongoDB (Fallback)...")
         
-        # Garante a importação e instanciação do serviço
-        projeto_real = await mongo_service_fallback.get_project_by_id(project_id)
+        #projeto_real = await mongo_service_fallback.get_project_by_id(project_id)
+        projeto_real = await mongo_service.get_project_by_id(project_id)
         
         if projeto_real:
             # Extrai a lista de membros (suporta dicionário do Mongo ou modelo do Pydantic)
