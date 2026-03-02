@@ -24,7 +24,7 @@ async def get_project_reports(
     job_id: str,
     email: str = Query(..., description="Email do usuário"),
 ):
-    logger.info(f"[Session] Requisição: project_id={project_id}, job_id={job_id}, email={email}, empresa={empresa}")
+    logger.info(f"[Session] Requisição recebida: project_id={project_id}, job_id={job_id}, email={email}")
 
     # 1. VALIDAÇÕES BÁSICAS DE ENTRADA
     if not project_id or not isinstance(project_id, str) or not project_id.strip():
@@ -35,14 +35,16 @@ async def get_project_reports(
         logger.error(f"[Session] job_id inválido ou ausente: {job_id}")
         raise HTTPException(status_code=400, detail="job_id inválido ou ausente.")
 
+    # 2. DESCOBRINDO A EMPRESA
     mongo_service = MongoDBService()
     user, empresa = await get_user_and_company_id(email, mongo_service)
     
+    # Aqui sim logamos a empresa, pois ela já foi carregada do banco!
     logger.info(f"[Session] Empresa resolvida automaticamente: {empresa}")
 
     redis_service = RedisSessionService()
     
-    # 2. BUSCAR METADADOS DO JOB NO REDIS (Apenas dados de controle, super leve)
+    # 3. BUSCAR METADADOS DO JOB NO REDIS (Apenas dados de controle, super leve)
     logger.info(f"[Session] Buscando metadados do job no Redis para job_id={job_id}")
     job = await redis_service.get_job(job_id)
 
