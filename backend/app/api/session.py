@@ -51,9 +51,6 @@ async def get_project_reports(
     if not job:
         logger.warning(f"[Session] Job {job_id} expirou no Redis. Buscando no histórico do MongoDB...")
         
-        from backend.app.services.mongodb_service import MongoDBService
-        mongo_service = MongoDBService()
-        
         historico_job = await mongo_service.db.project_reports_history.find_one({"job_id": job_id})
         
         if historico_job:
@@ -91,8 +88,6 @@ async def get_project_reports(
         logger.warning(f"[Session] Permissão não achada no Redis para {email}. Buscando no MongoDB (Fallback)...")
         
         # Garante a importação e instanciação do serviço
-        from backend.app.services.mongodb_service import MongoDBService
-        mongo_service_fallback = MongoDBService()
         projeto_real = await mongo_service_fallback.get_project_by_id(project_id)
         
         if projeto_real:
