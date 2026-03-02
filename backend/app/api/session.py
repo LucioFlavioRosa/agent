@@ -8,6 +8,9 @@ from fastapi import APIRouter, HTTPException, status, Query
 
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.mcp_client_service import MCPClientService
+from backend.app.services.mongodb_service import MongoDBService
+
+from backend.app.api.utils import get_user_and_company_id
 from backend.config.agent_mapping import AGENT_TO_CATEGORY
 from backend.app.core.config import settings
 
@@ -20,7 +23,6 @@ async def get_project_reports(
     project_id: str,
     job_id: str,
     email: str = Query(..., description="Email do usuário"),
-    empresa: str = Query(..., description="Empresa do usuário")
 ):
     logger.info(f"[Session] Requisição: project_id={project_id}, job_id={job_id}, email={email}, empresa={empresa}")
 
@@ -32,6 +34,11 @@ async def get_project_reports(
     if not job_id or not isinstance(job_id, str) or not job_id.strip():
         logger.error(f"[Session] job_id inválido ou ausente: {job_id}")
         raise HTTPException(status_code=400, detail="job_id inválido ou ausente.")
+
+    mongo_service = MongoDBService()
+    user, empresa = await get_user_and_company_id(email, mongo_service)
+    
+    logger.info(f"[Session] Empresa resolvida automaticamente: {empresa}")
 
     redis_service = RedisSessionService()
     
