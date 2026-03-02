@@ -21,7 +21,8 @@ from backend.app.models.project_management_models import (
     ProjectDetailsResponse,
     LatestReports,
     ReportHistoryItem,
-    ReportHistoryResponse
+    ReportHistoryResponse,
+    ReportLineageResponse
 )
 from backend.app.services.redis_session_service import RedisSessionService
 
