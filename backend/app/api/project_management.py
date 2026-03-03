@@ -1,5 +1,4 @@
 import logging
-
 from datetime import datetime
 from typing import List, Optional
 from bson import ObjectId
@@ -15,6 +14,7 @@ from backend.app.models.project_management_models import (
     AddProjectMemberResponse,
     UpdateProjectMembersRequest,
     UpdateProjectMembersResponse,
+    RemoveMemberRequest,
     DeleteProjectRequest,
     DeleteProjectResponse,
     ProjectRole,
@@ -33,29 +33,16 @@ logger = logging.getLogger("project_management_api")
 def get_mongo_service():
     return MongoDBService()
 
-async def resolve_project_id_by_name(project_name: str, company_id: str, mongo_service: MongoDBService) -> str:
-    project = await mongo_service.get_project_by_normalized_name(project_name, company_id)
-    if not project:
-        logger.error(f"[ProjectManagement] Projeto '{project_name}' não encontrado para empresa '{company_id}'.")
-        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
-    return getattr(project, "id", None) or project._id
-
 @router.get("/list", response_model=List[ProjectWithRoleItem], tags=["Project Management"])
 async def list_all_user_projects(
     email: str = Query(..., description="Email do usuário"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    """
-    Lista TODOS os projetos que o usuário tem acesso.
-    Retorna também o 'role' (nível de acesso) específico do usuário naquele projeto.
-    """
+    """Lista TODOS os projetos que o usuário tem acesso."""
     logger.info(f"[ProjectList] Buscando projetos para: {email}")
-    
     projects = await mongo_service.get_user_projects_with_access(email)
-    
     if not projects:
         return []
-        
     return projects
 
 @router.get("/{project_id}", response_model=ProjectDetailsResponse, tags=["Project Management"])
@@ -64,18 +51,13 @@ async def get_project_details(
     email: str = Query(..., description="Email do usuário solicitante"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    """
-    Retorna os detalhes de um projeto específico, incluindo o ponteiro para os relatórios mais recentes.
-    """
+    """Retorna os detalhes de um projeto específico."""
     logger.info(f"[ProjectManagement] Buscando detalhes do projeto {project_id} para {email}")
 
-    # 1. Busca o projeto no banco
     project = await mongo_service.get_project_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
-    # 2. Segurança: Verifica se o usuário pertence a este projeto
-    # Trata de forma segura caso 'project' venha como Dicionário ou como Objeto (Pydantic)
     members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
     
     is_member = False
@@ -89,20 +71,17 @@ async def get_project_details(
         logger.warning(f"[ProjectManagement] Acesso negado: {email} tentou ler o projeto {project_id}")
         raise HTTPException(status_code=403, detail="Você não tem permissão para visualizar este projeto.")
 
-    # 3. Extração segura de dados (lidando com ObjectId e diferenças estruturais)
     proj_id_str = str(getattr(project, "id", None) or getattr(project, "_id", project_id)) if not isinstance(project, dict) else str(project.get("_id", project_id))
     comp_id_str = str(getattr(project, "company_id", "")) if not isinstance(project, dict) else str(project.get("company_id", ""))
     name = getattr(project, "name", "") if not isinstance(project, dict) else project.get("name", "")
     desc = getattr(project, "description", None) if not isinstance(project, dict) else project.get("description")
     
-    # Busca o ponteiro de relatórios
     reports_data = getattr(project, "latest_reports", {}) if not isinstance(project, dict) else project.get("latest_reports", {})
     if not reports_data:
         reports_data = {}
     elif not isinstance(reports_data, dict):
-        reports_data = reports_data.dict() # Converte caso o banco devolva um modelo interno
+        reports_data = reports_data.dict() 
 
-    # 4. Retorna no formato esperado pelo Front-end
     return ProjectDetailsResponse(
         project_id=proj_id_str,
         name=name,
@@ -114,18 +93,16 @@ async def get_project_details(
 @router.get("/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
 async def list_owned_projects(
     email: str = Query(..., description="Email do usuário owner"),
-    mongo_service: MongoDBService = Depends(get_mongo_service) # <--- O serviço entra aqui
+    mongo_service: MongoDBService = Depends(get_mongo_service) 
 ):
     logger.info(f"[ProjectManagement] Recebida requisição para /projects/owned com email={email}")
     
     user = await mongo_service.get_user_by_email(email)
     if not user:
-        logger.error(f"[ProjectManagement] Usuário não encontrado: email={email}")
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
         
     company_id = getattr(user, "company_id", None)
     if not company_id:
-        logger.error(f"[ProjectManagement] Usuário não possui company_id: email={email}")
         raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
         
     projects = await mongo_service.get_projects_where_user_is_owner(email, company_id=company_id)
@@ -144,34 +121,34 @@ async def add_project_member(
     req: AddProjectMemberRequest = Body(...),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    logger.info(f"[ProjectManagement] Adicionar membro: requester={req.requester_email}, projeto={req.project_name}")
-    # Resolve company_id do requester
+    logger.info(f"[ProjectManagement] Adicionar membro: requester={req.requester_email}, projeto_id={req.project_id}")
+    
     user = await mongo_service.get_user_by_email(req.requester_email)
     if not user:
-        logger.error(f"[ProjectManagement] Usuário requisitante não encontrado: {req.requester_email}")
         return AddProjectMemberResponse(success=False, message="Usuário requisitante não encontrado.")
     company_id = getattr(user, "company_id", None)
-    if not company_id:
-        logger.error(f"[ProjectManagement] Usuário requisitante não possui company_id: {req.requester_email}")
-        return AddProjectMemberResponse(success=False, message="Usuário requisitante não possui company_id.")
-    # Resolve project_id
-    project_id = await resolve_project_id_by_name(req.project_name, company_id, mongo_service)
+    
+    project_id = req.project_id
+    project = await mongo_service.get_project_by_id(project_id)
+    if not project or getattr(project, "company_id", None) != company_id:
+        return AddProjectMemberResponse(success=False, message="Projeto não encontrado nesta empresa.")
+
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
     try:
-        # 1. Validação de permissão
         has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
             req.requester_email, project_id, action_type="add_member"
         )
         if not has_perm:
             return AddProjectMemberResponse(success=False, message=error_msg or "Sem permissão.")
-        # 2. Validação extra de Ownership
+            
         if not await _verify_user_is_owner_helper(req.requester_email, project_id, mongo_service):
              return AddProjectMemberResponse(success=False, message="Apenas Owners podem adicionar membros.")
-        # 3. Busca novo membro
+             
         new_user = await mongo_service.get_user_by_email(req.new_member_email)
         if not new_user:
             return AddProjectMemberResponse(success=False, message="Usuário a ser adicionado não encontrado.")
+            
         new_member = {
             "user_id": str(new_user.id),
             "email": req.new_member_email,
@@ -179,11 +156,8 @@ async def add_project_member(
             "added_at": datetime.utcnow().isoformat()
         }
         result = await mongo_service.add_member_to_project(project_id, new_member)
-        # Cache invalidation
-        project = await mongo_service.get_project_by_id(project_id)
-        if project:
-            company_id = getattr(project, "company_id", None)
-            await redis_session_service.invalidate_user_permissions(req.new_member_email, company_id)
+        await redis_session_service.invalidate_user_permissions(req.new_member_email, company_id)
+        
         return AddProjectMemberResponse(
             success=bool(result), 
             message="Membro adicionado!" if result else "Erro ao adicionar."
@@ -197,45 +171,44 @@ async def update_project_members(
     req: UpdateProjectMembersRequest = Body(...),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    logger.info(f"[ProjectManagement] Atualizar membros: requester={req.requester_email}, projeto={req.project_name}")
-    # Resolve company_id do requester
+    logger.info(f"[ProjectManagement] Atualizar membros: requester={req.requester_email}, projeto_id={req.project_id}")
+    
     user = await mongo_service.get_user_by_email(req.requester_email)
     if not user:
-        logger.error(f"[ProjectManagement] Usuário requisitante não encontrado: {req.requester_email}")
         return UpdateProjectMembersResponse(success=False, message="Usuário requisitante não encontrado.")
     company_id = getattr(user, "company_id", None)
-    if not company_id:
-        logger.error(f"[ProjectManagement] Usuário requisitante não possui company_id: {req.requester_email}")
-        return UpdateProjectMembersResponse(success=False, message="Usuário requisitante não possui company_id.")
-    # Resolve project_id
-    project_id = await resolve_project_id_by_name(req.project_name, company_id, mongo_service)
+    
+    project_id = req.project_id
+    project = await mongo_service.get_project_by_id(project_id)
+    if not project or getattr(project, "company_id", None) != company_id:
+        return UpdateProjectMembersResponse(success=False, message="Projeto não encontrado nesta empresa.")
+
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
     try:
-        # 1. Verifica permissão básica de edição
         has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
             req.requester_email, project_id, action_type="edit_project"
         )
         if not has_perm:
             return UpdateProjectMembersResponse(success=False, message=error_msg)
-        # 2. Verifica se quem pede é Owner
+            
         if not await _verify_user_is_owner_helper(req.requester_email, project_id, mongo_service):
             return UpdateProjectMembersResponse(success=False, message="Apenas Owners podem gerenciar membros.")
-        # Identifica os owners na NOVA lista
+            
         incoming_owners = [m for m in req.members if m.get("role", "").lower() == "owner"]
         if not incoming_owners:
             return UpdateProjectMembersResponse(
                 success=False, 
                 message="Ação negada: A lista de membros deve conter pelo menos um Owner."
             )
-        requester_in_new_list = next(
-            (m for m in req.members if m.get("email") == req.requester_email), None
-        )
+            
+        requester_in_new_list = next((m for m in req.members if m.get("email") == req.requester_email), None)
         if not requester_in_new_list:
              return UpdateProjectMembersResponse(
                 success=False, 
                 message="Você não pode se remover da lista via atualização. Use a função de sair do projeto."
             )
+            
         if requester_in_new_list.get("role", "").lower() != "owner":
             other_owners = [m for m in incoming_owners if m.get("email") != req.requester_email]
             if not other_owners:
@@ -243,13 +216,13 @@ async def update_project_members(
                     success=False, 
                     message="Você não pode alterar seu nível para Editor/Viewer sem antes promover outro membro a Owner."
                 )
+                
         result = await mongo_service.update_project_members(project_id, req.members)
-        project = await mongo_service.get_project_by_id(project_id)
-        if project:
-            company_id = getattr(project, "company_id", None)
-            affected_emails = [m.get("email") for m in req.members if m.get("email")]
-            for email in set(affected_emails):
-                await redis_session_service.invalidate_user_permissions(email, company_id)
+        
+        affected_emails = [m.get("email") for m in req.members if m.get("email")]
+        for email in set(affected_emails):
+            await redis_session_service.invalidate_user_permissions(email, company_id)
+            
         return UpdateProjectMembersResponse(
             success=bool(result), 
             message="Membros atualizados com sucesso!" if result else "Falha na atualização."
@@ -258,11 +231,6 @@ async def update_project_members(
         logger.error(f"Erro update_project_members: {e}")
         return UpdateProjectMembersResponse(success=False, message=str(e))
 
-from pydantic import BaseModel, EmailStr
-class RemoveMemberRequest(BaseModel):
-    requester_email: EmailStr
-    project_name: str
-    target_email: EmailStr
 
 @router.delete("/members/{target_email}", tags=["Project Management"])
 async def remove_project_member(
@@ -270,28 +238,28 @@ async def remove_project_member(
     req: RemoveMemberRequest = Body(...),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    logger.info(f"[ProjectManagement] Remove Member: target={target_email}, requester={req.requester_email}, projeto={req.project_name}")
-    # Resolve company_id do requester
+    logger.info(f"[ProjectManagement] Remove Member: target={target_email}, requester={req.requester_email}, projeto_id={req.project_id}")
+    
     user = await mongo_service.get_user_by_email(req.requester_email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuário requisitante não encontrado.")
     company_id = getattr(user, "company_id", None)
-    if not company_id:
-        raise HTTPException(status_code=400, detail="Usuário requisitante não possui company_id.")
-    # Resolve project_id
-    project_id = await resolve_project_id_by_name(req.project_name, company_id, mongo_service)
+    
+    project_id = req.project_id
+    
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
-    # 1. Verifica Permissão
+    
     has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
         req.requester_email, project_id, action_type="remove_member"
     )
     if not has_perm:
         raise HTTPException(status_code=403, detail=error_msg)
+        
     project = await mongo_service.get_project_by_id(project_id)
-    if not project:
+    if not project or getattr(project, "company_id", None) != company_id:
         raise HTTPException(status_code=404, detail="Projeto não encontrado")
-    # 2. Validação: Não permitir remover o último owner
+        
     target_member = next((m for m in project.members if m.email == target_email), None)
     if target_member and target_member.role.lower() == "owner":
         owners = [m for m in project.members if m.role.lower() == "owner"]
@@ -300,10 +268,11 @@ async def remove_project_member(
                 status_code=400, 
                 detail="Não é possível remover o único dono do projeto. Adicione outro dono antes de remover este."
             )
+            
     success = await mongo_service.remove_member_from_project(project_id, target_email)
-    company_id = getattr(project, "company_id", None)
     await redis_session_service.invalidate_user_permissions(target_email, company_id)
     await redis_session_service.invalidate_user_permissions(req.requester_email, company_id)
+    
     if not success:
         raise HTTPException(status_code=500, detail="Falha ao remover membro no banco de dados.")
     return {"success": True, "message": f"Membro {target_email} removido com sucesso."}
@@ -313,42 +282,42 @@ async def delete_project(
     req: DeleteProjectRequest = Body(...),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    """
-    Remove permanentemente um projeto do banco de dados.
-    """
-    logger.info(f"[ProjectManagement] Tentativa de exclusão: requester={req.requester_email}, projeto={req.project_name}")
+    """Remove permanentemente um projeto do banco de dados."""
+    logger.info(f"[ProjectManagement] Tentativa de exclusão: requester={req.requester_email}, projeto_id={req.project_id}")
+    
     user = await mongo_service.get_user_by_email(req.requester_email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuário requisitante não encontrado.")
     company_id = getattr(user, "company_id", None)
     if not company_id:
         raise HTTPException(status_code=400, detail="Usuário requisitante não possui company_id.")
-    project_id = await resolve_project_id_by_name(req.project_name, company_id, mongo_service)
+        
+    project_id = req.project_id
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
+    
     try:
-        # 1. Verifica permissão de deletar
         has_permission, _, error_msg = await permission_service.check_user_project_action_permission(
             req.requester_email, project_id, action_type="delete_project"
         )
         if not has_permission:
             logger.warning(f"[ProjectManagement] Acesso negado para exclusão: {req.requester_email}")
             raise HTTPException(status_code=403, detail=error_msg or "Permissão negada.")
-        # 2. Pega dados para limpar cache depois
+            
         project = await mongo_service.get_project_by_id(project_id)
-        if not project:
+        if not project or getattr(project, "company_id", None) != company_id:
             return DeleteProjectResponse(success=False, message="Projeto não encontrado.")
-        company_id = getattr(project, "company_id", None)
+            
         affected_emails = [m.email for m in project.members] if project.members else []
-        # 3. Deleta 
+        
         success = await mongo_service.delete_project(project_id, company_id)
-        # 4. Limpa Cache
         if success:
             for email in set(affected_emails):
                 await redis_session_service.invalidate_user_permissions(email, company_id)
             await redis_session_service.invalidate_user_permissions(req.requester_email, company_id)
             logger.info(f"[ProjectManagement] Projeto {project_id} excluído com sucesso.")
             return DeleteProjectResponse(success=True, message="Projeto excluído com sucesso.")
+            
         return DeleteProjectResponse(success=False, message="Erro ao excluir projeto ou projeto já excluído.")
     except HTTPException as hex:
         raise hex
@@ -356,12 +325,14 @@ async def delete_project(
         logger.error(f"[ProjectManagement] Erro crítico na exclusão: {e}")
         return DeleteProjectResponse(success=False, message=f"Erro interno: {str(e)}")
 
-# --- Helpers Locais (Renomeado para evitar conflito e ser interno) ---
+
+# --- Helpers Locais ---
 async def _verify_user_is_owner_helper(email: str, project_id: str, mongo_service: MongoDBService) -> bool:
     project = await mongo_service.get_project_by_id(project_id)
     if not project:
         return False
     return any(m.email == email and m.role.lower() == ProjectRole.OWNER.value for m in project.members)
+
 
 @router.get("/{project_id}/reports/history", response_model=ReportHistoryResponse, tags=["Project Management"])
 async def get_report_history(
@@ -370,35 +341,25 @@ async def get_report_history(
     email: str = Query(..., description="Email do usuário solicitante"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    """
-    Lista o histórico de versões de uma categoria de relatório (ex: epics) para um projeto específico.
-    """
+    """Lista o histórico de versões de uma categoria de relatório (ex: epics) para um projeto específico."""
     logger.info(f"[ProjectManagement] Buscando histórico de '{category}' para o projeto {project_id} (User: {email})")
 
-    # 1. Validação de Segurança Básica: O projeto existe e o usuário tem acesso?
     project = await mongo_service.get_project_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
-    # Trata 'members' lidando tanto com dicionários quanto com objetos do Pydantic
     members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
-    is_member = any(
-        (getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email 
-        for m in members
-    )
+    is_member = any((getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email for m in members)
     
     if not is_member:
         logger.warning(f"[ProjectManagement] Acesso negado: {email} tentou ver histórico do projeto {project_id}")
         raise HTTPException(status_code=403, detail="Você não tem permissão para visualizar este projeto.")
 
-    # 2. Conversão segura para ObjectId
     try:
         obj_project_id = ObjectId(project_id)
     except Exception:
-        logger.warning(f"[ProjectManagement] project_id '{project_id}' não é um ObjectId válido. Usando como string.")
         obj_project_id = project_id
 
-    # 3. Busca na coleção de histórico ordenando da versão mais nova para a mais velha
     cursor = mongo_service.db.project_reports_history.find({
         "project_id": obj_project_id,
         "report_category": category,
@@ -424,29 +385,22 @@ async def get_report_history(
 @router.get("/{project_id}/reports/{job_id}/lineage", response_model=ReportLineageResponse, tags=["Project Management"])
 async def get_report_lineage(
     project_id: str = Path(..., description="ID do projeto"),
-    job_id: str = Path(..., description="ID do Job base para buscar a linhagem"),
-    category: str = Query(..., description="A categoria do relatório atual (ex: epics, features, timeline, risks)"),
+    job_id: str = Path(..., description="ID do Job base"),
+    category: str = Query(..., description="A categoria do relatório atual"),
     email: str = Query(..., description="Email do usuário solicitante"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    """
-    Retorna a árvore genealógica (Ancestrais e Descendentes) de um relatório específico.
-    Isso permite rastrear qual 'Epics' gerou qual 'Feature', que gerou qual 'Timeline', etc.
-    """
-    logger.info(f"[ProjectManagement] Buscando linhagem do Job {job_id} (Categoria: {category}) no projeto {project_id} para {email}")
+    """Retorna a árvore genealógica (Ancestrais e Descendentes) de um relatório específico."""
+    logger.info(f"[ProjectManagement] Buscando linhagem do Job {job_id} (Categoria: {category}) no projeto {project_id}")
 
     project = await mongo_service.get_project_by_id(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
     members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
-    is_member = any(
-        (getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email 
-        for m in members
-    )
+    is_member = any((getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email for m in members)
     
     if not is_member:
-        logger.warning(f"[ProjectManagement] Acesso negado: {email} tentou ver linhagem no projeto {project_id}")
         raise HTTPException(status_code=403, detail="Você não tem permissão para visualizar este projeto.")
 
     tree_data = await mongo_service.get_report_context_tree(project_id, job_id, category)
@@ -455,13 +409,11 @@ async def get_report_lineage(
         raise HTTPException(status_code=404, detail="Relatório base não encontrado no histórico.")
 
     def format_history_item(doc: dict) -> Optional[dict]:
-        if not doc:
-            return None
+        if not doc: return None
         doc.pop("_id", None)
         if "project_id" in doc and not isinstance(doc["project_id"], str):
             doc["project_id"] = str(doc["project_id"])
-        if "created_by_email" not in doc:
-            doc["created_by_email"] = "Desconhecido"
+        if "created_by_email" not in doc: doc["created_by_email"] = "Desconhecido"
         return doc
 
     return ReportLineageResponse(
