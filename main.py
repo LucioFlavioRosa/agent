@@ -1,9 +1,9 @@
 import os
 import re
 import sys
-import ast
-import json
 import time
+import json
+import ast
 import asyncio
 import unicodedata
 
@@ -20,10 +20,9 @@ from backend.app.services.queue_service import QueueService
 from backend.app.config.settings import settings
 from backend.app.api.reports import router as reports_router
 
-# Instanciamos o logger passando o nome do módulo
 logger = StructuredLogger("mcp_worker")
 
-# --- INSTANCIAÇÃO DOS SERVIÇOS (ORQUESTRAÇÃO DAS DEPENDÊNCIAS) ---
+# --- INSTANCIAÇÃO DOS SERVIÇOS ---
 vault_urls = [
     settings.AZURE_INFRA_VAULT_URL,
     settings.AZURE_LLM_VAULT_URL,
@@ -39,7 +38,6 @@ queue_service = QueueService(
 def sanitize_filename(filename: str) -> str:
     if not filename:
         return "documento_base.docx"
-        
     nfkd_form = unicodedata.normalize('NFKD', filename)
     sem_acento = u"".join([c for c in nfkd_form if not unicodedata.combining(c)])
     limpo = re.sub(r'[^a-zA-Z0-9_.-]', '_', sem_acento)
@@ -48,12 +46,9 @@ def sanitize_filename(filename: str) -> str:
 # --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Usando o método log_evento da sua classe oficial
     logger.log_evento("INFO", "worker_task_iniciado", "Iniciando worker em background")
     worker_task = asyncio.create_task(queue_service.start_worker())
-    
     yield
-    
     logger.log_evento("INFO", "worker_task_cancelando", "Sinal de parada recebido")
     worker_task.cancel()
     try:
@@ -67,31 +62,16 @@ app = FastAPI(title="MCP Queue Worker", lifespan=lifespan)
 app.state.blob_storage_service = blob_storage_service
 app.include_router(reports_router, prefix="/reports", tags=["Reports"])
 
-# --- MIDDLEWARE DE LOG AUTOMÁTICO ---
 @app.middleware("http")
 async def log_request_middleware(request: Request, call_next):
     start_time = time.time()
-    
-    logger.log_evento(
-        level="INFO",
-        event="http_request_iniciada",
-        mensagem=f"Recebendo requisição HTTP",
-        extra={"method": request.method, "path": request.url.path}
-    )
-    
     response = await call_next(request)
-    
     process_time = round((time.time() - start_time) * 1000, 2)
     logger.log_evento(
         level="INFO",
         event="http_request_finalizada",
         mensagem="Requisição HTTP concluída",
-        extra={
-            "method": request.method,
-            "path": request.url.path,
-            "status_code": response.status_code,
-            "process_time_ms": process_time
-        }
+        extra={"method": request.method, "path": request.url.path, "status_code": response.status_code, "process_time_ms": process_time}
     )
     return response
 
@@ -111,94 +91,37 @@ async def start_analysis(
     context_used: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None)
 ):
-    # 🚀 ADIÇÃO: Imprimindo TODAS as variáveis recebidas no payload do Log
-    logger.log_evento(
-        level="INFO",
-        event="api_request_recebido",
-        mensagem="Requisição /start recebida",
-        job_id=job_id,
-        company_id=company_id,
-        project_id=project_id,
-        extra={
-            "payload_recebido": {
-                "group_ids": group_ids,
-                "email": email,
-                "nome_projeto": nome_projeto,
-                "analysis_type": analysis_type,
-                "branch": branch,
-                "repository": repository,
-                "comentario_extra": comentario_extra,
-                "context_used": context_used,
-                "has_file": bool(arquivo_docx),
-                "filename": arquivo_docx.filename if arquivo_docx else None
-            }
-        }
-    )
-    logger.log_evento(
-        level="INFO",
-        event="api_request_recebido",
-        mensagem="Requisição /start recebida",
-        job_id=job_id,
-        company_id=company_id,
-        project_id=project_id,
-        extra={"analysis_type": analysis_type, "has_file": bool(arquivo_docx)}
-    )
-    
-    nome_arquivo = None
-    blob_path = None
-    
-    if arquivo_docx:
-        nome_arquivo = sanitize_filename(arquivo_docx.filename)
-        logger.log_evento(
-            level="INFO",
-            event="api_file_upload_iniciado",
-            mensagem=f"Iniciando upload do arquivo {nome_arquivo}",
-            job_id=job_id,
-            company_id=company_id
-        )
-        try:
-            # 🚀 A MÁGICA ACONTECE AQUI: Lemos os bytes reais do arquivo de uma vez
-            file_bytes = await arquivo_docx.read()
-            
-            blob_path = await blob_storage_service.save_document(
-                company_id=company_id,
-                project_id=project_id,
-                job_id=job_id,
-                file_data=file_bytes, # 🚀 Enviamos os bytes diretamente para o serviço!
-                filename=nome_arquivo,
-                group_id=group_ids
-            )
-            logger.log_evento(
-                level="INFO",
-                event="api_file_upload_sucesso",
-                mensagem="Arquivo salvo no Blob Storage",
-                job_id=job_id,
-                company_id=company_id,
-                extra={"blob_path": blob_path}
-            )
-        except Exception as e:
-            logger.log_erro(
-                event="api_file_upload_erro",
-                mensagem=f"Erro ao salvar arquivo no Blob: {e}",
-                job_id=job_id,
-                company_id=company_id
-            )
-            return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivo no Blob Storage."})
-
+    # =========================================================================
+    # 🚀 PARSING BLINDADO DO CONTEXT_USED (O coração do problema)
+    # =========================================================================
     parsed_context = {}
-    if context_used:
-        try:
-            # Tenta como JSON normal (se vier com aspas duplas)
-            parsed_context = json.loads(context_used)
-        except Exception:
-            try:
-                # O TRUQUE: Lê o dicionário Python em formato string (aspas simples)
-                parsed_context = ast.literal_eval(context_used)
-            except Exception as e:
-                logger.log_erro(event="api_context_parse_erro", mensagem=f"Erro ao ler context_used: {e}", job_id=job_id, company_id=company_id)
-                parsed_context = {}
+    print(f"\n[{job_id}] 📥 RAW CONTEXT RECEBIDO DO FASTAPI: {repr(context_used)}", flush=True)
 
-    # Correção parecida para evitar que group_ids quebre o Vault se vier como "['id']"
+    if context_used and context_used.strip():
+        # Limpa espaços e formatações estranhas
+        clean_context_str = context_used.strip()
+        
+        # 1ª Tentativa: JSON padrão (aspas duplas)
+        try:
+            # Substitui aspas simples por aspas duplas como fallback rápido
+            json_friendly_str = clean_context_str.replace("'", '"')
+            parsed_context = json.loads(json_friendly_str)
+            print(f"[{job_id}] ✅ CONTEXTO LIDO COMO JSON: {parsed_context}", flush=True)
+        except Exception as e_json:
+            # 2ª Tentativa: Avaliação de Dicionário Python Literal (ast)
+            try:
+                parsed_context = ast.literal_eval(clean_context_str)
+                if not isinstance(parsed_context, dict):
+                    parsed_context = {}
+                print(f"[{job_id}] ✅ CONTEXTO LIDO COMO AST LITERAL: {parsed_context}", flush=True)
+            except Exception as e_ast:
+                print(f"[{job_id}] ❌ ERRO ABSOLUTO AO LER CONTEXTO. String inválida! JSON Error: {e_json} | AST Error: {e_ast}", flush=True)
+                parsed_context = {}
+    else:
+        print(f"[{job_id}] ⚠️ NENHUM CONTEXTO FOI ENVIADO NA REQUISIÇÃO.", flush=True)
+
+    # -------------------------------------------------------------------------
+    
     parsed_group_id = None
     if group_ids:
         try:
@@ -210,11 +133,29 @@ async def start_analysis(
         except:
             parsed_group_id = str(group_ids)
 
+    nome_arquivo = None
+    blob_path = None
+    
+    if arquivo_docx:
+        nome_arquivo = sanitize_filename(arquivo_docx.filename)
+        try:
+            file_bytes = await arquivo_docx.read()
+            blob_path = await blob_storage_service.save_document(
+                company_id=company_id,
+                project_id=project_id,
+                job_id=job_id,
+                file_data=file_bytes,
+                filename=nome_arquivo,
+                group_id=group_ids
+            )
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivo."})
+
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
         "company_id": company_id,
-        "group_ids": group_ids,
+        "group_ids": parsed_group_id,
         "email": email,
         "nome_projeto": nome_projeto,
         "analysis_type": analysis_type,
@@ -226,38 +167,9 @@ async def start_analysis(
         "context_used": parsed_context,
     }
     
-    logger.log_evento(
-        level="INFO",
-        event="api_task_enfileirada",
-        mensagem="Enviando tarefa para a fila",
-        job_id=job_id,
-        company_id=company_id
-    )
-    
     try:
         await queue_service.send_message(task_payload)
     except Exception as e:
-        logger.log_erro(
-            event="api_task_enfileirada_erro",
-            mensagem=f"Falha ao enviar para a fila: {e}",
-            job_id=job_id,
-            company_id=company_id
-        )
-        return JSONResponse(status_code=500, content={"error": "Falha ao enviar tarefa para a fila de processamento."})
+        return JSONResponse(status_code=500, content={"error": "Falha ao enviar tarefa para a fila."})
 
-    logger.log_evento(
-        level="INFO",
-        event="api_request_finalizado",
-        mensagem="Tarefa adicionada à fila com sucesso",
-        job_id=job_id,
-        company_id=company_id
-    )
-    
-    return JSONResponse(
-        status_code=202,
-        content={
-            "status": "queued",
-            "job_id": job_id,
-            "message": "Tarefa adicionada à fila de processamento."
-        }
-    )
+    return JSONResponse(status_code=202, content={"status": "queued", "job_id": job_id})
