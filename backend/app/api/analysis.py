@@ -195,6 +195,8 @@ async def start_analysis(
     # 2. Validação de Segurança do Arquivo
     if arquivo_docx:
         validate_file_extension(arquivo_docx)
+    else:
+        arquivo_docx = None
 
     logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' para usuário {email}")
     
