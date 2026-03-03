@@ -10,13 +10,13 @@ class ProjectRole(str, Enum):
     VIEWER = "viewer"
 
 class ProjectIdentifierRequest(BaseModel):
-    project_name: str = Field(..., description="Nome do projeto para identificação")
+    project_id: str = Field(..., description="ID do projeto para identificação")
     company_id: str = Field(..., description="Identificador da empresa associada ao projeto")
 
-    @validator('project_name')
-    def project_name_not_empty(cls, v):
+    @validator('project_id')
+    def project_id_not_empty(cls, v):
         if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('project_name é obrigatório e não pode ser vazio')
+            raise ValueError('project_id é obrigatório e não pode ser vazio')
         return v
 
     @validator('company_id')
@@ -36,14 +36,14 @@ class ListOwnedProjectsResponse(BaseModel):
 
 class AddProjectMemberRequest(BaseModel):
     requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
-    project_name: str = Field(..., description="Nome do projeto")
+    project_id: str = Field(..., description="ID do projeto")
     new_member_email: EmailStr = Field(..., description="Email do novo membro a ser adicionado")
     role: ProjectRole = Field(..., description="Permissão do novo membro: owner, editor ou viewer")
 
-    @validator('project_name')
-    def project_name_not_empty(cls, v):
+    @validator('project_id')
+    def project_id_not_empty(cls, v):
         if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('project_name é obrigatório e não pode ser vazio')
+            raise ValueError('project_id é obrigatório e não pode ser vazio')
         return v
 
 class AddProjectMemberResponse(BaseModel):
@@ -52,27 +52,39 @@ class AddProjectMemberResponse(BaseModel):
 
 class UpdateProjectMembersRequest(BaseModel):
     requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
-    project_name: str = Field(..., description="Nome do projeto")
+    project_id: str = Field(..., description="ID do projeto")
     members: List[dict] = Field(..., description="Lista completa de membros a ser salva no projeto")
 
-    @validator('project_name')
-    def project_name_not_empty(cls, v):
+    @validator('project_id')
+    def project_id_not_empty(cls, v):
         if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('project_name é obrigatório e não pode ser vazio')
+            raise ValueError('project_id é obrigatório e não pode ser vazio')
         return v
 
 class UpdateProjectMembersResponse(BaseModel):
     success: bool = Field(..., description="Indica se a atualização foi bem-sucedida")
     message: Optional[str] = Field(None, description="Mensagem de confirmação ou erro")
 
+# NOVO MODELO (Trazido das rotas para o local correto)
+class RemoveMemberRequest(BaseModel):
+    requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
+    project_id: str = Field(..., description="ID do projeto")
+    target_email: EmailStr = Field(..., description="Email do membro a ser removido")
+
+    @validator('project_id')
+    def project_id_not_empty(cls, v):
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError('project_id é obrigatório e não pode ser vazio')
+        return v
+
 class DeleteProjectRequest(BaseModel):
     requester_email: EmailStr = Field(..., description="Email do usuário solicitante (owner)")
-    project_name: str = Field(..., description="Nome do projeto a ser excluído")
+    project_id: str = Field(..., description="ID do projeto a ser excluído")
 
-    @validator('project_name')
-    def project_name_not_empty(cls, v):
+    @validator('project_id')
+    def project_id_not_empty(cls, v):
         if not v or not isinstance(v, str) or not v.strip():
-            raise ValueError('project_name é obrigatório e não pode ser vazio')
+            raise ValueError('project_id é obrigatório e não pode ser vazio')
         return v
 
 class DeleteProjectResponse(BaseModel):
