@@ -273,57 +273,55 @@ async def start_analysis(
     reports_to_read = ANALYSIS_CONTEXT_CONFIG.get(analysis_type, [])
     context_used = {}
     
-    # 🚀 CORREÇÃO CRÍTICA: Puxamos a busca do latest_reports para fora do IF,
-    # pois agora AMBOS os cenários precisam saber qual é o estado mais recente do projeto.
+    # 1. Decodifica a "Foto da Tela" que o Frontend enviou
+    screen_context = {}
+    if context_used_front:
+        try:
+            screen_context = json.loads(context_used_front)
+        except Exception:
+            pass
+
+    # 2. Busca o estado mais recente do banco (Plano C)
     project_doc = await mongo_service.get_project_by_id(project_id)
-    latest_reports = getattr(project_doc, "latest_reports", {})
-    if not isinstance(latest_reports, dict) and hasattr(latest_reports, "dict"):
-        latest_reports = latest_reports.dict()
-    elif not latest_reports:
-        latest_reports = {}
+    latest_reports_db = getattr(project_doc, "latest_reports", {})
+    if not isinstance(latest_reports_db, dict) and hasattr(latest_reports_db, "dict"):
+        latest_reports_db = latest_reports_db.dict()
+    elif not latest_reports_db:
+        latest_reports_db = {}
 
     if base_job_id:
         # ---------------------------------------------------------
-        # CENÁRIO A: REFINAMENTO (Usuário escolheu um relatório específico)
+        # CENÁRIO A: REFINAMENTO
         # ---------------------------------------------------------
         past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
         if not past_report:
-            raise HTTPException(status_code=404, detail="Relatório base histórico não encontrado.")
+            raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
             
         past_context = past_report.get("context_used", {})
         
         for category in reports_to_read:
-            # Se é a própria categoria que estou refinando (ex: Features)
             if category == past_report.get("report_category"):
                 context_used[f"{category}_job_id"] = base_job_id
             else:
-                # 🚀 MUDANÇA DE PARADIGMA (Contexto Vivo):
-                # Para as dependências (ex: Épicos), nós puxamos a versão mais atual do projeto. 
-                # Assim a IA vai ler o seu Épico recém-refinado.
-                dependency_job_id = latest_reports.get(category)
+                # 🚀 A REGRA DE OURO DA LINHAGEM:
+                # Prioridade 1: O que está na tela do usuário agora (screen_context)
+                # Prioridade 2: O passado congelado de quando o item foi criado (past_context)
+                # Prioridade 3: O mais recente do banco de dados (latest_reports_db)
+                dependency_job_id = screen_context.get(category) or past_context.get(f"{category}_job_id") or latest_reports_db.get(category)
                 
-                # Fallback de segurança: se por acaso não existir no mais recente, tenta achar no passado
                 if not dependency_job_id:
-                    dependency_job_id = past_context.get(f"{category}_job_id")
-                    
-                if not dependency_job_id:
-                     raise HTTPException(
-                        status_code=400, 
-                        detail=f"Dependência '{category}' não encontrada para realizar o refinamento."
-                    )
+                     raise HTTPException(status_code=400, detail=f"Dependência '{category}' não encontrada.")
                 context_used[f"{category}_job_id"] = dependency_job_id
 
     else:
         # ---------------------------------------------------------
-        # CENÁRIO B: FLUXO NORMAL (Geração do zero usando o mais recente)
+        # CENÁRIO B: GERAÇÃO DO ZERO
         # ---------------------------------------------------------
         for category in reports_to_read:
-            dependency_job_id = latest_reports.get(category)
+            # Prioridade 1: Tela. Prioridade 2: Banco.
+            dependency_job_id = screen_context.get(category) or latest_reports_db.get(category)
             if not dependency_job_id:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Não é possível iniciar '{analysis_type}'. O relatório '{category}' ainda não foi gerado."
-                )
+                raise HTTPException(status_code=400, detail=f"Dependência '{category}' não encontrada.")
             context_used[f"{category}_job_id"] = dependency_job_id
 
     # 7. Gera job_id único para rastreamento da execução
