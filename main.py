@@ -1,8 +1,9 @@
 import os
 import re
 import sys
-import time
+import ast
 import json
+import time
 import asyncio
 import unicodedata
 
@@ -187,9 +188,27 @@ async def start_analysis(
     parsed_context = {}
     if context_used:
         try:
+            # Tenta como JSON normal (se vier com aspas duplas)
             parsed_context = json.loads(context_used)
         except Exception:
-            parsed_context = {}
+            try:
+                # O TRUQUE: Lê o dicionário Python em formato string (aspas simples)
+                parsed_context = ast.literal_eval(context_used)
+            except Exception as e:
+                logger.log_erro(event="api_context_parse_erro", mensagem=f"Erro ao ler context_used: {e}", job_id=job_id, company_id=company_id)
+                parsed_context = {}
+
+    # Correção parecida para evitar que group_ids quebre o Vault se vier como "['id']"
+    parsed_group_id = None
+    if group_ids:
+        try:
+            g_val = ast.literal_eval(group_ids)
+            if isinstance(g_val, list) and len(g_val) > 0:
+                parsed_group_id = str(g_val[0])
+            else:
+                parsed_group_id = str(group_ids)
+        except:
+            parsed_group_id = str(group_ids)
 
     task_payload = {
         "job_id": job_id,
