@@ -27,9 +27,9 @@ Ao processar o feedback, siga estas regras:
 -   [ ] **Exclusão:** Se uma feature for cancelada ou considerada desnecessária, remova o objeto inteiro da lista.
 
 ## 5. REGRAS IMPERATIVAS E FORMATO DE SAÍDA (LEIA COM ATENÇÃO)
-**O NÃO CUMPRIMENTO DESTAS REGRAS CAUSARÁ FALHA NO SISTEMA (ERRO 422).**
 **SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
 1.  A única chave raiz deve ser `features_report` (Lista de objetos). É totalmente proibido ter outra chave
+
 2.  **Campos Obrigatórios por Item:**
 
     * `"id"`: (String, ex: "F01") Sequencial único.
