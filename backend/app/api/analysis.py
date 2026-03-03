@@ -271,42 +271,51 @@ async def start_analysis(
     # ==========================================
     reports_to_read = ANALYSIS_CONTEXT_CONFIG.get(analysis_type, [])
     context_used = {}
+    
+    # 🚀 CORREÇÃO CRÍTICA: Puxamos a busca do latest_reports para fora do IF,
+    # pois agora AMBOS os cenários precisam saber qual é o estado mais recente do projeto.
+    project_doc = await mongo_service.get_project_by_id(project_id)
+    latest_reports = getattr(project_doc, "latest_reports", {})
+    if not isinstance(latest_reports, dict) and hasattr(latest_reports, "dict"):
+        latest_reports = latest_reports.dict()
+    elif not latest_reports:
+        latest_reports = {}
+
     if base_job_id:
         # ---------------------------------------------------------
-        # CENÁRIO A: VIAGEM NO TEMPO (Usuário escolheu um relatório antigo)
+        # CENÁRIO A: REFINAMENTO (Usuário escolheu um relatório específico)
         # ---------------------------------------------------------
         past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
         if not past_report:
             raise HTTPException(status_code=404, detail="Relatório base histórico não encontrado.")
             
-        # Pega o contexto exato que foi usado para gerar aquele relatório antigo
         past_context = past_report.get("context_used", {})
         
         for category in reports_to_read:
-            # Se a categoria que eu preciso ler é a mesma do relatório que o usuário selecionou, uso o próprio ID dele
+            # Se é a própria categoria que estou refinando (ex: Features)
             if category == past_report.get("report_category"):
                 context_used[f"{category}_job_id"] = base_job_id
             else:
-                # Senão, pego do passado congelado
-                dependency_job_id = past_context.get(f"{category}_job_id")
+                # 🚀 MUDANÇA DE PARADIGMA (Contexto Vivo):
+                # Para as dependências (ex: Épicos), nós puxamos a versão mais atual do projeto. 
+                # Assim a IA vai ler o seu Épico recém-refinado.
+                dependency_job_id = latest_reports.get(category)
+                
+                # Fallback de segurança: se por acaso não existir no mais recente, tenta achar no passado
+                if not dependency_job_id:
+                    dependency_job_id = past_context.get(f"{category}_job_id")
+                    
                 if not dependency_job_id:
                      raise HTTPException(
                         status_code=400, 
-                        detail=f"O relatório histórico selecionado não possui a dependência de '{category}'."
+                        detail=f"Dependência '{category}' não encontrada para realizar o refinamento."
                     )
                 context_used[f"{category}_job_id"] = dependency_job_id
 
     else:
         # ---------------------------------------------------------
-        # CENÁRIO B: FLUXO NORMAL (Pega o mais recente do projeto)
+        # CENÁRIO B: FLUXO NORMAL (Geração do zero usando o mais recente)
         # ---------------------------------------------------------
-        project_doc = await mongo_service.get_project_by_id(project_id)
-        latest_reports = getattr(project_doc, "latest_reports", {})
-        if not isinstance(latest_reports, dict) and hasattr(latest_reports, "dict"):
-            latest_reports = latest_reports.dict()
-        elif not latest_reports:
-            latest_reports = {}
-
         for category in reports_to_read:
             dependency_job_id = latest_reports.get(category)
             if not dependency_job_id:
