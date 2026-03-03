@@ -310,12 +310,12 @@ class MongoDBService:
             self.logger.error(f"[remove_member_from_project] Erro: {e}")
             return False
 
-    async def get_project_by_normalized_name(self, nome_projeto: str, company_id: str) -> Optional[ProjectPermission]:
-        self.logger.info(f"[get_project_by_normalized_name] Iniciando busca de projeto por nome normalizado: '{nome_projeto}', company_id: '{company_id}'")
+    async def get_project_by_normalized_name(self, nome_projeto_normalizado: str, company_id: str) -> Optional[ProjectPermission]:
+        self.logger.info(f"[get_project_by_normalized_name] Iniciando busca de projeto por nome normalizado: '{nome_projeto_normalizado}', company_id: '{company_id}'")
+        
         if not company_id or not isinstance(company_id, str) or not company_id.strip():
             self.logger.error(f"[get_project_by_normalized_name] company_id inválido ou vazio: '{company_id}'")
-            raise ValueError("company_id é obrigatório e não pode ser vazio.")
-        nome_projeto_normalizado = normalize_string_general(nome_projeto)
+            raise ValueError("company_id é obrigatório e não pode ser vazio.") 
         try:
             doc = await self.db.projects.find_one({"name_normalized": nome_projeto_normalizado, "company_id": company_id})
             self.logger.info(f"[get_project_by_normalized_name] Resultado da consulta: {doc}")
