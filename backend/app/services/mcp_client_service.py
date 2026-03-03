@@ -22,6 +22,7 @@ class MCPStartAnalysisPayload(BaseModel):
     branch: Optional[str] = Field(None)
     repository: Optional[str] = Field(None)
     comentario_extra: Optional[str] = Field(None)
+    context_used: Optional[dict] = Field(default_factory=dict) # Proteção no Pydantic
 
     @staticmethod
     def validate_job_id(job_id):
@@ -48,6 +49,11 @@ class MCPClientService:
         )
         raw_groups = payload.get("group_ids", [])
         group_ids_str = json.dumps(raw_groups) if isinstance(raw_groups, list) else raw_groups
+        
+        # 🚀 A MÁGICA: Pega o dicionário e converte para string JSON garantindo aspas duplas!
+        raw_context = payload.get("context_used", {})
+        context_used_str = json.dumps(raw_context) if raw_context else "{}"
+
         return {
             "project_id": payload.get("project_id"),
             "job_id": payload.get("job_id"),
@@ -58,7 +64,8 @@ class MCPClientService:
             "analysis_type": payload.get("analysis_type"),
             "branch": payload.get("branch"),
             "repository": payload.get("repository"),
-            "comentario_extra": payload.get("comentario_extra")
+            "comentario_extra": payload.get("comentario_extra"),
+            "context_used": context_used_str  # 🔥 AGORA VAI NO PACOTE COMO STRING SEGURA
         }
 
     async def start_analysis(
@@ -119,15 +126,12 @@ class MCPClientService:
                 log_service_call(
                     service="MCPClientService",
                     action="http_response",
-                    response={"status_code": response.status_code}, # Removi o body daqui para não poluir o log se o retorno for gigante
+                    response={"status_code": response.status_code}, 
                     job_id=job_id,
                     project_id=project_id
                 )
                 response.raise_for_status()
                 
-                # O retorno não é estritamente necessário processar aqui se o Webhook já cuida do status
-                # mas mantemos para evitar quebrar chamadores anteriores
-                data_resp = response.json()
                 return MCPStartAnalysisResponse(project_id=project_id, job_id=job_id)
                 
         except Exception as exc:
@@ -141,12 +145,9 @@ class MCPClientService:
             logging.error(f"❌ [MCP Client] Falha ao chamar [{url}]: {str(exc)}")
             raise Exception(f"Erro na comunicação com MCP: {str(exc)}")
 
-    # MUDANÇA: Atualizado para a nova rota do MCP, enviando company_id e suportando nome de arquivo dinâmico
     async def get_report(self, project_id: str, job_id: str, mcp_url: str, company_id: str, filename: str = "epics.md") -> Any:
-        # A URL agora bate exatamente com o prefixo "/reports" do MCP
         url = f"{mcp_url.rstrip('/')}/reports/{project_id}/{job_id}"
         
-        # Os parâmetros exigidos pela nossa nova rota no MCP
         params = {
             "company_id": company_id,
             "filename": filename
@@ -154,16 +155,13 @@ class MCPClientService:
         
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                # Dispara o GET passando os parâmetros na URL
                 response = await client.get(url, params=params)
                 response.raise_for_status()
                 
                 content_type = response.headers.get("content-type", "").lower()
                 
-                # Se o MCP responder com JSON {"report": "..."}
                 if "application/json" in content_type:
                     return response.json()
-                # Se o MCP responder diretamente com o arquivo cru (Markdown/Texto)
                 else:
                     return {"report": response.text}
                     
