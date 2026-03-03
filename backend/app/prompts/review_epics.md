@@ -23,68 +23,42 @@ Ao processar o feedback, siga estas diretrizes:
 -   [ ] **Refatoração de Texto:** Se o usuário der novos detalhes técnicos, incorpore-os na `descricao` ou `entregaveis_macro` do épico pertinente.
 -   [ ] **Sanidade dos IDs:** Tente manter os IDs originais. Se dividir um épico, crie novos IDs sequenciais (ex: E01 vira E01-A e E01-B ou E08 e E09).
 
-## 5. REGRAS IMPERATIVAS E FORMATO DE SAÍDA (LEIA COM ATENÇÃO)
-**O NÃO CUMPRIMENTO DESTAS REGRAS CAUSARÁ FALHA NO SISTEMA (ERRO 422).**
+## 5. FORMATO DE SAÍDA (ESTRITO - JSON)
+**SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
+* **Raiz:** É mandatório que tenha apenas uma chave que é `epicos_report` que é uma Lista de objetos. É TOTALMENTE PROIBIDO TER OUTRA OUTRA CHAVE  e ou outro formato
+* **Campos Obrigatórios por Item:**
+    * `"id"`: (String, ex: "E01")
+    * `"titulo"`: (String) Nome executivo do Épico (ex: "Módulo Financeiro").
+    * `"resumo_valor"`: (String) O benefício claro para o negócio.
+    * `"business_case"`: (String) Quem pediu? Qual dor resolve? (Cite trechos ou cargos da transcrição).
+    * `"entregaveis_macro"`: (Lista de Strings) Liste TUDO que compõe a entrega (Telas, APIs, Integrações e Banco). Mostre que é uma solução completa.
+    * `"squad_sugerida"`:(Lista de Strings) lista de perfis para executarem a tarefas
+    * `"estimativa_semanas"`: (String) Estimativa para a entrega completa (Full Stack).
+    * `"prioridade_estrategica"`: (String) "Crítica", "Alta", "Média".
 
-1.  **CHAVE ÚNICA:** O JSON deve ter **EXATAMENTE UMA** chave raiz chamada `epicos_report`.
-2.  **PROIBIÇÃO DE METADADOS:**
-    * **NÃO** inclua chaves como `roadmap_estrategico`, `resumo`, `investimento_total`, `prazo_total`, `analise_financeira`.
-    * **NÃO** faça somatórios de valores ou prazos fora dos objetos.
-    * **NÃO** crie agrupamentos/aninhamentos fora da lista principal.
-3.  **SCHEMA IMUTÁVEL:** Os objetos dentro da lista `epicos_report` devem manter estritamente as chaves:
-    * `"id"`
-    * `"titulo"`
-    * `"business_case"`
-    * `"entregaveis_macro"`
-    * `"squad_sugerida"`
-    * `"estimativa_semanas"`
-    * `"prioridade_estrategica"`
+## 6. EXEMPLO DE LÓGICA ESPERADA (VERTICAL)
 
-## 6. ANTI-PADRÕES (O QUE NÃO FAZER)
-❌ **ERRADO (NÃO GERE ISSO):**
-Isso quebra o validador porque tem mais de uma chave raiz.
-```json
-{
-  "epicos_report": [...],
-  "roadmap_estrategico": { "onda1": "..." },
-  "investimento_total": "R$ 500k"
-}
-```
-## 7. exemplo saída
 ```json
 {
   "epicos_report": [
     {
       "id": "E01",
-      "titulo": "App de Vendas - Fase 1 (Catálogo Digital)",
-      "business_case": "Habilitar a visualização de produtos para clientes, focando em descoberta e engajamento inicial, reduzindo o time-to-market.",
+      "titulo": "Portal de Parceiros (Full Stack)",
+      "resumo_valor": "Solução ponta a ponta para que parceiros se cadastrem e operem sem intervenção manual.",
+      "business_case": "Atende a solicitação da Diretora de Vendas para eliminar o gargalo de cadastro manual via planilha.",
       "entregaveis_macro": [
-        "Home do App com vitrine de ofertas",
-        "Busca e listagem de produtos com filtros",
-        "Página de detalhe de produto (PDP)"
+        "Frontend: Wizard de cadastro e Dashboard do parceiro",
+        "Backend: APIs de criação, edição e validação de parceiros",
+        "Integração: Conexão com Receita Federal para validação de CNPJ",
+        "Banco de Dados: Modelagem das tabelas de Parceiros e Contratos"
       ],
-      "squad_sugerida": [
-        "Tech Lead Mobile",
-        "UX Designer"
-      ],
-      "estimativa_semanas": "4 semanas",
-      "prioridade_estrategica": "Alta - Onda 1"
-    },
-    {
-      "id": "E02",
-      "titulo": "App de Vendas - Fase 2 (Checkout e Pagamentos)",
-      "business_case": "Completar a jornada de compra permitindo transações in-app, monetizando a base de usuários adquirida na Fase 1.",
-      "entregaveis_macro": [
-        "Carrinho de compras persistente",
-        "Integração com Gateway de Pagamento",
-        "Histórico de Pedidos"
-      ],
-      "squad_sugerida": [
-        "Eng. Backend (Financeiro)",
-        "Dev Mobile"
-      ],
-      "estimativa_semanas": "5 semanas",
-      "prioridade_estrategica": "Média - Onda 2"
+"squad_sugerida": [
+      "Backend Developer",
+      "Frontend Developer",
+      "Analista de BI"
+    ]
+      "estimativa_semanas": "8 semanas",
+      "prioridade_estrategica": "Alta"
     }
   ]
 }
