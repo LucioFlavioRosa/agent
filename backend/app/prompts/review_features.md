@@ -29,8 +29,8 @@ Ao processar o feedback, siga estas regras:
 ## 5. REGRAS IMPERATIVAS E FORMATO DE SAÍDA (LEIA COM ATENÇÃO)
 **SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
 1.  A única chave raiz deve ser `features_report` (Lista de objetos). É totalmente proibido ter outra chave
-
-2.  **Campos Obrigatórios por Item:**
+2.  **É totalmente proibido ter qualquer conteúdo fora do json válido**
+3.  **Campos Obrigatórios por Item:**
 
     * `"id"`: (String, ex: "F01") Sequencial único.
     * `"epic_id"`: (String, ex: "E01") ID do Épico pai.
@@ -40,7 +40,7 @@ Ao processar o feedback, siga estas regras:
     * `"tipo"`: (String) "Backend", "Frontend", "Infra", "Dados", "Design".
     * `"complexidade"`: (String) "Baixa", "Média", "Alta".
 
-## 6. EXEMPLO DE SAÍDA MANDATÓRIA (Nota: Observe o agrupamento)
+## 6. EXEMPLO DE SAÍDA MANDATÓRIA
 ```json
 {
   "features_report": [
