@@ -53,20 +53,41 @@ class AgentService:
         group_ids: Optional[str] = None
     ) -> str:
         logger.log_entrada_funcao("_montar_prompt", job_id=None, company_id=company_id, project_id=project_id, mensagem="Montando mega-prompt", extra={"analysis_type": analysis_type})
+        
+        # 🚀 INÍCIO DO DEBUG VISUAL
+        print(f"\n{'='*60}\n🔍 [DEBUG AGENTE] INICIANDO MONTAGEM DO MEGA PROMPT\n{'='*60}", flush=True)
+        print(f"📌 Agente acionado: {analysis_type}", flush=True)
+        print(f"📌 Chaves de contexto recebidas do Redis/Fila: {list(context_used.keys())}", flush=True)
+        
         prompt = self._obter_prompt_base(analysis_type)
+        print(f"✅ Prompt base lido com sucesso (Tamanho: {len(prompt)} chars)", flush=True)
+
         contexto_historico = await self.context_retrieval.build_context_string(
             company_id=company_id, 
             project_id=project_id, 
             context_used=context_used,
             group_ids=group_ids
         )
+        
         if contexto_historico:
-            prompt += f"--- CONTEXTO HISTÓRICO (Relatórios Anteriores) ---\n{contexto_historico}\n\n"
+            print(f"✅ CONTEXTO HISTÓRICO BAIXADO COM SUCESSO! (Tamanho: {len(contexto_historico)} chars)", flush=True)
+            prompt += f"\n\n--- CONTEXTO HISTÓRICO (Relatórios Anteriores) ---\n{contexto_historico}\n\n"
+        else:
+            print(f"⚠️ AVISO: O Contexto Histórico retornou VAZIO! Se o agente precisar de épicos, ele vai falhar.", flush=True)
+
         if comentario_extra:
             prompt += f"--- INSTRUÇÕES ADICIONAIS DO USUÁRIO ---\n{comentario_extra}\n\n"
+            print(f"✅ Instruções adicionais anexadas.", flush=True)
+
         if texto_documento:
             prompt += f"--- DOCUMENTO ATUAL PARA ANÁLISE ---\n{texto_documento}\n\n"
+            print(f"✅ Documento DOCX anexado (Tamanho: {len(texto_documento)} chars).", flush=True)
+
         prompt += "Gere o relatório final estruturado em formato Markdown."
+        
+        print(f"\n🚀 MEGA PROMPT FINALIZADO! Tamanho total: {len(prompt)} caracteres.", flush=True)
+        print(f"{'='*60}\n", flush=True)
+        
         logger.log_saida_funcao("_montar_prompt", job_id=None, company_id=company_id, project_id=project_id, mensagem="Mega-prompt montado")
         return prompt
 
@@ -76,7 +97,9 @@ class AgentService:
         company_id = task_payload.get("company_id")
         project_id = task_payload.get("project_id")
         group_ids = task_payload.get("group_ids")
+        
         logger.log_entrada_funcao("executar_analise", job_id=job_id, company_id=company_id, project_id=project_id, mensagem="Início da análise IA", extra={"analysis_type": analysis_type})
+        
         try:
             mega_prompt = await self._montar_prompt(
                 texto_documento=texto_extraido,
@@ -87,27 +110,39 @@ class AgentService:
                 context_used=task_payload.get("context_used", {}), 
                 group_ids=group_ids
             )
+            
             config_agente = AGENT_CONFIG.get(analysis_type)
             if not config_agente:
                 logger.log_erro("tipo_analise_nao_encontrado", f"Tipo de análise '{analysis_type}' não encontrado no AGENT_CONFIG.", job_id=job_id, company_id=company_id, project_id=project_id)
                 raise ValueError(f"Tipo de análise '{analysis_type}' não encontrado no AGENT_CONFIG.")
+                
             nome_servico = config_agente.get("service")
             nome_modelo = config_agente.get("llm_model")
             nome_arquivo_saida = config_agente.get("output_filename")
+            
             llm_service = self.llm_services.get(nome_servico)
             if not llm_service:
                 logger.log_erro("servico_llm_nao_registrado", f"Serviço LLM '{nome_servico}' não foi registrado.", job_id=job_id, company_id=company_id, project_id=project_id)
                 raise ValueError(f"Serviço LLM '{nome_servico}' não foi registrado no llm_services.")
+                
             logger.log_info_negocio("chamada_llm", f"Chamando LLM para gerar resposta.", job_id=job_id, company_id=company_id, project_id=project_id, extra={"servico": nome_servico, "modelo": nome_modelo})
+            
+            # 🚀 IMPRESSÃO DEFINITIVA ANTES DE ENVIAR PARA A AWS
+            print(f"\n📡 DISPARANDO REQUISIÇÃO PARA {nome_servico} ({nome_modelo})...", flush=True)
+
             resposta_llm = await llm_service.gerar_texto(
                 prompt=mega_prompt, 
                 modelo=nome_modelo,
                 company_id=company_id, 
                 group_id=group_ids
             )
+            
+            print(f"✅ RESPOSTA RECEBIDA DO LLM! (Tamanho: {len(resposta_llm)} chars)", flush=True)
+
             if resposta_llm and nome_arquivo_saida:
                 file_bytes = resposta_llm.encode('utf-8')
                 logger.log_info_negocio("salvando_blob", f"Salvando relatório final no Blob Storage.", job_id=job_id, company_id=company_id, project_id=project_id, extra={"filename": nome_arquivo_saida})
+                
                 caminho_blob = await self.blob_storage.save_document(
                     company_id=company_id,
                     project_id=project_id,
@@ -117,8 +152,11 @@ class AgentService:
                     group_id=group_ids
                 )
                 logger.log_info_negocio("blob_salvo", f"Relatório salvo em: {caminho_blob}", job_id=job_id, company_id=company_id, project_id=project_id)
+                
             logger.log_saida_funcao("executar_analise", job_id=job_id, company_id=company_id, project_id=project_id, mensagem="Análise IA finalizada")
             return resposta_llm
+            
         except Exception as e:
             logger.log_erro("erro_executar_analise", f"Erro ao executar análise: {e}", job_id=job_id, company_id=company_id, project_id=project_id)
+            print(f"\n❌ ERRO CRÍTICO NA EXECUÇÃO DA IA: {str(e)}", flush=True)
             raise
