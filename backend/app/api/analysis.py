@@ -177,6 +177,7 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None),
     base_job_id: Optional[str] = Form(None), 
+    context_used_front: Optional[str] = Form(None),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     # 1. Log recebimento do payload
