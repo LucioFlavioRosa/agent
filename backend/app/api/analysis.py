@@ -341,20 +341,14 @@ async def start_analysis(
                      raise HTTPException(status_code=400, detail=f"Dependência '{category}' não encontrada.")
                 context_used[f"{category}_job_id"] = dependency_job_id
 
-        # 🚀 A MÁGICA DO GIT RESET (Atualizando o Latest State) 🚀
         # Transforma o passado recuperado no novo "presente oficial" do projeto.
-        if strategy == "checkout":
+        strategy == "checkout":
             new_latest_state = {}
             for cat, j_id in context_used.items():
                 cat_name = cat.replace("_job_id", "")
                 new_latest_state[cat_name] = j_id
-                
-            await mongo_service.db.projects.update_one(
-                {"_id": project_id},
-                {"$set": {
-                    **{f"latest_reports.{k}": v for k, v in new_latest_state.items()}
-                }}
-            )
+            # Chama o método oficial e limpo do serviço
+            await mongo_service.update_project_latest_reports(project_id, new_latest_state)
 
     else:
         # ---------------------------------------------------------
