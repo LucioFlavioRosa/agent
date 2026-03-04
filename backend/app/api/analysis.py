@@ -510,3 +510,46 @@ async def get_project_lineage(
         "nodes": nodes,
         "edges": edges
     }
+
+# ============================================================================
+# ROTA DE RESTAURAÇÃO DE VERSÃO (ROLLBACK / GIT RESET)
+# ============================================================================
+@router.post("/restore", tags=["Analysis"])
+async def restore_historical_version(
+    project_id: str = Form(...),
+    job_id: str = Form(...),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """
+    Restaura uma versão antiga de um relatório e puxa automaticamente 
+    todas as dependências (contexto) que geraram essa versão para o estado atual.
+    """
+    # 1. Verifica se o relatório existe
+    report = await mongo_service.db.project_reports_history.find_one({"job_id": job_id})
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatório histórico não encontrado.")
+
+    # 2. Usa a nossa função mágica de Grafo para escalar a árvore e achar o passado
+    historical_tree = await get_historical_lineage(job_id, mongo_service.db)
+
+    # 3. Monta o novo "Estado da Arte" (latest_reports) do projeto
+    new_latest_state = {}
+    for cat, j_id in historical_tree.items():
+        # A função de lineage já traz a categoria limpa (ex: "epics")
+        cat_name = cat.replace("_job_id", "") 
+        new_latest_state[cat_name] = j_id
+
+    # Garante que o próprio item selecionado está no novo estado
+    target_category = report.get("report_category")
+    new_latest_state[target_category] = job_id
+
+    # 4. Atualiza o banco de dados via serviço (O Git Reset)
+    success = await mongo_service.update_project_latest_reports(project_id, new_latest_state)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Falha ao atualizar o banco de dados.")
+
+    return {
+        "message": "Versão e contexto restaurados com sucesso.",
+        "new_state": new_latest_state
+    }
