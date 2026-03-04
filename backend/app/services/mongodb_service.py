@@ -505,6 +505,31 @@ class MongoDBService:
             f"context_used.{dependency_field}": dependency_job_id,
             "status": "done"
         }).sort("version", -1).limit(1)
+
+    async def update_project_latest_reports(self, project_id: str, new_reports: dict):
+        """
+        Atualiza campos específicos dentro do dicionário 'latest_reports' de um projeto,
+        sem apagar os outros campos que já estavam lá.
+        """
+        self.logger.info(f"[update_project_latest_reports] Atualizando linhagem do projeto: {project_id}")
+        try:
+            # Cria a estrutura de "set" para o Mongo no formato: {"latest_reports.epics": "123", ...}
+            update_query = {
+                f"latest_reports.{key}": value 
+                for key, value in new_reports.items()
+            }
+            
+            # Atualiza também a data de alteração
+            update_query["updated_at"] = datetime.utcnow()
+            
+            await self.projects_collection.update_one(
+                {"_id": project_id},
+                {"$set": update_query}
+            )
+            return True
+        except Exception as e:
+            self.logger.error(f"[update_project_latest_reports] Erro ao atualizar latest_reports: {e}")
+            return False
         
         docs = await cursor.to_list(length=1)
         return docs[0] if docs else None
