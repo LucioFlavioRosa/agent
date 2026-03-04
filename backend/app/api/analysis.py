@@ -444,3 +444,73 @@ async def start_analysis(
     )
     log_response_sent(endpoint="/analysis/start", response=response_obj.dict(), job_id=job_id, project_id=project_id)
     return response_obj
+
+# ============================================================================
+# ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO)
+# ============================================================================
+@router.get("/lineage/{project_id}", tags=["Lineage"])
+async def get_project_lineage(
+    project_id: str,
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """
+    Varre o histórico do projeto e constrói o grafo de linhagem.
+    Retorna Nós (Nodes) e Conexões (Edges) no formato que o vis.js espera.
+    """
+    # 1. Busca todo o histórico desse projeto ordenado pela data
+    cursor = mongo_service.db.project_reports_history.find(
+        {"project_id": project_id}
+    ).sort("created_at", 1) # Do mais antigo para o mais novo
+    
+    history = await cursor.to_list(length=2000)
+    
+    if not history:
+        return {"nodes": [], "edges": []}
+
+    nodes = []
+    edges = []
+    
+    # Mapa rápido para achar a categoria de um job pai na hora de ligar as setas
+    job_category_map = {item["job_id"]: item.get("report_category") for item in history}
+
+    for report in history:
+        job_id = report.get("job_id")
+        category = report.get("report_category", "unknown")
+        version = report.get("version", 1)
+        
+        # --- 1. CRIA O "NÓ" (A Caixinha no Gráfico) ---
+        nodes.append({
+            "id": job_id,
+            "type": category,
+            "label": f"{str(category).capitalize()} v{version}",
+            "version": version,
+            "status": report.get("status"),
+            "created_at": report.get("created_at").isoformat() if getattr(report.get("created_at"), "isoformat", None) else str(report.get("created_at")),
+            "created_by": report.get("created_by_email")
+        })
+
+        # --- 2. CRIA AS "ARESTAS" (As setas conectando as caixinhas) ---
+        context_used = report.get("context_used", {})
+        
+        for ctx_key, parent_job_id in context_used.items():
+            if not parent_job_id:
+                continue
+                
+            # Descobre de qual categoria veio esse pai
+            parent_category = job_category_map.get(parent_job_id)
+            
+            # Define se a seta é de Refinamento (mesma cor) ou Dependência (cores diferentes)
+            edge_type = "refinement" if parent_category == category else "dependency"
+            
+            edges.append({
+                "id": f"edge_{parent_job_id}_to_{job_id}",
+                "source": parent_job_id,  # De onde a flecha sai
+                "target": job_id,         # Onde a flecha chega
+                "type": edge_type
+            })
+
+    return {
+        "project_id": project_id,
+        "nodes": nodes,
+        "edges": edges
+    }
