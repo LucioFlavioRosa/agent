@@ -522,7 +522,7 @@ class MongoDBService:
             # Atualiza também a data de alteração
             update_query["updated_at"] = datetime.utcnow()
             
-            await self.projects_collection.update_one(
+            await self.db.projects.update_one(
                 {"_id": project_id},
                 {"$set": update_query}
             )
