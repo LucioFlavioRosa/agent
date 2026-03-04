@@ -41,7 +41,7 @@ Use o ciclo SDLC para encaixar as peças no limite de 2 pessoas:
 2.  **SCHEMA DA SEMANA:**
     * `"semana"`: (Int) Número da semana.
     * `"fase"`: (String) Fase atual (Discovery, Setup, Dev, QA, Deploy).
-    * `"atividades_focadas"`: (String) O que está sendo feito.
+    * `"atividades_focadas"`: (String) O que está sendo feito (deve informar qual features deve ser focada).
     * `"progresso_estimado"`: (String) %.
     * `"justificativa_agendamento"`: (String) **NOVO CAMPO:** Explique brevemente por que agendou aqui (ex: "Iniciado apenas na semana 5 para liberar a dupla de Backend que estava no Épico 1").
 
@@ -52,18 +52,18 @@ Use o ciclo SDLC para encaixar as peças no limite de 2 pessoas:
   "timeline_report": [
     {
       "E01 - Refatoração Crítica (Backend Pesado)": [
-        { "semana": 1, "fase": "Discovery & Setup", "atividades_focadas": "Tech Lead define arquitetura.", "progresso_estimado": "10%", "justificativa_agendamento": "Prioridade 1." },
-        { "semana": 2, "fase": "Dev-Backend Core", "atividades_focadas": "Dupla de Backend focada na API.", "progresso_estimado": "40%", "justificativa_agendamento": "Uso total da capacidade de Backend." },
-        { "semana": 3, "fase": "Dev-Backend Core", "atividades_focadas": "Finalização da lógica complexa.", "progresso_estimado": "80%", "justificativa_agendamento": "Mantendo foco total." },
-        { "semana": 4, "fase": "QA & Deploy", "atividades_focadas": "Homologação.", "progresso_estimado": "100%", "justificativa_agendamento": "Libera recursos para E02." }
+        { "semana": 1, "fase": "Discovery & Setup", "atividades_focadas": "Tech Lead define arquitetura(F1).", "progresso_estimado": "10%", "justificativa_agendamento": "Prioridade 1." },
+        { "semana": 2, "fase": "Dev-Backend Core", "atividades_focadas": "Dupla de Backend focada na API(F2)", "progresso_estimado": "40%", "justificativa_agendamento": "Uso total da capacidade de Backend." },
+        { "semana": 3, "fase": "Dev-Backend Core", "atividades_focadas": "Finalização da lógica complexa(F2)", "progresso_estimado": "80%", "justificativa_agendamento": "Mantendo foco total." },
+        { "semana": 4, "fase": "QA & Deploy", "atividades_focadas": "Homologação (F3).", "progresso_estimado": "100%", "justificativa_agendamento": "Libera recursos para E02." }
       ]
     },
     {
       "E02 - Integração Financeira (Backend Pesado)": [
-        { "semana": 3, "fase": "Discovery", "atividades_focadas": "Levantamento de requisitos (Tech Lead).", "progresso_estimado": "10%", "justificativa_agendamento": "Início leve enquanto E01 ainda está em Dev." },
-        { "semana": 4, "fase": "Setup", "atividades_focadas": "Preparação de ambiente.", "progresso_estimado": "20%", "justificativa_agendamento": "Aguardando liberação da dupla de Backend do E01." },
-        { "semana": 5, "fase": "Dev-Backend Core", "atividades_focadas": "Início da codificação pesada.", "progresso_estimado": "50%", "justificativa_agendamento": "Recursos liberados do E01 assumem aqui." },
-        { "semana": 6, "fase": "QA & Deploy", "atividades_focadas": "Entrega final.", "progresso_estimado": "100%", "justificativa_agendamento": "Sequência lógica finalizada." }
+        { "semana": 3, "fase": "Discovery", "atividades_focadas": "Levantamento de requisitos (Tech Lead)(F4).", "progresso_estimado": "10%", "justificativa_agendamento": "Início leve enquanto E01 ainda está em Dev." },
+        { "semana": 4, "fase": "Setup", "atividades_focadas": "Preparação de ambiente.(F5)", "progresso_estimado": "20%", "justificativa_agendamento": "Aguardando liberação da dupla de Backend do E01." },
+        { "semana": 5, "fase": "Dev-Backend Core", "atividades_focadas": "Início da codificação pesada.(F5)", "progresso_estimado": "50%", "justificativa_agendamento": "Recursos liberados do E01 assumem aqui." },
+        { "semana": 6, "fase": "QA & Deploy", "atividades_focadas": "Entrega final.(F6)", "progresso_estimado": "100%", "justificativa_agendamento": "Sequência lógica finalizada." }
       ]
     }
   ]
