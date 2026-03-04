@@ -15,10 +15,10 @@ Sua missão é aplicar as alterações mantendo a coerência financeira e técni
 * **Ociosidade Zero:** Se abrir um buraco na agenda, puxe discovery futuro para preencher.
 
 ## 5. FORMATO DE SAÍDA (ESTRITO - JSON)
-**SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
-
+**SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM UNICO BLOCO JSON VÁLIDO.**
+Não deve ter nada fora do json
 1.  **ESTRUTURA:**
-    * É mandatório que tenha apenas uma chave que é `epicos_timeline_report` (Lista de objetos). É TOTALMENTE PROIBIDO TER OUTRA OUTRA CHAVE
+    * É mandatório que tenha apenas uma chave que é `timeline_report` (Lista de objetos). É TOTALMENTE PROIBIDO TER OUTRA OUTRA CHAVE
     * Cada objeto é um dicionário onde a **Chave** é o "ID - Título" e o **Valor** é a lista de semanas.
 
 2.  **SCHEMA DA SEMANA:**
@@ -30,23 +30,24 @@ Sua missão é aplicar as alterações mantendo a coerência financeira e técni
 
 ## 6. EXEMPLO DE LÓGICA OBRIGATÓRIA (Sequenciamento por Restrição)
 
+
 ```json
 {
   "timeline_report": [
     {
       "E01 - Refatoração Crítica (Backend Pesado)": [
-        { "semana": 1, "fase": "Discovery & Setup", "atividades_focadas": "Tech Lead define arquitetura.", "progresso_estimado": "10%", "justificativa_agendamento": "Prioridade 1." },
-        { "semana": 2, "fase": "Dev-Backend Core", "atividades_focadas": "Dupla de Backend focada na API.", "progresso_estimado": "40%", "justificativa_agendamento": "Uso total da capacidade de Backend." },
-        { "semana": 3, "fase": "Dev-Backend Core", "atividades_focadas": "Finalização da lógica complexa.", "progresso_estimado": "80%", "justificativa_agendamento": "Mantendo foco total." },
-        { "semana": 4, "fase": "QA & Deploy", "atividades_focadas": "Homologação.", "progresso_estimado": "100%", "justificativa_agendamento": "Libera recursos para E02." }
+        { "semana": 1, "fase": "Discovery & Setup", "atividades_focadas": "Tech Lead define arquitetura(F1).", "progresso_estimado": "10%", "justificativa_agendamento": "Prioridade 1." },
+        { "semana": 2, "fase": "Dev-Backend Core", "atividades_focadas": "Dupla de Backend focada na API(F2)", "progresso_estimado": "40%", "justificativa_agendamento": "Uso total da capacidade de Backend." },
+        { "semana": 3, "fase": "Dev-Backend Core", "atividades_focadas": "Finalização da lógica complexa(F2)", "progresso_estimado": "80%", "justificativa_agendamento": "Mantendo foco total." },
+        { "semana": 4, "fase": "QA & Deploy", "atividades_focadas": "Homologação (F3).", "progresso_estimado": "100%", "justificativa_agendamento": "Libera recursos para E02." }
       ]
     },
     {
       "E02 - Integração Financeira (Backend Pesado)": [
-        { "semana": 3, "fase": "Discovery", "atividades_focadas": "Levantamento de requisitos (Tech Lead).", "progresso_estimado": "10%", "justificativa_agendamento": "Início leve enquanto E01 ainda está em Dev." },
-        { "semana": 4, "fase": "Setup", "atividades_focadas": "Preparação de ambiente.", "progresso_estimado": "20%", "justificativa_agendamento": "Aguardando liberação da dupla de Backend do E01." },
-        { "semana": 5, "fase": "Dev-Backend Core", "atividades_focadas": "Início da codificação pesada.", "progresso_estimado": "50%", "justificativa_agendamento": "Recursos liberados do E01 assumem aqui." },
-        { "semana": 6, "fase": "QA & Deploy", "atividades_focadas": "Entrega final.", "progresso_estimado": "100%", "justificativa_agendamento": "Sequência lógica finalizada." }
+        { "semana": 3, "fase": "Discovery", "atividades_focadas": "Levantamento de requisitos (Tech Lead)(F4).", "progresso_estimado": "10%", "justificativa_agendamento": "Início leve enquanto E01 ainda está em Dev." },
+        { "semana": 4, "fase": "Setup", "atividades_focadas": "Preparação de ambiente.(F5)", "progresso_estimado": "20%", "justificativa_agendamento": "Aguardando liberação da dupla de Backend do E01." },
+        { "semana": 5, "fase": "Dev-Backend Core", "atividades_focadas": "Início da codificação pesada.(F5)", "progresso_estimado": "50%", "justificativa_agendamento": "Recursos liberados do E01 assumem aqui." },
+        { "semana": 6, "fase": "QA & Deploy", "atividades_focadas": "Entrega final.(F6)", "progresso_estimado": "100%", "justificativa_agendamento": "Sequência lógica finalizada." }
       ]
     }
   ]
