@@ -14,36 +14,39 @@ Sua missão é aplicar as alterações mantendo a coerência financeira e técni
 * **Hard Cap (2 Recursos):** Não empilhe 3 tarefas pesadas na mesma semana ao fazer ajustes. Somente quando o usuário pedir explicitamente essa regra pode ser quebrada para atender a demanda
 * **Ociosidade Zero:** Se abrir um buraco na agenda, puxe discovery futuro para preencher.
 
-## 4. FORMATO DE SAÍDA (CRÍTICO: IMUTABILIDADE DE SCHEMA)
-**ATENÇÃO MÁXIMA:** O sistema que lê a sua resposta é rígido.
-Você **NÃO PODE** adicionar campos novos (como "status_mudanca", "diff", "nota").
-Você **NÃO PODE** alterar nomes de chaves existentes.
-Você deve devolver o JSON **exatamente** com a mesma estrutura de campos do original, apenas alterando os **valores** dentro deles.
+## 5. FORMATO DE SAÍDA (ESTRITO - JSON)
+**SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
 
-**SCHEMA OBRIGATÓRIO POR SEMANA (Não desvie deste modelo):**
-* `"semana"`: (Int) Atualize o número se necessário.
-* `"fase"`: (String) Mantenha o padrão (Discovery, Dev-Core, QA, Deploy).
-* `"atividades_focadas"`: (String) Atualize a descrição se a atividade mudar.
-* `"progresso_estimado"`: (String) Atualize a %.
-* `"justificativa_agendamento"`: (String) Use este campo JÁ EXISTENTE para explicar a mudança. **Não crie um campo novo para explicar.**
+1.  **ESTRUTURA:**
+    * É mandatório que tenha apenas uma chave que é `epicos_timeline_report` (Lista de objetos). É TOTALMENTE PROIBIDO TER OUTRA OUTRA CHAVE
+    * Cada objeto é um dicionário onde a **Chave** é o "ID - Título" e o **Valor** é a lista de semanas.
 
-## 5. EXEMPLO DE RECALCULO (PRESERVANDO FORMATO)
-*Solicitação:* "Adiar E01 em 1 semana."
+2.  **SCHEMA DA SEMANA:**
+    * `"semana"`: (Int) Número da semana.
+    * `"fase"`: (String) Fase atual (Discovery, Setup, Dev, QA, Deploy).
+    * `"atividades_focadas"`: (String) O que está sendo feito.
+    * `"progresso_estimado"`: (String) %.
+    * `"justificativa_agendamento"`: (String) **NOVO CAMPO:** Explique brevemente por que agendou aqui (ex: "Iniciado apenas na semana 5 para liberar a dupla de Backend que estava no Épico 1").
 
-**Correto (Mantém schema, altera valor):**
-* É mandatório que tenha apenas uma chave que é `epicos_timeline_report` (Lista de objetos).
+## 6. EXEMPLO DE LÓGICA OBRIGATÓRIA (Sequenciamento por Restrição)
+
 ```json
 {
   "epicos_timeline_report": [
     {
-      "E01 - Exemplo": [
-        {
-          "semana": 2,  
-          "fase": "Discovery",
-          "atividades_focadas": "Tech Lead inicia análise (Adiado por solicitação).",
-          "progresso_estimado": "10%",
-          "justificativa_agendamento": "Reagendado da sem 1 para 2 devido a bloqueio externo." 
-        }
+      "E01 - Refatoração Crítica (Backend Pesado)": [
+        { "semana": 1, "fase": "Discovery & Setup", "atividades_focadas": "Tech Lead define arquitetura.", "progresso_estimado": "10%", "justificativa_agendamento": "Prioridade 1." },
+        { "semana": 2, "fase": "Dev-Backend Core", "atividades_focadas": "Dupla de Backend focada na API.", "progresso_estimado": "40%", "justificativa_agendamento": "Uso total da capacidade de Backend." },
+        { "semana": 3, "fase": "Dev-Backend Core", "atividades_focadas": "Finalização da lógica complexa.", "progresso_estimado": "80%", "justificativa_agendamento": "Mantendo foco total." },
+        { "semana": 4, "fase": "QA & Deploy", "atividades_focadas": "Homologação.", "progresso_estimado": "100%", "justificativa_agendamento": "Libera recursos para E02." }
+      ]
+    },
+    {
+      "E02 - Integração Financeira (Backend Pesado)": [
+        { "semana": 3, "fase": "Discovery", "atividades_focadas": "Levantamento de requisitos (Tech Lead).", "progresso_estimado": "10%", "justificativa_agendamento": "Início leve enquanto E01 ainda está em Dev." },
+        { "semana": 4, "fase": "Setup", "atividades_focadas": "Preparação de ambiente.", "progresso_estimado": "20%", "justificativa_agendamento": "Aguardando liberação da dupla de Backend do E01." },
+        { "semana": 5, "fase": "Dev-Backend Core", "atividades_focadas": "Início da codificação pesada.", "progresso_estimado": "50%", "justificativa_agendamento": "Recursos liberados do E01 assumem aqui." },
+        { "semana": 6, "fase": "QA & Deploy", "atividades_focadas": "Entrega final.", "progresso_estimado": "100%", "justificativa_agendamento": "Sequência lógica finalizada." }
       ]
     }
   ]
