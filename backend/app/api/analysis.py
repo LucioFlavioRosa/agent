@@ -54,6 +54,38 @@ class StartAnalysisResponse(BaseModel):
 
 def get_mongo_service(request: Request) -> MongoDBService:
     return request.app.state.mongo_service
+
+async def get_historical_lineage(job_id: str, db) -> dict:
+    """
+    Percorre o Grafo de dependências de trás para frente no MongoDB.
+    Descobre toda a árvore genealógica de um relatório específico.
+    """
+    context = {}
+    queue = [job_id]
+    visited = set()
+
+    while queue:
+        current_id = queue.pop(0)
+        if current_id in visited:
+            continue
+        visited.add(current_id)
+
+        report = await db.project_reports_history.find_one({"job_id": current_id})
+        if not report:
+            continue
+
+        # Registra a categoria e o ID (O primeiro que acha é o mais direto na linhagem)
+        cat = report.get("report_category")
+        if cat and cat not in context:
+            context[cat] = current_id
+
+        # Pega os pais deste relatório e coloca na fila para continuar subindo a árvore
+        parent_context = report.get("context_used", {})
+        for key, p_id in parent_context.items():
+            if p_id:
+                queue.append(p_id)
+
+    return context
     
 def validate_file_extension(file: UploadFile):
     """Valida se o arquivo enviado possui uma extensão permitida."""
@@ -177,7 +209,7 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None),
     base_job_id: Optional[str] = Form(None), 
-    context_used_front: Optional[str] = Form(None),
+    strategy: str = Form("checkout"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     # 1. Log recebimento do payload
@@ -268,20 +300,12 @@ async def start_analysis(
     )
 
     # ==========================================
-    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
+    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM (BACKEND-DRIVEN)
     # ==========================================
     reports_to_read = ANALYSIS_CONTEXT_CONFIG.get(analysis_type, [])
     context_used = {}
-    
-    # 1. Decodifica a "Foto da Tela" que o Frontend enviou
-    screen_context = {}
-    if context_used_front:
-        try:
-            screen_context = json.loads(context_used_front)
-        except Exception:
-            pass
 
-    # 2. Busca o estado mais recente do banco (Plano C)
+    # Busca o estado mais recente do banco (Plano B)
     project_doc = await mongo_service.get_project_by_id(project_id)
     latest_reports_db = getattr(project_doc, "latest_reports", {})
     if not isinstance(latest_reports_db, dict) and hasattr(latest_reports_db, "dict"):
@@ -297,29 +321,47 @@ async def start_analysis(
         if not past_report:
             raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
             
-        past_context = past_report.get("context_used", {})
+        target_category = past_report.get("report_category")
+        
+        # O Backend descobre a árvore genealógica de forma autônoma
+        historical_tree = await get_historical_lineage(base_job_id, mongo_service.db)
         
         for category in reports_to_read:
-            if category == past_report.get("report_category"):
+            if category == target_category:
                 context_used[f"{category}_job_id"] = base_job_id
             else:
-                # 🚀 A REGRA DE OURO DA LINHAGEM:
-                # Prioridade 1: O que está na tela do usuário agora (screen_context)
-                # Prioridade 2: O passado congelado de quando o item foi criado (past_context)
-                # Prioridade 3: O mais recente do banco de dados (latest_reports_db)
-                dependency_job_id = screen_context.get(category) or past_context.get(f"{category}_job_id") or latest_reports_db.get(category)
+                if strategy == "rebase":
+                    # EFEITO CASCATA: Prioriza o mais novo do DB
+                    dependency_job_id = latest_reports_db.get(category) or historical_tree.get(category)
+                else:
+                    # CHECKOUT (Padrão): Prioriza a árvore congelada
+                    dependency_job_id = historical_tree.get(category) or latest_reports_db.get(category)
                 
                 if not dependency_job_id:
                      raise HTTPException(status_code=400, detail=f"Dependência '{category}' não encontrada.")
                 context_used[f"{category}_job_id"] = dependency_job_id
+
+        # 🚀 A MÁGICA DO GIT RESET (Atualizando o Latest State) 🚀
+        # Transforma o passado recuperado no novo "presente oficial" do projeto.
+        if strategy == "checkout":
+            new_latest_state = {}
+            for cat, j_id in context_used.items():
+                cat_name = cat.replace("_job_id", "")
+                new_latest_state[cat_name] = j_id
+                
+            await mongo_service.db.projects.update_one(
+                {"_id": project_id},
+                {"$set": {
+                    **{f"latest_reports.{k}": v for k, v in new_latest_state.items()}
+                }}
+            )
 
     else:
         # ---------------------------------------------------------
         # CENÁRIO B: GERAÇÃO DO ZERO
         # ---------------------------------------------------------
         for category in reports_to_read:
-            # Prioridade 1: Tela. Prioridade 2: Banco.
-            dependency_job_id = screen_context.get(category) or latest_reports_db.get(category)
+            dependency_job_id = latest_reports_db.get(category)
             if not dependency_job_id:
                 raise HTTPException(status_code=400, detail=f"Dependência '{category}' não encontrada.")
             context_used[f"{category}_job_id"] = dependency_job_id
