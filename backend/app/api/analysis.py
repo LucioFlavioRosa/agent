@@ -342,11 +342,13 @@ async def start_analysis(
                 context_used[f"{category}_job_id"] = dependency_job_id
 
         # Transforma o passado recuperado no novo "presente oficial" do projeto.
-        strategy == "checkout":
+        # 🚀 A MÁGICA DO GIT RESET (Atualizando o Latest State) 🚀
+        if strategy == "checkout":
             new_latest_state = {}
             for cat, j_id in context_used.items():
                 cat_name = cat.replace("_job_id", "")
                 new_latest_state[cat_name] = j_id
+                
             # Chama o método oficial e limpo do serviço
             await mongo_service.update_project_latest_reports(project_id, new_latest_state)
 
