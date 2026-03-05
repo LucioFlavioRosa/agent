@@ -98,7 +98,7 @@ flowchart TD
 ```
 
 ## Estrutura de Pastas
-
+```text
 plaintext
 backend/
   app/
@@ -114,7 +114,7 @@ backend/
 main.py
 requirements.txt
 startup.py
-
+```
 
 ## Avaliação do Design de Pastas
 
