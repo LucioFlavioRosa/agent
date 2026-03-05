@@ -57,7 +57,7 @@ flowchart TD
 
 ### Árvore de Diretórios (simplificada)
 
-
+```json
 backend/
   app/
     api/
@@ -82,7 +82,7 @@ docs/
 main.py
 requirements.txt
 startup.py
-
+```
 
 ### Análise do Design de Estrutura
 
