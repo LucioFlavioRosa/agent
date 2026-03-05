@@ -149,6 +149,13 @@ async def add_project_member(
         if not new_user:
             return AddProjectMemberResponse(success=False, message="Usuário a ser adicionado não encontrado.")
             
+        # 🚀 NOVA VALIDAÇÃO DE SEGURANÇA (ISOLAMENTO MULTI-TENANT) 🚀
+        new_user_company_id = getattr(new_user, "company_id", None)
+        if str(new_user_company_id) != str(company_id):
+            logger.warning(f"[ProjectManagement] Tentativa bloqueada: O usuário {req.new_member_email} não pertence à empresa do projeto {project_id}.")
+            return AddProjectMemberResponse(success=False, message="Ação negada: Este usuário não pertence à mesma empresa deste projeto.")
+        # ==========================================================
+
         new_member = {
             "user_id": str(new_user.id),
             "email": req.new_member_email,
