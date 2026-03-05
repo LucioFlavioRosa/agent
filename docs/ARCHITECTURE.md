@@ -61,7 +61,7 @@ flowchart TD
 
 ## Fluxo de Requisição HTTP
 
-mermaid
+```mermaid
 sequenceDiagram
     participant Client
     participant FastAPI
@@ -81,11 +81,11 @@ sequenceDiagram
     FastAPI-->>Client: HTTP Response
     Router->>ExceptionHandler: Exceção?
     ExceptionHandler-->>Client: Erro JSON
-
+```
 
 ## Diagrama da Arquitetura de Logging
 
-mermaid
+```mermaid
 flowchart TD
     A[setup_logging()] --> B[JsonFormatter]
     B --> C[Campos Base]
@@ -95,7 +95,7 @@ flowchart TD
     D --> F
     E --> F
     F --> G[stdout]
-
+```
 
 ## Estrutura de Pastas
 
