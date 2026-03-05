@@ -24,7 +24,7 @@ O backend do Peers CodeAI é construído sobre FastAPI, com foco em modularidade
 
 ## Fluxo de Inicialização (Startup)
 
-mermaid
+```mermaid
 flowchart TD
     A[Carrega .env] --> B[Configura Logging]
     B --> C[Instancia FastAPI]
@@ -35,7 +35,7 @@ flowchart TD
     G --> H[Inicializa MongoDBService]
     H --> I[Cria Índices MongoDB]
     I --> J[Backend Pronto]
-
+```
 
 ## Sistema de Logging Estruturado
 
