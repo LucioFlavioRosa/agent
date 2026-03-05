@@ -39,7 +39,7 @@ O arquivo `main.py` é o ponto de entrada do backend do projeto Peers CodeAI, im
 
 ## Fluxo de Inicialização (Mermaid)
 
-mermaid
+```mermaid
 flowchart TD
     A[Início main.py] --> B[Carrega .env]
     B --> C[Configura Logging JSON]
@@ -51,7 +51,7 @@ flowchart TD
     H --> I[Inicializa MongoDBService]
     I --> J[Cria índices MongoDB]
     J --> K[Aplicação pronta]
-
+```
 
 ## Estrutura de Pastas e Arquivos
 
