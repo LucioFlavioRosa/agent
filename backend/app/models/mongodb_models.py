@@ -48,6 +48,7 @@ class Project(BaseModel):
     name: str
     description: Optional[str] = None
     company_id: str = Field(...)
+    assigned_group_id: Optional[str] = None 
     blob_path: Optional[str] = None
     members: List[ProjectMember] = Field(default_factory=list)
     created_at: Optional[datetime]
