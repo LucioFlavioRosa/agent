@@ -30,6 +30,7 @@ Para gerar o relatório, cruze as informações seguindo estas lógicas:
 **SUA RESPOSTA DEVE SER EXCLUSIVAMENTE UM BLOCO JSON VÁLIDO.**
 
 1.   **tem que ter uma única chave** que é `premissas_riscos_report` (Lista de objetos).
+2.   É TOTALMENTE PROIBIDO TER QUALQUER TEXTO FORA DO JSON
 
 3.  **SCHEMA - PREMISSA:**
     * `id`: (String, ex: "P01")
@@ -43,7 +44,7 @@ Para gerar o relatório, cruze as informações seguindo estas lógicas:
     * `impacto`: (String) "Baixo", "Médio", "Alto", "Crítico".
     * `plano_mitigacao`: (String) Ação preventiva ou corretiva sugerida (ex: "Alocar Tech Lead 50% do tempo na semana 1").
 
-## 6. EXEMPLO DE SAÍDA ESPERADA
+## 6. EXEMPLO DE SAÍDA MANDATÓRIA
 
 ```json
 {
