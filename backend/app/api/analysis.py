@@ -199,14 +199,18 @@ async def start_analysis(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
-   # 🚀 2. BUSCA O PROJETO PARA PEGAR O GRUPO VINCULADO 🚀
+  # 🚀 2. BUSCA O PROJETO PARA PEGAR O GRUPO VINCULADO 🚀
     project_doc = await mongo_service.get_project_by_id(project_id)
     
-    # Usa a extração à prova de falhas: Tenta extrair da classe, se falhar, tenta extrair do dicionário.
-    project_group_id = getattr(project_doc, "assigned_group_id", None)
-    if project_group_id is None and isinstance(project_doc, dict):
-        project_group_id = project_doc.get("assigned_group_id")
+    # 1º Tenta usar o grupo que o Frontend acabou de mandar (Criação de Projeto)
+    project_group_id = assigned_group_id 
     
+    # 2º Se não veio do front (Refinamento), tenta pegar do banco
+    if not project_group_id:
+        project_group_id = getattr(project_doc, "assigned_group_id", None)
+        if project_group_id is None and isinstance(project_doc, dict):
+            project_group_id = project_doc.get("assigned_group_id")
+            
     if not project_group_id:
         raise HTTPException(status_code=400, detail="Este projeto não possui um grupo de especialidade associado.")
 
