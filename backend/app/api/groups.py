@@ -20,7 +20,6 @@ async def list_user_groups(
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     log_request_received(endpoint="/user-groups", payload={"email": email})
-    logger.info(f"[Groups] Requisição recebida para /user-groups: email={email}")
     try:
         user = await mongo_service.get_user_by_email(email)
         if not user:
@@ -28,13 +27,22 @@ async def list_user_groups(
             
         group_ids = getattr(user, "group_ids", user.get("group_ids", []) if isinstance(user, dict) else [])
         
+        # 🚀 LOG 1: O que o Python leu do usuário?
+        logger.info(f"🎯 [UserGroups] IDs encontrados no usuário: {group_ids}")
+        
         if not group_ids:
             return {"groups": []}
             
         groups_cursor = mongo_service.db.groups.find({"_id": {"$in": group_ids}})
         groups = await groups_cursor.to_list(length=100)
         
+        # 🚀 LOG 2: O que o Banco retornou?
+        logger.info(f"🎯 [UserGroups] Grupos encontrados na collection 'groups': {groups}")
+        
         response_data = [{"id": str(g["_id"]), "name": g.get("name", "Grupo Sem Nome")} for g in groups]
+        
+        # 🚀 LOG 3: O que vai para o Frontend?
+        logger.info(f"🎯 [UserGroups] Resposta enviada ao Front: {response_data}")
         
         log_response_sent(endpoint="/user-groups", response={"user_groups": len(response_data)})
         return {"groups": response_data}
