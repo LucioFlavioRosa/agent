@@ -277,9 +277,16 @@ async def start_analysis(
         raise HTTPException(status_code=500, detail=f"Agente '{analysis_type}' indisponível no serviço MCP.")
 
     # ==========================================
-    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
+    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM PARA O MCP
     # ==========================================
-    reports_to_read = CATEGORY_DEPENDENCIES.get(category, [])
+    # Pega as dependências base do dicionário global
+    reports_to_read = list(CATEGORY_DEPENDENCIES.get(category, []))
+    
+    # 🚀 O PULO DO GATO PARA O MCP:
+    # Se a ação for 'reviwer', o agente obrigatoriamente precisa ler o documento da própria categoria!
+    if action == "reviwer" and category not in reports_to_read:
+        reports_to_read.append(category)
+
     context_used = {}
 
     latest_reports_db = getattr(project_doc, "latest_reports", {})
@@ -297,6 +304,7 @@ async def start_analysis(
         
         for cat in reports_to_read:
             if cat == target_category:
+                # 🚀 Aqui ele adiciona a própria Feature base para o MCP ler!
                 context_used[f"{cat}_job_id"] = base_job_id
             else:
                 if strategy == "rebase":
