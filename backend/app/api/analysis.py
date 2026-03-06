@@ -54,17 +54,29 @@ def get_mongo_service(request: Request) -> MongoDBService:
 
 def resolve_target_agent(action: str, category: str, group_agents_list: list) -> str:
     """
-    action: "generator" ou "reviwer"
-    category: "epics", "features", "timeline", "risks"
-    group_agents_list: Lista de agentes que o grupo do projeto tem acesso.
+    Descobre o nome exato do agente baseado na categoria e ação.
+    Agora com blindagem contra espaços em branco e diferenças de maiúsculas/minúsculas!
     """
-    prefix = f"agent_{category}_{action}_"
+    # Limpeza pesada nas entradas
+    safe_action = str(action).strip().lower()
+    safe_category = str(category).strip().lower()
+    prefix = f"agent_{safe_category}_{safe_action}_"
+    
+    logger.info(f"🔍 [AgentResolver] Procurando prefixo: '{prefix}' na lista: {group_agents_list}")
     
     for agent_name in group_agents_list:
-        if agent_name.startswith(prefix):
+        # Limpa também o nome que veio do banco de dados
+        safe_agent_name = str(agent_name).strip().lower()
+        
+        if safe_agent_name.startswith(prefix):
+            logger.info(f"✅ [AgentResolver] Agente escolhido: '{agent_name}'")
             return agent_name
             
-    raise HTTPException(status_code=400, detail=f"O grupo deste projeto não possui um agente configurado para {action} de {category}.")
+    logger.error(f"❌ [AgentResolver] Prefixo '{prefix}' não encontrado. Lista do grupo: {group_agents_list}")
+    raise HTTPException(
+        status_code=400, 
+        detail=f"O grupo deste projeto não possui um agente configurado para {safe_action} de {safe_category}."
+    )
 
 async def get_historical_lineage(job_id: str, db) -> dict:
     context = {}
