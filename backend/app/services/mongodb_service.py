@@ -155,20 +155,24 @@ class MongoDBService:
                 return []
             user_id = user_doc.get("_id")
             cursor = self.db.projects.find({"members.email": email})
+            
             async def _build_project_dict(project_doc, email):
                 project_id = str(project_doc.get("_id"))
                 project_name = project_doc.get("name")
                 description = project_doc.get("description")
                 created_at = project_doc.get("created_at")
+                assigned_group_id = project_doc.get("assigned_group_id") # 🚀 ADICIONADO AQUI
                 role = next((member.get("role") for member in project_doc.get("members", []) if member.get("email") == email), None)
                 return {
                     "project_id": project_id,
                     "project_name": project_name,
+                    "assigned_group_id": assigned_group_id, # 🚀 ADICIONADO AQUI
                     "role": role,
                     "description": description,
                     "created_at": created_at,
                     "latest_reports": project_doc.get("latest_reports", {})
                 }
+                
             projects = [await _build_project_dict(project_doc, email) async for project_doc in cursor]
             self.logger.info(f"[get_user_projects_with_access] Projetos encontrados: {projects}")
             return projects
@@ -207,7 +211,6 @@ class MongoDBService:
     async def add_member_to_project(self, project_id: str, new_member: dict) -> bool:
         self.logger.info(f"[add_member_to_project] Adicionando membro '{new_member.get('email')}' ao projeto '{project_id}'.")
         try:
-            # Busca o projeto primeiro para pegar o company_id (necessário para a chave do Redis)
             project_doc = await self.db.projects.find_one({"_id": project_id})
             if not project_doc:
                 return False
@@ -220,8 +223,6 @@ class MongoDBService:
             )
             
             if result.modified_count > 0:
-                # OTIMIZAÇÃO: Invalida APENAS o usuário que entrou.
-                # Os outros membros continuam com seus roles inalterados.
                 email_novo_membro = new_member.get("email")
                 if email_novo_membro:
                     await RedisSessionService().invalidate_user_permissions(email_novo_membro, company_id)
@@ -236,8 +237,6 @@ class MongoDBService:
         self.logger.info(f"[update_project_members] Iniciando atualização de membros do projeto '{project_id}'.")
         
         try:
-            # 1. Busca o estado ATUAL (antes do update) para comparação
-            # Isso é necessário para saber quem foi removido e para pegar o company_id
             current_project_doc = await self.db.projects.find_one({"_id": project_id})
             
             if not current_project_doc:
@@ -247,7 +246,6 @@ class MongoDBService:
             company_id = current_project_doc.get("company_id")
             old_members_list = current_project_doc.get("members", [])
 
-            # 2. Executa a atualização no Banco de Dados
             result = await self.db.projects.update_one(
                 {"_id": project_id},
                 {"$set": {"members": members}}
@@ -255,16 +253,12 @@ class MongoDBService:
             
             self.logger.info(f"[update_project_members] Resultado da operação: modified_count={result.modified_count}")
 
-            # 3. Lógica Inteligente de Invalidação de Cache (Diff)
             if result.modified_count > 0:
                 redis_service = RedisSessionService()
                 
-                # Transforma listas em Dicionários {email: role} para comparação rápida
-                # Normalizamos para evitar erros com None
                 old_map = {m.get("email"): m.get("role") for m in old_members_list if m.get("email")}
                 new_map = {m.get("email"): m.get("role") for m in members if m.get("email")}
                 
-                # Conjunto de todos os emails envolvidos (antes e depois)
                 all_emails = set(old_map.keys()) | set(new_map.keys())
                 
                 invalidated_count = 0
@@ -272,7 +266,6 @@ class MongoDBService:
                     old_role = old_map.get(email)
                     new_role = new_map.get(email)
 
-                    # Se o role mudou, ou se entrou/saiu (um dos roles será None), invalida!
                     if old_role != new_role:
                         await redis_service.invalidate_user_permissions(email, company_id)
                         invalidated_count += 1
@@ -300,8 +293,6 @@ class MongoDBService:
             )
 
             if result.modified_count > 0:
-                # OTIMIZAÇÃO: Invalida APENAS o usuário removido.
-                # Ele precisa perder o acesso no Redis imediatamente.
                 await RedisSessionService().invalidate_user_permissions(target_email, company_id)
                 self.logger.info(f"[Cache] Invalidado apenas para o membro removido: {target_email}")
             
@@ -342,6 +333,7 @@ class MongoDBService:
             name_normalized = normalize_string_general(nome_projeto)
             description = project_data.get("description")
             members = project_data.get("members", [])
+            assigned_group_id = project_data.get("assigned_group_id") # 🚀 ADICIONADO AQUI
             now = datetime.utcnow()
             doc = {
                 "_id": project_id,
@@ -349,6 +341,7 @@ class MongoDBService:
                 "name_normalized": name_normalized,
                 "description": description,
                 "company_id": company_id,
+                "assigned_group_id": assigned_group_id, # 🚀 ADICIONADO AQUI
                 "members": members,
                 "created_at": now,
                 "updated_at": now
@@ -498,13 +491,16 @@ class MongoDBService:
 
         return tree
 
-    # Helper interno
+    # Helper interno (CORRIGIDO 🚀)
     async def _get_latest_descendant(self, target_category: str, dependency_field: str, dependency_job_id: str):
         cursor = self.db.project_reports_history.find({
             "report_category": target_category,
             f"context_used.{dependency_field}": dependency_job_id,
             "status": "done"
         }).sort("version", -1).limit(1)
+        
+        docs = await cursor.to_list(length=1)
+        return docs[0] if docs else None
 
     async def update_project_latest_reports(self, project_id: str, new_reports: dict):
         """
@@ -530,6 +526,3 @@ class MongoDBService:
         except Exception as e:
             self.logger.error(f"[update_project_latest_reports] Erro ao atualizar latest_reports: {e}")
             return False
-        
-        docs = await cursor.to_list(length=1)
-        return docs[0] if docs else None
