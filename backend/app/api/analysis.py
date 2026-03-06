@@ -111,7 +111,14 @@ async def validate_user_and_company(email: Optional[str], mongo_service: MongoDB
         raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
     return user, company_id
 
-async def get_or_create_project(nome_projeto: Optional[str], email: str, user, company_id, assigned_group_id: str, mongo_service: MongoDBService):
+async def get_or_create_project(
+    nome_projeto: Optional[str], 
+    email: str, 
+    user, 
+    company_id, 
+    assigned_group_id: Optional[str], 
+    mongo_service: MongoDBService
+):
     if not nome_projeto:
         raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes.")
     
@@ -123,6 +130,12 @@ async def get_or_create_project(nome_projeto: Optional[str], email: str, user, c
         can_create, error_msg_create = await permission_service.check_user_can_create_project(email, company_id)
         if not can_create:
             raise HTTPException(status_code=403, detail=error_msg_create)
+            
+        if not assigned_group_id:
+            raise HTTPException(
+                status_code=400, 
+                detail="Para criar um novo projeto, é obrigatório informar o grupo de especialidade (assigned_group_id)."
+            )
             
         new_project_id = str(uuid.uuid4()) 
         project_data = {
@@ -146,7 +159,7 @@ async def get_or_create_project(nome_projeto: Optional[str], email: str, user, c
         project_id = getattr(project, "id", None) or project.get("_id")
     
     return project_id, nome_projeto
-
+    
 @router.post("/start", response_model=StartAnalysisResponse, tags=["Analysis"])
 async def start_analysis(
     email: Optional[str] = Form(None),
@@ -156,7 +169,6 @@ async def start_analysis(
     category: str = Form(...), # "epics", "features", "timeline", "risks"
     action: str = Form(...),   # "generator", "reviwer"
     assigned_group_id: Optional[str] = Form(None), # Necessário apenas na criação do projeto
-    
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
@@ -173,7 +185,7 @@ async def start_analysis(
     user, company_id = await validate_user_and_company(email, mongo_service)
     grupos_do_usuario = getattr(user, "group_ids", [])
     
-    # 1. CRIA OU BUSCA O PROJETO (agora passando o grupo associado)
+    # 1. CRIA OU BUSCA O PROJETO (passando o grupo associado)
     project_id, nome_projeto_final = await get_or_create_project(
         nome_projeto, email, user, company_id, assigned_group_id, mongo_service
     )
@@ -187,32 +199,33 @@ async def start_analysis(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
-    # 🚀 2. A MÁGICA DA RESOLUÇÃO DE AGENTES 🚀
+    # 🚀 2. BUSCA O PROJETO PARA PEGAR O GRUPO VINCULADO 🚀
     project_doc = await mongo_service.get_project_by_id(project_id)
     project_group_id = project_doc.get("assigned_group_id")
     
     if not project_group_id:
         raise HTTPException(status_code=400, detail="Este projeto não possui um grupo de especialidade associado.")
 
-    # Busca as definições do grupo no banco para saber quais agentes ele pode usar
+    # 🚀 3. BUSCA O GRUPO NO BANCO PARA PEGAR OS AGENTES PERMITIDOS 🚀
     group_details = await mongo_service.db.groups.find_one({"_id": project_group_id})
     if not group_details:
-         raise HTTPException(status_code=404, detail="Grupo associado ao projeto não encontrado.")
+         raise HTTPException(status_code=404, detail=f"Grupo associado ({project_group_id}) não encontrado.")
          
     allowed_agents = group_details.get("allowed_agents", [])
+    if not allowed_agents:
+         raise HTTPException(status_code=400, detail="O grupo deste projeto não possui agentes configurados.")
     
-    # O Python descobre sozinho qual o nome completo do agente ("agent_epics_generator_digital")
+    # 🚀 4. O PYTHON DESCOBRE O NOME COMPLETO DO AGENTE 🚀
     analysis_type = resolve_target_agent(action, category, allowed_agents)
 
-    # 3. VALIDA O AGENTE NO MCP
+    # 5. VALIDA O AGENTE NO MCP
     agent_cfg = MCPConfigService.get_agent_config(analysis_type)
     if not agent_cfg or not agent_cfg.mcp_service_url:
         raise HTTPException(status_code=500, detail=f"Agente '{analysis_type}' indisponível no serviço MCP.")
 
     # ==========================================
-    # 4. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
+    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
     # ==========================================
-    # Usando a regra universal em vez da regra fixa por agente
     reports_to_read = CATEGORY_DEPENDENCIES.get(category, [])
     context_used = {}
 
@@ -251,10 +264,10 @@ async def start_analysis(
     else:
         for cat in reports_to_read:
             dependency_job_id = latest_reports_db.get(cat)
-            if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
+            if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada para gerar {category}.")
             context_used[f"{cat}_job_id"] = dependency_job_id
 
-    # 5. EXECUÇÃO
+    # 7. EXECUÇÃO
     job_id = str(uuid.uuid4())
     redis_service = RedisSessionService()
     job_id = await redis_service.create_job(
@@ -282,7 +295,7 @@ async def start_analysis(
     return response_obj
 
 # ============================================================================
-# ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO)
+# 🚀 ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO) - RECUPERADA! 🚀
 # ============================================================================
 @router.get("/lineage/{project_id}", tags=["Lineage"])
 async def get_project_lineage(project_id: str, mongo_service: MongoDBService = Depends(get_mongo_service)):
