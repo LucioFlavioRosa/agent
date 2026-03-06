@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 import re
@@ -9,10 +10,7 @@ from azure.core.exceptions import ResourceNotFoundError
 logger = logging.getLogger("mcp_vault")
 
 class VaultCache:
-    """
-    Cache simples com TTL para segredos de cofres.
-    TTL padrão: 900 segundos (15 minutos)
-    """
+    """Cache simples com TTL para segredos de cofres (15 minutos)."""
     def __init__(self):
         self._cache = {}
 
@@ -31,62 +29,67 @@ class VaultCache:
         self._cache[key] = (value, expires_at)
 
 class VaultService:
-    def __init__(self, vault_urls: List[str]):
-        self.vault_urls = vault_urls
+    def __init__(self, infra_url: str, llm_url: str):
+        # 🚀 MAPEAMENTO EXPLÍCITO DE COFRES
+        self.vaults = {
+            "infra": infra_url,
+            "llm": llm_url
+        }
         self.credential = DefaultAzureCredential()
         self.cache = VaultCache()
 
     def _sanitize_name(self, name: str) -> str:
-        """
-        Garante que o nome do segredo siga a regra do Azure Key Vault:
-        Apenas caracteres alfanuméricos e hífens (^[0-9a-zA-Z-]+$).
-        """
         if not name:
             return name
         sanitized = re.sub(r'[^0-9a-zA-Z-]+', '-', name)
         return sanitized.strip('-')
 
-    async def get_secret(self, base_name: str, company_id: str, group_id: Optional[str] = None) -> Optional[str]:
+    # 🚀 NOVO PARÂMETRO 'vault_type' (Padrão é 'llm', pois será o mais usado aqui)
+    async def get_secret(self, base_name: str, company_id: str, group_id: Optional[str] = None, vault_type: str = "llm") -> Optional[str]:
+        target_url = self.vaults.get(vault_type)
+        if not target_url:
+            logger.error(f"vault_secret_erro | Cofre do tipo '{vault_type}' não configurado nas variáveis de ambiente.")
+            return None
+
         safe_company_id = self._sanitize_name(company_id)
         safe_group_id = self._sanitize_name(group_id) if group_id else None
+        
         secret_name_full = f"{base_name}-{safe_company_id}-{safe_group_id}" if safe_group_id else f"{base_name}-{safe_company_id}"
         fallback_secret_name = f"{base_name}-{safe_company_id}"
+        
         names_to_try = [secret_name_full]
         if safe_group_id:
             names_to_try.append(fallback_secret_name)
-        logger.info(f"vault_secret_busca_iniciada | base_name={base_name} | company_id={company_id} | group_id={group_id}")
+            
+        logger.info(f"vault_secret_busca_iniciada | base_name={base_name} | target_vault={vault_type}")
+        
         for secret_name in names_to_try:
+            # 1. Tenta no Cache
             cached_value = self.cache.get(secret_name)
             if cached_value:
                 logger.info(f"vault_secret_encontrado | secret_name={secret_name} | origem=cache")
                 return cached_value
-            for url in self.vault_urls:
-                try:
-                    async with SecretClient(vault_url=url, credential=self.credential) as client:
-                        secret = await client.get_secret(secret_name)
-                        self.cache.set(secret_name, secret.value)
-                        logger.info(f"vault_secret_encontrado | secret_name={secret_name} | vault_url={url}")
-                        return secret.value
-                except ResourceNotFoundError:
-                    continue
-                except Exception as e:
-                    logger.error(f"vault_secret_erro_acesso | secret_name={secret_name} | vault_url={url} | erro={str(e)}")
-                    continue
-        logger.info(f"vault_secret_nao_encontrado | base_name={base_name} | company_id={company_id} | group_id={group_id}")
+                
+            # 2. Vai DIRETO no cofre correto (Sem loop de URLs)
+            try:
+                async with SecretClient(vault_url=target_url, credential=self.credential) as client:
+                    secret = await client.get_secret(secret_name)
+                    self.cache.set(secret_name, secret.value)
+                    logger.info(f"vault_secret_encontrado | secret_name={secret_name} | vault_url={target_url}")
+                    return secret.value
+            except ResourceNotFoundError:
+                continue # Não achou esse nome de chave, tenta o fallback de nome (ex: sem o group_id)
+            except Exception as e:
+                logger.error(f"vault_secret_erro_acesso | secret_name={secret_name} | vault_url={target_url} | erro={str(e)}")
+                continue
+                
+        logger.warning(f"vault_secret_nao_encontrado | base_name={base_name} | company_id={company_id}")
         return None
 
-    async def get_queue_connection_string(self) -> Optional[str]:
-        cached = self.cache.get("queue-connection-string")
-        if cached:
-            logger.info("vault_secret_encontrado | secret_name=queue-connection-string | origem=cache")
-            return cached
-        logger.info("vault_secret_busca_iniciada | base_name=queue-connection-string")
-        async with SecretClient(vault_url=self.vault_urls[0], credential=self.credential) as client:
-            try:
-                secret = await client.get_secret("queue-connection-string")
-                self.cache.set("queue-connection-string", secret.value, ttl=3600)
-                logger.info(f"vault_secret_encontrado | secret_name=queue-connection-string | vault_url={self.vault_urls[0]}")
-                return secret.value
-            except Exception:
-                logger.info("vault_secret_nao_encontrado | base_name=queue-connection-string")
-                return None
+# ============================================================================
+# INSTÂNCIA GLOBAL OTIMIZADA
+# ============================================================================
+_infra_url = os.getenv("AZURE_KEYVAULT_INFRA_URL", "").strip()
+_llm_url = os.getenv("AZURE_KEYVAULT_LLM_URL", "").strip()
+
+vault_service = VaultService(infra_url=_infra_url, llm_url=_llm_url)
