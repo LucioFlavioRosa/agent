@@ -8,7 +8,7 @@ from typing import List, Optional
 router = APIRouter()
 logger = logging.getLogger("groups_api")
 
-async def get_mongo_service(request):
+async def get_mongo_service(request: Request):
     return request.app.state.mongo_service
 
 # ============================================================================
