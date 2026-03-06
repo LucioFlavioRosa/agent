@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks
 
 # Imports apontando para a pasta "app" logo ali do lado
-from app.core.database import connect_to_mongo, close_mongo_connection
+from app.core.mongodb import connect_to_mongo, close_mongo_connection
 from app.utils.document_parser import extract_text_from_docx
 from app.services.prototype_service import process_analysis_task
 
