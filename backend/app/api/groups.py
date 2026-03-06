@@ -11,6 +11,66 @@ logger = logging.getLogger("groups_api")
 async def get_mongo_service(request):
     return request.app.state.mongo_service
 
+# ============================================================================
+# ROTA EXCLUSIVA PARA O FRONTEND (DROPDOWN DE PROJETOS)
+# ============================================================================
+@router.get("/user-groups", tags=["Groups"])
+async def list_user_groups(
+    email: str = Query(..., description="Email para listar apenas os grupos permitidos do usuário"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    log_request_received(endpoint="/user-groups", payload={"email": email})
+    logger.info(f"[Groups] Requisição recebida para /user-groups: email={email}")
+    try:
+        user = await mongo_service.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+            
+        group_ids = getattr(user, "group_ids", user.get("group_ids", []) if isinstance(user, dict) else [])
+        
+        if not group_ids:
+            return {"groups": []}
+            
+        groups_cursor = mongo_service.db.groups.find({"_id": {"$in": group_ids}})
+        groups = await groups_cursor.to_list(length=100)
+        
+        response_data = [{"id": str(g["_id"]), "name": g.get("name", "Grupo Sem Nome")} for g in groups]
+        
+        log_response_sent(endpoint="/user-groups", response={"user_groups": len(response_data)})
+        return {"groups": response_data}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Groups] Erro ao listar grupos do usuário: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao listar grupos do usuário.")
+
+# ============================================================================
+# ROTAS GENÉRICAS / ADMINISTRAÇÃO
+# ============================================================================
+
+# IMPORTANTE: Rota genérica SEMPRE vem antes da rota com parâmetro {id} no FastAPI
+@router.get("/groups", tags=["Groups"])
+async def list_groups_by_company(
+    company_id: str = Query(..., description="ID da empresa para filtrar grupos"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    log_request_received(endpoint="/groups", payload={"company_id": company_id})
+    logger.info(f"[Groups] Requisição recebida para /groups: company_id={company_id}")
+    if not company_id or not isinstance(company_id, str) or not company_id.strip():
+        logger.warning(f"[Groups] company_id inválido ou ausente: {company_id}")
+        log_response_sent(endpoint="/groups", response={"detail": "company_id é obrigatório."})
+        raise HTTPException(status_code=400, detail="company_id é obrigatório.")
+    try:
+        groups = await mongo_service.list_groups_by_company(company_id)
+        response = [g.dict() if hasattr(g, 'dict') else g for g in groups]
+        log_response_sent(endpoint="/groups", response=response)
+        return response
+    except Exception as e:
+        logger.error(f"[Groups] Erro ao listar grupos: {e}")
+        log_response_sent(endpoint="/groups", response={"detail": str(e)})
+        raise HTTPException(status_code=500, detail="Erro interno ao listar grupos.")
+
 @router.get("/groups/{group_id}", tags=["Groups"])
 async def get_group_by_id(
     group_id: str = Path(..., description="ID do grupo a ser consultado"),
@@ -33,60 +93,6 @@ async def get_group_by_id(
         logger.error(f"[Groups] Erro ao buscar grupo: {e}")
         log_response_sent(endpoint=f"/groups/{group_id}", response={"detail": str(e)})
         raise HTTPException(status_code=500, detail="Erro interno ao buscar grupo.")
-
-@router.get("/groups", tags=["Groups"])
-async def list_groups(
-    company_id: Optional[str] = Query(None, description="ID da empresa para listar todos os grupos (Modo Admin)"),
-    email: Optional[str] = Query(None, description="Email para listar apenas os grupos do usuário (Modo Dropdown)"),
-    mongo_service: MongoDBService = Depends(get_mongo_service)
-):
-    log_request_received(endpoint="/groups", payload={"company_id": company_id, "email": email})
-    logger.info(f"[Groups] Requisição recebida para /groups: company_id={company_id}, email={email}")
-    
-    if not company_id and not email:
-        logger.warning("[Groups] Nenhum parâmetro de filtro fornecido.")
-        raise HTTPException(status_code=400, detail="É obrigatório informar 'company_id' ou 'email'.")
-        
-    try:
-        # ==========================================
-        # CENÁRIO 1: O Frontend pediu os grupos do usuário (Dropdown do Novo Projeto)
-        # ==========================================
-        if email:
-            user = await mongo_service.get_user_by_email(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-            
-            # Extrai os IDs dos grupos de forma segura (lidando com objeto ou dicionário)
-            group_ids = getattr(user, "group_ids", user.get("group_ids", []) if isinstance(user, dict) else [])
-            
-            if not group_ids:
-                return {"groups": []} # Retorna vazio se o usuário não tiver especialidades
-                
-            # Busca os detalhes apenas dos grupos permitidos
-            groups_cursor = mongo_service.db.groups.find({"_id": {"$in": group_ids}})
-            groups = await groups_cursor.to_list(length=100)
-            
-            # Formata exatamente como o Frontend está esperando (array de id e name)
-            response_data = [{"id": str(g["_id"]), "name": g.get("name", "Grupo Sem Nome")} for g in groups]
-            
-            log_response_sent(endpoint="/groups", response={"user_groups": len(response_data)})
-            return {"groups": response_data}
-
-        # ==========================================
-        # CENÁRIO 2: Lógica Original (Modo Admin)
-        # ==========================================
-        elif company_id:
-            groups = await mongo_service.list_groups_by_company(company_id)
-            response = [g.dict() if hasattr(g, 'dict') else g for g in groups]
-            log_response_sent(endpoint="/groups", response=response)
-            return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[Groups] Erro ao listar grupos: {e}")
-        log_response_sent(endpoint="/groups", response={"detail": str(e)})
-        raise HTTPException(status_code=500, detail="Erro interno ao listar grupos.")
 
 @router.post("/groups", tags=["Groups"])
 async def create_group(
