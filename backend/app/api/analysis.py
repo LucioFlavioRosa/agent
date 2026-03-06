@@ -303,7 +303,7 @@ async def start_analysis(
     return response_obj
 
 # ============================================================================
-# 🚀 ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO) - RECUPERADA! 🚀
+# 🚀 ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO) - CORRIGIDA! 🚀
 # ============================================================================
 @router.get("/lineage/{project_id}", tags=["Lineage"])
 async def get_project_lineage(project_id: str, mongo_service: MongoDBService = Depends(get_mongo_service)):
@@ -314,6 +314,9 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
     nodes = []
     edges = []
     job_category_map = {item["job_id"]: item.get("report_category") for item in history}
+
+    # 🚀 MÁGICA AQUI: Memória para rastrear a versão anterior de cada categoria
+    last_version_map = {}
 
     for report in history:
         job_id = report.get("job_id")
@@ -328,11 +331,39 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
         })
 
         context_used = report.get("context_used", {})
+        has_refinement_edge = False
+
+        # 1. Cria as arestas de DEPENDÊNCIA (Ex: Epic -> Feature)
         for ctx_key, parent_job_id in context_used.items():
             if not parent_job_id: continue
             parent_category = job_category_map.get(parent_job_id)
-            edge_type = "refinement" if parent_category == category else "dependency"
-            edges.append({"id": f"edge_{parent_job_id}_to_{job_id}", "source": parent_job_id, "target": job_id, "type": edge_type})
+            
+            if parent_category == category:
+                edge_type = "refinement"
+                has_refinement_edge = True
+            else:
+                edge_type = "dependency"
+                
+            edges.append({
+                "id": f"edge_{parent_job_id}_to_{job_id}", 
+                "source": parent_job_id, 
+                "target": job_id, 
+                "type": edge_type
+            })
+
+        # 2. Cria as arestas de REFINAMENTO (Ex: Epics v1 -> Epics v2)
+        # Se for uma evolução e o context_used não tiver pego, ligamos manualmente à versão anterior.
+        if not has_refinement_edge and category in last_version_map:
+            parent_job_id = last_version_map[category]
+            edges.append({
+                "id": f"edge_auto_refine_{parent_job_id}_to_{job_id}",
+                "source": parent_job_id,
+                "target": job_id,
+                "type": "refinement"
+            })
+
+        # Atualiza a memória com o ID atual para que a próxima versão (v3) saiba de onde puxar
+        last_version_map[category] = job_id
 
     return {"project_id": project_id, "nodes": nodes, "edges": edges}
 
