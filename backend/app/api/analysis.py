@@ -27,21 +27,18 @@ logger = logging.getLogger("analysis_api")
 # Configuração de segurança para arquivos
 ALLOWED_EXTENSIONS = {".docx"}
 
-ANALYSIS_CONTEXT_CONFIG = {
-    "agent_epics_generator_digital": [],
-    "agent_epics_reviwer_digital": ["epics"],
-    "agent_features_generator_digital": ["epics"],
-    "agent_features_reviwer_digital": ["epics", "features"], 
-    "agent_timeline_generator_digital": ["epics", "features"],
-    "agent_timeline_reviwer_digital": ["epics", "features", "timeline"],
-    "agent_risks_generator_digital": ["epics", "features", "timeline"],
-    "agent_risks_reviwer_digital": ["epics", "features", "timeline", "risks"]  
+CATEGORY_DEPENDENCIES = {
+    "epics": [],
+    "features": ["epics"],
+    "timeline": ["epics", "features"],
+    "risks": ["epics", "features", "timeline"]
 }
 
 class StartAnalysisRequest(BaseModel):
     email: Optional[str] = None
     nome_projeto: Optional[str] = None
-    analysis_type: Optional[str] = None
+    category: Optional[str] = None # Ex: "epics", "features"
+    action: Optional[str] = None   # Ex: "generator", "reviwer"
     branch: Optional[str] = None
     repository: Optional[str] = None
     comentario_extra: Optional[str] = None
@@ -55,11 +52,21 @@ class StartAnalysisResponse(BaseModel):
 def get_mongo_service(request: Request) -> MongoDBService:
     return request.app.state.mongo_service
 
+def resolve_target_agent(action: str, category: str, group_agents_list: list) -> str:
+    """
+    action: "generator" ou "reviwer"
+    category: "epics", "features", "timeline", "risks"
+    group_agents_list: Lista de agentes que o grupo do projeto tem acesso.
+    """
+    prefix = f"agent_{category}_{action}_"
+    
+    for agent_name in group_agents_list:
+        if agent_name.startswith(prefix):
+            return agent_name
+            
+    raise HTTPException(status_code=400, detail=f"O grupo deste projeto não possui um agente configurado para {action} de {category}.")
+
 async def get_historical_lineage(job_id: str, db) -> dict:
-    """
-    Percorre o Grafo de dependências de trás para frente no MongoDB.
-    Descobre toda a árvore genealógica de um relatório específico.
-    """
     context = {}
     queue = [job_id]
     visited = set()
@@ -74,12 +81,10 @@ async def get_historical_lineage(job_id: str, db) -> dict:
         if not report:
             continue
 
-        # Registra a categoria e o ID (O primeiro que acha é o mais direto na linhagem)
         cat = report.get("report_category")
         if cat and cat not in context:
             context[cat] = current_id
 
-        # Pega os pais deste relatório e coloca na fila para continuar subindo a árvore
         parent_context = report.get("context_used", {})
         for key, p_id in parent_context.items():
             if p_id:
@@ -88,94 +93,44 @@ async def get_historical_lineage(job_id: str, db) -> dict:
     return context
     
 def validate_file_extension(file: UploadFile):
-    """Valida se o arquivo enviado possui uma extensão permitida."""
     extension = os.path.splitext(file.filename)[1].lower()
     if extension not in ALLOWED_EXTENSIONS:
-        log_validation_step(
-            step="validate_file_extension",
-            status="fail",
-            details=f"Extensão de arquivo '{extension}' não permitida.",
-            job_id=None,
-            project_id=None
-        )
+        log_validation_step(step="validate_file_extension", status="fail", details=f"Extensão '{extension}' não permitida.", job_id=None, project_id=None)
         logger.warning(f"Tentativa de upload de arquivo inválido: {file.filename}")
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Extensão de arquivo '{extension}' não permitida. Use apenas: {', '.join(ALLOWED_EXTENSIONS)}"
-        )
-    log_validation_step(
-        step="validate_file_extension",
-        status="success",
-        details=f"Arquivo '{file.filename}' validado com extensão '{extension}'.",
-        job_id=None,
-        project_id=None
-    )
+        raise HTTPException(status_code=400, detail=f"Extensão de arquivo '{extension}' não permitida. Use apenas: {', '.join(ALLOWED_EXTENSIONS)}")
+    log_validation_step(step="validate_file_extension", status="success", details=f"Arquivo '{file.filename}' validado.", job_id=None, project_id=None)
 
 async def validate_user_and_company(email: Optional[str], mongo_service: MongoDBService):
     if not email:
-        log_validation_step(
-            step="validate_user_and_company",
-            status="fail",
-            details="Campo 'email' do usuário é obrigatório.",
-            job_id=None,
-            project_id=None
-        )
         raise HTTPException(status_code=400, detail="Campo 'email' do usuário é obrigatório.")
     user = await mongo_service.get_user_by_email(email)
     if not user:
-        log_validation_step(
-            step="validate_user_and_company",
-            status="fail",
-            details="Usuário não encontrado.",
-            job_id=None,
-            project_id=None
-        )
         raise HTTPException(status_code=404, detail="Usuário não encontrado.")
     company_id = getattr(user, "company_id", None)
     if not company_id:
-        log_validation_step(
-            step="validate_user_and_company",
-            status="fail",
-            details="Usuário não possui company_id.",
-            job_id=None,
-            project_id=None
-        )
         raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
-    log_validation_step(
-        step="validate_user_and_company",
-        status="success",
-        details="Usuário e company_id validados.",
-        job_id=None,
-        project_id=None
-    )
     return user, company_id
 
-async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Optional[str], email: str, user, company_id, mongo_service: MongoDBService):
-    if not nome_projeto or not analysis_type:
-        # (Log de erro omitido para brevidade)
+async def get_or_create_project(nome_projeto: Optional[str], email: str, user, company_id, assigned_group_id: str, mongo_service: MongoDBService):
+    if not nome_projeto:
         raise HTTPException(status_code=400, detail="Campos obrigatórios ausentes.")
     
     permission_service = PermissionService(mongo_service)
-    has_access, error_msg = await permission_service.check_user_agent_permission(email, analysis_type)
-    if not has_access:
-        raise HTTPException(status_code=403, detail=error_msg or "Usuário não possui permissão para usar este agente.")
-
     nome_projeto_normalized = normalize_string_general(nome_projeto)
     project = await mongo_service.get_project_by_normalized_name(nome_projeto_normalized, company_id)
     
     if not project:
-        # 1. Verifica permissão de criação
         can_create, error_msg_create = await permission_service.check_user_can_create_project(email, company_id)
         if not can_create:
             raise HTTPException(status_code=403, detail=error_msg_create)
             
-        # --- LINHA 2: Corrigindo a variável de ID para evitar Erro 500 no log ---
         new_project_id = str(uuid.uuid4()) 
         project_data = {
             "_id": new_project_id,
             "name": nome_projeto,
             "name_normalized": nome_projeto_normalized,
             "company_id": company_id,
+            "assigned_group_id": assigned_group_id, # 🚀 SALVA O GRUPO AQUI
             "members": [{"user_id": user.id, "email": email, "role": "owner", "added_at": datetime.utcnow().isoformat()}],
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
@@ -183,17 +138,10 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
         }
         
         created_id = await mongo_service.create_project(project_data, company_id)
-        
         if not created_id:
-            project_db = await mongo_service.get_project_by_normalized_name(nome_projeto_normalized, company_id)
-            if not project_db:
-                # Aqui usamos a variável correta new_project_id
-                log_error(context="get_or_create_project", error_message="Falha crítica", project_id=new_project_id)
-                raise HTTPException(status_code=500, detail="Erro de concorrência.")
-            project_id = getattr(project_db, "id", None) or project_db.get("_id")
-        else:
-            project_id = created_id
-            await RedisSessionService().invalidate_user_permissions(email, company_id)
+            raise HTTPException(status_code=500, detail="Erro de concorrência ao criar projeto.")
+        project_id = created_id
+        await RedisSessionService().invalidate_user_permissions(email, company_id)
     else:
         project_id = getattr(project, "id", None) or project.get("_id")
     
@@ -203,7 +151,12 @@ async def get_or_create_project(nome_projeto: Optional[str], analysis_type: Opti
 async def start_analysis(
     email: Optional[str] = Form(None),
     nome_projeto: Optional[str] = Form(None),
-    analysis_type: Optional[str] = Form(None),
+    
+    # 🚀 NOVOS PARÂMETROS FRONTEND 🚀
+    category: str = Form(...), # "epics", "features", "timeline", "risks"
+    action: str = Form(...),   # "generator", "reviwer"
+    assigned_group_id: Optional[str] = Form(None), # Necessário apenas na criação do projeto
+    
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
@@ -212,101 +165,57 @@ async def start_analysis(
     strategy: str = Form("checkout"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    # 1. Log recebimento do payload
-    payload = {
-        "email": email,
-        "nome_projeto": nome_projeto,
-        "analysis_type": analysis_type,
-        "branch": branch,
-        "repository": repository,
-        "comentario_extra": comentario_extra,
-        "base_job_id": base_job_id,
-        "arquivo_docx": arquivo_docx.filename if arquivo_docx else None
-    }
+    payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id}
     log_request_received(endpoint="/analysis/start", payload=payload)
 
-    # 2. Validação de Segurança do Arquivo
-    if arquivo_docx:
-        validate_file_extension(arquivo_docx)
-    else:
-        arquivo_docx = None
+    if arquivo_docx: validate_file_extension(arquivo_docx)
 
-    logger.info(f"Iniciando análise multiagente para projeto '{nome_projeto}' para usuário {email}")
-    
-    # 3. Validação de usuário e company_id
     user, company_id = await validate_user_and_company(email, mongo_service)
     grupos_do_usuario = getattr(user, "group_ids", [])
     
-    # 4. Criação ou busca de projeto
+    # 1. CRIA OU BUSCA O PROJETO (agora passando o grupo associado)
     project_id, nome_projeto_final = await get_or_create_project(
-        nome_projeto, analysis_type, email, user, company_id, mongo_service
+        nome_projeto, email, user, company_id, assigned_group_id, mongo_service
     )
 
-    # 5. Verifica permissão do usuário para executar ação no projeto
     try:
         permission_service = PermissionService(mongo_service)
         has_permission, member_role, error_msg = await permission_service.check_user_project_action_permission(
             email, project_id, action_type="edit_project"
         )
-        log_validation_step(
-            step="check_user_project_action_permission",
-            status="success" if has_permission else "fail",
-            details="Permissão validada para ação de edição no projeto." if has_permission else (error_msg or "Usuário não possui permissão para executar esta ação no projeto."),
-            job_id=None,
-            project_id=project_id
-        )
-        if not has_permission:
-            raise HTTPException(
-                status_code=403,
-                detail=error_msg or "Usuário não possui permissão para executar esta ação no projeto."
-            )
-    except HTTPException as exc:
-        log_error(
-            context="check_user_project_action_permission",
-            error_message=str(exc.detail),
-            exception=exc,
-            job_id=None,
-            project_id=project_id
-        )
-        raise
+        if not has_permission: raise HTTPException(status_code=403, detail=error_msg or "Sem permissão.")
     except Exception as e:
-        log_error(
-            context="check_user_project_action_permission",
-            error_message="Erro ao validar permissões de ação do usuário.",
-            exception=e,
-            job_id=None,
-            project_id=project_id
-        )
-        logger.error(f"Erro ao validar permissões de ação: {e}")
         raise HTTPException(status_code=500, detail="Erro ao validar permissões do usuário.")
 
+    # 🚀 2. A MÁGICA DA RESOLUÇÃO DE AGENTES 🚀
+    project_doc = await mongo_service.get_project_by_id(project_id)
+    project_group_id = project_doc.get("assigned_group_id")
+    
+    if not project_group_id:
+        raise HTTPException(status_code=400, detail="Este projeto não possui um grupo de especialidade associado.")
+
+    # Busca as definições do grupo no banco para saber quais agentes ele pode usar
+    group_details = await mongo_service.db.groups.find_one({"_id": project_group_id})
+    if not group_details:
+         raise HTTPException(status_code=404, detail="Grupo associado ao projeto não encontrado.")
+         
+    allowed_agents = group_details.get("allowed_agents", [])
+    
+    # O Python descobre sozinho qual o nome completo do agente ("agent_epics_generator_digital")
+    analysis_type = resolve_target_agent(action, category, allowed_agents)
+
+    # 3. VALIDA O AGENTE NO MCP
     agent_cfg = MCPConfigService.get_agent_config(analysis_type)
     if not agent_cfg or not agent_cfg.mcp_service_url:
-        log_error(
-            context="get_agent_config",
-            error_message=f"Configuração do agente '{analysis_type}' inválida ou URL do MCP ausente.",
-            exception=None,
-            job_id=None,
-            project_id=project_id
-        )
-        raise HTTPException(status_code=500, detail=f"Configuração do agente '{analysis_type}' não disponível.")
-    
-    log_validation_step(
-        step="get_agent_config",
-        status="success",
-        details=f"Configuração do agente '{analysis_type}' carregada.",
-        job_id=None,
-        project_id=project_id
-    )
+        raise HTTPException(status_code=500, detail=f"Agente '{analysis_type}' indisponível no serviço MCP.")
 
     # ==========================================
-    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM (BACKEND-DRIVEN)
+    # 4. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
     # ==========================================
-    reports_to_read = ANALYSIS_CONTEXT_CONFIG.get(analysis_type, [])
+    # Usando a regra universal em vez da regra fixa por agente
+    reports_to_read = CATEGORY_DEPENDENCIES.get(category, [])
     context_used = {}
 
-    # Busca o estado mais recente do banco (Plano B)
-    project_doc = await mongo_service.get_project_by_id(project_id)
     latest_reports_db = getattr(project_doc, "latest_reports", {})
     if not isinstance(latest_reports_db, dict) and hasattr(latest_reports_db, "dict"):
         latest_reports_db = latest_reports_db.dict()
@@ -314,159 +223,75 @@ async def start_analysis(
         latest_reports_db = {}
 
     if base_job_id:
-        # ---------------------------------------------------------
-        # CENÁRIO A: REFINAMENTO
-        # ---------------------------------------------------------
         past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
-        if not past_report:
-            raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
+        if not past_report: raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
             
         target_category = past_report.get("report_category")
-        
-        # O Backend descobre a árvore genealógica de forma autônoma
         historical_tree = await get_historical_lineage(base_job_id, mongo_service.db)
         
-        for category in reports_to_read:
-            if category == target_category:
-                context_used[f"{category}_job_id"] = base_job_id
+        for cat in reports_to_read:
+            if cat == target_category:
+                context_used[f"{cat}_job_id"] = base_job_id
             else:
                 if strategy == "rebase":
-                    # EFEITO CASCATA: Prioriza o mais novo do DB
-                    dependency_job_id = latest_reports_db.get(category) or historical_tree.get(category)
+                    dependency_job_id = latest_reports_db.get(cat) or historical_tree.get(cat)
                 else:
-                    # CHECKOUT (Padrão): Prioriza a árvore congelada
-                    dependency_job_id = historical_tree.get(category) or latest_reports_db.get(category)
+                    dependency_job_id = historical_tree.get(cat) or latest_reports_db.get(cat)
                 
-                if not dependency_job_id:
-                     raise HTTPException(status_code=400, detail=f"Dependência '{category}' não encontrada.")
-                context_used[f"{category}_job_id"] = dependency_job_id
+                if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
+                context_used[f"{cat}_job_id"] = dependency_job_id
 
-        # Transforma o passado recuperado no novo "presente oficial" do projeto.
-        # 🚀 A MÁGICA DO GIT RESET (Atualizando o Latest State) 🚀
         if strategy == "checkout":
             new_latest_state = {}
             for cat, j_id in context_used.items():
                 cat_name = cat.replace("_job_id", "")
                 new_latest_state[cat_name] = j_id
-                
-            # Chama o método oficial e limpo do serviço
             await mongo_service.update_project_latest_reports(project_id, new_latest_state)
 
     else:
-        # ---------------------------------------------------------
-        # CENÁRIO B: GERAÇÃO DO ZERO
-        # ---------------------------------------------------------
-        for category in reports_to_read:
-            dependency_job_id = latest_reports_db.get(category)
-            if not dependency_job_id:
-                raise HTTPException(status_code=400, detail=f"Dependência '{category}' não encontrada.")
-            context_used[f"{category}_job_id"] = dependency_job_id
+        for cat in reports_to_read:
+            dependency_job_id = latest_reports_db.get(cat)
+            if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
+            context_used[f"{cat}_job_id"] = dependency_job_id
 
-    # 7. Gera job_id único para rastreamento da execução
+    # 5. EXECUÇÃO
     job_id = str(uuid.uuid4())
     redis_service = RedisSessionService()
     job_id = await redis_service.create_job(
-        project_id=project_id,
-        analysis_type=analysis_type,
-        email=email,
-        empresa=company_id,
-        context_used=context_used
+        project_id=project_id, analysis_type=analysis_type, email=email, empresa=company_id, context_used=context_used
     )
     
-    log_validation_step(
-        step="generate_job_id",
-        status="success",
-        details=f"job_id gerado: {job_id}",
-        job_id=job_id,
-        project_id=project_id
-    )
-
-    # 8. Monta payload para o serviço MCP
     mcp_payload = {
-        "email": email,
-        "nome_projeto": nome_projeto_final,
-        "analysis_type": analysis_type,
-        "branch": branch,
-        "repository": repository,
-        "comentario_extra": comentario_extra,
-        "project_id": project_id,
-        "job_id": job_id,
-        "company_id": company_id,
-        "group_ids": grupos_do_usuario,
-        "context_used": context_used
+        "email": email, "nome_projeto": nome_projeto_final, "analysis_type": analysis_type,
+        "branch": branch, "repository": repository, "comentario_extra": comentario_extra,
+        "project_id": project_id, "job_id": job_id, "company_id": company_id,
+        "group_ids": grupos_do_usuario, "context_used": context_used
     }
-    log_service_call(
-        service="MCPClientService",
-        action="build_payload",
-        payload=mcp_payload,
-        job_id=job_id,
-        project_id=project_id
-    )
-
-    # 9. Comunicação com o serviço MCP via Client Service
+    
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
     try:
-        log_service_call(
-            service="MCPClientService",
-            action="start_analysis_call",
-            payload=mcp_payload,
-            job_id=job_id,
-            project_id=project_id
-        )
         await mcp_client.start_analysis(mcp_payload, agent_cfg.mcp_service_url, arquivo_docx)
-        log_service_call(
-            service="MCPClientService",
-            action="start_analysis_success",
-            response="Solicitação enviada com sucesso ao MCP.",
-            job_id=job_id,
-            project_id=project_id
-        )
     except Exception as e:
-        log_error(
-            context="MCPClientService.start_analysis",
-            error_message=f"Erro na comunicação com MCP para o job {job_id}: {str(e)}",
-            exception=e,
-            job_id=job_id,
-            project_id=project_id
-        )
-        logger.error(f"Erro na comunicação com MCP para o job {job_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"O serviço de agentes (MCP) retornou um erro: {str(e)}")
+        logger.error(f"Erro MCP {job_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"Erro no MCP: {str(e)}")
 
     response_obj = StartAnalysisResponse(
         message="Análise multiagente solicitada com sucesso ao MCP.",
-        project_id=project_id,
-        job_id=job_id,
-        nome_projeto=nome_projeto_final
+        project_id=project_id, job_id=job_id, nome_projeto=nome_projeto_final
     )
-    log_response_sent(endpoint="/analysis/start", response=response_obj.dict(), job_id=job_id, project_id=project_id)
     return response_obj
 
 # ============================================================================
 # ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO)
 # ============================================================================
 @router.get("/lineage/{project_id}", tags=["Lineage"])
-async def get_project_lineage(
-    project_id: str,
-    mongo_service: MongoDBService = Depends(get_mongo_service)
-):
-    """
-    Varre o histórico do projeto e constrói o grafo de linhagem.
-    Retorna Nós (Nodes) e Conexões (Edges) no formato que o vis.js espera.
-    """
-    # 1. Busca todo o histórico desse projeto ordenado pela data
-    cursor = mongo_service.db.project_reports_history.find(
-        {"project_id": project_id}
-    ).sort("created_at", 1) # Do mais antigo para o mais novo
-    
+async def get_project_lineage(project_id: str, mongo_service: MongoDBService = Depends(get_mongo_service)):
+    cursor = mongo_service.db.project_reports_history.find({"project_id": project_id}).sort("created_at", 1) 
     history = await cursor.to_list(length=2000)
-    
-    if not history:
-        return {"nodes": [], "edges": []}
+    if not history: return {"nodes": [], "edges": []}
 
     nodes = []
     edges = []
-    
-    # Mapa rápido para achar a categoria de um job pai na hora de ligar as setas
     job_category_map = {item["job_id"]: item.get("report_category") for item in history}
 
     for report in history:
@@ -474,82 +299,40 @@ async def get_project_lineage(
         category = report.get("report_category", "unknown")
         version = report.get("version", 1)
         
-        # --- 1. CRIA O "NÓ" (A Caixinha no Gráfico) ---
         nodes.append({
-            "id": job_id,
-            "type": category,
-            "label": f"{str(category).capitalize()} v{version}",
-            "version": version,
-            "status": report.get("status"),
+            "id": job_id, "type": category, "label": f"{str(category).capitalize()} v{version}",
+            "version": version, "status": report.get("status"),
             "created_at": report.get("created_at").isoformat() if getattr(report.get("created_at"), "isoformat", None) else str(report.get("created_at")),
             "created_by": report.get("created_by_email")
         })
 
-        # --- 2. CRIA AS "ARESTAS" (As setas conectando as caixinhas) ---
         context_used = report.get("context_used", {})
-        
         for ctx_key, parent_job_id in context_used.items():
-            if not parent_job_id:
-                continue
-                
-            # Descobre de qual categoria veio esse pai
+            if not parent_job_id: continue
             parent_category = job_category_map.get(parent_job_id)
-            
-            # Define se a seta é de Refinamento (mesma cor) ou Dependência (cores diferentes)
             edge_type = "refinement" if parent_category == category else "dependency"
-            
-            edges.append({
-                "id": f"edge_{parent_job_id}_to_{job_id}",
-                "source": parent_job_id,  # De onde a flecha sai
-                "target": job_id,         # Onde a flecha chega
-                "type": edge_type
-            })
+            edges.append({"id": f"edge_{parent_job_id}_to_{job_id}", "source": parent_job_id, "target": job_id, "type": edge_type})
 
-    return {
-        "project_id": project_id,
-        "nodes": nodes,
-        "edges": edges
-    }
+    return {"project_id": project_id, "nodes": nodes, "edges": edges}
 
 # ============================================================================
 # ROTA DE RESTAURAÇÃO DE VERSÃO (ROLLBACK / GIT RESET)
 # ============================================================================
 @router.post("/restore", tags=["Analysis"])
-async def restore_historical_version(
-    project_id: str = Form(...),
-    job_id: str = Form(...),
-    mongo_service: MongoDBService = Depends(get_mongo_service)
-):
-    """
-    Restaura uma versão antiga de um relatório e puxa automaticamente 
-    todas as dependências (contexto) que geraram essa versão para o estado atual.
-    """
-    # 1. Verifica se o relatório existe
+async def restore_historical_version(project_id: str = Form(...), job_id: str = Form(...), mongo_service: MongoDBService = Depends(get_mongo_service)):
     report = await mongo_service.db.project_reports_history.find_one({"job_id": job_id})
-    if not report:
-        raise HTTPException(status_code=404, detail="Relatório histórico não encontrado.")
+    if not report: raise HTTPException(status_code=404, detail="Relatório histórico não encontrado.")
 
-    # 2. Usa a nossa função mágica de Grafo para escalar a árvore e achar o passado
     historical_tree = await get_historical_lineage(job_id, mongo_service.db)
-
-    # 3. Monta o novo "Estado da Arte" (latest_reports) do projeto
     new_latest_state = {}
     for cat, j_id in historical_tree.items():
-        # A função de lineage já traz a categoria limpa (ex: "epics")
         cat_name = cat.replace("_job_id", "") 
         new_latest_state[cat_name] = j_id
 
-    # Garante que o próprio item selecionado está no novo estado
     target_category = report.get("report_category")
     new_latest_state[target_category] = job_id
 
-    # 4. Atualiza o banco de dados via serviço (O Git Reset)
     success = await mongo_service.update_project_latest_reports(project_id, new_latest_state)
-    
-    if not success:
-        raise HTTPException(status_code=500, detail="Falha ao atualizar o banco de dados.")
+    if not success: raise HTTPException(status_code=500, detail="Falha ao atualizar o banco de dados.")
 
-    return {
-        "message": "Versão e contexto restaurados com sucesso.",
-        "new_state": new_latest_state
-    }
+    return {"message": "Versão e contexto restaurados com sucesso.", "new_state": new_latest_state}
