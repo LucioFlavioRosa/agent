@@ -226,17 +226,50 @@ async def start_analysis(
     if not project_group_id:
         raise HTTPException(status_code=400, detail="Este projeto não possui um grupo de especialidade associado.")
 
-    # 🚀 3. BUSCA O GRUPO NO BANCO PARA PEGAR OS AGENTES PERMITIDOS 🚀
-    group_details = await mongo_service.db.groups.find_one({"_id": project_group_id})
-    if not group_details:
+    # =====================================================================
+    # 🚀 3. IDENTIFICA A ESPECIALIDADE DO PROJETO E O AGENTE NECESSÁRIO 🚀
+    # =====================================================================
+    project_group_doc = await mongo_service.db.groups.find_one({"_id": project_group_id})
+    if not project_group_doc:
          raise HTTPException(status_code=404, detail=f"Grupo associado ({project_group_id}) não encontrado.")
          
-    allowed_agents = group_details.get("allowed_agents", [])
-    if not allowed_agents:
-         raise HTTPException(status_code=400, detail="O grupo deste projeto não possui agentes configurados.")
+    # Descobre o sufixo (ex: "digital", "sap") a partir dos agentes do grupo original do projeto
+    project_agents = project_group_doc.get("allowed_agents", [])
+    project_suffix = "digital" # Fallback de segurança
+    for pa in project_agents:
+        parts = str(pa).strip().split("_")
+        if len(parts) >= 4:
+            project_suffix = parts[-1]
+            break
+
+    # Monta o nome exato do agente que o sistema precisa invocar agora:
+    target_agent_name = f"agent_{str(category).strip().lower()}_{str(action).strip().lower()}_{project_suffix}"
+    logger.info(f"🎯 [AgentResolver] O projeto exige o agente: '{target_agent_name}'")
+
+    # =====================================================================
+    # 🚀 4. VERIFICA SE O *USUÁRIO LOGADO* TEM PERMISSÃO PARA ESSE AGENTE 🚀
+    # =====================================================================
+    user_group_ids = getattr(user, "group_ids", [])
+    user_groups_cursor = mongo_service.db.groups.find({"_id": {"$in": user_group_ids}})
+    user_groups = await user_groups_cursor.to_list(length=100)
     
-    # 🚀 4. O PYTHON DESCOBRE O NOME COMPLETO DO AGENTE 🚀
-    analysis_type = resolve_target_agent(action, category, allowed_agents)
+    # Junta todos os agentes de todos os grupos do usuário atual (O Rafael)
+    user_allowed_agents = set()
+    for g in user_groups:
+         for agent in g.get("allowed_agents", []):
+             user_allowed_agents.add(str(agent).strip().lower())
+             
+    logger.info(f"👤 [AgentResolver] Agentes disponíveis para o usuário {email}: {list(user_allowed_agents)}")
+
+    # A grande validação: O usuário tem a ferramenta certa na mochila?
+    if target_agent_name not in user_allowed_agents:
+         raise HTTPException(
+             status_code=403, 
+             detail=f"Seu usuário não possui permissão para utilizar o agente '{target_agent_name}' necessário para esta etapa."
+         )
+         
+    # Passou na validação! Define o agente final para enviar ao MCP
+    analysis_type = target_agent_name
 
     # 5. VALIDA O AGENTE NO MCP
     agent_cfg = MCPConfigService.get_agent_config(analysis_type)
