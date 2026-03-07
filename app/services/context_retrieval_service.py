@@ -1,4 +1,3 @@
-
 import logging
 from typing import Optional
 from backend.app.services.blob_storage_service import BlobStorageService
