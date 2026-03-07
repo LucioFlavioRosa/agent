@@ -12,9 +12,6 @@ logger = logging.getLogger("mcp_prototype.main")
 
 app = FastAPI(title="MCP - Prototype Generator", version="1.0")
 
-# ❌ Removemos app.add_event_handler("startup", connect_to_mongo)
-# ❌ Removemos app.add_event_handler("shutdown", close_mongo_connection)
-
 @app.post("/analyze")
 async def analyze_endpoint(
     background_tasks: BackgroundTasks,
