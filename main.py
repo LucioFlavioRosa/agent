@@ -120,32 +120,34 @@ async def start_analysis(
             parsed_group_id = str(group_ids)
 
     # =========================================================================
-    # 🚀 UPLOAD PARA O BLOB STORAGE (DOIS ARQUIVOS)
+    # 🚀 UPLOAD PARA O BLOB STORAGE (ARQUIVOS SÃO 100% OPCIONAIS)
     # =========================================================================
     blob_path = None
     blob_identidade_path = None
     
     try:
-        # 1. Salva o DOCX de Instruções (Se existir)
-        if arquivo_docx:
+        # 1. Verifica se o usuário enviou o arquivo de Instruções e se ele é real
+        if arquivo_docx and arquivo_docx.filename:
             nome_arquivo = sanitize_filename(arquivo_docx.filename, "instrucoes.docx")
             file_bytes = await arquivo_docx.read()
             blob_path = await blob_storage_service.save_document(
                 company_id=company_id, project_id=project_id, job_id=job_id,
                 file_data=file_bytes, filename=nome_arquivo, group_id=parsed_group_id
             )
+            logger.log_evento("INFO", "upload_instrucoes_ok", "DOCX de instruções salvo no Blob.")
 
-        # 2. Salva o DOCX de Identidade Visual (Se existir)
-        if arquivo_identidade:
+        # 2. Verifica se o usuário enviou o arquivo de Identidade Visual e se ele é real
+        if arquivo_identidade and arquivo_identidade.filename:
             nome_identidade = sanitize_filename(arquivo_identidade.filename, "identidade.docx")
             identidade_bytes = await arquivo_identidade.read()
             blob_identidade_path = await blob_storage_service.save_document(
                 company_id=company_id, project_id=project_id, job_id=job_id,
                 file_data=identidade_bytes, filename=nome_identidade, group_id=parsed_group_id
             )
+            logger.log_evento("INFO", "upload_identidade_ok", "DOCX de identidade salvo no Blob.")
             
     except Exception as e:
-        logger.log_erro("erro_upload_blob", f"Falha ao salvar arquivos: {e}")
+        logger.log_erro("erro_upload_blob", f"Falha ao salvar arquivos base: {e}")
         return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivos base."})
 
     # =========================================================================
