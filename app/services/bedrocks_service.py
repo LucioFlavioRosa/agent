@@ -3,7 +3,7 @@ import logging
 import sys
 from typing import Optional
 import aioboto3
-from botocore.config import Config # 🚀 IMPORT NOVO AQUI
+from botocore.config import Config
 from azure.keyvault.secrets.aio import SecretClient
 
 from backend.app.services.vault_service import VaultService
