@@ -11,7 +11,7 @@ from backend.app.services.vault_service import VaultService
 logger = logging.getLogger("mcp_claude_aws")
 logger.setLevel(logging.INFO)
 
-class ClaudeAWSService:
+class LLMService:
     def __init__(self, vault_service: VaultService):
         self.vault_service = vault_service
 
