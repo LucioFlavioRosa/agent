@@ -164,6 +164,12 @@ async def start_analysis(
     try:
         await queue_service.send_message(task_payload)
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": "Falha ao enviar tarefa para a fila."})
+        # =================================================================
+        # 🚀 ESTA É A MÁGICA: VAI IMPRIMIR O ERRO REAL NO LOG DA AZURE!
+        # =================================================================
+        import traceback
+        print(f"❌ [{job_id}] ERRO FATAL NA FILA: {str(e)}", flush=True)
+        traceback.print_exc() 
+        return JSONResponse(status_code=500, content={"error": f"Falha na Fila: {str(e)}"})
 
     return JSONResponse(status_code=202, content={"status": "queued", "job_id": job_id})
