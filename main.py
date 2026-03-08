@@ -140,7 +140,7 @@ async def start_analysis(
                 job_id=job_id,
                 file_data=file_bytes,
                 filename=nome_arquivo,
-                group_id=group_ids
+                group_id=parsed_group_id
             )
         except Exception as e:
             return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivo."})
