@@ -20,8 +20,6 @@ from app.services.queue_service import QueueService
 
 logger = StructuredLogger("mcp_prototype_worker")
 
-# --- INSTANCIAÇÃO DOS SERVIÇOS ---
-# Pegando das variáveis de ambiente ou do seu settings.py
 vault_urls = [
     os.getenv("AZURE_INFRA_VAULT_URL", ""),
     os.getenv("AZURE_LLM_VAULT_URL", ""),
@@ -29,7 +27,7 @@ vault_urls = [
 queue_name_prototype = os.getenv("QUEUE_NAME", "prototype-queue")
 
 vault_service = VaultService(vault_urls=[u for u in vault_urls if u])
-blob_storage_service = BlobStorageService() # Já usa o vault_service global internamente
+blob_storage_service = BlobStorageService() 
 queue_service = QueueService(
     queue_name=queue_name_prototype,
     max_concurrent_workers=5
@@ -43,7 +41,6 @@ def sanitize_filename(filename: str, fallback_name: str = "documento.docx") -> s
     limpo = re.sub(r'[^a-zA-Z0-9_.-]', '_', sem_acento)
     return re.sub(r'_+', '_', limpo).lower()
 
-# --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.log_evento("INFO", "worker_task_iniciado", "Iniciando worker do Protótipo em background")
@@ -73,7 +70,6 @@ async def log_request_middleware(request: Request, call_next):
     )
     return response
 
-# --- ENDPOINTS ---
 @app.post("/start")
 async def start_analysis(
     job_id: str = Form(...),
@@ -88,15 +84,9 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     context_used: Optional[str] = Form(None),
     
-    # 🚀 AQUI ESTÁ A GRANDE MUDANÇA: Aceita os DOIS arquivos do Frontend/Maestro
     arquivo_docx: Optional[UploadFile] = File(None),
     arquivo_identidade: Optional[UploadFile] = File(None)
 ):
-    # =========================================================================
-    # 🚀 PARSING BLINDADO DO CONTEXT_USED
-    # Como o protótipo "começa do zero", ele vai processar graciosamente 
-    # se o context_used vier vazio ({}) do Maestro.
-    # =========================================================================
     parsed_context = {}
     if context_used and context_used.strip():
         clean_context_str = context_used.strip()
@@ -118,15 +108,12 @@ async def start_analysis(
         except:
             parsed_group_id = str(group_ids)
 
-    # =========================================================================
-    # 🚀 UPLOAD PARA O BLOB STORAGE (ARQUIVOS SÃO 100% OPCIONAIS)
-    # =========================================================================
     blob_path = None
     blob_identidade_path = None
     
     try:
-        # 1. Verifica se o usuário enviou o arquivo de Instruções e se ele é real
-        if arquivo_docx and arquivo_docx.filename:
+        # Checagem robusta: existe e tem filename válido
+        if arquivo_docx and getattr(arquivo_docx, "filename", None):
             nome_arquivo = sanitize_filename(arquivo_docx.filename, "instrucoes.docx")
             file_bytes = await arquivo_docx.read()
             blob_path = await blob_storage_service.save_document(
@@ -135,8 +122,7 @@ async def start_analysis(
             )
             logger.log_evento("INFO", "upload_instrucoes_ok", "DOCX de instruções salvo no Blob.")
 
-        # 2. Verifica se o usuário enviou o arquivo de Identidade Visual e se ele é real
-        if arquivo_identidade and arquivo_identidade.filename:
+        if arquivo_identidade and getattr(arquivo_identidade, "filename", None):
             nome_identidade = sanitize_filename(arquivo_identidade.filename, "identidade.docx")
             identidade_bytes = await arquivo_identidade.read()
             blob_identidade_path = await blob_storage_service.save_document(
@@ -149,9 +135,6 @@ async def start_analysis(
         logger.log_erro("erro_upload_blob", f"Falha ao salvar arquivos base: {e}")
         return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivos base."})
 
-    # =========================================================================
-    # 🚀 MONTAGEM DO PAYLOAD DA FILA
-    # =========================================================================
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
@@ -164,7 +147,6 @@ async def start_analysis(
         "repository": repository,
         "comentario_extra": comentario_extra,
         
-        # Passa os dois caminhos do Blob Storage para o Queue Worker ler
         "blob_path": blob_path, 
         "identidade_visual_blob_path": blob_identidade_path, 
         
@@ -175,6 +157,6 @@ async def start_analysis(
         await queue_service.send_message(task_payload)
         logger.log_evento("INFO", "task_enviada_fila", "Mensagem colocada na fila de prototipação com sucesso.")
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": "Falha ao enviar tarefa para a fila."})
+        return JSONResponse(status_code=500, content={"error": f"Falha ao enviar tarefa para a fila: {e}"})
 
     return JSONResponse(status_code=202, content={"status": "queued", "job_id": job_id})
