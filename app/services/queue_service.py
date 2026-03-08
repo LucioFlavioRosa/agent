@@ -49,6 +49,17 @@ class QueueService:
             llm_services=llm_registry # Injeta o Bedrock aqui!
         )
 
+    # NOVO MÉTODo: Necessário para o main.py enviar a mensagem
+    async def send_message(self, payload: dict):
+        queue_conn_str = await self.vault_service.get_secret("queue-connection-string", company_id="default", vault_type="infra")
+        if not queue_conn_str:
+            raise ValueError("Connection string da fila não encontrada.")
+            
+        async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=self.queue_name) as queue_client:
+            message_bytes = json.dumps(payload).encode('utf-8')
+            encoded_msg = base64.b64encode(message_bytes).decode('utf-8')
+            await queue_client.send_message(encoded_msg)
+
     async def _notificar_backend(
         self, 
         job_id: str, 
@@ -85,12 +96,12 @@ class QueueService:
         except Exception as e:
             logger.log_erro("webhook_erro_rede", f"Falha de rede ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
 
-    async def _extract_text_from_blob(self, company_id: str, blob_path: str, group_ids: list) -> str:
+    async def _extract_text_from_blob(self, company_id: str, blob_path: str, group_id: Optional[str]) -> str:
         """Função auxiliar para baixar o DOCX do Blob e extrair o texto"""
         if not blob_path: return ""
         try:
             file_bytes = await self.blob_storage_service.download_document(
-                company_id=company_id, blob_path=blob_path, group_id=group_ids[0] if group_ids else None
+                company_id=company_id, blob_path=blob_path, group_id=group_id
             )
             doc = docx.Document(io.BytesIO(file_bytes))
             return "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
@@ -106,23 +117,22 @@ class QueueService:
             job_id = task_data.get('job_id')
             company_id = task_data.get('company_id')
             project_id = task_data.get('project_id')
-            group_ids = task_data.get('group_ids', [])
+            group_id = task_data.get('group_ids') # Vem como string do main.py
             analysis_type = task_data.get("analysis_type", "unknown")
             
-            # Caminhos dos arquivos base
+            # Caminhos dos arquivos base (podem vir nulos caso o usuário não envie)
             blob_instrucoes = task_data.get('blob_path') 
             blob_identidade = task_data.get('identidade_visual_blob_path')
             
             logger.log_info_negocio("job_recebido_fila", "Job recebido da fila", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
-            # 1. Extração dos textos das instruções (se os DOCX foram enviados)
-            texto_instrucoes = await self._extract_text_from_blob(company_id, blob_instrucoes, group_ids)
-            texto_identidade = await self._extract_text_from_blob(company_id, blob_identidade, group_ids)
+            # 1. Extração dos textos (Apenas se os arquivos foram enviados)
+            texto_instrucoes = await self._extract_text_from_blob(company_id, blob_instrucoes, group_id)
+            texto_identidade = await self._extract_text_from_blob(company_id, blob_identidade, group_id)
 
             logger.log_info_negocio("job_inicio_processamento", "Iniciando processamento com o AgentService", job_id=job_id, company_id=company_id)
             
             # 2. 🚀 DELEGA TUDO PARA O AGENT SERVICE 🚀
-            # Ele monta o prompt, chama a AWS e já salva o HTML no Blob Storage sozinho!
             resultado_html = await self.agent_service.executar_analise(
                 task_payload=task_data,
                 texto_instrucoes=texto_instrucoes,
