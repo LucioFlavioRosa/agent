@@ -427,5 +427,6 @@ async def get_report_lineage(
         epics=format_history_item(tree_data.get("epics")),
         features=format_history_item(tree_data.get("features")),
         timeline=format_history_item(tree_data.get("timeline")),
-        risks=format_history_item(tree_data.get("risks"))
+        risks=format_history_item(tree_data.get("risks")),
+        prototype=format_history_item(tree_data.get("prototype"))
     )
