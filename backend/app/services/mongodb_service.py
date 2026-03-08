@@ -443,26 +443,33 @@ class MongoDBService:
         Dada uma categoria e um job_id específico, reconstrói o contexto 
         olhando para o passado (o que gerou ele) e para o futuro (o que ele gerou).
         """
-        # 1. Busca o relatório alvo (ex: Features V2)
         target_report = await self.db.project_reports_history.find_one({"job_id": job_id})
         if not target_report:
             return None
 
         context_used = target_report.get("context_used", {})
         
-        # Estrutura de resposta
+        # 🚀 1. Adicionado o slot do prototype
         tree = {
             "epics": None,
             "features": None,
             "timeline": None,
-            "risks": None
+            "risks": None,
+            "prototype": None 
         }
         
-        # Coloca o alvo no lugar certo
         tree[category] = target_report
 
-        # 2. OLHANDO PARA O PASSADO (Ancestrais)
-        # Se eu sou Feature, preciso do Épico exato que me gerou
+        # 🚀 2. REGRA DE ISOLAMENTO DO PROTÓTIPO
+        # Se for um protótipo, não há linhagem lateral com features/épicos. Retorna apenas ele mesmo.
+        if category == "prototype":
+            return tree
+
+        # =========================================================================
+        # 3. Restante do código original mantido intacto para Epics/Features/etc
+        # =========================================================================
+        
+        # OLHANDO PARA O PASSADO (Ancestrais)
         if category in ["features", "timeline", "risks"] and context_used.get("epics_job_id"):
             tree["epics"] = await self.db.project_reports_history.find_one({"job_id": context_used["epics_job_id"]})
             
@@ -472,14 +479,11 @@ class MongoDBService:
         if category == "risks" and context_used.get("timeline_job_id"):
              tree["timeline"] = await self.db.project_reports_history.find_one({"job_id": context_used["timeline_job_id"]})
 
-        # 3. OLHANDO PARA O FUTURO (Descendentes Mais Recentes)
-        # Se eu sou Feature, quais Timelines e Riscos mais novos foram gerados a partir de mim?
+        # OLHANDO PARA O FUTURO (Descendentes Mais Recentes)
         if category == "epics":
-            # Busca a feature mais recente que usou este épico específico
             tree["features"] = await self._get_latest_descendant("features", "epics_job_id", job_id)
             
         if category in ["epics", "features"]:
-            # Busca a timeline mais recente que usou esta feature (ou épico se não houver feature)
             child_job = tree["features"]["job_id"] if tree["features"] else job_id
             child_field = "features_job_id" if tree["features"] else "epics_job_id"
             tree["timeline"] = await self._get_latest_descendant("timeline", child_field, child_job)
