@@ -6,6 +6,7 @@ from typing import Optional, List
 from azure.identity.aio import DefaultAzureCredential
 from azure.keyvault.secrets.aio import SecretClient
 from azure.core.exceptions import ResourceNotFoundError
+from backend.app.config.settings import settings
 
 logger = logging.getLogger("mcp_vault")
 
@@ -89,7 +90,7 @@ class VaultService:
 # ============================================================================
 # INSTÂNCIA GLOBAL OTIMIZADA
 # ============================================================================
-_infra_url = os.getenv("AZURE_INFRA_VAULT_URL", "").strip()
-_llm_url = os.getenv("AZURE_LLM_VAULT_URL", "").strip()
-
-vault_service = VaultService(infra_url=_infra_url, llm_url=_llm_url)
+vault_service = VaultService(
+    infra_url=settings.AZURE_INFRA_VAULT_URL, 
+    llm_url=settings.AZURE_LLM_VAULT_URL
+)
