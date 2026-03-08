@@ -22,7 +22,11 @@ class AgentService:
         self.llm_services = llm_services
 
     def _obter_prompt_base(self, analysis_type: Optional[str]) -> str:
-        prompt_padrao = "Você é um Desenvolvedor Frontend Sênior. Crie um protótipo em HTML/CSS/JS (Single File)."
+        prompt_padrao = (
+            "Você é um Desenvolvedor Frontend Sênior. Crie um protótipo em HTML/CSS/JS (Single File). "
+            "Utilize a biblioteca Tailwind CSS via CDN para estilização padrão e siga estritamente "
+            "diretrizes de acessibilidade (como ARIA tags, contraste de cores e navegação por teclado)."
+        )
         logger.log_evento("INFO", "_obter_prompt_base", "Obtendo prompt base", extra={"analysis_type": analysis_type})
         
         if not analysis_type or analysis_type not in AGENT_CONFIG:
