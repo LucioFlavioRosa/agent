@@ -186,10 +186,18 @@ class QueueService:
 
     async def start_worker(self):
         logger.log_info_negocio("orquestrador_worker_iniciado", "Orquestrador do Worker iniciado.")
-        queue_conn_str = await self.vault_service.get_queue_connection_string()
+        
+        # 🚀 CORREÇÃO AQUI
+        queue_conn_str = await self.vault_service.get_secret(
+            base_name="queue-connection-string", # Substitua pelo nome correto se for diferente
+            company_id="default", 
+            vault_type="infra"
+        )
+        
         if not queue_conn_str:
             logger.log_erro("erro_sem_connection_string_fila", "Abortando worker: Sem connection string da fila.")
             return
+            
         async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=self.queue_name) as queue_client:
             try:
                 await queue_client.create_queue()
@@ -224,10 +232,18 @@ class QueueService:
         job_id = task_payload.get('job_id')
         company_id = task_payload.get('company_id')
         logger.log_info_negocio("envio_mensagem_fila", "Enviando mensagem para fila", job_id=job_id, company_id=company_id)
-        queue_conn_str = await self.vault_service.get_queue_connection_string()
+        
+        # 🚀 CORREÇÃO AQUI TAMBÉM
+        queue_conn_str = await self.vault_service.get_secret(
+            base_name="queue-connection-string", # Substitua pelo nome correto se for diferente
+            company_id="default", 
+            vault_type="infra"
+        )
+        
         if not queue_conn_str:
             logger.log_erro("erro_envio_mensagem_fila", "Falha ao obter conexão da fila do Azure.", job_id=job_id, company_id=company_id)
             raise Exception("Falha ao obter conexão da fila do Azure.")
+            
         async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=self.queue_name) as queue_client:
             message_b64 = base64.b64encode(json.dumps(task_payload).encode('utf-8')).decode('utf-8')
             await queue_client.send_message(message_b64)
