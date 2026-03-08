@@ -46,24 +46,40 @@ class VaultService:
         return sanitized.strip('-')
 
     # 🚀 NOVO PARÂMETRO 'vault_type' (Padrão é 'llm', pois será o mais usado aqui)
-    async def get_secret(self, base_name: str, company_id: str, group_id: Optional[str] = None, vault_type: str = "llm") -> Optional[str]:
+    # 🚀 ADICIONADO PARÂMETRO 'is_global' (padrão False)
+    async def get_secret(
+        self, 
+        base_name: str, 
+        company_id: str = None, 
+        group_id: Optional[str] = None, 
+        vault_type: str = "llm",
+        is_global: bool = False
+    ) -> Optional[str]:
         target_url = self.vaults.get(vault_type)
         if not target_url:
             logger.error(f"vault_secret_erro | Cofre do tipo '{vault_type}' não configurado nas variáveis de ambiente.")
             return None
 
-        safe_company_id = self._sanitize_name(company_id)
-        safe_group_id = self._sanitize_name(group_id) if group_id else None
-        
-        secret_name_full = f"{base_name}-{safe_company_id}-{safe_group_id}" if safe_group_id else f"{base_name}-{safe_company_id}"
-        fallback_secret_name = f"{base_name}-{safe_company_id}"
-        
-        names_to_try = [secret_name_full]
-        if safe_group_id:
-            names_to_try.append(fallback_secret_name)
+        logger.info(f"vault_secret_busca_iniciada | base_name={base_name} | target_vault={vault_type} | is_global={is_global}")
+
+        # 🚀 SE FOR GLOBAL, BUSCA EXATAMENTE O BASE_NAME
+        if is_global:
+            names_to_try = [base_name]
+        else:
+            if not company_id:
+                logger.error("vault_secret_erro | company_id é obrigatório quando is_global=False.")
+                return None
+                
+            safe_company_id = self._sanitize_name(company_id)
+            safe_group_id = self._sanitize_name(group_id) if group_id else None
             
-        logger.info(f"vault_secret_busca_iniciada | base_name={base_name} | target_vault={vault_type}")
-        
+            secret_name_full = f"{base_name}-{safe_company_id}-{safe_group_id}" if safe_group_id else f"{base_name}-{safe_company_id}"
+            fallback_secret_name = f"{base_name}-{safe_company_id}"
+            
+            names_to_try = [secret_name_full]
+            if safe_group_id:
+                names_to_try.append(fallback_secret_name)
+                
         for secret_name in names_to_try:
             # 1. Tenta no Cache
             cached_value = self.cache.get(secret_name)
@@ -71,7 +87,7 @@ class VaultService:
                 logger.info(f"vault_secret_encontrado | secret_name={secret_name} | origem=cache")
                 return cached_value
                 
-            # 2. Vai DIRETO no cofre correto (Sem loop de URLs)
+            # 2. Vai DIRETO no cofre correto
             try:
                 async with SecretClient(vault_url=target_url, credential=self.credential) as client:
                     secret = await client.get_secret(secret_name)
@@ -79,7 +95,7 @@ class VaultService:
                     logger.info(f"vault_secret_encontrado | secret_name={secret_name} | vault_url={target_url}")
                     return secret.value
             except ResourceNotFoundError:
-                continue # Não achou esse nome de chave, tenta o fallback de nome (ex: sem o group_id)
+                continue 
             except Exception as e:
                 logger.error(f"vault_secret_erro_acesso | secret_name={secret_name} | vault_url={target_url} | erro={str(e)}")
                 continue
