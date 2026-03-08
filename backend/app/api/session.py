@@ -184,7 +184,10 @@ async def get_project_reports(
     categoria = AGENT_TO_CATEGORY.get(job.analysis_type)
     
     # 2. Adiciona o .md no final (ou usa um fallback de segurança se esquecerem de mapear um agente novo)
-    if categoria:
+    if categoria == "prototype":
+        # O protótipo salva como index.html (ou o nome que estiver no seu AGENT_CONFIG do MCP)
+        nome_arquivo_dinamico = "index.html"
+    elif categoria:
         nome_arquivo_dinamico = f"{categoria}.md"
     else:
         logger.warning(f"[Session] Agente '{job.analysis_type}' não mapeado em AGENT_TO_CATEGORY. Usando nome próprio.")
