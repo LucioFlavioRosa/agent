@@ -14,7 +14,7 @@ from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 
 from backend.app.utils.log_formatter import StructuredLogger
-from backend.app.services.vault_service import VaultService
+from backend.app.services.vault_service import VaultService, vault_service
 from backend.app.services.blob_storage_service import BlobStorageService
 from backend.app.services.queue_service import QueueService
 from backend.app.config.settings import settings
@@ -23,18 +23,12 @@ from backend.app.api.reports import router as reports_router
 logger = StructuredLogger("mcp_worker")
 
 # --- INSTANCIAÇÃO DOS SERVIÇOS ---
-vault_urls = [
-    settings.AZURE_INFRA_VAULT_URL,
-    settings.AZURE_LLM_VAULT_URL,
-]
-vault_service = VaultService(vault_urls=vault_urls)
 blob_storage_service = BlobStorageService(vault_service=vault_service)
 queue_service = QueueService(
     vault_service=vault_service,
     blob_storage_service=blob_storage_service,
     queue_name=settings.QUEUE_NAME
 )
-
 def sanitize_filename(filename: str) -> str:
     if not filename:
         return "documento_base.docx"
