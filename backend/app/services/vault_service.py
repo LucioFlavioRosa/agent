@@ -89,7 +89,7 @@ class VaultService:
 # ============================================================================
 # INSTÂNCIA GLOBAL OTIMIZADA
 # ============================================================================
-_infra_url = os.getenv("AZURE_KEYVAULT_INFRA_URL", "").strip()
-_llm_url = os.getenv("AZURE_KEYVAULT_LLM_URL", "").strip()
+_infra_url = os.getenv("AZURE_INFRA_VAULT_URL", "").strip()
+_llm_url = os.getenv("AZURE_LLM_VAULT_URL", "").strip()
 
 vault_service = VaultService(infra_url=_infra_url, llm_url=_llm_url)
