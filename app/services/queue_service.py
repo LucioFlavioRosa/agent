@@ -5,25 +5,49 @@ import json
 import httpx
 import base64
 import asyncio
-import logging
+
 from typing import Optional
 from azure.storage.queue.aio import QueueClient
 
 from app.services.vault_service import vault_service
 from app.services.blob_storage_service import blob_storage_service
+from app.services.context_retrieval_service import ContextRetrievalService
+from app.services.bedrock_service import LLMService as BedrockLLMService
+from app.services.agent_service import AgentService
+from app.config.agent_mapping import AGENT_CONFIG
+from app.utils.log_formatter import StructuredLogger
 
-# Importamos o serviço de LLM que criamos anteriormente
-from app.services.llm_service import generate_html_prototype
-
-logger = logging.getLogger("mcp_prototype.queue_service")
+logger = StructuredLogger("mcp_prototype_queue_service")
 
 class QueueService:
-    def __init__(self, queue_name: str, max_concurrent_workers: int = 5):
+    def __init__(
+        self, 
+        queue_name: str, 
+        max_concurrent_workers: int = 5
+    ):
         self.vault_service = vault_service
         self.blob_storage_service = blob_storage_service
         self.queue_name = queue_name
         self.max_concurrent_workers = max_concurrent_workers
         self.internal_queue = asyncio.Queue(maxsize=max_concurrent_workers * 2)
+        
+        # 🚀 1. INICIALIZA O SERVIÇO DA AWS (BEDROCK)
+        self.bedrock_service = BedrockLLMService(vault_service=self.vault_service)
+        
+        # 🚀 2. REGISTRA NO DICIONÁRIO USANDO O NOME QUE ESTÁ NO AGENT_MAPPING
+        llm_registry = {
+            "bedrock_service": self.bedrock_service
+        }
+        
+        # 🚀 3. INICIALIZA OS SERVIÇOS DO AGENTE
+        self.context_retrieval_service = ContextRetrievalService(
+            blob_storage_service=self.blob_storage_service
+        )
+        self.agent_service = AgentService(
+            context_retrieval_service=self.context_retrieval_service,
+            blob_storage_service=self.blob_storage_service,
+            llm_services=llm_registry # Injeta o Bedrock aqui!
+        )
 
     async def _notificar_backend(
         self, 
@@ -35,7 +59,7 @@ class QueueService:
         blob_path: Optional[str] = None,
         error_message: Optional[str] = None
     ):
-        """Envia o webhook avisando o Maestro que o Job acabou."""
+        """Envia o payload EXATO que o JobCompletePayload do FastAPI espera."""
         backend_base_url = os.getenv("BACKEND_WEBHOOK_URL", "http://host.docker.internal:8000").rstrip('/')
         webhook_url = f"{backend_base_url}/internal/jobs/{job_id}/complete"
         
@@ -48,18 +72,18 @@ class QueueService:
             "error_message": error_message
         }
 
-        logger.info(f"webhook_iniciado | Chamando: POST {webhook_url} | Job: {job_id}")
+        logger.log_info_negocio("webhook_iniciado", f"Chamando webhook: POST {webhook_url}", job_id=job_id, company_id=company_id)
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(webhook_url, json=payload, timeout=15.0)
                 response.raise_for_status() 
-                logger.info(f"webhook_sucesso | Backend atualizado para '{status}' | Job: {job_id}")
+                logger.log_info_negocio("webhook_sucesso", f"Backend atualizado com status '{status}'", job_id=job_id, company_id=company_id)
                 
         except httpx.HTTPStatusError as exc:
-            logger.error(f"webhook_erro_http | Backend rejeitou: {exc.response.status_code} | Job: {job_id}")
+            logger.log_erro("webhook_erro_http", f"O backend rejeitou o webhook. HTTP {exc.response.status_code}", job_id=job_id, company_id=company_id)
         except Exception as e:
-            logger.error(f"webhook_erro_rede | Falha ao notificar: {str(e)} | Job: {job_id}")
+            logger.log_erro("webhook_erro_rede", f"Falha de rede ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
 
     async def _extract_text_from_blob(self, company_id: str, blob_path: str, group_ids: list) -> str:
         """Função auxiliar para baixar o DOCX do Blob e extrair o texto"""
@@ -71,7 +95,7 @@ class QueueService:
             doc = docx.Document(io.BytesIO(file_bytes))
             return "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
         except Exception as e:
-            logger.error(f"Erro ao ler DOCX do blob {blob_path}: {e}")
+            logger.log_erro("erro_extracao_docx", f"Erro ao ler DOCX do blob {blob_path}: {e}")
             return ""
 
     async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
@@ -84,83 +108,49 @@ class QueueService:
             project_id = task_data.get('project_id')
             group_ids = task_data.get('group_ids', [])
             analysis_type = task_data.get("analysis_type", "unknown")
-            context_used = task_data.get("context_used", {})
-            comentario_extra = task_data.get("comentario_extra", "")
             
-            # Caminhos dos arquivos enviados pelo usuário e salvos pelo Maestro no Blob
+            # Caminhos dos arquivos base
             blob_instrucoes = task_data.get('blob_path') 
             blob_identidade = task_data.get('identidade_visual_blob_path')
             
-            logger.info(f"job_recebido_fila | Job: {job_id} | Worker: {worker_id}")
+            logger.log_info_negocio("job_recebido_fila", "Job recebido da fila", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
-            # 1. Extração dos textos das instruções enviadas pelo usuário
+            # 1. Extração dos textos das instruções (se os DOCX foram enviados)
             texto_instrucoes = await self._extract_text_from_blob(company_id, blob_instrucoes, group_ids)
             texto_identidade = await self._extract_text_from_blob(company_id, blob_identidade, group_ids)
 
-            # 2. Resgatar contexto histórico (Épicos, Features, e HTML Anterior) do Blob
-            # Nota: O Maestro precisa enviar os caminhos (paths) no context_used
-            texto_epico = ""
-            if "epics_blob_path" in context_used:
-                epics_bytes = await self.blob_storage_service.download_document(company_id, context_used["epics_blob_path"])
-                texto_epico = epics_bytes.decode('utf-8') # Assumindo que o agente de epics salvou como texto/md
-                
-            texto_features = ""
-            if "features_blob_path" in context_used:
-                feat_bytes = await self.blob_storage_service.download_document(company_id, context_used["features_blob_path"])
-                texto_features = feat_bytes.decode('utf-8')
-
-            # 🚀 LÓGICA DE REFINAMENTO: Baixa o HTML anterior!
-            texto_prototipo_base = ""
-            is_reviewer = "reviwer" in analysis_type.lower()
-            if is_reviewer and "prototype_blob_path" in context_used:
-                proto_bytes = await self.blob_storage_service.download_document(company_id, context_used["prototype_blob_path"])
-                texto_prototipo_base = proto_bytes.decode('utf-8')
-
-            # 3. Montar o Mega Prompt
-            mega_prompt = f"Crie um protótipo HTML/CSS/JS (Single File).\n[ÉPICOS]\n{texto_epico}\n[FEATURES]\n{texto_features}"
-            if is_reviewer and texto_prototipo_base:
-                mega_prompt += f"\n[PROTÓTIPO ANTERIOR (REFINAR)]\n{texto_prototipo_base}"
-            if texto_identidade:
-                mega_prompt += f"\n[IDENTIDADE VISUAL]\n{texto_identidade}"
-            if texto_instrucoes:
-                mega_prompt += f"\n[INSTRUÇÕES GERAIS]\n{texto_instrucoes}"
-            if comentario_extra:
-                mega_prompt += f"\n[PROMPT DO USUÁRIO]\n{comentario_extra}"
-
-            # 4. Chamar a IA para gerar o HTML
-            logger.info(f"job_gerando_ia | Enviando para o LLM | Job: {job_id}")
-            # Pegamos a chave do cofre para passar ao LLM
-            api_key = await self.vault_service.get_secret("openai-api-key", company_id, vault_type="llm")
-            html_gerado = await generate_html_prototype(mega_prompt, api_key)
-
-            # 5. 🚀 SALVAR O ARQUIVO HTML GERADO NO BLOB STORAGE 🚀
-            nome_arquivo_saida = "prototype.html" # A extensão mudou para HTML!
-            caminho_salvo = await self.blob_storage_service.save_document(
-                company_id=company_id,
-                project_id=project_id,
-                job_id=job_id,
-                file_data=html_gerado.encode('utf-8'), # Salva como bytes
-                filename=nome_arquivo_saida,
-                group_id=group_ids[0] if group_ids else None
+            logger.log_info_negocio("job_inicio_processamento", "Iniciando processamento com o AgentService", job_id=job_id, company_id=company_id)
+            
+            # 2. 🚀 DELEGA TUDO PARA O AGENT SERVICE 🚀
+            # Ele monta o prompt, chama a AWS e já salva o HTML no Blob Storage sozinho!
+            resultado_html = await self.agent_service.executar_analise(
+                task_payload=task_data,
+                texto_instrucoes=texto_instrucoes,
+                texto_identidade=texto_identidade
             )
-
-            # Apaga a mensagem da fila pois deu sucesso
+            
+            # 3. Apaga a mensagem da fila pois deu sucesso
             await queue_client.delete_message(msg)
-
-            # 6. Notifica o Backend Maestro
+            
+            # 4. Descobre o caminho onde o Agente salvou o arquivo para avisar o Maestro
+            config_do_agente = AGENT_CONFIG.get(analysis_type, {})
+            nome_arquivo_saida = config_do_agente.get("output_filename", "index.html")
+            caminho_salvo = f"{company_id}/{project_id}/{job_id}/{nome_arquivo_saida}"
+            
+            # 5. Notifica o Backend Maestro
             await self._notificar_backend(
                 job_id=job_id,
                 company_id=company_id,
                 project_id=project_id,
                 status="done",
-                category="prototype", # Categoria fixa e limpa
-                blob_path=caminho_salvo # Envia o caminho do HTML recém salvo
+                category="prototype", 
+                blob_path=caminho_salvo 
             )
             
-            logger.info(f"job_finalizado | Job: {job_id} | Salvo em: {caminho_salvo}")
+            logger.log_info_negocio("job_finalizado", f"Job finalizado com sucesso. Salvo em: {caminho_salvo}", job_id=job_id, company_id=company_id)
             
         except Exception as e:
-            logger.error(f"erro_processamento_job | Worker: {worker_id} | Erro: {e}")
+            logger.log_erro("erro_processamento_job", f"Erro ao processar mensagem: {e}", extra={"worker_id": worker_id})
             try:
                 task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
                 await self._notificar_backend(
@@ -174,4 +164,53 @@ class QueueService:
             except Exception:
                 pass
 
-    # ... (Os métodos _consumer_loop, start_worker e send_message continuam rigorosamente IGUAIS ao seu código original) ...
+    async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
+        logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
+        while True:
+            try:
+                msg = await self.internal_queue.get()
+                await self.process_single_message(msg, queue_client, worker_id)
+                self.internal_queue.task_done()
+            except asyncio.CancelledError:
+                logger.log_info_negocio("worker_cancelado", f"Worker-{worker_id} cancelado.", extra={"worker_id": worker_id})
+                break
+            except Exception as e:
+                logger.log_erro("erro_consumer_loop", f"Erro crítico no loop do consumidor: {e}", extra={"worker_id": worker_id})
+
+    async def start_worker(self):
+        logger.log_info_negocio("orquestrador_worker_iniciado", "Orquestrador do Worker iniciado.")
+        queue_conn_str = await self.vault_service.get_secret("queue-connection-string", company_id="default", vault_type="infra")
+        
+        if not queue_conn_str:
+            logger.log_erro("erro_sem_connection_string_fila", "Abortando worker: Sem connection string da fila.")
+            return
+            
+        async with QueueClient.from_connection_string(conn_str=queue_conn_str, queue_name=self.queue_name) as queue_client:
+            try:
+                await queue_client.create_queue()
+                logger.log_info_negocio("fila_criada", f"Fila '{self.queue_name}' criada/verificada.")
+            except Exception:
+                logger.log_info_negocio("fila_existente", f"Fila '{self.queue_name}' já existe ou erro ao criar.")
+                
+            workers = [
+                asyncio.create_task(self._consumer_loop(queue_client, i))
+                for i in range(self.max_concurrent_workers)
+            ]
+            
+            try:
+                while True:
+                    messages = queue_client.receive_messages(max_messages=5, visibility_timeout=300)
+                    has_messages = False
+                    async for msg in messages:
+                        has_messages = True
+                        logger.log_info_negocio("mensagem_recebida_queue", "Nova mensagem recebida.")
+                        await self.internal_queue.put(msg)
+                    if not has_messages:
+                        await asyncio.sleep(3)
+            except asyncio.CancelledError:
+                logger.log_info_negocio("orquestrador_worker_cancelado", "Sinal de desligamento recebido.")
+            finally:
+                for w in workers:
+                    w.cancel()
+                await asyncio.gather(*workers, return_exceptions=True)
+                logger.log_info_negocio("workers_finalizados", "Todos os workers finalizados.")
