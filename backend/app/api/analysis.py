@@ -334,12 +334,19 @@ async def start_analysis(
     job_id = await redis_service.create_job(
         project_id=project_id, analysis_type=analysis_type, email=email, empresa=company_id, context_used=context_used
     )
-    
+
     mcp_payload = {
-        "email": email, "nome_projeto": nome_projeto_final, "analysis_type": analysis_type,
-        "branch": branch, "repository": repository, "comentario_extra": comentario_extra,
-        "project_id": project_id, "job_id": job_id, "company_id": company_id,
-        "group_ids": grupos_do_usuario, "context_used": context_used
+        "email": email, 
+        "nome_projeto": nome_projeto_final, 
+        "analysis_type": analysis_type,
+        "branch": branch, 
+        "repository": repository, 
+        "comentario_extra": comentario_extra,
+        "project_id": project_id, 
+        "job_id": job_id, 
+        "company_id": company_id,
+        "group_ids": [project_group_id],
+        "context_used": context_used
     }
     
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
