@@ -20,6 +20,7 @@ from app.services.queue_service import QueueService
 
 logger = StructuredLogger("mcp_prototype_worker")
 
+# --- INSTANCIAÇÃO DOS SERVIÇOS ---
 vault_urls = [
     os.getenv("AZURE_INFRA_VAULT_URL", ""),
     os.getenv("AZURE_LLM_VAULT_URL", ""),
@@ -41,6 +42,7 @@ def sanitize_filename(filename: str, fallback_name: str = "documento.docx") -> s
     limpo = re.sub(r'[^a-zA-Z0-9_.-]', '_', sem_acento)
     return re.sub(r'_+', '_', limpo).lower()
 
+# --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.log_evento("INFO", "worker_task_iniciado", "Iniciando worker do Protótipo em background")
@@ -70,6 +72,7 @@ async def log_request_middleware(request: Request, call_next):
     )
     return response
 
+# --- ENDPOINTS ---
 @app.post("/start")
 async def start_analysis(
     job_id: str = Form(...),
@@ -84,50 +87,72 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     context_used: Optional[str] = Form(None),
     
+    # 🚀 EXCLUSIVO DO PROTÓTIPO: Dois arquivos opcionais
     arquivo_docx: Optional[UploadFile] = File(None),
     arquivo_identidade: Optional[UploadFile] = File(None)
 ):
+    # =========================================================================
+    # 🚀 PARSING BLINDADO DO CONTEXT_USED (Importado do código de Organização)
+    # =========================================================================
     parsed_context = {}
+    print(f"\n[{job_id}] 📥 RAW CONTEXT RECEBIDO DO FASTAPI: {repr(context_used)}", flush=True)
+
     if context_used and context_used.strip():
         clean_context_str = context_used.strip()
         try:
             json_friendly_str = clean_context_str.replace("'", '"')
             parsed_context = json.loads(json_friendly_str)
-        except Exception:
+            print(f"[{job_id}] ✅ CONTEXTO LIDO COMO JSON: {parsed_context}", flush=True)
+        except Exception as e_json:
             try:
                 parsed_context = ast.literal_eval(clean_context_str)
-                if not isinstance(parsed_context, dict): parsed_context = {}
-            except Exception:
+                if not isinstance(parsed_context, dict):
+                    parsed_context = {}
+                print(f"[{job_id}] ✅ CONTEXTO LIDO COMO AST LITERAL: {parsed_context}", flush=True)
+            except Exception as e_ast:
+                print(f"[{job_id}] ❌ ERRO ABSOLUTO AO LER CONTEXTO. JSON Error: {e_json} | AST Error: {e_ast}", flush=True)
                 parsed_context = {}
+    else:
+        print(f"[{job_id}] ⚠️ NENHUM CONTEXTO FOI ENVIADO NA REQUISIÇÃO.", flush=True)
 
+    # -------------------------------------------------------------------------
     parsed_group_id = None
     if group_ids:
         try:
             g_val = ast.literal_eval(group_ids)
-            parsed_group_id = str(g_val[0]) if isinstance(g_val, list) and len(g_val) > 0 else str(group_ids)
+            if isinstance(g_val, list) and len(g_val) > 0:
+                parsed_group_id = str(g_val[0])
+            else:
+                parsed_group_id = str(group_ids)
         except:
             parsed_group_id = str(group_ids)
 
+    # =========================================================================
+    # 🚀 UPLOAD PARA O BLOB STORAGE (Lógica Dupla)
+    # =========================================================================
     blob_path = None
     blob_identidade_path = None
     
     try:
-        # Checagem robusta: existe e tem filename válido
+        # Arquivo 1: Instruções Gerais
         if arquivo_docx and getattr(arquivo_docx, "filename", None):
             nome_arquivo = sanitize_filename(arquivo_docx.filename, "instrucoes.docx")
             file_bytes = await arquivo_docx.read()
             blob_path = await blob_storage_service.save_document(
                 company_id=company_id, project_id=project_id, job_id=job_id,
-                file_data=file_bytes, filename=nome_arquivo, group_id=parsed_group_id
+                file_data=file_bytes, filename=nome_arquivo, 
+                group_id=parsed_group_id # ✅ Usando a variável correta
             )
             logger.log_evento("INFO", "upload_instrucoes_ok", "DOCX de instruções salvo no Blob.")
 
+        # Arquivo 2: Identidade Visual
         if arquivo_identidade and getattr(arquivo_identidade, "filename", None):
             nome_identidade = sanitize_filename(arquivo_identidade.filename, "identidade.docx")
             identidade_bytes = await arquivo_identidade.read()
             blob_identidade_path = await blob_storage_service.save_document(
                 company_id=company_id, project_id=project_id, job_id=job_id,
-                file_data=identidade_bytes, filename=nome_identidade, group_id=parsed_group_id
+                file_data=identidade_bytes, filename=nome_identidade, 
+                group_id=parsed_group_id # ✅ Usando a variável correta
             )
             logger.log_evento("INFO", "upload_identidade_ok", "DOCX de identidade salvo no Blob.")
             
@@ -135,6 +160,9 @@ async def start_analysis(
         logger.log_erro("erro_upload_blob", f"Falha ao salvar arquivos base: {e}")
         return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivos base."})
 
+    # =========================================================================
+    # 🚀 PAYLOAD DA FILA
+    # =========================================================================
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
