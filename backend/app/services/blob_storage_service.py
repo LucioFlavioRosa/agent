@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, AsyncIterable, Union
 from azure.storage.blob.aio import BlobServiceClient
+from azure.storage.blob import ContentSettings # 🚀 IMPORTANTE: Necessário para o Content-Type
 from azure.core.exceptions import ResourceNotFoundError
 from backend.app.services.vault_service import VaultService
 
@@ -15,35 +16,47 @@ class BlobStorageService:
         company_id: str,
         project_id: str,
         job_id: str,
-        file_data: Union[bytes, AsyncIterable[bytes]], # Suporta Bytes ou Stream
+        file_data: Union[bytes, AsyncIterable[bytes]], 
         filename: str,
-        group_id: Optional[str] = None
+        group_id: Optional[str] = None,
+        content_type: Optional[str] = None # 🚀 NOVO: Parâmetro opcional para suportar HTML, PDF, etc.
     ) -> str:
         blob_path = f"{project_id}/{job_id}/{filename}"
         full_blob_path = f"{company_id}/{blob_path}"
         logger.info(f"blob_upload_iniciado | company_id={company_id} | project_id={project_id} | job_id={job_id} | filename={filename}")
+        
         try:
+            # ✅ CORRETO: Buscando no cofre de infra
             conn_str = await self.vault_service.get_secret('blobstorage-connection-string', company_id, group_id, vault_type='infra')
+            
             if not conn_str:
                 logger.error(f"blob_upload_erro | company_id={company_id} | motivo=connection_string_nao_encontrada")
                 raise Exception("Connection string do Blob Storage não encontrada.")
+                
             async with BlobServiceClient.from_connection_string(conn_str) as blob_service_client:
                 container_client = blob_service_client.get_container_client(company_id)
                 blob_client = container_client.get_blob_client(blob_path)
+                
+                # 🚀 NOVO: Configura o Content-Type se ele for fornecido
+                blob_kwargs = {"overwrite": True}
+                if content_type:
+                    blob_kwargs["content_settings"] = ContentSettings(content_type=content_type)
+                
                 try:
-                    await blob_client.upload_blob(file_data, overwrite=True)
+                    await blob_client.upload_blob(file_data, **blob_kwargs)
                 except ResourceNotFoundError:
                     await container_client.create_container()
-                    await blob_client.upload_blob(file_data, overwrite=True)
-                # Obtém o tamanho do arquivo se possível
+                    await blob_client.upload_blob(file_data, **blob_kwargs)
+                    
                 file_size = None
                 if isinstance(file_data, bytes):
                     file_size = len(file_data)
                 elif hasattr(file_data, '__aiter__'):
-                    # Não é possível determinar o tamanho de um stream sem ler
                     file_size = 'stream'
+                    
                 logger.info(f"blob_upload_sucesso | company_id={company_id} | project_id={project_id} | job_id={job_id} | filename={filename} | blob_path={full_blob_path} | file_size={file_size}")
                 return full_blob_path
+                
         except Exception as e:
             logger.error(f"blob_upload_erro | company_id={company_id} | project_id={project_id} | job_id={job_id} | filename={filename} | erro={e}")
             raise
@@ -55,8 +68,11 @@ class BlobStorageService:
         group_id: Optional[str] = None
     ) -> bytes:
         logger.info(f"blob_download_iniciado | company_id={company_id} | blob_path={blob_path}")
+        
         try:
-            conn_str = await self.vault_service.get_secret('blobstorage-connection-string', company_id, group_id)
+            # 🚀 CORREÇÃO CRÍTICA: Adicionado o vault_type='infra' aqui!
+            conn_str = await self.vault_service.get_secret('blobstorage-connection-string', company_id, group_id, vault_type='infra')
+            
             if not conn_str:
                 logger.error(f"blob_download_erro | company_id={company_id} | blob_path={blob_path} | motivo=connection_string_nao_encontrada")
                 raise Exception("Connection string do Blob Storage não encontrada.")
@@ -69,9 +85,11 @@ class BlobStorageService:
                 blob_client = blob_service_client.get_blob_client(container=company_id, blob=caminho_real_blob)
                 stream = await blob_client.download_blob()
                 file_bytes = await stream.readall()
+                
                 file_size = len(file_bytes)
                 logger.info(f"blob_download_sucesso | company_id={company_id} | blob_path={blob_path} | file_size={file_size}")
                 return file_bytes
+                
         except ResourceNotFoundError:
             logger.error(f"blob_download_erro | company_id={company_id} | blob_path={blob_path} | motivo=arquivo_nao_encontrado")
             raise
