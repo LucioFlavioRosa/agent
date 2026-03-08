@@ -176,8 +176,6 @@ async def get_or_create_project(
 async def start_analysis(
     email: Optional[str] = Form(None),
     nome_projeto: Optional[str] = Form(None),
-    
-    # 🚀 NOVOS PARÂMETROS FRONTEND 🚀
     category: str = Form(...), # "epics", "features", "timeline", "risks"
     action: str = Form(...),   # "generator", "reviwer"
     assigned_group_id: Optional[str] = Form(None), # Necessário apenas na criação do projeto
@@ -185,6 +183,7 @@ async def start_analysis(
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
     arquivo_docx: Optional[UploadFile] = File(None),
+    arquivo_identidade: Optional[UploadFile] = File(None),
     base_job_id: Optional[str] = Form(None), 
     strategy: str = Form("checkout"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
@@ -193,6 +192,7 @@ async def start_analysis(
     log_request_received(endpoint="/analysis/start", payload=payload)
 
     if arquivo_docx: validate_file_extension(arquivo_docx)
+    if arquivo_identidade: validate_file_extension(arquivo_identidade)
 
     user, company_id = await validate_user_and_company(email, mongo_service)
     grupos_do_usuario = getattr(user, "group_ids", [])
