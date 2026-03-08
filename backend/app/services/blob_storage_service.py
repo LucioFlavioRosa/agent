@@ -23,7 +23,7 @@ class BlobStorageService:
         full_blob_path = f"{company_id}/{blob_path}"
         logger.info(f"blob_upload_iniciado | company_id={company_id} | project_id={project_id} | job_id={job_id} | filename={filename}")
         try:
-            conn_str = await self.vault_service.get_secret('blobstorage-connection-string', company_id, group_id)
+            conn_str = await self.vault_service.get_secret('blobstorage-connection-string', company_id, group_id, vault_type='infra')
             if not conn_str:
                 logger.error(f"blob_upload_erro | company_id={company_id} | motivo=connection_string_nao_encontrada")
                 raise Exception("Connection string do Blob Storage não encontrada.")
