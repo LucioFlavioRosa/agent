@@ -344,7 +344,7 @@ async def start_analysis(
     
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
     try:
-        await mcp_client.start_analysis(mcp_payload, agent_cfg.mcp_service_url, arquivo_docx)
+        await mcp_client.start_analysis(mcp_payload, agent_cfg.mcp_service_url, arquivo_docx, arquivo_identidade)
     except Exception as e:
         logger.error(f"Erro MCP {job_id}: {e}")
         raise HTTPException(status_code=502, detail=f"Erro no MCP: {str(e)}")
