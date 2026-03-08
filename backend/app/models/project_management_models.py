@@ -105,6 +105,7 @@ class LatestReports(BaseModel):
     features: Optional[str] = None
     timeline: Optional[str] = None
     risks: Optional[str] = None
+    prototype: Optional[str] = None
 
 class ProjectDetailsResponse(BaseModel):
     project_id: str
