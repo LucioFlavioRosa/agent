@@ -191,7 +191,8 @@ class QueueService:
         queue_conn_str = await self.vault_service.get_secret(
             base_name="queue-connection-string", # Substitua pelo nome correto se for diferente
             company_id="default", 
-            vault_type="infra"
+            vault_type="infra",
+            is_global=True
         )
         
         if not queue_conn_str:
