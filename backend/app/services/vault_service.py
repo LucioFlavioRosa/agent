@@ -45,8 +45,6 @@ class VaultService:
         sanitized = re.sub(r'[^0-9a-zA-Z-]+', '-', name)
         return sanitized.strip('-')
 
-    # 🚀 NOVO PARÂMETRO 'vault_type' (Padrão é 'llm', pois será o mais usado aqui)
-    # 🚀 ADICIONADO PARÂMETRO 'is_global' (padrão False)
     async def get_secret(
         self, 
         base_name: str, 
@@ -56,20 +54,15 @@ class VaultService:
         is_global: bool = False
     ) -> Optional[str]:
         target_url = self.vaults.get(vault_type)
+        print(f"🔍 [VAULT] Iniciando busca: base={base_name}, vault_type={vault_type}, URL={target_url}", flush=True)
+
         if not target_url:
-            logger.error(f"vault_secret_erro | Cofre do tipo '{vault_type}' não configurado nas variáveis de ambiente.")
+            print(f"❌ [VAULT] ERRO: A URL do cofre de '{vault_type}' está VAZIA!", flush=True)
             return None
 
-        logger.info(f"vault_secret_busca_iniciada | base_name={base_name} | target_vault={vault_type} | is_global={is_global}")
-
-        # 🚀 SE FOR GLOBAL, BUSCA EXATAMENTE O BASE_NAME
         if is_global:
             names_to_try = [base_name]
         else:
-            if not company_id:
-                logger.error("vault_secret_erro | company_id é obrigatório quando is_global=False.")
-                return None
-                
             safe_company_id = self._sanitize_name(company_id)
             safe_group_id = self._sanitize_name(group_id) if group_id else None
             
@@ -80,27 +73,29 @@ class VaultService:
             if safe_group_id:
                 names_to_try.append(fallback_secret_name)
                 
+        print(f"🔍 [VAULT] Nomes exatos que vamos procurar na Azure: {names_to_try}", flush=True)
+
         for secret_name in names_to_try:
-            # 1. Tenta no Cache
             cached_value = self.cache.get(secret_name)
             if cached_value:
-                logger.info(f"vault_secret_encontrado | secret_name={secret_name} | origem=cache")
                 return cached_value
                 
-            # 2. Vai DIRETO no cofre correto
             try:
+                print(f"⏳ [VAULT] Batendo na porta da Azure para pegar: {secret_name}...", flush=True)
                 async with SecretClient(vault_url=target_url, credential=self.credential) as client:
                     secret = await client.get_secret(secret_name)
                     self.cache.set(secret_name, secret.value)
-                    logger.info(f"vault_secret_encontrado | secret_name={secret_name} | vault_url={target_url}")
+                    print(f"✅ [VAULT] SUCESSO! Achamos a chave: {secret_name}", flush=True)
                     return secret.value
             except ResourceNotFoundError:
+                print(f"⚠️ [VAULT] A Azure disse que {secret_name} NÃO EXISTE lá dentro.", flush=True)
                 continue 
             except Exception as e:
-                logger.error(f"vault_secret_erro_acesso | secret_name={secret_name} | vault_url={target_url} | erro={str(e)}")
+                # 🚀 O ERRO DE PERMISSÃO VAI GRITAR AQUI!
+                print(f"❌ [VAULT] ERRO DE ACESSO/PERMISSÃO AO COFRE: {str(e)}", flush=True)
                 continue
                 
-        logger.warning(f"vault_secret_nao_encontrado | base_name={base_name} | company_id={company_id}")
+        print(f"❌ [VAULT] Fim da linha. Nenhuma das chaves foi encontrada.", flush=True)
         return None
 
 # ============================================================================
