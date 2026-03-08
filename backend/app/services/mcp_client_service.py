@@ -72,13 +72,15 @@ class MCPClientService:
         self,
         payload: dict,
         mcp_service_url: str,
-        arquivo_docx: Optional[UploadFile] = None
+        arquivo_docx: Optional[UploadFile] = None,
+        arquivo_identidade: Optional[UploadFile] = None # 🚀 1. ADICIONADO AQUI
     ) -> MCPStartAnalysisResponse:
         base = mcp_service_url.strip().rstrip("/")
         url = f"{base}/start"
         job_id = payload.get("job_id")
         project_id = payload.get("project_id")
         company_id = payload.get("company_id")
+        
         if not job_id:
             log_error(
                 context="MCPClientService.start_analysis",
@@ -90,21 +92,36 @@ class MCPClientService:
             raise ValueError("job_id é obrigatório")
 
         data = self._build_payload(payload)
-        files = None
+        
+        # 🚀 2. DICIONÁRIO DINÂMICO DE ARQUIVOS
+        files = {}
 
         if arquivo_docx is not None:
             await arquivo_docx.seek(0)
-            files = {
-                "arquivo_docx": (
-                    arquivo_docx.filename,
-                    arquivo_docx.file,
-                    arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-            }
+            files["arquivo_docx"] = (
+                arquivo_docx.filename,
+                arquivo_docx.file,
+                arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
             log_service_call(
                 service="MCPClientService",
-                action="prepare_file",
+                action="prepare_file_docx",
                 payload={"filename": arquivo_docx.filename, "content_type": arquivo_docx.content_type},
+                job_id=job_id,
+                project_id=project_id
+            )
+
+        if arquivo_identidade is not None:
+            await arquivo_identidade.seek(0)
+            files["arquivo_identidade"] = (
+                arquivo_identidade.filename,
+                arquivo_identidade.file,
+                arquivo_identidade.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            log_service_call(
+                service="MCPClientService",
+                action="prepare_file_identidade",
+                payload={"filename": arquivo_identidade.filename, "content_type": arquivo_identidade.content_type},
                 job_id=job_id,
                 project_id=project_id
             )
@@ -113,12 +130,14 @@ class MCPClientService:
             log_service_call(
                 service="MCPClientService",
                 action="http_request",
-                payload={"url": url, "method": "POST", "files": bool(files)},
+                payload={"url": url, "method": "POST", "files_count": len(files)},
                 job_id=job_id,
                 project_id=project_id
             )
+            
             async with httpx.AsyncClient(timeout=120.0) as client:
-                if files:
+                # 🚀 3. ENVIA OS ARQUIVOS SE O DICIONÁRIO NÃO ESTIVER VAZIO
+                if len(files) > 0:
                     response = await client.post(url, data=data, files=files)
                 else:
                     response = await client.post(url, data=data) 
