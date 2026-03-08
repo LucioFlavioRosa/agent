@@ -6,6 +6,7 @@ import json
 import ast
 import asyncio
 import unicodedata
+import traceback
 
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -143,7 +144,9 @@ async def start_analysis(
                 group_id=parsed_group_id
             )
         except Exception as e:
-            return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivo."})
+            print(f"❌ [{job_id}] ERRO NO BLOB: {str(e)}", flush=True)
+            traceback.print_exc()
+            return JSONResponse(status_code=500, content={"error": f"Falha no Blob Storage: {str(e)}"})
 
     task_payload = {
         "job_id": job_id,
