@@ -17,7 +17,6 @@ from app.utils.log_formatter import StructuredLogger
 from app.services.vault_service import VaultService
 from app.services.blob_storage_service import BlobStorageService
 from app.services.queue_service import QueueService
-# from app.config.settings import settings  # Ajuste o import do settings conforme sua pasta
 
 logger = StructuredLogger("mcp_prototype_worker")
 
