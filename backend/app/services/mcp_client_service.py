@@ -22,7 +22,7 @@ class MCPStartAnalysisPayload(BaseModel):
     branch: Optional[str] = Field(None)
     repository: Optional[str] = Field(None)
     comentario_extra: Optional[str] = Field(None)
-    context_used: Optional[dict] = Field(default_factory=dict) # Proteção no Pydantic
+    context_used: Optional[dict] = Field(default_factory=dict)
 
     @staticmethod
     def validate_job_id(job_id):
@@ -50,11 +50,10 @@ class MCPClientService:
         raw_groups = payload.get("group_ids", [])
         group_ids_str = json.dumps(raw_groups) if isinstance(raw_groups, list) else raw_groups
         
-        # 🚀 A MÁGICA: Pega o dicionário e converte para string JSON garantindo aspas duplas!
         raw_context = payload.get("context_used", {})
         context_used_str = json.dumps(raw_context) if raw_context else "{}"
 
-        return {
+        raw_data = {
             "project_id": payload.get("project_id"),
             "job_id": payload.get("job_id"),
             "company_id": payload.get("company_id"),
@@ -65,15 +64,18 @@ class MCPClientService:
             "branch": payload.get("branch"),
             "repository": payload.get("repository"),
             "comentario_extra": payload.get("comentario_extra"),
-            "context_used": context_used_str  # 🔥 AGORA VAI NO PACOTE COMO STRING SEGURA
+            "context_used": context_used_str 
         }
+        
+        # Retorna apenas chaves que possuem um valor real (evita mandar 'None' via form-data)
+        return {k: v for k, v in raw_data.items() if v is not None}
 
     async def start_analysis(
         self,
         payload: dict,
         mcp_service_url: str,
         arquivo_docx: Optional[UploadFile] = None,
-        arquivo_identidade: Optional[UploadFile] = None # 🚀 1. ADICIONADO AQUI
+        arquivo_identidade: Optional[UploadFile] = None 
     ) -> MCPStartAnalysisResponse:
         base = mcp_service_url.strip().rstrip("/")
         url = f"{base}/start"
@@ -92,15 +94,14 @@ class MCPClientService:
             raise ValueError("job_id é obrigatório")
 
         data = self._build_payload(payload)
-        
-        # 🚀 2. DICIONÁRIO DINÂMICO DE ARQUIVOS
         files = {}
 
         if arquivo_docx is not None:
             await arquivo_docx.seek(0)
+            file_bytes_docx = await arquivo_docx.read()
             files["arquivo_docx"] = (
                 arquivo_docx.filename,
-                arquivo_docx.file,
+                file_bytes_docx,
                 arquivo_docx.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
             log_service_call(
@@ -113,9 +114,10 @@ class MCPClientService:
 
         if arquivo_identidade is not None:
             await arquivo_identidade.seek(0)
+            file_bytes_ident = await arquivo_identidade.read()
             files["arquivo_identidade"] = (
                 arquivo_identidade.filename,
-                arquivo_identidade.file,
+                file_bytes_ident,
                 arquivo_identidade.content_type or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
             log_service_call(
@@ -136,7 +138,6 @@ class MCPClientService:
             )
             
             async with httpx.AsyncClient(timeout=120.0) as client:
-                # 🚀 3. ENVIA OS ARQUIVOS SE O DICIONÁRIO NÃO ESTIVER VAZIO
                 if len(files) > 0:
                     response = await client.post(url, data=data, files=files)
                 else:
@@ -193,5 +194,10 @@ class MCPClientService:
             )
             raise Exception(f"O agente MCP recusou a requisição ({exc.response.status_code}): {erro_mcp}")
         except Exception as exc:
+            log_error(
+                context="MCPClientService.get_report",
+                error_message=f"Erro de conexão ao buscar relatório do MCP: {str(exc)}",
+                exception=exc, job_id=job_id, project_id=project_id
+            )
             logging.error(f"Erro de conexão ao buscar relatório do MCP: {str(exc)}")
             raise Exception(f"Erro ao comunicar com o agente MCP: {str(exc)}")
