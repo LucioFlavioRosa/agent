@@ -6,5 +6,7 @@ AGENT_TO_CATEGORY = {
     "agent_timeline_generator_digital": "timeline",
     "agent_timeline_reviwer_digital": "timeline",
     "agent_risks_generator_digital": "risks",
-    "agent_risks_reviwer_digital": "risks"
+    "agent_risks_reviwer_digital": "risks",
+    "agent_prototype_generator_digital": "prototype",
+    "agent_prototype_reviwer_digital": "prototype"
 }
