@@ -153,7 +153,13 @@ class MCPClientService:
                 response.raise_for_status()
                 
                 return MCPStartAnalysisResponse(project_id=project_id, job_id=job_id)
-                
+
+        except httpx.HTTPStatusError as exc:
+            erro_mcp = exc.response.text
+            print(f"🚨 DETALHES DO ERRO 500 NO MCP: {erro_mcp}", flush=True)
+            logging.error(f"Erro detalhado retornado pelo MCP: {erro_mcp}")
+            raise Exception(f"O MCP recusou a requisição (500): {erro_mcp}")
+        
         except Exception as exc:
             log_error(
                 context="MCPClientService.start_analysis",
