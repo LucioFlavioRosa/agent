@@ -21,14 +21,21 @@ from app.services.queue_service import QueueService
 
 logger = StructuredLogger("mcp_prototype_worker")
 
+# --- CONFIGURAÇÕES DE AMBIENTE ---
 vault_urls = [
     os.getenv("AZURE_INFRA_VAULT_URL", ""),
     os.getenv("AZURE_LLM_VAULT_URL", ""),
 ]
 queue_name_prototype = os.getenv("QUEUE_NAME", "prototype-queue")
 
+# --- INICIALIZAÇÃO DOS SERVIÇOS (Injeção de Dependência) ---
+# 1. Cofre é a base de tudo
 vault_service = VaultService(vault_urls=[u for u in vault_urls if u])
+
+# 2. Blob Storage recebe o cofre
 blob_storage_service = BlobStorageService(vault_service=vault_service) 
+
+# 3. Fila recebe o cofre e o blob (ela instanciará o Agente e o Context internamente)
 queue_service = QueueService(
     vault_service=vault_service,
     blob_storage_service=blob_storage_service,
@@ -44,22 +51,22 @@ def sanitize_filename(filename: str, fallback_name: str = "documento.docx") -> s
     limpo = re.sub(r'[^a-zA-Z0-9_.-]', '_', sem_acento)
     return re.sub(r'_+', '_', limpo).lower()
 
+# --- LIFESPAN (Gerenciamento do Worker) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.log_evento("INFO", "worker_task_iniciado", "Iniciando worker do Protótipo em background")
+    print("🚀 [BOOT] Iniciando Worker de Prototipação...", flush=True)
     worker_task = asyncio.create_task(queue_service.start_worker())
     yield
-    logger.log_evento("INFO", "worker_task_cancelando", "Sinal de parada recebido")
+    print("🛑 [SHUTDOWN] Cancelando worker...", flush=True)
     worker_task.cancel()
     try:
         await worker_task
-        logger.log_evento("INFO", "worker_task_finalizado", "Worker finalizado com sucesso")
     except asyncio.CancelledError:
-        logger.log_evento("INFO", "worker_task_cancelled_success", "Worker cancelado com sucesso")
+        pass
 
 app = FastAPI(title="MCP Prototype Queue Worker", lifespan=lifespan)
-app.state.blob_storage_service = blob_storage_service
 
+# Middleware para Logs de Requisição
 @app.middleware("http")
 async def log_request_middleware(request: Request, call_next):
     start_time = time.time()
@@ -88,85 +95,59 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     context_used: Optional[str] = Form(None),
     
-    # 🚀 EXCLUSIVO DO PROTÓTIPO: Dois arquivos opcionais
+    # Arquivos Multipart
     arquivo_docx: Optional[UploadFile] = File(None),
     arquivo_identidade: Optional[UploadFile] = File(None)
 ):
-    # =========================================================================
-    # 🚀 PARSING BLINDADO DO CONTEXT_USED (Importado do código de Organização)
-    # =========================================================================
+    # 1. Parsing do Contexto (Lógica Blindada)
     parsed_context = {}
-    print(f"\n[{job_id}] 📥 RAW CONTEXT RECEBIDO DO FASTAPI: {repr(context_used)}", flush=True)
-
     if context_used and context_used.strip():
-        clean_context_str = context_used.strip()
         try:
-            json_friendly_str = clean_context_str.replace("'", '"')
-            parsed_context = json.loads(json_friendly_str)
-            print(f"[{job_id}] ✅ CONTEXTO LIDO COMO JSON: {parsed_context}", flush=True)
-        except Exception as e_json:
+            parsed_context = json.loads(context_used.replace("'", '"'))
+        except:
             try:
-                parsed_context = ast.literal_eval(clean_context_str)
-                if not isinstance(parsed_context, dict):
-                    parsed_context = {}
-                print(f"[{job_id}] ✅ CONTEXTO LIDO COMO AST LITERAL: {parsed_context}", flush=True)
-            except Exception as e_ast:
-                print(f"[{job_id}] ❌ ERRO ABSOLUTO AO LER CONTEXTO. JSON Error: {e_json} | AST Error: {e_ast}", flush=True)
+                parsed_context = ast.literal_eval(context_used)
+            except:
                 parsed_context = {}
-    else:
-        print(f"[{job_id}] ⚠️ NENHUM CONTEXTO FOI ENVIADO NA REQUISIÇÃO.", flush=True)
 
-    # -------------------------------------------------------------------------
+    # 2. Parsing do Group ID
     parsed_group_id = None
     if group_ids:
         try:
             g_val = ast.literal_eval(group_ids)
-            if isinstance(g_val, list) and len(g_val) > 0:
-                parsed_group_id = str(g_val[0])
-            else:
-                parsed_group_id = str(group_ids)
+            parsed_group_id = str(g_val[0]) if isinstance(g_val, list) and len(g_val) > 0 else str(group_ids)
         except:
             parsed_group_id = str(group_ids)
 
-    # =========================================================================
-    # 🚀 UPLOAD PARA O BLOB STORAGE (Lógica Dupla)
-    # =========================================================================
+    # 3. Upload dos arquivos para o Blob
     blob_path = None
     blob_identidade_path = None
     
     try:
-        # Arquivo 1: Instruções Gerais
-        if arquivo_docx and getattr(arquivo_docx, "filename", None):
+        # Arquivo 1: Instruções
+        if arquivo_docx and arquivo_docx.filename:
             nome_arquivo = sanitize_filename(arquivo_docx.filename, "instrucoes.docx")
             file_bytes = await arquivo_docx.read()
             blob_path = await blob_storage_service.save_document(
                 company_id=company_id, project_id=project_id, job_id=job_id,
-                file_data=file_bytes, filename=nome_arquivo, 
-                group_id=parsed_group_id # ✅ Usando a variável correta
+                file_data=file_bytes, filename=nome_arquivo, group_id=parsed_group_id
             )
-            logger.log_evento("INFO", "upload_instrucoes_ok", "DOCX de instruções salvo no Blob.")
 
         # Arquivo 2: Identidade Visual
-        if arquivo_identidade and getattr(arquivo_identidade, "filename", None):
+        if arquivo_identidade and arquivo_identidade.filename:
             nome_identidade = sanitize_filename(arquivo_identidade.filename, "identidade.docx")
             identidade_bytes = await arquivo_identidade.read()
             blob_identidade_path = await blob_storage_service.save_document(
                 company_id=company_id, project_id=project_id, job_id=job_id,
-                file_data=identidade_bytes, filename=nome_identidade, 
-                group_id=parsed_group_id # ✅ Usando a variável correta
+                file_data=identidade_bytes, filename=nome_identidade, group_id=parsed_group_id
             )
-            logger.log_evento("INFO", "upload_identidade_ok", "DOCX de identidade salvo no Blob.")
             
     except Exception as e:
-        # 🚀 IMPRIME O ERRO REAL NA AZURE E DEVOLVE PARA O ORQUESTRADOR LER
-        print(f"❌ [{job_id}] ERRO NO BLOB DE PROTOTIPAÇÃO: {str(e)}", flush=True)
+        print(f"❌ [{job_id}] ERRO NO BLOB STORAGE: {str(e)}", flush=True)
         traceback.print_exc()
-        logger.log_erro("erro_upload_blob", f"Falha ao salvar arquivos base: {e}")
-        return JSONResponse(status_code=500, content={"error": f"Falha no Blob Storage: {str(e)}"})
+        return JSONResponse(status_code=500, content={"error": f"Falha no Blob: {str(e)}"})
 
-    # =========================================================================
-    # 🚀 PAYLOAD DA FILA
-    # =========================================================================
+    # 4. Envio para a Fila
     task_payload = {
         "job_id": job_id,
         "project_id": project_id,
@@ -185,10 +166,8 @@ async def start_analysis(
     
     try:
         await queue_service.send_message(task_payload)
-        logger.log_evento("INFO", "task_enviada_fila", "Mensagem colocada na fila de prototipação com sucesso.")
+        return JSONResponse(status_code=202, content={"status": "queued", "job_id": job_id})
     except Exception as e:
-        print(f"❌ [{job_id}] ERRO FATAL NA FILA DE PROTOTIPAÇÃO: {str(e)}", flush=True)
+        print(f"❌ [{job_id}] ERRO AO ENVIAR PARA FILA: {str(e)}", flush=True)
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"error": f"Falha na Fila: {str(e)}"})
-
-    return JSONResponse(status_code=202, content={"status": "queued", "job_id": job_id})
