@@ -6,7 +6,7 @@ import aioboto3
 from botocore.config import Config
 from azure.keyvault.secrets.aio import SecretClient
 
-from backend.app.services.vault_service import VaultService
+from app.services.vault_service import VaultService
 
 logger = logging.getLogger("mcp_claude_aws")
 logger.setLevel(logging.INFO)
