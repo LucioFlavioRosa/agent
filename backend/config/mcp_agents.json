@@ -4,73 +4,61 @@
       "analysis_type": "agent_epics_generator_digital",
       "agent_name": "Gerador de Épicos",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net",
-      "report_fields": ["report"],
-      "report_mapping": {
-        "code_report": "Código Gerado"
-      }
+      "report_fields": ["report"]
     },
     "agent_epics_reviwer_digital": {
       "analysis_type": "agent_epics_reviwer_digital",
       "agent_name": "Revisor de Épicos",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net",
-      "report_fields": ["report"],
-      "report_mapping": {
-        "refactor_report": "Refatoração"
-      }
+      "report_fields": ["report"]
     },
     "agent_features_generator_digital": {
       "analysis_type": "agent_features_generator_digital",
       "agent_name": "Gerador de Features",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net",
-      "report_fields": ["report"],
-      "report_mapping": {
-        "unit_test_report": "Testes Unitários"
-      }
+      "report_fields": ["report"]
     },
     "agent_features_reviwer_digital": {
       "analysis_type": "agent_features_reviwer_digital",
       "agent_name": "Revisor de Features",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
-      "report_fields": ["report"],
-      "report_mapping": {
-        "epics_report": "Gerador de Épicos"
-      }
+      "report_fields": ["report"]
     },
    "agent_timeline_generator_digital": {
       "analysis_type": "agent_timeline_generator_digital",
       "agent_name": "Timeline",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
-      "report_fields": ["report"],
-      "report_mapping": {
-        "epics_report": "GeraÉpicos"
-      }
+      "report_fields": ["report"]}
     }, 
   "agent_timeline_reviwer_digital": {
       "analysis_type": "agent_timeline_reviwer_digital",
       "agent_name": "Revisor de Timeline",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
-      "report_fields": ["report"],
-      "report_mapping": {
-        "epics_report": "Gerador de Épicos"
-      }
+      "report_fields": ["report"]
     },
   "agent_risks_generator_digital": {
       "analysis_type": "agent_risks_generator_digital",
       "agent_name": "Riscos",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
-      "report_fields": ["report"],
-      "report_mapping": {
-      "epics_report": "Gerador de Épicos"
-      }
+      "report_fields": ["report"]
     },
   "agent_risks_reviwer_digital": {
       "analysis_type": "agent_risks_reviwer_digital",
       "agent_name": "Revisor de Riscos",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
-      "report_fields": ["risks_report"],
-      "report_mapping": {
-      "epics_report": "Épicos"
-      }
+      "report_fields": ["risks_report"]
+    },
+  "agent_prototype_generator_digital": {
+      "analysis_type": "agent_prototype_generator_digital",
+      "agent_name": "Criador de Prototipo",
+      "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
+      "report_fields": ["prototype_report"]
+    },
+   "agent_prototype_reviwer_digital": {
+      "analysis_type": "agent_prototype_reviwer_digital",
+      "agent_name": "Revisor de Prototipo",
+      "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
+      "report_fields": ["prototype_report"]
     }
   }
 }
