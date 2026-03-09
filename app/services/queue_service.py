@@ -9,8 +9,8 @@ import asyncio
 from typing import Optional
 from azure.storage.queue.aio import QueueClient
 
-from app.services.vault_service import vault_service
-from app.services.blob_storage_service import blob_storage_service
+#from app.services.vault_service import vault_service
+#from app.services.blob_storage_service import blob_storage_service
 from app.services.context_retrieval_service import ContextRetrievalService
 from app.services.bedrock_service import LLMService as BedrockLLMService
 from app.services.agent_service import AgentService
@@ -22,6 +22,8 @@ logger = StructuredLogger("mcp_prototype_queue_service")
 class QueueService:
     def __init__(
         self, 
+        vault_service,
+        blob_storage_service,
         queue_name: str, 
         max_concurrent_workers: int = 5
     ):
@@ -51,7 +53,7 @@ class QueueService:
 
     # NOVO MÉTODo: Necessário para o main.py enviar a mensagem
     async def send_message(self, payload: dict):
-        queue_conn_str = await self.vault_service.get_secret("queue-connection-string", company_id="default", vault_type="infra")
+        queue_conn_str = await self.vault_service.get_secret("queue-connection-string", company_id="default", vault_type="infra", is_global=True)
         if not queue_conn_str:
             raise ValueError("Connection string da fila não encontrada.")
             
@@ -189,7 +191,7 @@ class QueueService:
 
     async def start_worker(self):
         logger.log_info_negocio("orquestrador_worker_iniciado", "Orquestrador do Worker iniciado.")
-        queue_conn_str = await self.vault_service.get_secret("queue-connection-string", company_id="default", vault_type="infra")
+        queue_conn_str = await self.vault_service.get_secret("queue-connection-string", company_id="default", vault_type="infra", is_global=True)
         
         if not queue_conn_str:
             logger.log_erro("erro_sem_connection_string_fila", "Abortando worker: Sem connection string da fila.")
