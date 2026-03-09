@@ -1,10 +1,11 @@
 import os
 import re
 import sys
+import ast
 import time
 import json
-import ast
 import asyncio
+import traceback
 import unicodedata
 
 from contextlib import asynccontextmanager
@@ -27,8 +28,10 @@ vault_urls = [
 queue_name_prototype = os.getenv("QUEUE_NAME", "prototype-queue")
 
 vault_service = VaultService(vault_urls=[u for u in vault_urls if u])
-blob_storage_service = BlobStorageService() 
+blob_storage_service = BlobStorageService(vault_service=vault_service) 
 queue_service = QueueService(
+    vault_service=vault_service,
+    blob_storage_service=blob_storage_service,
     queue_name=queue_name_prototype,
     max_concurrent_workers=5
 )
@@ -155,8 +158,11 @@ async def start_analysis(
             logger.log_evento("INFO", "upload_identidade_ok", "DOCX de identidade salvo no Blob.")
             
     except Exception as e:
+        # 🚀 IMPRIME O ERRO REAL NA AZURE E DEVOLVE PARA O ORQUESTRADOR LER
+        print(f"❌ [{job_id}] ERRO NO BLOB DE PROTOTIPAÇÃO: {str(e)}", flush=True)
+        traceback.print_exc()
         logger.log_erro("erro_upload_blob", f"Falha ao salvar arquivos base: {e}")
-        return JSONResponse(status_code=500, content={"error": "Falha ao salvar arquivos base."})
+        return JSONResponse(status_code=500, content={"error": f"Falha no Blob Storage: {str(e)}"})
 
     # =========================================================================
     # 🚀 PAYLOAD DA FILA
@@ -181,6 +187,8 @@ async def start_analysis(
         await queue_service.send_message(task_payload)
         logger.log_evento("INFO", "task_enviada_fila", "Mensagem colocada na fila de prototipação com sucesso.")
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Falha ao enviar tarefa para a fila: {e}"})
+        print(f"❌ [{job_id}] ERRO FATAL NA FILA DE PROTOTIPAÇÃO: {str(e)}", flush=True)
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"error": f"Falha na Fila: {str(e)}"})
 
     return JSONResponse(status_code=202, content={"status": "queued", "job_id": job_id})
