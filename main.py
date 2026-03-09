@@ -20,7 +20,6 @@ from app.services.queue_service import QueueService
 
 logger = StructuredLogger("mcp_prototype_worker")
 
-# --- INSTANCIAÇÃO DOS SERVIÇOS ---
 vault_urls = [
     os.getenv("AZURE_INFRA_VAULT_URL", ""),
     os.getenv("AZURE_LLM_VAULT_URL", ""),
@@ -42,7 +41,6 @@ def sanitize_filename(filename: str, fallback_name: str = "documento.docx") -> s
     limpo = re.sub(r'[^a-zA-Z0-9_.-]', '_', sem_acento)
     return re.sub(r'_+', '_', limpo).lower()
 
-# --- LIFESPAN ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.log_evento("INFO", "worker_task_iniciado", "Iniciando worker do Protótipo em background")
@@ -174,10 +172,8 @@ async def start_analysis(
         "branch": branch,
         "repository": repository,
         "comentario_extra": comentario_extra,
-        
         "blob_path": blob_path, 
         "identidade_visual_blob_path": blob_identidade_path, 
-        
         "context_used": parsed_context,
     }
     
