@@ -13,7 +13,7 @@ from azure.storage.queue.aio import QueueClient
 #from app.services.blob_storage_service import blob_storage_service
 from app.services.context_retrieval_service import ContextRetrievalService
 from app.services.bedrock_service import LLMService as BedrockLLMService
-from app.services.agent_service import AgentService
+from app.services.prototype_service import AgentService
 from app.config.agent_mapping import AGENT_CONFIG
 from app.utils.log_formatter import StructuredLogger
 
