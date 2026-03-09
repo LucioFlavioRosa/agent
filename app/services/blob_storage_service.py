@@ -3,14 +3,12 @@ from typing import Optional, AsyncIterable, Union
 from azure.storage.blob.aio import BlobServiceClient
 from azure.core.exceptions import ResourceNotFoundError
 
-# Importa o vault_service já instanciado do nosso arquivo vizinho
-from app.services.vault_service import vault_service
+from app.services.vault_service import VaultService
 
 logger = logging.getLogger("mcp_prototype.blob_storage")
 
 class BlobStorageService:
-    def __init__(self):
-        # Usamos a instância global do VaultService
+    def __init__(self, vault_service: VaultService):
         self.vault_service = vault_service
         
     async def save_document(
@@ -18,7 +16,7 @@ class BlobStorageService:
         company_id: str,
         project_id: str,
         job_id: str,
-        file_data: Union[bytes, AsyncIterable[bytes]], # Suporta Bytes ou Stream
+        file_data: Union[bytes, AsyncIterable[bytes]], 
         filename: str,
         group_id: Optional[str] = None
     ) -> str:
@@ -27,7 +25,6 @@ class BlobStorageService:
         logger.info(f"blob_upload_iniciado | company_id={company_id} | project_id={project_id} | job_id={job_id} | filename={filename}")
         
         try:
-            # 🚀 ALVO DEFINIDO: Busca no cofre de INFRA
             conn_str = await self.vault_service.get_secret(
                 base_name='blobstorage-connection-string', 
                 company_id=company_id, 
@@ -67,7 +64,6 @@ class BlobStorageService:
         logger.info(f"blob_download_iniciado | company_id={company_id} | blob_path={blob_path}")
         
         try:
-            # 🚀 ALVO DEFINIDO: Busca no cofre de INFRA
             conn_str = await self.vault_service.get_secret(
                 base_name='blobstorage-connection-string', 
                 company_id=company_id, 
@@ -97,6 +93,3 @@ class BlobStorageService:
         except Exception as e:
             logger.error(f"blob_download_erro | blob_path={blob_path} | erro={e}")
             raise
-
-# Instância global para uso nos outros serviços
-blob_storage_service = BlobStorageService()
