@@ -51,13 +51,13 @@
   "agent_prototype_generator_digital": {
       "analysis_type": "agent_prototype_generator_digital",
       "agent_name": "Criador de Prototipo",
-      "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
+      "mcp_service_url": "https://app-codeai-backend-dev--mcp-prototype-fqc2e3enejhzafdj.centralus-01.azurewebsites.net", 
       "report_fields": ["prototype_report"]
     },
    "agent_prototype_reviwer_digital": {
       "analysis_type": "agent_prototype_reviwer_digital",
       "agent_name": "Revisor de Prototipo",
-      "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
+      "mcp_service_url": "app-codeai-backend-dev--mcp-prototype-fqc2e3enejhzafdj.centralus-01.azurewebsites.net", 
       "report_fields": ["prototype_report"]
     }
   }
