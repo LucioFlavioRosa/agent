@@ -127,7 +127,7 @@ class AgentService:
                 group_ids=group_ids
             )
             
-            config_agente = AGENT_CONFIG.get(analysis_type)
+            config_agente = AGENT_CONFIG.get(analysis_type, {})
             nome_servico = config_agente.get("service")
             nome_modelo = config_agente.get("llm_model")
             nome_arquivo_saida = config_agente.get("output_filename", "index.html")
