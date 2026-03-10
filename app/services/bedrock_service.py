@@ -1,81 +1,102 @@
+import json
 import logging
+import boto3
 import traceback
 from typing import Optional
-from app.config.agent_mapping import AGENT_CONFIG
+from botocore.config import Config
 
-logger = logging.getLogger("mcp_prototype.agent_service")
+logger = logging.getLogger("mcp_prototype.bedrock_service")
 
-class AgentService:
-    def __init__(self, context_retrieval_service, blob_storage_service, llm_services: dict):
-        self.context_retrieval = context_retrieval_service
-        self.blob_storage = blob_storage_service
-        self.llm_services = llm_services # Contém o 'bedrock_service'
-
-    async def executar_analise(self, task_payload: dict, texto_instrucoes: str, texto_identidade: str) -> str:
+class LLMService:
+    def __init__(self, vault_service):
         """
-        Orquestra a chamada para a IA e o salvamento do arquivo HTML final.
+        Inicializa o serviço. 
+        Nota: Não criamos o cliente boto3 aqui no __init__ porque as credenciais
+        podem variar por empresa/grupo.
         """
-        job_id = task_payload.get("job_id")
-        company_id = task_payload.get("company_id")
-        project_id = task_payload.get("project_id")
-        group_id = task_payload.get("group_ids")
-        analysis_type = task_payload.get("analysis_type", "agent_prototype_generator_digital")
-        comentario_extra = task_payload.get("comentario_extra", "")
+        self.vault_service = vault_service
+
+    async def _get_bedrock_client(self, company_id: str, group_id: Optional[str] = None):
+        """Busca credenciais no Vault e cria o cliente AWS"""
+        try:
+            # 🚀 LÓGICA DE BUSCA: Passamos group_id. 
+            # O VaultService tentará: base-company-group -> base-company
+
+            aws_access_key = await self.vault_service.get_secret(
+                "aws-access-key-id", 
+                company_id=company_id, 
+                group_id=group_id, # 🎯 Mudamos para group_id conforme solicitado
+                vault_type="llm"
+            )
+            aws_secret_key = await self.vault_service.get_secret(
+                "aws-secret-access-key", 
+                company_id=company_id, 
+                group_id=group_id, 
+                vault_type="llm"
+            )
+            aws_region = await self.vault_service.get_secret(
+                "aws-region", 
+                company_id=company_id,
+                group_id=group_id, 
+                vault_type="llm"
+
+            )
+
+            if not all([aws_access_key, aws_secret_key, aws_region]):
+                raise ValueError(f"Credenciais AWS incompletas no cofre para a empresa {company_id} (Grupo: {group_id})")
+
+            return boto3.client(
+                service_name='bedrock-runtime',
+                region_name=aws_region,
+                aws_access_key_id=aws_access_key,
+                aws_secret_access_key=aws_secret_key,
+                config=Config(retries={'max_attempts': 3, 'mode': 'standard'})
+            )
+        except Exception as e:
+            logger.error(f"erro_criacao_cliente_bedrock | company_id={company_id} | group_id={group_id} | erro={e}")
+            raise
+
+    async def gerar_texto(
+        self, 
+        prompt: str, 
+        modelo: str = "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        max_tokens: int = 4096,
+        temperature: float = 0.0,
+        company_id: str = "default",
+        group_id: Optional[str] = None # 🚀 Recebe group_id vindo do queue_service
+    ) -> str:
+        """Chama o Bedrock para gerar o código HTML"""
 
         try:
-            print(f"🛠️ [AGENTE] Iniciando execução para Job {job_id}...", flush=True)
+            print(f"📡 [BEDROCK] Iniciando geração para Empresa {company_id} e Grupo {group_id}...", flush=True)
 
-            # 1. Recupera o contexto (Épicos, Features, etc.)
-            context_string = await self.context_retrieval.build_context_string(
-                company_id=company_id,
-                project_id=project_id,
-                context_used=task_payload.get("context_used", {}),
-                group_ids=group_id
+            # Obtém o cliente AWS configurado para este contexto específico
+            client = await self._get_bedrock_client(company_id, group_id)
+
+            body = json.dumps({
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": prompt}]
+                    }
+                ]
+            })
+
+            # Execução síncrona dentro da thread do worker
+            response = client.invoke_model(
+                modelId=modelo,
+                body=body
             )
 
-            # 2. Monta o Prompt (Simples para teste)
-            prompt_final = f"""
-            Você é um desenvolvedor Frontend experiente.
-            Instruções do Usuário: {texto_instrucoes}
-            Identidade Visual: {texto_identidade}
-            Contexto do Projeto: {context_string}
-            Comentário Extra: {comentario_extra}
+            response_body = json.loads(response.get('body').read())
+            texto_gerado = response_body.get('content', [{}])[0].get('text', '')
             
-            Gere um código HTML único, completo e funcional com Tailwind CSS. 
-            Responda APENAS com o código HTML.
-            """
-
-            # 3. Chama o Bedrock (Passando os IDs para o Vault funcionar)
-            bedrock = self.llm_services.get("bedrock_service")
-            if not bedrock:
-                raise ValueError("Serviço Bedrock não encontrado no registro.")
-
-            print(f"📡 [AGENTE] Chamando Bedrock para empresa {company_id}...", flush=True)
-            
-            codigo_html = await bedrock.gerar_texto(
-                prompt=prompt_final,
-                company_id=company_id,
-                job_id=job_id # O VaultService usará isso para achar as chaves AWS
-            )
-
-            # 4. Salva o resultado no Blob
-            config = AGENT_CONFIG.get(analysis_type, {})
-            filename = config.get("output_filename", "index.html")
-            
-            print(f"💾 [AGENTE] Salvando resultado em {filename}...", flush=True)
-            
-            await self.blob_storage.save_document(
-                company_id=company_id,
-                project_id=project_id,
-                job_id=job_id,
-                file_data=codigo_html.encode('utf-8'),
-                filename=filename,
-                group_id=group_id
-            )
-
-            return codigo_html
+            return texto_gerado
 
         except Exception as e:
-            print(f"❌ [AGENTE] ERRO CRÍTICO: {str(e)}", flush=True)
+            print(f"❌ [BEDROCK] Erro na chamada para Empresa {company_id}: {str(e)}", flush=True)
             traceback.print_exc()
-            raise
+            raise Exception(f"Falha na IA Bedrock: {str(e)}")
