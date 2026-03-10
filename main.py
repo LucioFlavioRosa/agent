@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import FastAPI, Form, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 
+from app.api.reports import router as reports_router
 from app.utils.log_formatter import StructuredLogger
 from app.services.vault_service import VaultService
 from app.services.blob_storage_service import BlobStorageService
@@ -78,6 +79,9 @@ async def lifespan(app: FastAPI):
         pass
 
 app = FastAPI(title="MCP Prototype Queue Worker", lifespan=lifespan)
+
+app.state.blob_storage_service = blob_storage_service
+app.include_router(reports_router, prefix="/reports", tags=["Reports"])
 
 # Middleware para Logs de Requisição
 @app.middleware("http")
