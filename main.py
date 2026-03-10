@@ -55,8 +55,21 @@ def sanitize_filename(filename: str, fallback_name: str = "documento.docx") -> s
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 [BOOT] Iniciando Worker de Prototipação...", flush=True)
-    worker_task = asyncio.create_task(queue_service.start_worker())
+    
+    # 🛡️ Criamos um escudo para capturar qualquer erro fatal no background
+    async def run_worker_safely():
+        try:
+            await queue_service.start_worker()
+        except Exception as e:
+            print(f"\n❌ [ERRO FATAL NO WORKER] A fila parou de rodar! Motivo: {str(e)}", flush=True)
+            import traceback
+            traceback.print_exc()
+
+    # Inicia a tarefa com o escudo
+    worker_task = asyncio.create_task(run_worker_safely())
+    
     yield
+    
     print("🛑 [SHUTDOWN] Cancelando worker...", flush=True)
     worker_task.cancel()
     try:
