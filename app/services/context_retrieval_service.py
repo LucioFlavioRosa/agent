@@ -29,13 +29,13 @@ class ContextRetrievalService:
             # Converte 'prototype_job_id' em 'prototype'
             category = key.replace("_job_id", "")
             
-            # 🚀 LÓGICA DE NOME DE ARQUIVO:
+            # 🚀 LÓGICA DE NOME DE ARQUIVO (CORRIGIDA):
             # Tenta encontrar o nome do arquivo de saída no AGENT_CONFIG (ex: 'index.html')
             nome_arquivo_esperado = f"{category}.md" # Fallback padrão
             
             for agent_key, config in AGENT_CONFIG.items():
-                # Se a categoria (ex: 'prototype') estiver no nome do agente, usa o output_filename dele
-                if category in agent_key:
+                # Verifica pela chave 'category' exata configurada no dicionário OU se a palavra está no nome do agente
+                if config.get("category") == category or category in agent_key:
                     nome_arquivo_esperado = config.get("output_filename", nome_arquivo_esperado)
                     break
             
