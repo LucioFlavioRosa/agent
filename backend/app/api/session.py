@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, status, Query
+from typing import Optional # <-- IMPORTANTE ADICIONAR
 
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.mcp_client_service import MCPClientService
@@ -23,8 +24,9 @@ async def get_project_reports(
     project_id: str,
     job_id: str,
     email: str = Query(..., description="Email do usuário"),
+    filename: Optional[str] = Query(None, description="Nome do arquivo desejado (opcional)"), # 🚀 ADICIONADO AQUI
 ):
-    logger.info(f"[Session] Requisição recebida: project_id={project_id}, job_id={job_id}, email={email}")
+    logger.info(f"[Session] Requisição recebida: project_id={project_id}, job_id={job_id}, email={email}, filename={filename}")
 
     # 1. VALIDAÇÕES BÁSICAS DE ENTRADA
     if not project_id or not isinstance(project_id, str) or not project_id.strip():
@@ -87,7 +89,6 @@ async def get_project_reports(
         # Fallback: O Redis negou (cache expirado ou projeto recém-criado)
         logger.warning(f"[Session] Permissão não achada no Redis para {email}. Buscando no MongoDB (Fallback)...")
         
-        #projeto_real = await mongo_service_fallback.get_project_by_id(project_id)
         projeto_real = await mongo_service.get_project_by_id(project_id)
         
         if projeto_real:
@@ -176,16 +177,18 @@ async def get_project_reports(
         raise HTTPException(status_code=500, detail="Configuração de URL do MCP ausente.")
 
     # ==========================================================
-    # 🚀 FAZ A REQUISIÇÃO PARA O MCP (USANDO O SEU MAPPING)
+    # 🚀 FAZ A REQUISIÇÃO PARA O MCP COM NOME BLINDADO
     # ==========================================================
     mcp_client = MCPClientService()
     
     # 1. Busca a categoria exata no seu arquivo de configuração
     categoria = AGENT_TO_CATEGORY.get(job.analysis_type)
     
-    # 2. Adiciona o .md no final (ou usa um fallback de segurança se esquecerem de mapear um agente novo)
-    if categoria == "prototype":
-        # O protótipo salva como index.html (ou o nome que estiver no seu AGENT_CONFIG do MCP)
+    # 2. 🚀 A MÁGICA: Se o frontend enviou o nome do arquivo, USE ELE! 
+    # Caso contrário, tente adivinhar. E não dependemos apenas da variável "categoria".
+    if filename:
+        nome_arquivo_dinamico = filename
+    elif categoria == "prototype" or "prototype" in job.analysis_type: # <-- DUPLA CHECAGEM
         nome_arquivo_dinamico = "index.html"
     elif categoria:
         nome_arquivo_dinamico = f"{categoria}.md"
@@ -195,12 +198,13 @@ async def get_project_reports(
 
     try:
         # Repassa a chamada para o MCP enviando o nome do arquivo montado perfeitamente
+        logger.info(f"[Session] Pedindo arquivo {nome_arquivo_dinamico} para a URL do MCP: {mcp_url}")
         report_data = await mcp_client.get_report(
             project_id=project_id, 
             job_id=job_id, 
             mcp_url=mcp_url,
             company_id=empresa, 
-            filename=nome_arquivo_dinamico # 🚀 "epics.md", "features.md", etc.
+            filename=nome_arquivo_dinamico # 🚀 "epics.md", "features.md" ou "index.html"
         )
         
         logger.info(f"[Session] Sucesso: Arquivo {nome_arquivo_dinamico} recuperado do MCP.")
@@ -218,5 +222,5 @@ async def get_project_reports(
         logger.error(f"[Session] Erro ao buscar relatório no MCP: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, 
-            detail="Falha ao obter o relatório do serviço de agentes (MCP)."
+            detail=f"Falha ao obter o arquivo {nome_arquivo_dinamico} do serviço MCP: {str(e)}"
         )
