@@ -1,6 +1,4 @@
-import io
 import os
-import docx
 import json
 import httpx
 import base64
@@ -9,13 +7,12 @@ import asyncio
 from typing import Optional
 from azure.storage.queue.aio import QueueClient
 
-#from app.services.vault_service import vault_service
-#from app.services.blob_storage_service import blob_storage_service
 from app.services.context_retrieval_service import ContextRetrievalService
 from app.services.bedrock_service import LLMService as BedrockLLMService
 from app.services.prototype_service import AgentService
 from app.config.agent_mapping import AGENT_CONFIG
 from app.utils.log_formatter import StructuredLogger
+from app.utils.document_parser import extrair_texto_docx_em_memoria
 
 logger = StructuredLogger("mcp_prototype_queue_service")
 
@@ -98,15 +95,31 @@ class QueueService:
         except Exception as e:
             logger.log_erro("webhook_erro_rede", f"Falha de rede ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
 
+    # 🚀 MÉTODO CORRIGIDO AQUI 🚀
     async def _extract_text_from_blob(self, company_id: str, blob_path: str, group_id: Optional[str]) -> str:
-        """Função auxiliar para baixar o DOCX do Blob e extrair o texto"""
+        """Função auxiliar para baixar o DOCX do Blob e extrair o texto estruturado"""
         if not blob_path: return ""
         try:
+            # Baixa os bytes do blob storage
             file_bytes = await self.blob_storage_service.download_document(
                 company_id=company_id, blob_path=blob_path, group_id=group_id
             )
-            doc = docx.Document(io.BytesIO(file_bytes))
-            return "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+            
+            # Extrai os metadados do blob_path para os logs estruturados
+            # Geralmente o formato é: company_id/project_id/job_id/arquivo.docx
+            partes = blob_path.split('/')
+            project_id = partes[1] if len(partes) > 1 else None
+            job_id = partes[2] if len(partes) > 2 else None
+            
+            # 🚀 Chamada da sua função que entende parágrafos e tabelas!
+            texto = extrair_texto_docx_em_memoria(
+                file_bytes=file_bytes,
+                job_id=job_id,
+                company_id=company_id,
+                project_id=project_id
+            )
+            return texto
+            
         except Exception as e:
             logger.log_erro("erro_extracao_docx", f"Erro ao ler DOCX do blob {blob_path}: {e}")
             return ""
