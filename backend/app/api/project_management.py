@@ -44,7 +44,32 @@ async def list_all_user_projects(
     if not projects:
         return []
     return projects
-
+@router.get("/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
+async def list_owned_projects(
+    email: str = Query(..., description="Email do usuário owner"),
+    mongo_service: MongoDBService = Depends(get_mongo_service) 
+):
+    logger.info(f"[ProjectManagement] Recebida requisição para /projects/owned com email={email}")
+    
+    user = await mongo_service.get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+        
+    company_id = getattr(user, "company_id", None)
+    if not company_id:
+        raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
+        
+    projects = await mongo_service.get_projects_where_user_is_owner(email, company_id=company_id)
+    
+    items = [OwnedProjectItem(
+        project_id=p["project_id"],
+        name=p["name"],
+        description=p.get("description"),
+        members=p.get("members", [])
+    ) for p in projects]
+    
+    return ListOwnedProjectsResponse(projects=items)
+    
 @router.get("/{project_id}", response_model=ProjectDetailsResponse, tags=["Project Management"])
 async def get_project_details(
     project_id: str = Path(..., description="ID do projeto"),
@@ -89,32 +114,6 @@ async def get_project_details(
         company_id=comp_id_str,
         latest_reports=LatestReports(**reports_data)
     )
-    
-@router.get("/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
-async def list_owned_projects(
-    email: str = Query(..., description="Email do usuário owner"),
-    mongo_service: MongoDBService = Depends(get_mongo_service) 
-):
-    logger.info(f"[ProjectManagement] Recebida requisição para /projects/owned com email={email}")
-    
-    user = await mongo_service.get_user_by_email(email)
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
-        
-    company_id = getattr(user, "company_id", None)
-    if not company_id:
-        raise HTTPException(status_code=400, detail="Usuário não possui company_id.")
-        
-    projects = await mongo_service.get_projects_where_user_is_owner(email, company_id=company_id)
-    
-    items = [OwnedProjectItem(
-        project_id=p["project_id"],
-        name=p["name"],
-        description=p.get("description"),
-        members=p.get("members", [])
-    ) for p in projects]
-    
-    return ListOwnedProjectsResponse(projects=items)
 
 @router.post("/members", response_model=AddProjectMemberResponse, tags=["Project Management"])
 async def add_project_member(
