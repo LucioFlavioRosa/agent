@@ -135,6 +135,7 @@ async def add_project_member(
 
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
+    
     try:
         has_perm, _, error_msg = await permission_service.check_user_project_action_permission(
             req.requester_email, project_id, action_type="add_member"
@@ -149,15 +150,41 @@ async def add_project_member(
         if not new_user:
             return AddProjectMemberResponse(success=False, message="Usuário a ser adicionado não encontrado.")
             
-        # 🚀 NOVA VALIDAÇÃO DE SEGURANÇA (ISOLAMENTO MULTI-TENANT) 🚀
+        # 🚀 VALIDAÇÃO 1: SEGURANÇA (ISOLAMENTO MULTI-TENANT)
         new_user_company_id = getattr(new_user, "company_id", None)
         if str(new_user_company_id) != str(company_id):
             logger.warning(f"[ProjectManagement] Tentativa bloqueada: O usuário {req.new_member_email} não pertence à empresa do projeto {project_id}.")
             return AddProjectMemberResponse(success=False, message="Ação negada: Este usuário não pertence à mesma empresa deste projeto.")
+        
+        # ==========================================================
+        # 🚀 VALIDAÇÃO 2: REGRA DE NEGÓCIO DE GRUPOS (OWNER/EDITOR)
+        # ==========================================================
+        requested_role = str(req.role.value).lower()
+        
+        if requested_role in ["owner", "editor"]:
+            # Pega o ID do grupo do projeto com segurança
+            project_group_id = getattr(project, "assigned_group_id", None)
+            if not project_group_id and isinstance(project, dict):
+                project_group_id = project.get("assigned_group_id")
+            project_group_id = str(project_group_id) if project_group_id else ""
+
+            # Pega a lista de grupos do novo usuário com segurança
+            new_user_groups_raw = getattr(new_user, "group_ids", [])
+            if not new_user_groups_raw and isinstance(new_user, dict):
+                new_user_groups_raw = new_user.get("group_ids", [])
+            new_user_groups = [str(g) for g in new_user_groups_raw]
+
+            # Se o projeto tem um grupo, mas o usuário não pertence a ele, bloqueia!
+            if project_group_id and project_group_id not in new_user_groups:
+                logger.warning(f"[ProjectManagement] Bloqueio de Role: {req.new_member_email} tentou ser {requested_role}, mas não possui o grupo {project_group_id}.")
+                return AddProjectMemberResponse(
+                    success=False, 
+                    message=f"O usuário {req.new_member_email} não pertence à especialidade (grupo) deste projeto. Portanto, ele só pode ser adicionado como 'Leitor (Viewer)'."
+                )
         # ==========================================================
 
         new_member = {
-            "user_id": str(new_user.id),
+            "user_id": str(getattr(new_user, "id", None) or new_user.get("_id")),
             "email": req.new_member_email,
             "role": req.role.value,
             "added_at": datetime.utcnow().isoformat()
