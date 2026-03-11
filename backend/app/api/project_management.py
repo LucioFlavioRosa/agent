@@ -132,6 +132,20 @@ async def add_project_member(
     if not project or getattr(project, "company_id", None) != company_id:
         return AddProjectMemberResponse(success=False, message="Projeto não encontrado nesta empresa.")
 
+    # ==========================================================
+    # 🚀 VALIDAÇÃO 0: EVITA DUPLICIDADE DE USUÁRIOS NO PROJETO
+    # ==========================================================
+    existing_members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
+    for m in existing_members:
+        m_email = getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")
+        if m_email and m_email.lower() == req.new_member_email.lower():
+            logger.warning(f"[ProjectManagement] Inserção bloqueada: {req.new_member_email} já está no projeto {project_id}.")
+            return AddProjectMemberResponse(
+                success=False, 
+                message=f"O usuário {req.new_member_email} já possui acesso a este projeto. Utilize a lista abaixo para atualizar ou remover seu acesso."
+            )
+    # ==========================================================
+
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
     
@@ -147,7 +161,7 @@ async def add_project_member(
              
         new_user = await mongo_service.get_user_by_email(req.new_member_email)
         if not new_user:
-            return AddProjectMemberResponse(success=False, message="Usuário a ser adicionado não encontrado.")
+            return AddProjectMemberResponse(success=False, message="Usuário a ser adicionado não encontrado na base de dados.")
             
         # 🚀 VALIDAÇÃO 1: SEGURANÇA (ISOLAMENTO MULTI-TENANT)
         new_user_company_id = getattr(new_user, "company_id", None)
@@ -161,24 +175,21 @@ async def add_project_member(
         requested_role = str(req.role.value).lower()
         
         if requested_role in ["owner", "editor"]:
-            # Pega o ID do grupo do projeto com segurança
             project_group_id = getattr(project, "assigned_group_id", None)
             if not project_group_id and isinstance(project, dict):
                 project_group_id = project.get("assigned_group_id")
             project_group_id = str(project_group_id) if project_group_id else ""
 
-            # Pega a lista de grupos do novo usuário com segurança
             new_user_groups_raw = getattr(new_user, "group_ids", [])
             if not new_user_groups_raw and isinstance(new_user, dict):
                 new_user_groups_raw = new_user.get("group_ids", [])
             new_user_groups = [str(g) for g in new_user_groups_raw]
 
-            # Se o projeto tem um grupo, mas o usuário não pertence a ele, bloqueia!
             if project_group_id and project_group_id not in new_user_groups:
                 logger.warning(f"[ProjectManagement] Bloqueio de Role: {req.new_member_email} tentou ser {requested_role}, mas não possui o grupo {project_group_id}.")
                 return AddProjectMemberResponse(
                     success=False, 
-                    message=f"O usuário {req.new_member_email} não pertence à especialidade (grupo) deste projeto. Portanto, ele só pode ser adicionado como 'Leitor (Viewer)'."
+                    message=f"O usuário {req.new_member_email} não pertence à especialidade deste projeto. Portanto, ele só pode ser adicionado como 'Leitor (Viewer)'."
                 )
         # ==========================================================
 
@@ -193,12 +204,11 @@ async def add_project_member(
         
         return AddProjectMemberResponse(
             success=bool(result), 
-            message="Membro adicionado!" if result else "Erro ao adicionar."
+            message="Membro adicionado com sucesso!" if result else "Erro ao adicionar membro no banco."
         )
     except Exception as e:
         logger.error(f"Erro add_project_member: {e}")
         return AddProjectMemberResponse(success=False, message=str(e))
-
 @router.put("/members", response_model=UpdateProjectMembersResponse, tags=["Project Management"])
 async def update_project_members(
     req: UpdateProjectMembersRequest = Body(...),
