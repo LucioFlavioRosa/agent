@@ -46,7 +46,9 @@ async def get_generated_report(
         erro_msg = str(e)
         logger.error(f"[MCP Reports] Erro ao baixar {blob_path}: {erro_msg}")
         
-        if "não encontrado" in erro_msg.lower() or "not found" in erro_msg.lower():
-             raise HTTPException(status_code=404, detail=f"Arquivo {filename} não encontrado no Azure Blob.")
+        # 🚀 AGORA ELE RECONHECE O VOCABULÁRIO DA AZURE
+        if "não encontrado" in erro_msg.lower() or "not found" in erro_msg.lower() or "does not exist" in erro_msg.lower() or "blobnotfound" in erro_msg.lower():
+             raise HTTPException(status_code=404, detail=f"O arquivo {filename} ainda não foi salvo no Azure Blob.")
              
-        raise HTTPException(status_code=500, detail="Erro interno ao acessar o Blob Storage.")
+        # 🚀 COLOQUE O erro_msg AQUI PARA APARECER NO FRONTEND!
+        raise HTTPException(status_code=500, detail=f"Erro interno do Blob: {erro_msg}")
