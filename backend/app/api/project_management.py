@@ -265,6 +265,26 @@ async def update_project_members(
         logger.error(f"Erro update_project_members: {e}")
         return UpdateProjectMembersResponse(success=False, message=str(e))
 
+@router.get("/{project_id}/members", tags=["Project Management"])
+async def get_project_members(
+    project_id: str = Path(..., description="ID do projeto"),
+    email: str = Query(..., description="Email do usuário solicitante"),
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """Retorna a lista fresquinha e atualizada de membros do projeto."""
+    project = await mongo_service.get_project_by_id(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
+    
+    # Trava de Segurança: Só devolve a lista se quem está pedindo fizer parte do projeto
+    is_member = any((getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email for m in members)
+    if not is_member:
+        raise HTTPException(status_code=403, detail="Acesso negado.")
+
+    members_list = [m if isinstance(m, dict) else m.dict() for m in members]
+    return {"members": members_list}
 
 @router.delete("/members/{target_email}", tags=["Project Management"])
 async def remove_project_member(
