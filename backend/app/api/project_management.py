@@ -249,6 +249,40 @@ async def update_project_members(
                     success=False, 
                     message="Você não pode alterar seu nível para Editor/Viewer sem antes promover outro membro a Owner."
                 )
+
+        # ==========================================================
+        # 🚀 VALIDAÇÃO DE GRUPOS AO ATUALIZAR ROLE (IGUAL NO ADD)
+        # ==========================================================
+        project_group_id = getattr(project, "assigned_group_id", None)
+        if not project_group_id and isinstance(project, dict):
+            project_group_id = project.get("assigned_group_id")
+        project_group_id = str(project_group_id) if project_group_id else ""
+
+        if project_group_id:
+            # Varre todos os membros que vieram na requisição
+            for incoming_member in req.members:
+                requested_role = str(incoming_member.get("role", "")).lower()
+                target_email = incoming_member.get("email")
+                
+                # Só importa checar quem está ganhando poder de Owner ou Editor
+                if requested_role in ["owner", "editor"]:
+                    target_user = await mongo_service.get_user_by_email(target_email)
+                    if not target_user:
+                        continue # Se o user não existe no banco, deixa falhar mais pra frente
+                    
+                    target_user_groups_raw = getattr(target_user, "group_ids", [])
+                    if not target_user_groups_raw and isinstance(target_user, dict):
+                        target_user_groups_raw = target_user.get("group_ids", [])
+                    target_user_groups = [str(g) for g in target_user_groups_raw]
+
+                    # A Trava de Ouro: Se o projeto tem grupo e o usuário não está nele, barra a atualização inteira!
+                    if project_group_id not in target_user_groups:
+                        logger.warning(f"[ProjectManagement] Bloqueio de Update Role: {target_email} tentou ser promovido para {requested_role}, mas não pertence ao grupo {project_group_id}.")
+                        return UpdateProjectMembersResponse(
+                            success=False, 
+                            message=f"Não é possível promover {target_email} a {requested_role.capitalize()}. Este usuário não pertence à especialidade deste projeto e só pode ser 'Leitor (Viewer)'."
+                        )
+        # ==========================================================
                 
         result = await mongo_service.update_project_members(project_id, req.members)
         
@@ -263,7 +297,7 @@ async def update_project_members(
     except Exception as e:
         logger.error(f"Erro update_project_members: {e}")
         return UpdateProjectMembersResponse(success=False, message=str(e))
-
+        
 @router.get("/{project_id}/members", tags=["Project Management"])
 async def get_project_members(
     project_id: str = Path(..., description="ID do projeto"),
