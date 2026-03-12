@@ -280,10 +280,15 @@ async def start_analysis(
 
     context_used = {}
 
-    latest_reports_db = getattr(project_doc, "latest_reports", {})
+    # 🚀 CORREÇÃO CRÍTICA: Forma segura de ler atributos de Dicionários ou Objetos 🚀
+    if isinstance(project_doc, dict):
+        latest_reports_db = project_doc.get("latest_reports", {})
+    else:
+        latest_reports_db = getattr(project_doc, "latest_reports", {})
+
     if not isinstance(latest_reports_db, dict) and hasattr(latest_reports_db, "dict"):
         latest_reports_db = latest_reports_db.dict()
-    elif not latest_reports_db:
+    if not latest_reports_db:
         latest_reports_db = {}
 
     if base_job_id:
