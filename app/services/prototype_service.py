@@ -26,8 +26,8 @@ class AgentService:
         self.blob_storage = blob_storage_service
         self.llm_services = llm_services
         
-        # 🚀 Instanciando o serviço de auditoria passando o blob_storage
-        self.audit_service = LLMAuditService(self.blob_storage)
+        # 🚀 Instanciando o serviço de auditoria usando as credenciais do Vault
+        self.audit_service = LLMAuditService(self.blob_storage.vault_service)
 
     def _obter_prompt_base(self, analysis_type: Optional[str]) -> str:
         prompt_padrao = (
