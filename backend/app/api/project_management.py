@@ -169,7 +169,7 @@ async def add_project_member(
             return AddProjectMemberResponse(success=False, message="Ação negada: Este usuário não pertence à mesma empresa deste projeto.")
         
         # ==========================================================
-        # 🚀 VALIDAÇÃO 2: INTERSECÇÃO DE AGENTES (OWNER/EDITOR)
+        # 🚀 VALIDAÇÃO 2 e 3: INTERSECÇÃO E REGRA DO 'GENERATOR'
         # ==========================================================
         requested_role = str(req.role.value).lower()
         
@@ -179,14 +179,12 @@ async def add_project_member(
                 project_group_id = project.get("assigned_group_id")
             
             if project_group_id:
-                # 1. Busca os Agentes permitidos no Grupo do Projeto
                 project_group = await mongo_service.get_group_by_id(str(project_group_id))
                 project_agents = set()
                 if project_group:
                     agents = getattr(project_group, "allowed_agents", []) if not isinstance(project_group, dict) else project_group.get("allowed_agents", [])
                     project_agents = set(agents)
 
-                # 2. Busca TODOS os Agentes de TODOS os Grupos do Usuário
                 new_user_groups_raw = getattr(new_user, "group_ids", [])
                 if not new_user_groups_raw and isinstance(new_user, dict):
                     new_user_groups_raw = new_user.get("group_ids", [])
@@ -196,17 +194,28 @@ async def add_project_member(
                     u_group = await mongo_service.get_group_by_id(str(g_id))
                     if u_group:
                         a = getattr(u_group, "allowed_agents", []) if not isinstance(u_group, dict) else u_group.get("allowed_agents", [])
-                        user_agents.update(a) # Adiciona ao Set (sem duplicar)
+                        user_agents.update(a)
 
-                # 3. A Mágica: Existe intersecção entre os agentes do projeto e os do usuário?
-                has_intersection = bool(project_agents.intersection(user_agents))
+                # Extrai a intersecção real de agentes
+                intersection_agents = project_agents.intersection(user_agents)
 
-                if not has_intersection:
-                    logger.warning(f"[ProjectManagement] Bloqueio de Role: {req.new_member_email} tentou ser {requested_role}, mas não possui agentes em comum com o projeto.")
+                # Validação 2: Precisa ter pelo menos 1 agente em comum
+                if not intersection_agents:
+                    logger.warning(f"[ProjectManagement] Bloqueio de Role: {req.new_member_email} sem agentes em comum com o projeto.")
                     return AddProjectMemberResponse(
                         success=False, 
-                        message=f"O usuário {req.new_member_email} não possui acesso às ferramentas (Agentes) necessárias para este projeto. Ele só pode ser adicionado como 'Leitor (Viewer)'."
+                        message=f"O usuário {req.new_member_email} não possui acesso às ferramentas (Agentes) necessárias para este projeto. Ele só pode ser 'Leitor (Viewer)'."
                     )
+                
+                # Validação 3: Se for Owner, TEM QUE TER um agente 'generator' na intersecção
+                if requested_role == "owner":
+                    has_generator = any("generator" in str(agent).lower() for agent in intersection_agents)
+                    if not has_generator:
+                        logger.warning(f"[ProjectManagement] Bloqueio de Owner: {req.new_member_email} não possui agente 'generator' na intersecção.")
+                        return AddProjectMemberResponse(
+                            success=False, 
+                            message=f"Para ser Admin (Owner), o usuário {req.new_member_email} precisa ter permissão de geração ('generator') nas ferramentas deste projeto."
+                        )
         # ==========================================================
 
         new_member = {
@@ -278,21 +287,19 @@ async def update_project_members(
                 )
 
         # ==========================================================
-        # 🚀 VALIDAÇÃO DE INTERSECÇÃO DE AGENTES AO ATUALIZAR ROLE
+        # 🚀 VALIDAÇÕES DE GRUPOS E REGRA DO 'GENERATOR' AO ATUALIZAR
         # ==========================================================
         project_group_id = getattr(project, "assigned_group_id", None)
         if not project_group_id and isinstance(project, dict):
             project_group_id = project.get("assigned_group_id")
 
         if project_group_id:
-            # 1. Pega os Agentes do Projeto (Fora do loop para otimizar o banco)
             project_group = await mongo_service.get_group_by_id(str(project_group_id))
             project_agents = set()
             if project_group:
                 agents = getattr(project_group, "allowed_agents", []) if not isinstance(project_group, dict) else project_group.get("allowed_agents", [])
                 project_agents = set(agents)
 
-            # 2. Varre os usuários enviados na requisição
             for incoming_member in req.members:
                 requested_role = str(incoming_member.get("role", "")).lower()
                 target_email = incoming_member.get("email")
@@ -306,7 +313,6 @@ async def update_project_members(
                     if not target_user_groups_raw and isinstance(target_user, dict):
                         target_user_groups_raw = target_user.get("group_ids", [])
 
-                    # 3. Pega os Agentes do Usuário Alvo
                     user_agents = set()
                     for g_id in target_user_groups_raw:
                         u_group = await mongo_service.get_group_by_id(str(g_id))
@@ -314,15 +320,26 @@ async def update_project_members(
                             a = getattr(u_group, "allowed_agents", []) if not isinstance(u_group, dict) else u_group.get("allowed_agents", [])
                             user_agents.update(a)
 
-                    # 4. Cruza os dados
-                    has_intersection = bool(project_agents.intersection(user_agents))
+                    # Pegamos a intersecção de agentes
+                    intersection_agents = project_agents.intersection(user_agents)
 
-                    if not has_intersection:
+                    # Validação 2: Sem intersecção, bloqueia.
+                    if not intersection_agents:
                         logger.warning(f"[ProjectManagement] Bloqueio de Update Role: {target_email} tentou ser {requested_role}, sem intersecção de agentes.")
                         return UpdateProjectMembersResponse(
                             success=False, 
-                            message=f"Não é possível promover {target_email} a {requested_role.capitalize()}. Ele não possui acesso aos Agentes (ferramentas) deste projeto e só pode ser 'Leitor (Viewer)'."
+                            message=f"Não é possível promover {target_email} a {requested_role.capitalize()}. Ele não possui acesso aos Agentes deste projeto e só pode ser 'Leitor (Viewer)'."
                         )
+                    
+                    # Validação 3: Para ser Owner, exige pelo menos 1 agente 'generator' na intersecção
+                    if requested_role == "owner":
+                        has_generator = any("generator" in str(agent).lower() for agent in intersection_agents)
+                        if not has_generator:
+                            logger.warning(f"[ProjectManagement] Bloqueio de Update Owner: {target_email} não tem agentes 'generator' na intersecção.")
+                            return UpdateProjectMembersResponse(
+                                success=False,
+                                message=f"Não é possível promover {target_email} a Admin (Owner) pois ele não possui permissão de geração ('generator') na especialidade do projeto."
+                            )
         # ==========================================================
                 
         result = await mongo_service.update_project_members(project_id, req.members)
