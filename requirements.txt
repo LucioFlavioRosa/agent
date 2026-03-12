@@ -22,3 +22,4 @@ cachetools>=5.3.0
 python-docx
 aiohttp>=3.9.0
 aioboto3
+azure-data-tables>=12.4.0
