@@ -20,7 +20,7 @@ class LLMService:
         self, 
         prompt: str, 
         modelo: str = "anthropic.claude-3-5-sonnet-20240620-v1:0",
-        max_tokens: int = 20000,
+        max_tokens: int = 30000,
         temperature: float = 0.0,
         company_id: str = "default",
         group_id: Optional[str] = None
