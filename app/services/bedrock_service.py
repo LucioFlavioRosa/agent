@@ -24,8 +24,8 @@ class LLMService:
         temperature: float = 0.0,
         company_id: str = "default",
         group_id: Optional[str] = None
-    ) -> str:
-        """Chama o Bedrock de forma ASSÍNCRONA para gerar o código HTML"""
+    ) -> tuple: # 🚀 AGORA RETORNA UMA TUPLA (texto, in_tokens, out_tokens)
+        """Chama o Bedrock de forma ASSÍNCRONA e retorna texto e tokens consumidos"""
 
         try:
             print(f"📡 [BEDROCK] Iniciando geração para Empresa {company_id} e Grupo {group_id}...", flush=True)
@@ -66,14 +66,14 @@ class LLMService:
                 ]
             }
 
-            # 3. Configurações de timeout para geração de código longo
+            # 3. Configurações de timeout
             aws_config = Config(
-                read_timeout=300,  # 5 minutos para o Claude pensar e gerar o HTML completo
+                read_timeout=300,  
                 connect_timeout=60,
                 retries={'max_attempts': 3, 'mode': 'standard'}
             )
 
-            # 4. 🚀 CHAMADA ASSÍNCRONA COM AIOBOTO3
+            # 4. CHAMADA ASSÍNCRONA
             session = aioboto3.Session(
                 aws_access_key_id=aws_access_key,
                 aws_secret_access_key=aws_secret_key,
@@ -88,14 +88,19 @@ class LLMService:
                     body=json.dumps(body)
                 )
 
-                # No aioboto3, a leitura do streaming do body precisa de 'await'
                 response_body_bytes = await response['body'].read()
                 response_body = json.loads(response_body_bytes)
                 
+                # 🚀 EXTRAÇÃO DOS TOKENS
                 texto_gerado = response_body.get('content', [{}])[0].get('text', '')
+                usage = response_body.get('usage', {})
+                input_tokens = usage.get('input_tokens', 0)
+                output_tokens = usage.get('output_tokens', 0)
                 
-                print(f"✅ [BEDROCK] Geração concluída com sucesso para Empresa {company_id}!", flush=True)
-                return texto_gerado
+                print(f"✅ [BEDROCK] Sucesso! Tokens In: {input_tokens} | Out: {output_tokens}", flush=True)
+                
+                # 🚀 DEVOLVE O TEXTO E AS MÉTRICAS
+                return texto_gerado, input_tokens, output_tokens
 
         except Exception as e:
             print(f"❌ [BEDROCK] Erro na chamada para Empresa {company_id}: {str(e)}", flush=True)
