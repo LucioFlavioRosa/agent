@@ -1,19 +1,24 @@
-import json
 import logging
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, List
+from azure.data.tables.aio import TableServiceClient
+from azure.core.exceptions import ResourceExistsError
 
-from app.services.blob_storage_service import BlobStorageService
-
-logger = logging.getLogger("mcp_prototype.llm_audit_service")
+logger = logging.getLogger("mcp.llm_audit_service")
 
 class LLMAuditService:
-    def __init__(self, blob_storage_service: BlobStorageService):
+    def __init__(self, vault_service):
         """
-        Serviço dedicado para auditoria e FinOps (controle de custos LLM).
-        Reaproveita o blob_storage_service já instanciado no sistema.
+        Serviço de auditoria conectando diretamente ao Azure Table Storage.
+        Recebe o vault_service para puxar as credenciais.
         """
-        self.blob_storage = blob_storage_service
+        self.vault_service = vault_service
+        self.table_name = "LLMUsageMetrics" # Nome da Tabela na Azure
+
+    def _normalize_group_id(self, group_id: Any) -> Optional[str]:
+        if isinstance(group_id, list):
+            return str(group_id[0]) if group_id else None
+        return str(group_id) if group_id else None
 
     async def save_usage_metrics(
         self,
@@ -27,42 +32,59 @@ class LLMAuditService:
         output_tokens: int,
         group_ids: Optional[Any] = None
     ) -> bool:
-        """
-        Monta o registro de uso de tokens e salva como JSON no Blob Storage.
-        """
+        """Salva a interação do usuário como uma linha estruturada na Tabela Azure."""
         try:
-            audit_record = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "user_email": user_email,
-                "company_id": company_id,
-                "group_ids": group_ids,
-                "project_id": project_id,
-                "job_id": job_id,
-                "agent_type": analysis_type,
-                "model_name": model_name,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens
-            }
-
-            # Converte o registro para bytes no formato JSON
-            audit_bytes = json.dumps(audit_record, indent=4).encode('utf-8')
-
-            # Salva o arquivo de auditoria na mesma pasta do Job no Blob Storage
-            await self.blob_storage.save_document(
-                company_id=company_id,
-                project_id=project_id,
-                job_id=job_id,
-                file_data=audit_bytes,
-                filename="llm_usage_metrics.json",
-                group_id=group_ids
+            safe_group_id = self._normalize_group_id(group_ids)
+            
+            # 1. Pega a mesma Connection String usada para os Blobs
+            conn_str = await self.vault_service.get_secret(
+                base_name='blobstorage-connection-string', 
+                company_id=company_id, 
+                group_id=safe_group_id,
+                vault_type='infra'
             )
             
-            print(f"✅ [AUDITORIA] Métricas salvadas via LLMAuditService (Tokens: {input_tokens + output_tokens}).", flush=True)
+            if not conn_str:
+                logger.error("[AUDITORIA] Connection string não encontrada.")
+                return False
+
+            # 2. Conecta no serviço de Tabelas da Azure
+            table_service_client = TableServiceClient.from_connection_string(conn_str=conn_str)
+            
+            async with table_service_client:
+                # 3. Cria a tabela se não existir (só executa a criação na primeira vez)
+                try:
+                    await table_service_client.create_table(table_name=self.table_name)
+                except ResourceExistsError:
+                    pass # Se já existe, segue o jogo!
+                    
+                table_client = table_service_client.get_table_client(table_name=self.table_name)
+                
+                # 4. Estrutura da Linha (Entidade)
+                # PartitionKey: Agrupa os dados. Agrupar por Empresa facilita consultar "Quanto a empresa X gastou?"
+                # RowKey: Identificador único da linha no banco.
+                entity = {
+                    "PartitionKey": company_id,
+                    "RowKey": f"{project_id}_{job_id}",
+                    "TimestampUTC": datetime.utcnow().isoformat(),
+                    "UserEmail": user_email,
+                    "ProjectID": project_id,
+                    "JobID": job_id,
+                    "AgentType": analysis_type,
+                    "ModelName": model_name,
+                    "InputTokens": input_tokens,
+                    "OutputTokens": output_tokens,
+                    "TotalTokens": input_tokens + output_tokens,
+                    "GroupIDs": str(group_ids)
+                }
+
+                # 5. Adiciona a linha na tabela
+                await table_client.create_entity(entity=entity)
+            
+            print(f"✅ [AUDITORIA FINOPS] Métricas registradas na Tabela '{self.table_name}' (Tokens: {input_tokens + output_tokens}).", flush=True)
             return True
             
         except Exception as audit_err:
-            # Logamos o erro, mas retornamos False em vez de quebrar (Crash) a aplicação
-            print(f"⚠️ [AVISO - AUDITORIA] Falha ao salvar a auditoria no Blob: {audit_err}", flush=True)
+            print(f"⚠️ [AVISO - AUDITORIA] Falha ao salvar na Azure Table: {audit_err}", flush=True)
             logger.error(f"Erro no LLMAuditService: {audit_err}")
             return False
