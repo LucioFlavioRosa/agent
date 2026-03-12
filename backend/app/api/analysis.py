@@ -188,14 +188,13 @@ async def start_analysis(
     strategy: str = Form("checkout"),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id}
+    payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id, "strategy": strategy}
     log_request_received(endpoint="/analysis/start", payload=payload)
 
     if arquivo_docx: validate_file_extension(arquivo_docx)
     if arquivo_identidade: validate_file_extension(arquivo_identidade)
 
     user, company_id = await validate_user_and_company(email, mongo_service)
-    grupos_do_usuario = getattr(user, "group_ids", [])
     
     # 1. CRIA OU BUSCA O PROJETO (passando o grupo associado)
     project_id, nome_projeto_final = await get_or_create_project(
@@ -233,7 +232,6 @@ async def start_analysis(
     if not project_group_doc:
          raise HTTPException(status_code=404, detail=f"Grupo associado ({project_group_id}) não encontrado.")
          
-    # Descobre o sufixo (ex: "digital", "sap") a partir dos agentes do grupo original do projeto
     project_agents = project_group_doc.get("allowed_agents", [])
     project_suffix = "digital" # Fallback de segurança
     for pa in project_agents:
@@ -242,7 +240,6 @@ async def start_analysis(
             project_suffix = parts[-1]
             break
 
-    # Monta o nome exato do agente que o sistema precisa invocar agora:
     target_agent_name = f"agent_{str(category).strip().lower()}_{str(action).strip().lower()}_{project_suffix}"
     logger.info(f"🎯 [AgentResolver] O projeto exige o agente: '{target_agent_name}'")
 
@@ -253,7 +250,6 @@ async def start_analysis(
     user_groups_cursor = mongo_service.db.groups.find({"_id": {"$in": user_group_ids}})
     user_groups = await user_groups_cursor.to_list(length=100)
     
-    # Junta todos os agentes de todos os grupos do usuário atual (O Rafael)
     user_allowed_agents = set()
     for g in user_groups:
          for agent in g.get("allowed_agents", []):
@@ -261,14 +257,12 @@ async def start_analysis(
              
     logger.info(f"👤 [AgentResolver] Agentes disponíveis para o usuário {email}: {list(user_allowed_agents)}")
 
-    # A grande validação: O usuário tem a ferramenta certa na mochila?
     if target_agent_name not in user_allowed_agents:
          raise HTTPException(
              status_code=403, 
              detail=f"Seu usuário não possui permissão para utilizar o agente '{target_agent_name}' necessário para esta etapa."
          )
          
-    # Passou na validação! Define o agente final para enviar ao MCP
     analysis_type = target_agent_name
 
     # 5. VALIDA O AGENTE NO MCP
@@ -279,11 +273,8 @@ async def start_analysis(
     # ==========================================
     # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM PARA O MCP
     # ==========================================
-    # Pega as dependências base do dicionário global
     reports_to_read = list(CATEGORY_DEPENDENCIES.get(category, []))
     
-    # 🚀 O PULO DO GATO PARA O MCP:
-    # Se a ação for 'reviwer', o agente obrigatoriamente precisa ler o documento da própria categoria!
     if action == "reviwer" and category not in reports_to_read:
         reports_to_read.append(category)
 
@@ -302,19 +293,26 @@ async def start_analysis(
         target_category = past_report.get("report_category")
         historical_tree = await get_historical_lineage(base_job_id, mongo_service.db)
         
+        # 🚀 REGRAS DE ESTRATÉGIA CORRIGIDAS AQUI 🚀
         for cat in reports_to_read:
             if cat == target_category:
-                # 🚀 Aqui ele adiciona a própria Feature base para o MCP ler!
+                # O próprio documento que está sendo refinado deve vir obrigatoriamente do histórico (base_job_id)
                 context_used[f"{cat}_job_id"] = base_job_id
             else:
                 if strategy == "rebase":
+                    # MODO CASCATA: Ignora o passado. Busca a dependência na versão mais nova (latest_reports).
+                    # Se não tiver a versão nova, fallback para a versão histórica.
                     dependency_job_id = latest_reports_db.get(cat) or historical_tree.get(cat)
+                    logger.info(f"🔄 [Estratégia] Rebase para '{cat}': Puxando a versão mais moderna do projeto -> {dependency_job_id}")
                 else:
-                    dependency_job_id = historical_tree.get(cat) or latest_reports_db.get(cat)
+                    # MODO CONGELADA (Checkout): Usa a exata versão que o passado apontava.
+                    dependency_job_id = historical_tree.get(cat)
+                    logger.info(f"❄️ [Estratégia] Checkout para '{cat}': Puxando do histórico congelado -> {dependency_job_id}")
                 
                 if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
                 context_used[f"{cat}_job_id"] = dependency_job_id
 
+        # Se for checkout, devemos fazer "Rollback" no estado atual do projeto para refletir a árvore congelada que acabamos de montar.
         if strategy == "checkout":
             new_latest_state = {}
             for cat, j_id in context_used.items():
@@ -323,6 +321,7 @@ async def start_analysis(
             await mongo_service.update_project_latest_reports(project_id, new_latest_state)
 
     else:
+        # AÇÃO DE GENERATOR (Nova criação sem base)
         for cat in reports_to_read:
             dependency_job_id = latest_reports_db.get(cat)
             if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada para gerar {category}.")
@@ -361,7 +360,7 @@ async def start_analysis(
         project_id=project_id, job_id=job_id, nome_projeto=nome_projeto_final
     )
     return response_obj
-
+    
 # ============================================================================
 # 🚀 ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO) - CORRIGIDA! 🚀
 # ============================================================================
