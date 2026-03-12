@@ -144,7 +144,6 @@ async def add_project_member(
                 success=False, 
                 message=f"O usuário {req.new_member_email} já possui acesso a este projeto. Utilize a lista abaixo para atualizar ou remover seu acesso."
             )
-    # ==========================================================
 
     permission_service = PermissionService(mongo_service)
     redis_session_service = RedisSessionService()
@@ -170,7 +169,7 @@ async def add_project_member(
             return AddProjectMemberResponse(success=False, message="Ação negada: Este usuário não pertence à mesma empresa deste projeto.")
         
         # ==========================================================
-        # 🚀 VALIDAÇÃO 2: REGRA DE NEGÓCIO DE GRUPOS (OWNER/EDITOR)
+        # 🚀 VALIDAÇÃO 2: INTERSECÇÃO DE AGENTES (OWNER/EDITOR)
         # ==========================================================
         requested_role = str(req.role.value).lower()
         
@@ -178,19 +177,36 @@ async def add_project_member(
             project_group_id = getattr(project, "assigned_group_id", None)
             if not project_group_id and isinstance(project, dict):
                 project_group_id = project.get("assigned_group_id")
-            project_group_id = str(project_group_id) if project_group_id else ""
+            
+            if project_group_id:
+                # 1. Busca os Agentes permitidos no Grupo do Projeto
+                project_group = await mongo_service.get_group_by_id(str(project_group_id))
+                project_agents = set()
+                if project_group:
+                    agents = getattr(project_group, "allowed_agents", []) if not isinstance(project_group, dict) else project_group.get("allowed_agents", [])
+                    project_agents = set(agents)
 
-            new_user_groups_raw = getattr(new_user, "group_ids", [])
-            if not new_user_groups_raw and isinstance(new_user, dict):
-                new_user_groups_raw = new_user.get("group_ids", [])
-            new_user_groups = [str(g) for g in new_user_groups_raw]
+                # 2. Busca TODOS os Agentes de TODOS os Grupos do Usuário
+                new_user_groups_raw = getattr(new_user, "group_ids", [])
+                if not new_user_groups_raw and isinstance(new_user, dict):
+                    new_user_groups_raw = new_user.get("group_ids", [])
+                
+                user_agents = set()
+                for g_id in new_user_groups_raw:
+                    u_group = await mongo_service.get_group_by_id(str(g_id))
+                    if u_group:
+                        a = getattr(u_group, "allowed_agents", []) if not isinstance(u_group, dict) else u_group.get("allowed_agents", [])
+                        user_agents.update(a) # Adiciona ao Set (sem duplicar)
 
-            if project_group_id and project_group_id not in new_user_groups:
-                logger.warning(f"[ProjectManagement] Bloqueio de Role: {req.new_member_email} tentou ser {requested_role}, mas não possui o grupo {project_group_id}.")
-                return AddProjectMemberResponse(
-                    success=False, 
-                    message=f"O usuário {req.new_member_email} não pertence à especialidade deste projeto. Portanto, ele só pode ser adicionado como 'Leitor (Viewer)'."
-                )
+                # 3. A Mágica: Existe intersecção entre os agentes do projeto e os do usuário?
+                has_intersection = bool(project_agents.intersection(user_agents))
+
+                if not has_intersection:
+                    logger.warning(f"[ProjectManagement] Bloqueio de Role: {req.new_member_email} tentou ser {requested_role}, mas não possui agentes em comum com o projeto.")
+                    return AddProjectMemberResponse(
+                        success=False, 
+                        message=f"O usuário {req.new_member_email} não possui acesso às ferramentas (Agentes) necessárias para este projeto. Ele só pode ser adicionado como 'Leitor (Viewer)'."
+                    )
         # ==========================================================
 
         new_member = {
@@ -209,6 +225,7 @@ async def add_project_member(
     except Exception as e:
         logger.error(f"Erro add_project_member: {e}")
         return AddProjectMemberResponse(success=False, message=str(e))
+        
 @router.put("/members", response_model=UpdateProjectMembersResponse, tags=["Project Management"])
 async def update_project_members(
     req: UpdateProjectMembersRequest = Body(...),
@@ -261,36 +278,50 @@ async def update_project_members(
                 )
 
         # ==========================================================
-        # 🚀 VALIDAÇÃO DE GRUPOS AO ATUALIZAR ROLE (IGUAL NO ADD)
+        # 🚀 VALIDAÇÃO DE INTERSECÇÃO DE AGENTES AO ATUALIZAR ROLE
         # ==========================================================
         project_group_id = getattr(project, "assigned_group_id", None)
         if not project_group_id and isinstance(project, dict):
             project_group_id = project.get("assigned_group_id")
-        project_group_id = str(project_group_id) if project_group_id else ""
 
         if project_group_id:
-            # Varre todos os membros que vieram na requisição
+            # 1. Pega os Agentes do Projeto (Fora do loop para otimizar o banco)
+            project_group = await mongo_service.get_group_by_id(str(project_group_id))
+            project_agents = set()
+            if project_group:
+                agents = getattr(project_group, "allowed_agents", []) if not isinstance(project_group, dict) else project_group.get("allowed_agents", [])
+                project_agents = set(agents)
+
+            # 2. Varre os usuários enviados na requisição
             for incoming_member in req.members:
                 requested_role = str(incoming_member.get("role", "")).lower()
                 target_email = incoming_member.get("email")
                 
-                # Só importa checar quem está ganhando poder de Owner ou Editor
                 if requested_role in ["owner", "editor"]:
                     target_user = await mongo_service.get_user_by_email(target_email)
                     if not target_user:
-                        continue # Se o user não existe no banco, deixa falhar mais pra frente
+                        continue 
                     
                     target_user_groups_raw = getattr(target_user, "group_ids", [])
                     if not target_user_groups_raw and isinstance(target_user, dict):
                         target_user_groups_raw = target_user.get("group_ids", [])
-                    target_user_groups = [str(g) for g in target_user_groups_raw]
 
-                    # A Trava de Ouro: Se o projeto tem grupo e o usuário não está nele, barra a atualização inteira!
-                    if project_group_id not in target_user_groups:
-                        logger.warning(f"[ProjectManagement] Bloqueio de Update Role: {target_email} tentou ser promovido para {requested_role}, mas não pertence ao grupo {project_group_id}.")
+                    # 3. Pega os Agentes do Usuário Alvo
+                    user_agents = set()
+                    for g_id in target_user_groups_raw:
+                        u_group = await mongo_service.get_group_by_id(str(g_id))
+                        if u_group:
+                            a = getattr(u_group, "allowed_agents", []) if not isinstance(u_group, dict) else u_group.get("allowed_agents", [])
+                            user_agents.update(a)
+
+                    # 4. Cruza os dados
+                    has_intersection = bool(project_agents.intersection(user_agents))
+
+                    if not has_intersection:
+                        logger.warning(f"[ProjectManagement] Bloqueio de Update Role: {target_email} tentou ser {requested_role}, sem intersecção de agentes.")
                         return UpdateProjectMembersResponse(
                             success=False, 
-                            message=f"Não é possível promover {target_email} a {requested_role.capitalize()}. Este usuário não pertence à especialidade deste projeto e só pode ser 'Leitor (Viewer)'."
+                            message=f"Não é possível promover {target_email} a {requested_role.capitalize()}. Ele não possui acesso aos Agentes (ferramentas) deste projeto e só pode ser 'Leitor (Viewer)'."
                         )
         # ==========================================================
                 
