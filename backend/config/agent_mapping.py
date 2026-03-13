@@ -4,7 +4,6 @@ AGENT_TO_CATEGORY = {
     "agent_features_generator_digital": "features",
     "agent_features_reviwer_digital": "features",
     "agent_timeline_generator_digital": "timeline",
-    "agent_timeline_reviwer_digital": "timeline",
     "agent_risks_generator_digital": "risks",
     "agent_risks_reviwer_digital": "risks",
     "agent_prototype_generator_digital": "prototype",
