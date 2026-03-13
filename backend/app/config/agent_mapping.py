@@ -29,12 +29,6 @@ AGENT_CONFIG = {
         "llm_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "service": "claude_aws_service"
     },
-    "agent_timeline_reviwer_digital": {
-        "prompt_file": "review_timeline.md",
-        "output_filename": "timeline.md",
-        "llm_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-        "service": "claude_aws_service"
-    },
     "agent_risks_generator_digital": {
         "prompt_file": "create_risks.md",
         "output_filename": "risks.md",
