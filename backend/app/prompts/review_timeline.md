@@ -19,8 +19,7 @@ Sua missão é aplicar as alterações mantendo a coerência financeira e técni
 Você **NÃO PODE** adicionar campos novos (como "status_mudanca", "diff", "nota").
 Você **NÃO PODE** alterar nomes de chaves existentes.
 Você deve devolver o JSON **exatamente** com a mesma estrutura de campos do original, apenas alterando os **valores** dentro deles.
-
-
+**É proibido qualquer conteúdo fora do json**
 
 ## 5. EXEMPLO DE LÓGICA OBRIGATÓRIA (Sequenciamento por Restrição)
 
@@ -30,7 +29,7 @@ Você deve devolver o JSON **exatamente** com a mesma estrutura de campos do ori
 * `"atividades_focadas"`: (String) Atualize a descrição se a atividade mudar.
 * `"progresso_estimado"`: (String) Atualize a %.
 * `"justificativa_agendamento"`: (String) Use este campo JÁ EXISTENTE para explicar a mudança. **Não crie um campo novo para explicar.**
-
+**É proibido qualquer conteúdo fora do json**
 
 ```json
 {
