@@ -30,12 +30,6 @@
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
       "report_fields": ["report"]
     }, 
-  "agent_timeline_reviwer_digital": {
-      "analysis_type": "agent_timeline_reviwer_digital",
-      "agent_name": "Revisor de Timeline",
-      "mcp_service_url": "https://app-codeai-backend-dev--mcp-org-projetos-fpe8eygbeffef7bf.centralus-01.azurewebsites.net", 
-      "report_fields": ["report"]
-    },
   "agent_risks_generator_digital": {
       "analysis_type": "agent_risks_generator_digital",
       "agent_name": "Riscos",
