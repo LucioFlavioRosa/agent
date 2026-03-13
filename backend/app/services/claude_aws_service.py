@@ -1,9 +1,9 @@
 import json
 import logging
 import sys
-from typing import Optional
+from typing import Optional, Tuple
 import aioboto3
-from botocore.config import Config # 🚀 IMPORT NOVO AQUI
+from botocore.config import Config
 from azure.keyvault.secrets.aio import SecretClient
 
 from backend.app.services.vault_service import VaultService
@@ -15,7 +15,8 @@ class ClaudeAWSService:
     def __init__(self, vault_service: VaultService):
         self.vault_service = vault_service
 
-    async def gerar_texto(self, prompt: str, modelo: str, company_id: str, group_id: Optional[str] = None) -> str:
+    # 🚀 AGORA RETORNA UMA TUPLA COM OS TOKENS 🚀
+    async def gerar_texto(self, prompt: str, modelo: str, company_id: str, group_id: Optional[str] = None) -> Tuple[str, int, int]:
         print(f"🚀 [TESTE DEBUG] Chegou na função da AWS! Empresa: {company_id}", flush=True)
         logger.info(f"llm_invocacao_iniciada | company_id={company_id} | group_id={group_id} | modelo={modelo}")
         
@@ -32,9 +33,6 @@ class ClaudeAWSService:
             
         model_id = modelo or "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
         
-        # ==========================================================
-        # 🚀 PRINTS RAIZ PARA GARANTIR A VISUALIZAÇÃO NO LOG
-        # ==========================================================
         tamanho_texto = len(str(prompt))
         estimativa_tokens_entrada = tamanho_texto // 4
         
@@ -74,24 +72,24 @@ class ClaudeAWSService:
                     body=json.dumps(body)
                 )
                 
-                # Se passou da linha de cima, o Claude respondeu!
                 response_body_bytes = await response['body'].read()
                 response_body = json.loads(response_body_bytes)
                 
                 content = response_body.get('content', [])
                 result = content[0].get('text', '') if content else ""
                 
+                # 🚀 EXTRAÇÃO DOS TOKENS REAIS COBRADOS PELA AWS 🚀
                 usage = response_body.get('usage', {})
                 input_tokens = usage.get('input_tokens', 0)
                 output_tokens = usage.get('output_tokens', 0)
                 
                 print(f"✅ [AWS SUCESSO] O Claude terminou o relatório! Tokens Faturados -> Entrada: {input_tokens} | Saída: {output_tokens}", flush=True)
                 
-                return result
+                # RETORNA A TUPLA DE TRÊS ITENS
+                return result, input_tokens, output_tokens
                 
         except Exception as e:
             print(f"❌ [AWS ERRO FATAL] Falha na comunicação com o Bedrock: {e}", flush=True)
-            raise RuntimeError(f"Erro ao comunicar com AWS Bedrock: {e}") from e
             logger.error(f"llm_invocacao_erro | company_id={company_id} | modelo={model_id} | region={aws_region} | erro={str(e)}")
             sys.stdout.flush()
             raise RuntimeError(f"Erro ao comunicar com AWS Bedrock: {e}") from e
