@@ -5,6 +5,8 @@ import re
 
 from backend.app.services.context_retrieval_service import ContextRetrievalService
 from backend.app.services.blob_storage_service import BlobStorageService
+# 🚀 IMPORTANDO O SERVIÇO DE AUDITORIA
+from backend.app.services.llm_audit_service import LLMAuditService
 from backend.app.config.agent_mapping import AGENT_CONFIG
 from backend.app.utils.log_formatter import StructuredLogger
 
@@ -21,16 +23,22 @@ class AgentService:
         self.context_retrieval = context_retrieval_service
         self.blob_storage = blob_storage_service
         self.llm_services = llm_services
+        
+        # 🚀 INSTANCIANDO O SERVIÇO DE AUDITORIA PASSANDO O VAULT (QUE ESTÁ DENTRO DO BLOB STORAGE)
+        self.audit_service = LLMAuditService(self.blob_storage.vault_service)
 
     def _obter_prompt_base(self, analysis_type: Optional[str]) -> str:
         prompt_padrao = "Você é um assistente de IA corporativo. Faça uma análise do documento fornecido."
         logger.log_entrada_funcao("_obter_prompt_base", mensagem="Obtendo prompt base", extra={"analysis_type": analysis_type})
+        
         if not analysis_type or analysis_type not in AGENT_CONFIG:
             logger.log_info_negocio("prompt_fallback", "Agente não mapeado, usando prompt padrão.", extra={"analysis_type": analysis_type})
             return prompt_padrao
+            
         nome_arquivo_prompt = AGENT_CONFIG[analysis_type]["prompt_file"]
         diretorio_base = Path(__file__).resolve().parent.parent
         caminho_arquivo = diretorio_base / "prompts" / nome_arquivo_prompt
+        
         try:
             if caminho_arquivo.exists() and caminho_arquivo.is_file():
                 logger.log_info_negocio("prompt_base_encontrado", f"Prompt base encontrado: {caminho_arquivo.name}", extra={"analysis_type": analysis_type})
@@ -97,6 +105,7 @@ class AgentService:
         company_id = task_payload.get("company_id")
         project_id = task_payload.get("project_id")
         group_ids = task_payload.get("group_ids")
+        user_email = task_payload.get("email", "email_nao_fornecido") # 🚀 Resgatando e-mail
         
         logger.log_entrada_funcao("executar_analise", job_id=job_id, company_id=company_id, project_id=project_id, mensagem="Início da análise IA", extra={"analysis_type": analysis_type})
         
@@ -127,10 +136,10 @@ class AgentService:
                 
             logger.log_info_negocio("chamada_llm", f"Chamando LLM para gerar resposta.", job_id=job_id, company_id=company_id, project_id=project_id, extra={"servico": nome_servico, "modelo": nome_modelo})
             
-            # 🚀 IMPRESSÃO DEFINITIVA ANTES DE ENVIAR PARA A AWS
             print(f"\n📡 DISPARANDO REQUISIÇÃO PARA {nome_servico} ({nome_modelo})...", flush=True)
 
-            resposta_llm = await llm_service.gerar_texto(
+            # 🚀 RECEBE AS TRÊS VARIÁVEIS (TEXTO E TOKENS) DA AWS
+            resposta_llm, in_tokens, out_tokens = await llm_service.gerar_texto(
                 prompt=mega_prompt, 
                 modelo=nome_modelo,
                 company_id=company_id, 
@@ -152,6 +161,22 @@ class AgentService:
                     group_id=group_ids
                 )
                 logger.log_info_negocio("blob_salvo", f"Relatório salvo em: {caminho_blob}", job_id=job_id, company_id=company_id, project_id=project_id)
+
+            # ====================================================================
+            # 🚀 SALVAR AUDITORIA NA AZURE TABLE STORAGE
+            # ====================================================================
+            await self.audit_service.save_usage_metrics(
+                company_id=company_id,
+                project_id=project_id,
+                job_id=job_id,
+                user_email=user_email,
+                analysis_type=analysis_type,
+                model_name=nome_modelo,
+                input_tokens=in_tokens,
+                output_tokens=out_tokens,
+                group_ids=group_ids
+            )
+            # ====================================================================
                 
             logger.log_saida_funcao("executar_analise", job_id=job_id, company_id=company_id, project_id=project_id, mensagem="Análise IA finalizada")
             return resposta_llm
