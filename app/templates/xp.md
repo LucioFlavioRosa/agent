@@ -37,8 +37,10 @@ A arquitetura de interface segue as padronizações do **SOMA Design System**, c
 
 **Conceito Central:** "Lighthouse" (Farol) – Foco absoluto em clareza, acessibilidade e redução da carga cognitiva, utilizando alto contraste e espaço em branco intencional.
 
-**5. Estrutura de UI e Componentes**
+**6. URL de Componentes**
+url_logo_xp: https://upload.wikimedia.org/wikipedia/pt/0/0b/XP_Investimentos_logo.png
 
+**5. Estrutura de UI e Componentes**
 * **Layout:** Utilize estruturas em *Cards* modulares para separar famílias de fundos e produtos complexos.
 * **Dashboards:** Organize em matrizes reticuladas (ex: 2x2). Priorize a escaneabilidade numérica com hierarquia vertical de empilhamento (ex: Nome do Fundo acima do Valor Total em tamanho massivo).
 * **Mega-Footer:** É inegociável. Deve conter badges das lojas de aplicativos, matriz de links, contatos de atendimento (incluindo acessibilidade em Libras) e o bloco final com avisos regulatórios e CNPJ.
