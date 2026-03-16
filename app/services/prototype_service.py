@@ -7,6 +7,7 @@ from typing import Optional
 
 from app.services.context_retrieval_service import ContextRetrievalService
 from app.services.blob_storage_service import BlobStorageService
+# 🚀 Importando o novo serviço de auditoria
 from app.services.llm_audit_service import LLMAuditService 
 from app.config.agent_mapping import AGENT_CONFIG
 from app.utils.log_formatter import StructuredLogger
@@ -51,9 +52,15 @@ class AgentService:
             logger.log_erro("erro_leitura_prompt_base", f"Erro ao ler prompt: {e}")
             return prompt_padrao
 
-    # 🚀 NOVA FUNÇÃO: Leitor dinâmico da pasta templates
+    # ====================================================================
+    # 🚀 NOVA FUNÇÃO COM TRACKING COMPLETO PARA DEBUG DE TEMPLATES
+    # ====================================================================
     def _obter_template_empresa(self, company_template: Optional[str]) -> str:
-        if not company_template:
+        print(f"\n🔍 [DEBUG TEMPLATE] Iniciando busca por template...", flush=True)
+        print(f"   -> Valor recebido do payload (company_template): '{company_template}'", flush=True)
+        
+        if not company_template or str(company_template).strip() == "":
+            print(f"   -> Nenhum template selecionado no front. Seguindo com design padrão.", flush=True)
             return ""
             
         # Normaliza o nome (ex: "Porto Seguro" vira "portoseguro.md")
@@ -62,18 +69,32 @@ class AgentService:
             nome_arquivo += ".md"
             
         diretorio_base = Path(__file__).resolve().parent.parent
-        caminho_arquivo = diretorio_base / "templates" / nome_arquivo
+        pasta_templates = diretorio_base / "templates"
+        caminho_arquivo = pasta_templates / nome_arquivo
+        
+        print(f"   -> Caminho absoluto da pasta templates: {pasta_templates.absolute()}", flush=True)
+        print(f"   -> Caminho absoluto esperado do arquivo: {caminho_arquivo.absolute()}", flush=True)
         
         try:
-            if caminho_arquivo.exists() and caminho_arquivo.is_file():
-                print(f"🎨 [TEMPLATE] Injetando Design System de '{nome_arquivo}'", flush=True)
-                return caminho_arquivo.read_text(encoding="utf-8")
+            # 🚀 Lista todos os arquivos da pasta para tirar a prova dos nove
+            if pasta_templates.exists() and pasta_templates.is_dir():
+                arquivos_na_pasta = [f.name for f in pasta_templates.iterdir() if f.is_file()]
+                print(f"   -> Arquivos encontrados dentro da pasta 'templates': {arquivos_na_pasta}", flush=True)
             else:
-                print(f"⚠️ [TEMPLATE] Arquivo '{nome_arquivo}' não encontrado na pasta templates.", flush=True)
+                print(f"   -> ⚠️ AVISO: A pasta 'templates' NÃO EXISTE fisicamente no servidor!", flush=True)
+
+            if caminho_arquivo.exists() and caminho_arquivo.is_file():
+                conteudo = caminho_arquivo.read_text(encoding="utf-8")
+                print(f"✅ [TEMPLATE] Design System de '{nome_arquivo}' injetado com sucesso! (Tamanho: {len(conteudo)} chars)", flush=True)
+                return conteudo
+            else:
+                print(f"⚠️ [TEMPLATE] Arquivo '{nome_arquivo}' não encontrado. O protótipo será gerado sem template específico.", flush=True)
                 return ""
         except Exception as e:
-            print(f"❌ [ERRO] Falha ao ler template {nome_arquivo}: {e}", flush=True)
+            print(f"❌ [ERRO TEMPLATE] Falha ao ler template {nome_arquivo}: {e}", flush=True)
+            traceback.print_exc()
             return ""
+    # ====================================================================
 
     async def _montar_prompt(
         self, 
@@ -85,7 +106,7 @@ class AgentService:
         project_id: str,
         context_used: dict,
         group_ids: Optional[str] = None,
-        company_template: Optional[str] = None # 🚀 NOVO PARÂMETRO OPCIONAL
+        company_template: Optional[str] = None
     ) -> str:
         
         print(f"\n{'='*60}\n🔍 [DEBUG PROTÓTIPO] MONTAGEM DO PROMPT\n{'='*60}", flush=True)
@@ -146,7 +167,7 @@ class AgentService:
                 project_id=project_id,
                 context_used=task_payload.get("context_used", {}), 
                 group_ids=group_ids,
-                company_template=company_template # 🚀 REPASSA PARA O MONTADOR DE PROMPT
+                company_template=company_template 
             )
             
             config_agente = AGENT_CONFIG.get(analysis_type, {})
