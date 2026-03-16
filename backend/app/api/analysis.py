@@ -185,9 +185,9 @@ async def get_or_create_project(
 async def start_analysis(
     email: Optional[str] = Form(None),
     nome_projeto: Optional[str] = Form(None),
-    category: str = Form(...), # "epics", "features", "timeline", "risks"
-    action: str = Form(...),   # "generator", "reviwer"
-    assigned_group_id: Optional[str] = Form(None), # Necessário apenas na criação do projeto
+    category: str = Form(...), # "epics", "features", "timeline", "risks", "prototype"
+    action: str = Form(...),   # "generator", "reviwer", "fromepic"
+    assigned_group_id: Optional[str] = Form(None), 
     branch: Optional[str] = Form(None),
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
@@ -195,10 +195,11 @@ async def start_analysis(
     arquivo_identidade: Optional[UploadFile] = File(None),
     base_job_id: Optional[str] = Form(None), 
     strategy: str = Form("checkout"),
-    company_template: Optional[str] = Form(None), # 🚀 TEMPLATE DA EMPRESA
+    company_template: Optional[str] = Form(None),
+    target_epic_id: Optional[str] = Form(None), 
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id, "strategy": strategy, "company_template": company_template}
+    payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id, "strategy": strategy, "company_template": company_template, "target_epic_id": target_epic_id}
     log_request_received(endpoint="/analysis/start", payload=payload)
 
     if arquivo_docx: validate_file_extension(arquivo_docx)
@@ -280,6 +281,7 @@ async def start_analysis(
         latest_reports_db = {}
 
     async def fetch_absolute_latest(cat_name):
+        from bson import ObjectId
         try:
             oid = ObjectId(project_id)
         except Exception:
@@ -290,6 +292,7 @@ async def start_analysis(
         )
         return latest_doc.get("job_id") if latest_doc else None
 
+    # 🚀 REGRA NOVA PARA LER O BASE_JOB_ID MESMO EM MODO GENERATOR (Para a action fromepic)
     if base_job_id:
         past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
         if not past_report: raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
@@ -297,6 +300,10 @@ async def start_analysis(
         target_category = past_report.get("report_category")
         historical_tree = await get_historical_lineage(base_job_id, mongo_service.db)
         
+        # Se for a action fromepic, nós garantimos que a linhagem epics seja mapeada!
+        if action == "fromepic":
+            context_used[f"{target_category}_job_id"] = base_job_id
+            
         for cat in reports_to_read:
             if cat == target_category:
                 context_used[f"{cat}_job_id"] = base_job_id
@@ -313,7 +320,7 @@ async def start_analysis(
                 if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
                 context_used[f"{cat}_job_id"] = dependency_job_id
 
-        if strategy == "checkout":
+        if strategy == "checkout" and action != "fromepic":
             new_latest_state = {}
             for cat, j_id in context_used.items():
                 cat_name = cat.replace("_job_id", "")
@@ -349,7 +356,8 @@ async def start_analysis(
         "company_id": company_id,
         "group_ids": [str(project_group_id)],
         "context_used": context_used,
-        "company_template": company_template # 🚀 ENVIA PARA O MCP
+        "company_template": company_template,
+        "target_epic_id": target_epic_id 
     }
     
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
