@@ -65,6 +65,6 @@
       "agent_name": "Criador de Prototipo a partir do epico",
       "mcp_service_url": "https://app-codeai-backend-dev--mcp-prototype-fqc2e3enejhzafdj.centralus-01.azurewebsites.net", 
       "report_fields": ["prototype_report"]
-    },
+    }
   }
 }
