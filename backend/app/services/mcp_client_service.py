@@ -3,36 +3,16 @@ import httpx
 import logging
 
 from typing import Any, Dict, Optional, List
-from pydantic import BaseModel, Field
-from backend.app.core.config import settings
 from fastapi import UploadFile
+from backend.app.core.config import settings
 from backend.app.utils.logging_utils import (
     log_service_call,
     log_error
 )
 
-class MCPStartAnalysisPayload(BaseModel):
-    project_id: str = Field(...)
-    job_id: str = Field(...)
-    company_id: str = Field(...)
-    group_ids: Optional[List[str]] = Field(default_factory=list)
-    email: Optional[str] = Field(None)
-    nome_projeto: Optional[str] = Field(None)
-    analysis_type: Optional[str] = Field(None)
-    branch: Optional[str] = Field(None)
-    repository: Optional[str] = Field(None)
-    comentario_extra: Optional[str] = Field(None)
-    context_used: Optional[dict] = Field(default_factory=dict)
+# 🚀 IMPORTANDO OS MODELOS DO ARQUIVO CORRETO EM VEZ DE REPETIR!
+from backend.app.models.mcp_models import MCPStartAnalysisPayload, MCPStartAnalysisResponse
 
-    @staticmethod
-    def validate_job_id(job_id):
-        if not job_id or not isinstance(job_id, str) or not job_id.strip():
-            raise ValueError('job_id é obrigatório e não pode ser vazio')
-        return job_id
-
-class MCPStartAnalysisResponse(BaseModel):
-    project_id: str
-    job_id: Optional[str] = None
 
 class MCPClientService:
     def __init__(self, base_url: str = None):
@@ -64,7 +44,8 @@ class MCPClientService:
             "branch": payload.get("branch"),
             "repository": payload.get("repository"),
             "comentario_extra": payload.get("comentario_extra"),
-            "context_used": context_used_str 
+            "context_used": context_used_str,
+            "company_template": payload.get("company_template")
         }
         
         # Retorna apenas chaves que possuem um valor real (evita mandar 'None' via form-data)
