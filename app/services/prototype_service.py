@@ -7,7 +7,6 @@ from typing import Optional
 
 from app.services.context_retrieval_service import ContextRetrievalService
 from app.services.blob_storage_service import BlobStorageService
-# 🚀 Importando o novo serviço de auditoria
 from app.services.llm_audit_service import LLMAuditService 
 from app.config.agent_mapping import AGENT_CONFIG
 from app.utils.log_formatter import StructuredLogger
@@ -52,6 +51,30 @@ class AgentService:
             logger.log_erro("erro_leitura_prompt_base", f"Erro ao ler prompt: {e}")
             return prompt_padrao
 
+    # 🚀 NOVA FUNÇÃO: Leitor dinâmico da pasta templates
+    def _obter_template_empresa(self, company_template: Optional[str]) -> str:
+        if not company_template:
+            return ""
+            
+        # Normaliza o nome (ex: "Porto Seguro" vira "portoseguro.md")
+        nome_arquivo = str(company_template).strip().lower().replace(" ", "")
+        if not nome_arquivo.endswith(".md"):
+            nome_arquivo += ".md"
+            
+        diretorio_base = Path(__file__).resolve().parent.parent
+        caminho_arquivo = diretorio_base / "templates" / nome_arquivo
+        
+        try:
+            if caminho_arquivo.exists() and caminho_arquivo.is_file():
+                print(f"🎨 [TEMPLATE] Injetando Design System de '{nome_arquivo}'", flush=True)
+                return caminho_arquivo.read_text(encoding="utf-8")
+            else:
+                print(f"⚠️ [TEMPLATE] Arquivo '{nome_arquivo}' não encontrado na pasta templates.", flush=True)
+                return ""
+        except Exception as e:
+            print(f"❌ [ERRO] Falha ao ler template {nome_arquivo}: {e}", flush=True)
+            return ""
+
     async def _montar_prompt(
         self, 
         texto_instrucoes: str, 
@@ -61,7 +84,8 @@ class AgentService:
         company_id: str,
         project_id: str,
         context_used: dict,
-        group_ids: Optional[str] = None
+        group_ids: Optional[str] = None,
+        company_template: Optional[str] = None # 🚀 NOVO PARÂMETRO OPCIONAL
     ) -> str:
         
         print(f"\n{'='*60}\n🔍 [DEBUG PROTÓTIPO] MONTAGEM DO PROMPT\n{'='*60}", flush=True)
@@ -84,11 +108,16 @@ class AgentService:
             if codigo_html_anterior:
                 prompt += f"\n\n--- CÓDIGO DO PROTÓTIPO DE REFERÊNCIA (CONFORME CONTEXTO) ---\n{codigo_html_anterior}\n\n"
 
+        # 🚀 INJETANDO AS DIRETRIZES DA EMPRESA SE EXISTIREM
+        texto_template = self._obter_template_empresa(company_template)
+        if texto_template:
+            prompt += f"--- DIRETRIZES DE UI/UX DA EMPRESA ({str(company_template).upper()}) ---\n{texto_template}\n\n"
+
         if texto_instrucoes:
             prompt += f"--- REQUISITOS DE TELA E NEGÓCIO ---\n{texto_instrucoes}\n\n"
 
         if texto_identidade:
-            prompt += f"--- DIRETRIZES DE ESTILO E CORES ---\n{texto_identidade}\n\n"
+            prompt += f"--- DIRETRIZES DE ESTILO E CORES (ARQUIVO EXTRA) ---\n{texto_identidade}\n\n"
 
         if comentario_extra:
             prompt += f"--- SOLICITAÇÃO ESPECÍFICA DO USUÁRIO ---\n{comentario_extra}\n\n"
@@ -105,6 +134,7 @@ class AgentService:
         project_id = task_payload.get("project_id")
         group_ids = task_payload.get("group_ids")
         user_email = task_payload.get("email", "email_nao_fornecido") 
+        company_template = task_payload.get("company_template") # 🚀 RESGATA DO PAYLOAD
         
         try:
             mega_prompt = await self._montar_prompt(
@@ -115,7 +145,8 @@ class AgentService:
                 company_id=company_id,
                 project_id=project_id,
                 context_used=task_payload.get("context_used", {}), 
-                group_ids=group_ids
+                group_ids=group_ids,
+                company_template=company_template # 🚀 REPASSA PARA O MONTADOR DE PROMPT
             )
             
             config_agente = AGENT_CONFIG.get(analysis_type, {})
