@@ -111,7 +111,7 @@ async def start_analysis(
     repository: Optional[str] = Form(None),
     comentario_extra: Optional[str] = Form(None),
     context_used: Optional[str] = Form(None),
-    
+    company_template: Optional[str] = Form(None),
     # Arquivos Multipart
     arquivo_docx: Optional[UploadFile] = File(None),
     arquivo_identidade: Optional[UploadFile] = File(None)
@@ -179,6 +179,7 @@ async def start_analysis(
         "blob_path": blob_path, 
         "identidade_visual_blob_path": blob_identidade_path, 
         "context_used": parsed_context,
+        "company_template": company_template
     }
     
     try:
