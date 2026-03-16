@@ -9,8 +9,6 @@ from backend.app.utils.logging_utils import (
     log_service_call,
     log_error
 )
-
-# 🚀 IMPORTANDO OS MODELOS DO ARQUIVO CORRETO EM VEZ DE REPETIR!
 from backend.app.models.mcp_models import MCPStartAnalysisPayload, MCPStartAnalysisResponse
 
 
