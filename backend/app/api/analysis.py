@@ -199,6 +199,7 @@ async def start_analysis(
     arquivo_identidade: Optional[UploadFile] = File(None),
     base_job_id: Optional[str] = Form(None), 
     strategy: str = Form("checkout"),
+    company_template: Optional[str] = Form(None),
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
     payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id, "strategy": strategy}
@@ -358,7 +359,8 @@ async def start_analysis(
         "job_id": job_id, 
         "company_id": company_id,
         "group_ids": [str(project_group_id)],
-        "context_used": context_used
+        "context_used": context_used,
+        "company_template": company_template
     }
     
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
