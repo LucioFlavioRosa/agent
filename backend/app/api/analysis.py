@@ -69,9 +69,6 @@ def get_mongo_service(request: Request) -> MongoDBService:
     return request.app.state.mongo_service
 
 def resolve_target_agent(action: str, category: str, group_agents_list: list) -> str:
-    """
-    Descobre o nome exato do agente baseado na categoria e ação.
-    """
     safe_action = str(action).strip().lower()
     safe_category = str(category).strip().lower()
     prefix = f"agent_{safe_category}_{safe_action}_"
@@ -80,7 +77,6 @@ def resolve_target_agent(action: str, category: str, group_agents_list: list) ->
     
     for agent_name in group_agents_list:
         safe_agent_name = str(agent_name).strip().lower()
-        
         if safe_agent_name.startswith(prefix):
             logger.info(f"✅ [AgentResolver] Agente escolhido: '{agent_name}'")
             return agent_name
@@ -199,10 +195,10 @@ async def start_analysis(
     arquivo_identidade: Optional[UploadFile] = File(None),
     base_job_id: Optional[str] = Form(None), 
     strategy: str = Form("checkout"),
-    company_template: Optional[str] = Form(None),
+    company_template: Optional[str] = Form(None), # 🚀 TEMPLATE DA EMPRESA
     mongo_service: MongoDBService = Depends(get_mongo_service)
 ):
-    payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id, "strategy": strategy}
+    payload = {"email": email, "nome_projeto": nome_projeto, "category": category, "action": action, "base_job_id": base_job_id, "strategy": strategy, "company_template": company_template}
     log_request_received(endpoint="/analysis/start", payload=payload)
 
     if arquivo_docx: validate_file_extension(arquivo_docx)
@@ -283,8 +279,6 @@ async def start_analysis(
     if not latest_reports_db:
         latest_reports_db = {}
 
-    # 🚀 HELPER SUPREMO DA CASCATA 🚀
-    # Busca a versão mais recente direto na fonte da verdade (History) ordenando por Versão Descendente!
     async def fetch_absolute_latest(cat_name):
         try:
             oid = ObjectId(project_id)
@@ -308,16 +302,11 @@ async def start_analysis(
                 context_used[f"{cat}_job_id"] = base_job_id
             else:
                 if strategy == "rebase":
-                    # MODO CASCATA BLINDADO: Puxa direto do BD de históricos a versão mais avançada!
                     dependency_job_id = await fetch_absolute_latest(cat)
-                    
-                    # Fallback de segurança 
                     if not dependency_job_id:
                         dependency_job_id = latest_reports_db.get(cat) or historical_tree.get(cat)
-                        
                     logger.info(f"🔄 [Estratégia] Rebase para '{cat}': Puxando a versão mais moderna do projeto -> {dependency_job_id}")
                 else:
-                    # MODO CONGELADA
                     dependency_job_id = historical_tree.get(cat)
                     logger.info(f"❄️ [Estratégia] Checkout para '{cat}': Puxando do histórico congelado -> {dependency_job_id}")
                 
@@ -332,16 +321,16 @@ async def start_analysis(
             await mongo_service.update_project_latest_reports(project_id, new_latest_state)
 
     else:
-        # Ação Generator 
         for cat in reports_to_read:
             dependency_job_id = await fetch_absolute_latest(cat)
             if not dependency_job_id:
                 dependency_job_id = latest_reports_db.get(cat)
-                
             if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada para gerar {category}.")
             context_used[f"{cat}_job_id"] = dependency_job_id
 
+    # ==========================================
     # 7. EXECUÇÃO
+    # ==========================================
     job_id = str(uuid.uuid4())
     redis_service = RedisSessionService()
     job_id = await redis_service.create_job(
@@ -360,7 +349,7 @@ async def start_analysis(
         "company_id": company_id,
         "group_ids": [str(project_group_id)],
         "context_used": context_used,
-        "company_template": company_template
+        "company_template": company_template # 🚀 ENVIA PARA O MCP
     }
     
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
@@ -372,92 +361,6 @@ async def start_analysis(
 
     return StartAnalysisResponse(message="Análise multiagente solicitada com sucesso.", project_id=project_id, job_id=job_id, nome_projeto=nome_projeto_final)
 
-    # ==========================================
-    # 6. CONSTRUÇÃO DO CONTEXTO DE LINHAGEM 
-    # ==========================================
-    reports_to_read = list(CATEGORY_DEPENDENCIES.get(category, []))
-    if action == "reviwer" and category not in reports_to_read:
-        reports_to_read.append(category)
-
-    context_used = {}
-
-    # Leitura correta do latest_reports
-    if isinstance(project_doc, dict):
-        latest_reports_db = project_doc.get("latest_reports", {})
-    else:
-        latest_reports_db = getattr(project_doc, "latest_reports", {})
-
-    if not isinstance(latest_reports_db, dict) and hasattr(latest_reports_db, "dict"):
-        latest_reports_db = latest_reports_db.dict()
-    if not latest_reports_db:
-        latest_reports_db = {}
-
-    if base_job_id:
-        past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
-        if not past_report: raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
-            
-        target_category = past_report.get("report_category")
-        historical_tree = await get_historical_lineage(base_job_id, mongo_service.db)
-        
-        for cat in reports_to_read:
-            if cat == target_category:
-                context_used[f"{cat}_job_id"] = base_job_id
-            else:
-                if strategy == "rebase":
-                    # MODO CASCATA: Puxa do latest_reports_db
-                    dependency_job_id = latest_reports_db.get(cat) or historical_tree.get(cat)
-                    logger.info(f"🔄 [Estratégia] Rebase para '{cat}': Puxando a versão mais moderna do projeto -> {dependency_job_id}")
-                else:
-                    # MODO CONGELADA
-                    dependency_job_id = historical_tree.get(cat)
-                    logger.info(f"❄️ [Estratégia] Checkout para '{cat}': Puxando do histórico congelado -> {dependency_job_id}")
-                
-                if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
-                context_used[f"{cat}_job_id"] = dependency_job_id
-
-        if strategy == "checkout":
-            new_latest_state = {}
-            for cat, j_id in context_used.items():
-                cat_name = cat.replace("_job_id", "")
-                new_latest_state[cat_name] = j_id
-            await mongo_service.update_project_latest_reports(project_id, new_latest_state)
-
-    else:
-        for cat in reports_to_read:
-            dependency_job_id = latest_reports_db.get(cat)
-            if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada para gerar {category}.")
-            context_used[f"{cat}_job_id"] = dependency_job_id
-
-    # 7. EXECUÇÃO
-    job_id = str(uuid.uuid4())
-    redis_service = RedisSessionService()
-    job_id = await redis_service.create_job(
-        project_id=project_id, analysis_type=analysis_type, email=email, empresa=company_id, context_used=context_used
-    )
-
-    mcp_payload = {
-        "email": email, 
-        "nome_projeto": nome_projeto_final, 
-        "analysis_type": analysis_type,
-        "branch": branch, 
-        "repository": repository, 
-        "comentario_extra": comentario_extra,
-        "project_id": project_id, 
-        "job_id": job_id, 
-        "company_id": company_id,
-        "group_ids": [str(project_group_id)],
-        "context_used": context_used
-    }
-    
-    mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
-    try:
-        await mcp_client.start_analysis(mcp_payload, agent_cfg.mcp_service_url, arquivo_docx, arquivo_identidade)
-    except Exception as e:
-        logger.error(f"Erro MCP {job_id}: {e}")
-        raise HTTPException(status_code=502, detail=f"Erro no MCP: {str(e)}")
-
-    return StartAnalysisResponse(message="Análise multiagente solicitada com sucesso.", project_id=project_id, job_id=job_id, nome_projeto=nome_projeto_final)
-    
 # ============================================================================
 # 🚀 ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO) 
 # ============================================================================
