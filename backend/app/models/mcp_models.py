@@ -19,8 +19,8 @@ class MCPStartAnalysisPayload(BaseModel):
     repository: Optional[str] = None
     comentario_extra: Optional[str] = None
     
-    # 🚀 NOVO CAMPO PARA O DESIGN SYSTEM (MOTOR DE TEMPLATES)
     company_template: Optional[str] = Field(None, description="Nome do template markdown da empresa (ex: 'boticario', 'xp')")
+    target_epic_id: Optional[str] = Field(None, description="ID do épico específico para prototipar (Ex: E01)")
 
     @field_validator('job_id', 'project_id', 'company_id', mode='before')
     @classmethod
