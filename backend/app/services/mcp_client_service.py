@@ -43,7 +43,8 @@ class MCPClientService:
             "repository": payload.get("repository"),
             "comentario_extra": payload.get("comentario_extra"),
             "context_used": context_used_str,
-            "company_template": payload.get("company_template")
+            "company_template": payload.get("company_template"),
+            "target_epic_id": payload.get("target_epic_id")
         }
         
         # Retorna apenas chaves que possuem um valor real (evita mandar 'None' via form-data)
