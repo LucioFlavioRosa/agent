@@ -112,6 +112,7 @@ async def start_analysis(
     comentario_extra: Optional[str] = Form(None),
     context_used: Optional[str] = Form(None),
     company_template: Optional[str] = Form(None),
+    target_epic_id: Optional[str] = Form(None), # 🚀 NOVO: RECEBENDO O ID DO ÉPICO
     # Arquivos Multipart
     arquivo_docx: Optional[UploadFile] = File(None),
     arquivo_identidade: Optional[UploadFile] = File(None)
@@ -179,7 +180,8 @@ async def start_analysis(
         "blob_path": blob_path, 
         "identidade_visual_blob_path": blob_identidade_path, 
         "context_used": parsed_context,
-        "company_template": company_template
+        "company_template": company_template,
+        "target_epic_id": target_epic_id # 🚀 NOVO: REPASSANDO PARA A FILA INTERNA!
     }
     
     try:
