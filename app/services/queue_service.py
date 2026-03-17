@@ -148,6 +148,8 @@ class QueueService:
             logger.log_info_negocio("job_inicio_processamento", "Iniciando processamento com o AgentService", job_id=job_id, company_id=company_id)
             
             # 2. 🚀 DELEGA TUDO PARA O AGENT SERVICE 🚀
+            # Não mexemos nos parâmetros aqui, pois repassamos o "task_data" inteiro!
+            # E o AgentService já foi programado para tirar o target_epic_id lá de dentro.
             resultado_html = await self.agent_service.executar_analise(
                 task_payload=task_data,
                 texto_instrucoes=texto_instrucoes,
