@@ -2,6 +2,7 @@ import re
 import asyncio
 import logging
 import traceback
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -53,13 +54,13 @@ class AgentService:
             return prompt_padrao
 
     # ====================================================================
-    # 🚀 NOVA FUNÇÃO COM TRACKING COMPLETO PARA DEBUG DE TEMPLATES
+    # 🚀 FUNÇÃO COM TRACKING COMPLETO PARA DEBUG DE TEMPLATES
     # ====================================================================
     def _obter_template_empresa(self, company_template: Optional[str]) -> str:
         print(f"\n🔍 [DEBUG TEMPLATE] Iniciando busca por template...", flush=True)
         print(f"   -> Valor recebido do payload (company_template): '{company_template}'", flush=True)
         
-        if not company_template or str(company_template).strip() == "":
+        if not company_template or str(company_template).strip() == "" or str(company_template).lower() == "none":
             print(f"   -> Nenhum template selecionado no front. Seguindo com design padrão.", flush=True)
             return ""
             
@@ -106,16 +107,20 @@ class AgentService:
         project_id: str,
         context_used: dict,
         group_ids: Optional[str] = None,
-        company_template: Optional[str] = None
+        company_template: Optional[str] = None,
+        target_epic_id: Optional[str] = None # 🚀 NOVA VARIÁVEL RECEBIDA AQUI!
     ) -> str:
         
         print(f"\n{'='*60}\n🔍 [DEBUG PROTÓTIPO] MONTAGEM DO PROMPT\n{'='*60}", flush=True)
         
         prompt = self._obter_prompt_base(analysis_type)
-        is_reviewer = analysis_type and "reviwer" in str(analysis_type).lower()
         
-        if is_reviewer and context_used:
-            print(f"📌 Chaves de contexto para refinamento (Linhagem): {list(context_used.keys())}", flush=True)
+        # 🚀 Habilitamos a busca de contexto tanto para reviwer quanto para fromepic
+        is_reviewer = analysis_type and "reviwer" in str(analysis_type).lower()
+        is_fromepic = analysis_type and "fromepic" in str(analysis_type).lower()
+        
+        if (is_reviewer or is_fromepic) and context_used:
+            print(f"📌 Chaves de contexto para processamento (Linhagem): {list(context_used.keys())}", flush=True)
             
             context_result = self.context_retrieval.build_context_string(
                 company_id=company_id, 
@@ -127,7 +132,14 @@ class AgentService:
             codigo_html_anterior = await context_result if asyncio.iscoroutine(context_result) else context_result
             
             if codigo_html_anterior:
-                prompt += f"\n\n--- CÓDIGO DO PROTÓTIPO DE REFERÊNCIA (CONFORME CONTEXTO) ---\n{codigo_html_anterior}\n\n"
+                # 🚀 MÁGICA ACONTECE AQUI! Focamos a IA em 1 épico específico
+                if is_fromepic and target_epic_id:
+                    prompt += f"\n\n🎯 ALVO DO PROTÓTIPO: ATENÇÃO MÁXIMA!\n"
+                    prompt += f"Você deve criar a interface EXCLUSIVAMENTE baseada no Épico de Identificador '{target_epic_id}'.\n"
+                    prompt += f"Abaixo está o relatório contendo todos os épicos do projeto. Procure pelo épico '{target_epic_id}' e use os dados dele (Título, Business Case, Entregáveis Macro, etc) para projetar e compor a tela. Ignore completamente as informações dos outros épicos.\n\n"
+                    prompt += f"--- RELATÓRIO DE ÉPICOS ---\n{codigo_html_anterior}\n\n"
+                else:
+                    prompt += f"\n\n--- CÓDIGO DO PROTÓTIPO DE REFERÊNCIA (CONFORME CONTEXTO) ---\n{codigo_html_anterior}\n\n"
 
         # 🚀 INJETANDO AS DIRETRIZES DA EMPRESA SE EXISTIREM
         texto_template = self._obter_template_empresa(company_template)
@@ -155,7 +167,8 @@ class AgentService:
         project_id = task_payload.get("project_id")
         group_ids = task_payload.get("group_ids")
         user_email = task_payload.get("email", "email_nao_fornecido") 
-        company_template = task_payload.get("company_template") # 🚀 RESGATA DO PAYLOAD
+        company_template = task_payload.get("company_template")
+        target_epic_id = task_payload.get("target_epic_id") # 🚀 EXTRAÍDO DO PAYLOAD
         
         try:
             mega_prompt = await self._montar_prompt(
@@ -167,7 +180,8 @@ class AgentService:
                 project_id=project_id,
                 context_used=task_payload.get("context_used", {}), 
                 group_ids=group_ids,
-                company_template=company_template 
+                company_template=company_template,
+                target_epic_id=target_epic_id # 🚀 PASSADO PARA A MONTAGEM
             )
             
             config_agente = AGENT_CONFIG.get(analysis_type, {})
