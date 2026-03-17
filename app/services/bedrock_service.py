@@ -24,7 +24,7 @@ class LLMService:
         temperature: float = 0.0,
         company_id: str = "default",
         group_id: Optional[str] = None
-    ) -> tuple: # 🚀 AGORA RETORNA UMA TUPLA (texto, in_tokens, out_tokens)
+    ) -> tuple: 
         """Chama o Bedrock de forma ASSÍNCRONA e retorna texto e tokens consumidos"""
 
         try:
@@ -66,10 +66,11 @@ class LLMService:
                 ]
             }
 
-            # 3. Configurações de timeout
+            # 3. Configurações de timeout (🚀 O ANTÍDOTO DA AZURE ESTÁ AQUI!)
             aws_config = Config(
-                read_timeout=300,  
-                connect_timeout=60,
+                read_timeout=900,        
+                connect_timeout=120,     
+                tcp_keepalive=True,       
                 retries={'max_attempts': 3, 'mode': 'standard'}
             )
 
