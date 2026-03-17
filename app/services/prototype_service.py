@@ -170,17 +170,16 @@ class AgentService:
             )
             
             # =========================================================
-            # 🚀 TRAVA DE SEGURANÇA: LIMITE DE TOKENS DO PROMPT
+            # 🚀 TRAVA DE SEGURANÇA 1: LIMITE DE TOKENS DE ENTRADA (PROMPT)
             # =========================================================
             LIMITE_TOKENS = 40000
-            LIMITE_CARACTERES = LIMITE_TOKENS * 4.3
+            LIMITE_CARACTERES = LIMITE_TOKENS * 4 # Aproximadamente 160.000 chars
             
             tamanho_prompt = len(mega_prompt)
             tokens_estimados = tamanho_prompt // 4
             
             print(f"📏 [VERIFICAÇÃO DE TAMANHO] Mega Prompt possui {tamanho_prompt} caracteres (~{tokens_estimados} tokens).", flush=True)
 
-            # 🚀 Mudança aqui: >= (Maior ou igual) para pegar exatamente o teto
             if tamanho_prompt >= LIMITE_CARACTERES:
                 mensagem_bloqueio = (
                     f"O volume de informações atingiu o limite máximo da inteligência artificial "
@@ -188,7 +187,7 @@ class AgentService:
                     f"Como o limite foi atingido, as informações do projeto foram cortadas e o código gerado ficaria incompleto. "
                     f"Para garantir a qualidade, simplifique o Template da empresa, reduza o documento base ou divida o escopo do projeto."
                 )
-                print(f"⚠️ [BLOQUEIO DE SEGURANÇA] A requisição foi abortada pois atingiu ou ultrapassou o teto de tokens.", flush=True)
+                print(f"⚠️ [BLOQUEIO DE SEGURANÇA] A requisição foi abortada pois atingiu ou ultrapassou o teto de tokens de entrada.", flush=True)
                 raise ValueError(mensagem_bloqueio) 
             # =========================================================
             
@@ -208,10 +207,21 @@ class AgentService:
                 group_id=group_ids
             )
             
-            # --- VERIFICAÇÃO DE CÓDIGO INCOMPLETO (OUTPUT) ---
-            if out_tokens >= 40000: # Considerando um limite comum de saída segura
-                print("⚠️ [AVISO DE OUTPUT] A IA usou muitos tokens na resposta, o HTML gerado pode estar cortado no final.", flush=True)
+            # =========================================================
+            # 🚀 TRAVA DE SEGURANÇA 2: LIMITE DE TOKENS DE SAÍDA (RESPOSTA TRUNCADA)
+            # =========================================================
+            if out_tokens >= 35000: 
+                mensagem_corte = (
+                    "A interface solicitada é muito complexa e a inteligência artificial atingiu o limite "
+                    "máximo de escrita, deixando o código HTML pela metade. "
+                    "Para evitar uma tela quebrada, a geração foi interrompida. Tente solicitar uma versão "
+                    "mais simples ou foque em apenas uma funcionalidade por vez. Se os detalhes forem mandatórios, você terá que construir pagians separadas a partir da ultima versão do prototipo "
+                )
+                print(f"⚠️ [BLOQUEIO DE OUTPUT] O HTML foi truncado com {out_tokens} tokens. Abortando salvamento.", flush=True)
+                raise ValueError(mensagem_corte) # Manda o erro pro Frontend e NÃO salva o arquivo pela metade!
+            # =========================================================
 
+            # --- LIMPEZA BÁSICA ---
             if "```html" in resposta_llm:
                 resposta_llm = resposta_llm.replace("```html", "")
             if "```" in resposta_llm:
@@ -245,10 +255,9 @@ class AgentService:
             return resposta_llm
             
         except ValueError as ve:
+            # Captura a trava de tokens para não printar um stacktrace gigantesco no console, só passa adiante
             raise ve
         except Exception as e:
             print(f"❌ [ERRO CRÍTICO] Falha na execução da IA: {str(e)}", flush=True)
-            traceback.print_exc()
-            raise
             traceback.print_exc()
             raise
