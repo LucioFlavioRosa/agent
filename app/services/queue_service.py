@@ -135,6 +135,10 @@ class QueueService:
             group_id = task_data.get('group_ids') # Vem como string do main.py
             analysis_type = task_data.get("analysis_type", "unknown")
             
+            # 🚀 CORREÇÃO 1: Extrai o ID do épico e cria a categoria dinâmica
+            target_epic_id = task_data.get("target_epic_id")
+            categoria_salvamento = f"prototype_{target_epic_id}" if target_epic_id else "prototype"
+            
             # Caminhos dos arquivos base (podem vir nulos caso o usuário não envie)
             blob_instrucoes = task_data.get('blob_path') 
             blob_identidade = task_data.get('identidade_visual_blob_path')
@@ -168,7 +172,7 @@ class QueueService:
                 company_id=company_id,
                 project_id=project_id,
                 status="done",
-                category="prototype", 
+                category=categoria_salvamento,  # 🚀 CORREÇÃO 2: Usa a categoria dinâmica aqui!
                 blob_path=caminho_salvo 
             )
             
@@ -188,12 +192,17 @@ class QueueService:
                 # Avisa o Frontend que deu erro definitivo
                 try:
                     task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
+                    
+                    # 🚀 CORREÇÃO 3: Usa a mesma lógica dinâmica para o erro
+                    target_epic_id_err = task_data.get("target_epic_id")
+                    cat_err = f"prototype_{target_epic_id_err}" if target_epic_id_err else "prototype"
+                    
                     await self._notificar_backend(
                         job_id=task_data.get("job_id"),
                         company_id=task_data.get("company_id"),
                         project_id=task_data.get("project_id"),
                         status="error",
-                        category="prototype",
+                        category=cat_err, # 🚀 Envia o erro pro épico correto
                         error_message=f"Falha após {limite_tentativas} tentativas: {str(e)}"
                     )
                 except Exception:
