@@ -166,23 +166,32 @@ async def delete_group(
     log_response_sent(endpoint=f"/groups/{group_id}", response={"success": True})
     return {"success": True}
 
-@router.get("/groups/{group_id}/templates", tags=["Groups"])
+# 🚀 CORRIGIDO: Retirado o "/groups" do início, pois o main.py já injeta ele automaticamente!
+@router.get("/{group_id}/templates", tags=["Groups"])
 async def get_group_templates(group_id: str, mongo_service: MongoDBService = Depends(get_mongo_service)):
     """Busca os templates de protótipo permitidos para um grupo específico."""
+    
+    # 🚀 LOG 1: Aviso que a rota foi chamada
+    log_request_received(endpoint=f"/{group_id}/templates", payload={"group_id": group_id})
+    logger.info(f"🎯 [Templates] O Frontend pediu os templates do Grupo ID: {group_id}")
+    
     try:
-        # Usa o método oficial do service (evita bugs de ObjectId vs String)
         group = await mongo_service.get_group_by_id(group_id)
         if not group:
+            logger.warning(f"❌ [Templates] Grupo {group_id} não existe no banco!")
             raise HTTPException(status_code=404, detail="Grupo não encontrado")
 
-        # Converte para dicionário caso o service retorne um Pydantic Model
         group_dict = group if isinstance(group, dict) else group.dict()
+        
+        # 🚀 LOG 2: Mostra o nome do grupo que ele achou
+        logger.info(f"🎯 [Templates] Grupo encontrado no banco: {group_dict.get('name')}")
 
-        # Extrai os templates da chave settings -> prototype
         settings = group_dict.get("settings", {})
         templates = settings.get("prototype", [])
 
-        # Retorna a lista (se não existir, retorna array vazia)
+        # 🚀 LOG 3: Mostra os templates que ele achou dentro do grupo
+        logger.info(f"🎯 [Templates] Templates que serão enviados ao Front: {templates}")
+
         return {"templates": templates}
     
     except HTTPException:
