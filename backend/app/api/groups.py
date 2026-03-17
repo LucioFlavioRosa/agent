@@ -166,22 +166,27 @@ async def delete_group(
     log_response_sent(endpoint=f"/groups/{group_id}", response={"success": True})
     return {"success": True}
 
-@router.get("/{group_id}/templates", tags=["Groups"])
+@router.get("/groups/{group_id}/templates", tags=["Groups"])
 async def get_group_templates(group_id: str, mongo_service: MongoDBService = Depends(get_mongo_service)):
     """Busca os templates de protótipo permitidos para um grupo específico."""
     try:
-        # Busca o grupo pelo ID
-        group = await mongo_service.db.groups.find_one({"_id": group_id})
+        # Usa o método oficial do service (evita bugs de ObjectId vs String)
+        group = await mongo_service.get_group_by_id(group_id)
         if not group:
             raise HTTPException(status_code=404, detail="Grupo não encontrado")
 
+        # Converte para dicionário caso o service retorne um Pydantic Model
+        group_dict = group if isinstance(group, dict) else group.dict()
+
         # Extrai os templates da chave settings -> prototype
-        settings = group.get("settings", {})
+        settings = group_dict.get("settings", {})
         templates = settings.get("prototype", [])
 
         # Retorna a lista (se não existir, retorna array vazia)
         return {"templates": templates}
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Erro ao buscar templates do grupo {group_id}: {e}")
         raise HTTPException(status_code=500, detail="Erro interno ao buscar templates.")
