@@ -148,15 +148,13 @@ class QueueService:
             logger.log_info_negocio("job_inicio_processamento", "Iniciando processamento com o AgentService", job_id=job_id, company_id=company_id)
             
             # 2. 🚀 DELEGA TUDO PARA O AGENT SERVICE 🚀
-            # Não mexemos nos parâmetros aqui, pois repassamos o "task_data" inteiro!
-            # E o AgentService já foi programado para tirar o target_epic_id lá de dentro.
             resultado_html = await self.agent_service.executar_analise(
                 task_payload=task_data,
                 texto_instrucoes=texto_instrucoes,
                 texto_identidade=texto_identidade
             )
             
-            # 3. Apaga a mensagem da fila pois deu sucesso
+            # 3. SUCESSO! Apaga a mensagem da fila para não repetir.
             await queue_client.delete_message(msg)
             
             # 4. Descobre o caminho onde o Agente salvou o arquivo para avisar o Maestro
@@ -177,27 +175,41 @@ class QueueService:
             logger.log_info_negocio("job_finalizado", f"Job finalizado com sucesso. Salvo em: {caminho_salvo}", job_id=job_id, company_id=company_id)
             
         except Exception as e:
-            logger.log_erro("erro_processamento_job", f"Erro ao processar mensagem: {e}", extra={"worker_id": worker_id})
-            try:
-                task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
-                await self._notificar_backend(
-                    job_id=task_data.get("job_id"),
-                    company_id=task_data.get("company_id"),
-                    project_id=task_data.get("project_id"),
-                    status="error",
-                    category="prototype",
-                    error_message=str(e)
-                )
-            except Exception:
-                pass
-            finally:
-                # 🚀 O EXORCISTA DE FANTASMAS: Apaga a mensagem da fila mesmo em caso de erro!
-                # Sem isso, a mensagem reaparece depois de 5 minutos gerando um loop infinito.
+            # 🚀 LÓGICA DE RESILIÊNCIA E ANTI-FANTASMAS
+            tentativas_atuais = getattr(msg, 'dequeue_count', 1)
+            limite_tentativas = 3
+            
+            logger.log_erro("erro_processamento_job", f"Erro na tentativa {tentativas_atuais}/{limite_tentativas}: {e}", extra={"worker_id": worker_id})
+            
+            if tentativas_atuais >= limite_tentativas:
+                # 💀 MATAR O FANTASMA: Já tentou 3 vezes e falhou. Erro permanente.
+                logger.log_info_negocio("mensagem_venenosa", "Limite de tentativas excedido. Abortando job e limpando fila.", job_id=job_id)
+                
+                # Avisa o Frontend que deu erro definitivo
+                try:
+                    task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
+                    await self._notificar_backend(
+                        job_id=task_data.get("job_id"),
+                        company_id=task_data.get("company_id"),
+                        project_id=task_data.get("project_id"),
+                        status="error",
+                        category="prototype",
+                        error_message=f"Falha após {limite_tentativas} tentativas: {str(e)}"
+                    )
+                except Exception:
+                    pass
+                
+                # Deleta a mensagem para limpar a fila de vez
                 try:
                     await queue_client.delete_message(msg)
-                    logger.log_info_negocio("mensagem_apagada_com_erro", "Mensagem com falha removida da fila para evitar loop.", job_id=job_id)
+                    logger.log_info_negocio("mensagem_apagada_com_erro", "Mensagem removida da fila após limite de falhas.", job_id=job_id)
                 except Exception as del_err:
                     logger.log_erro("erro_ao_apagar_mensagem", f"Falha ao tentar remover a mensagem da fila: {del_err}")
+                    
+            else:
+                # ♻️ RESILIÊNCIA: Erro transiente. Tem vidas sobrando.
+                # Não deletamos a mensagem e não avisamos o frontend. A Azure vai tentar de novo.
+                logger.log_info_negocio("mensagem_reagendada", f"A mensagem retornará para a fila em breve. Vidas restantes: {limite_tentativas - tentativas_atuais}", job_id=job_id)
 
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
@@ -234,7 +246,8 @@ class QueueService:
             
             try:
                 while True:
-                    messages = queue_client.receive_messages(max_messages=5, visibility_timeout=300)
+                    # 🚀 AQUI: Mudado para 1200 segundos (20 minutos)
+                    messages = queue_client.receive_messages(max_messages=5, visibility_timeout=1200)
                     has_messages = False
                     async for msg in messages:
                         has_messages = True
@@ -249,3 +262,16 @@ class QueueService:
                     w.cancel()
                 await asyncio.gather(*workers, return_exceptions=True)
                 logger.log_info_negocio("workers_finalizados", "Todos os workers finalizados.")
+
+    async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
+        logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
+        while True:
+            try:
+                msg = await self.internal_queue.get()
+                await self.process_single_message(msg, queue_client, worker_id)
+                self.internal_queue.task_done()
+            except asyncio.CancelledError:
+                logger.log_info_negocio("worker_cancelado", f"Worker-{worker_id} cancelado.", extra={"worker_id": worker_id})
+                break
+            except Exception as e:
+                logger.log_erro("erro_consumer_loop", f"Erro crítico no loop do consumidor: {e}", extra={"worker_id": worker_id})
