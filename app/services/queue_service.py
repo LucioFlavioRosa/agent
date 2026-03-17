@@ -190,6 +190,14 @@ class QueueService:
                 )
             except Exception:
                 pass
+            finally:
+                # 🚀 O EXORCISTA DE FANTASMAS: Apaga a mensagem da fila mesmo em caso de erro!
+                # Sem isso, a mensagem reaparece depois de 5 minutos gerando um loop infinito.
+                try:
+                    await queue_client.delete_message(msg)
+                    logger.log_info_negocio("mensagem_apagada_com_erro", "Mensagem com falha removida da fila para evitar loop.", job_id=job_id)
+                except Exception as del_err:
+                    logger.log_erro("erro_ao_apagar_mensagem", f"Falha ao tentar remover a mensagem da fila: {del_err}")
 
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
