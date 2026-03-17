@@ -165,3 +165,23 @@ async def delete_group(
             await RedisSessionService().invalidate_user_permissions(email, company_id)
     log_response_sent(endpoint=f"/groups/{group_id}", response={"success": True})
     return {"success": True}
+
+@router.get("/{group_id}/templates", tags=["Groups"])
+async def get_group_templates(group_id: str, mongo_service: MongoDBService = Depends(get_mongo_service)):
+    """Busca os templates de protótipo permitidos para um grupo específico."""
+    try:
+        # Busca o grupo pelo ID
+        group = await mongo_service.db.groups.find_one({"_id": group_id})
+        if not group:
+            raise HTTPException(status_code=404, detail="Grupo não encontrado")
+
+        # Extrai os templates da chave settings -> prototype
+        settings = group.get("settings", {})
+        templates = settings.get("prototype", [])
+
+        # Retorna a lista (se não existir, retorna array vazia)
+        return {"templates": templates}
+    
+    except Exception as e:
+        logger.error(f"Erro ao buscar templates do grupo {group_id}: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno ao buscar templates.")
