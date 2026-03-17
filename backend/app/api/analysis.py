@@ -416,7 +416,10 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
                 "type": edge_type
             })
 
-        if not has_refinement_edge and category in last_version_map:
+        # 🚀 CORREÇÃO DO MULTIVERSO: 
+        # Só força a linha contínua se NÃO for protótipo. 
+        # Protótipos devem respeitar as linhas exclusivas do contexto injetado (vêm do Épico ou do Refine explícito).
+        if not has_refinement_edge and category in last_version_map and category != "prototype":
             parent_job_id = last_version_map[category]
             edges.append({
                 "id": f"edge_auto_refine_{parent_job_id}_to_{job_id}",
