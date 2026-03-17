@@ -8,7 +8,6 @@ from typing import Optional
 
 from app.services.context_retrieval_service import ContextRetrievalService
 from app.services.blob_storage_service import BlobStorageService
-# 🚀 Importando o novo serviço de auditoria
 from app.services.llm_audit_service import LLMAuditService 
 from app.config.agent_mapping import AGENT_CONFIG
 from app.utils.log_formatter import StructuredLogger
@@ -27,7 +26,6 @@ class AgentService:
         self.blob_storage = blob_storage_service
         self.llm_services = llm_services
         
-        # 🚀 Instanciando o serviço de auditoria usando as credenciais do Vault
         self.audit_service = LLMAuditService(self.blob_storage.vault_service)
 
     def _obter_prompt_base(self, analysis_type: Optional[str]) -> str:
@@ -53,9 +51,6 @@ class AgentService:
             logger.log_erro("erro_leitura_prompt_base", f"Erro ao ler prompt: {e}")
             return prompt_padrao
 
-    # ====================================================================
-    # 🚀 FUNÇÃO COM TRACKING COMPLETO PARA DEBUG DE TEMPLATES
-    # ====================================================================
     def _obter_template_empresa(self, company_template: Optional[str]) -> str:
         print(f"\n🔍 [DEBUG TEMPLATE] Iniciando busca por template...", flush=True)
         print(f"   -> Valor recebido do payload (company_template): '{company_template}'", flush=True)
@@ -64,7 +59,6 @@ class AgentService:
             print(f"   -> Nenhum template selecionado no front. Seguindo com design padrão.", flush=True)
             return ""
             
-        # Normaliza o nome (ex: "Porto Seguro" vira "portoseguro.md")
         nome_arquivo = str(company_template).strip().lower().replace(" ", "")
         if not nome_arquivo.endswith(".md"):
             nome_arquivo += ".md"
@@ -73,11 +67,7 @@ class AgentService:
         pasta_templates = diretorio_base / "templates"
         caminho_arquivo = pasta_templates / nome_arquivo
         
-        print(f"   -> Caminho absoluto da pasta templates: {pasta_templates.absolute()}", flush=True)
-        print(f"   -> Caminho absoluto esperado do arquivo: {caminho_arquivo.absolute()}", flush=True)
-        
         try:
-            # 🚀 Lista todos os arquivos da pasta para tirar a prova dos nove
             if pasta_templates.exists() and pasta_templates.is_dir():
                 arquivos_na_pasta = [f.name for f in pasta_templates.iterdir() if f.is_file()]
                 print(f"   -> Arquivos encontrados dentro da pasta 'templates': {arquivos_na_pasta}", flush=True)
@@ -89,13 +79,12 @@ class AgentService:
                 print(f"✅ [TEMPLATE] Design System de '{nome_arquivo}' injetado com sucesso! (Tamanho: {len(conteudo)} chars)", flush=True)
                 return conteudo
             else:
-                print(f"⚠️ [TEMPLATE] Arquivo '{nome_arquivo}' não encontrado. O protótipo será gerado sem template específico.", flush=True)
+                print(f"⚠️ [TEMPLATE] Arquivo '{nome_arquivo}' não encontrado. O protótipo será gerado sem template.", flush=True)
                 return ""
         except Exception as e:
             print(f"❌ [ERRO TEMPLATE] Falha ao ler template {nome_arquivo}: {e}", flush=True)
             traceback.print_exc()
             return ""
-    # ====================================================================
 
     async def _montar_prompt(
         self, 
@@ -108,14 +97,13 @@ class AgentService:
         context_used: dict,
         group_ids: Optional[str] = None,
         company_template: Optional[str] = None,
-        target_epic_id: Optional[str] = None # 🚀 NOVA VARIÁVEL RECEBIDA AQUI!
+        target_epic_id: Optional[str] = None 
     ) -> str:
         
         print(f"\n{'='*60}\n🔍 [DEBUG PROTÓTIPO] MONTAGEM DO PROMPT\n{'='*60}", flush=True)
         
         prompt = self._obter_prompt_base(analysis_type)
         
-        # 🚀 Habilitamos a busca de contexto tanto para reviwer quanto para fromepic
         is_reviewer = analysis_type and "reviwer" in str(analysis_type).lower()
         is_fromepic = analysis_type and "fromepic" in str(analysis_type).lower()
         
@@ -132,7 +120,6 @@ class AgentService:
             codigo_html_anterior = await context_result if asyncio.iscoroutine(context_result) else context_result
             
             if codigo_html_anterior:
-                # 🚀 MÁGICA ACONTECE AQUI! Focamos a IA em 1 épico específico
                 if is_fromepic and target_epic_id:
                     prompt += f"\n\n🎯 ALVO DO PROTÓTIPO: ATENÇÃO MÁXIMA!\n"
                     prompt += f"Você deve criar a interface EXCLUSIVAMENTE baseada no Épico de Identificador '{target_epic_id}'.\n"
@@ -141,7 +128,6 @@ class AgentService:
                 else:
                     prompt += f"\n\n--- CÓDIGO DO PROTÓTIPO DE REFERÊNCIA (CONFORME CONTEXTO) ---\n{codigo_html_anterior}\n\n"
 
-        # 🚀 INJETANDO AS DIRETRIZES DA EMPRESA SE EXISTIREM
         texto_template = self._obter_template_empresa(company_template)
         if texto_template:
             prompt += f"--- DIRETRIZES DE UI/UX DA EMPRESA ({str(company_template).upper()}) ---\n{texto_template}\n\n"
@@ -157,7 +143,6 @@ class AgentService:
             
         prompt += "\nRETORNE APENAS O CÓDIGO HTML COMPLETO, SEM EXPLICAÇÕES."
         
-        print(f"🚀 Mega Prompt montado com {len(prompt)} caracteres.", flush=True)
         return prompt
 
     async def executar_analise(self, task_payload: dict, texto_instrucoes: str, texto_identidade: str) -> str:
@@ -168,7 +153,7 @@ class AgentService:
         group_ids = task_payload.get("group_ids")
         user_email = task_payload.get("email", "email_nao_fornecido") 
         company_template = task_payload.get("company_template")
-        target_epic_id = task_payload.get("target_epic_id") # 🚀 EXTRAÍDO DO PAYLOAD
+        target_epic_id = task_payload.get("target_epic_id")
         
         try:
             mega_prompt = await self._montar_prompt(
@@ -181,8 +166,30 @@ class AgentService:
                 context_used=task_payload.get("context_used", {}), 
                 group_ids=group_ids,
                 company_template=company_template,
-                target_epic_id=target_epic_id # 🚀 PASSADO PARA A MONTAGEM
+                target_epic_id=target_epic_id 
             )
+            
+            # =========================================================
+            # 🚀 TRAVA DE SEGURANÇA: LIMITE DE TOKENS DO PROMPT
+            # =========================================================
+            LIMITE_TOKENS = 45000
+            LIMITE_CARACTERES = LIMITE_TOKENS * 4
+            
+            tamanho_prompt = len(mega_prompt)
+            tokens_estimados = tamanho_prompt // 4
+            
+            print(f"📏 [VERIFICAÇÃO DE TAMANHO] Mega Prompt possui {tamanho_prompt} caracteres (~{tokens_estimados} tokens).", flush=True)
+
+            if tamanho_prompt > LIMITE_CARACTERES:
+                mensagem_bloqueio = (
+                    f"O volume de informações ultrapassou o limite seguro da inteligência artificial "
+                    f"({tokens_estimados} tokens estimadados / Limite de {LIMITE_TOKENS}). "
+                    f"Para garantir a qualidade, simplifique o Template da empresa, reduza o tamanho "
+                    f"do documento base ou divida o escopo do projeto em partes menores."
+                )
+                print(f"⚠️ [BLOQUEIO DE SEGURANÇA] A requisição foi abortada para evitar Timeouts e Alucinações da IA.", flush=True)
+                raise ValueError(mensagem_bloqueio) # Esse erro vai direto pra tela do Frontend!
+            # =========================================================
             
             config_agente = AGENT_CONFIG.get(analysis_type, {})
             nome_servico = config_agente.get("service")
@@ -200,14 +207,12 @@ class AgentService:
                 group_id=group_ids
             )
             
-            # --- LIMPEZA BÁSICA ---
             if "```html" in resposta_llm:
                 resposta_llm = resposta_llm.replace("```html", "")
             if "```" in resposta_llm:
                 resposta_llm = resposta_llm.replace("```", "")
             resposta_llm = resposta_llm.strip()
 
-            # 1. Salvar HTML no Blob Storage
             if resposta_llm and nome_arquivo_saida:
                 file_bytes = resposta_llm.encode('utf-8')
                 await self.blob_storage.save_document(
@@ -220,7 +225,6 @@ class AgentService:
                 )
                 print(f"✅ HTML salvo com sucesso.", flush=True)
 
-            # 🚀 2. SALVAR AUDITORIA/MÉTRICAS USANDO O NOVO SERVIÇO 🚀
             await self.audit_service.save_usage_metrics(
                 company_id=company_id,
                 project_id=project_id,
@@ -235,6 +239,9 @@ class AgentService:
 
             return resposta_llm
             
+        except ValueError as ve:
+            # Captura a trava de tokens para não printar um stacktrace gigantesco no console, só passa adiante
+            raise ve
         except Exception as e:
             print(f"❌ [ERRO CRÍTICO] Falha na execução da IA: {str(e)}", flush=True)
             traceback.print_exc()
