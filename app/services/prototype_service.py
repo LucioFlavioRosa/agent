@@ -172,23 +172,24 @@ class AgentService:
             # =========================================================
             # 🚀 TRAVA DE SEGURANÇA: LIMITE DE TOKENS DO PROMPT
             # =========================================================
-            LIMITE_TOKENS = 45000
-            LIMITE_CARACTERES = LIMITE_TOKENS * 4
+            LIMITE_TOKENS = 40000
+            LIMITE_CARACTERES = LIMITE_TOKENS * 4.3
             
             tamanho_prompt = len(mega_prompt)
             tokens_estimados = tamanho_prompt // 4
             
             print(f"📏 [VERIFICAÇÃO DE TAMANHO] Mega Prompt possui {tamanho_prompt} caracteres (~{tokens_estimados} tokens).", flush=True)
 
-            if tamanho_prompt > LIMITE_CARACTERES:
+            # 🚀 Mudança aqui: >= (Maior ou igual) para pegar exatamente o teto
+            if tamanho_prompt >= LIMITE_CARACTERES:
                 mensagem_bloqueio = (
-                    f"O volume de informações ultrapassou o limite seguro da inteligência artificial "
-                    f"({tokens_estimados} tokens estimadados / Limite de {LIMITE_TOKENS}). "
-                    f"Para garantir a qualidade, simplifique o Template da empresa, reduza o tamanho "
-                    f"do documento base ou divida o escopo do projeto em partes menores."
+                    f"O volume de informações atingiu o limite máximo da inteligência artificial "
+                    f"({tokens_estimados} tokens estimados / Limite de {LIMITE_TOKENS}). "
+                    f"Como o limite foi atingido, as informações do projeto foram cortadas e o código gerado ficaria incompleto. "
+                    f"Para garantir a qualidade, simplifique o Template da empresa, reduza o documento base ou divida o escopo do projeto."
                 )
-                print(f"⚠️ [BLOQUEIO DE SEGURANÇA] A requisição foi abortada para evitar Timeouts e Alucinações da IA.", flush=True)
-                raise ValueError(mensagem_bloqueio) # Esse erro vai direto pra tela do Frontend!
+                print(f"⚠️ [BLOQUEIO DE SEGURANÇA] A requisição foi abortada pois atingiu ou ultrapassou o teto de tokens.", flush=True)
+                raise ValueError(mensagem_bloqueio) 
             # =========================================================
             
             config_agente = AGENT_CONFIG.get(analysis_type, {})
@@ -207,6 +208,10 @@ class AgentService:
                 group_id=group_ids
             )
             
+            # --- VERIFICAÇÃO DE CÓDIGO INCOMPLETO (OUTPUT) ---
+            if out_tokens >= 40000: # Considerando um limite comum de saída segura
+                print("⚠️ [AVISO DE OUTPUT] A IA usou muitos tokens na resposta, o HTML gerado pode estar cortado no final.", flush=True)
+
             if "```html" in resposta_llm:
                 resposta_llm = resposta_llm.replace("```html", "")
             if "```" in resposta_llm:
@@ -240,9 +245,10 @@ class AgentService:
             return resposta_llm
             
         except ValueError as ve:
-            # Captura a trava de tokens para não printar um stacktrace gigantesco no console, só passa adiante
             raise ve
         except Exception as e:
             print(f"❌ [ERRO CRÍTICO] Falha na execução da IA: {str(e)}", flush=True)
+            traceback.print_exc()
+            raise
             traceback.print_exc()
             raise
