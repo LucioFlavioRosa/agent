@@ -1,5 +1,3 @@
-Peço desculpas pela dificuldade em acessar o arquivo anterior. Aqui está o documento completo contendo as diretrizes em formato Markdown bruto. Você pode usar o botão de copiar no canto superior do bloco de código para enviar diretamente ao seu agente:
-
 # Descritivo Objetivo para o Agente de UI/UX
 
 Aqui está o descritivo objetivo com os elementos visuais da XP Investimentos para a construção do protótipo:
