@@ -40,7 +40,7 @@ A arquitetura UI foi construída com absoluto rigor para organizar normas e dado
 **Conceito Central:** "Mitigação da Carga Cognitiva" – Focar em segmentar o usuário no segundo zero de interação, separando a navegação técnica burocrática da navegação de convencimento de vendas, sempre através de alto contraste.[1]
 
 **5. URL de Componentes**
-url_logo_comgas: https://pt.wikipedia.org/wiki/Ficheiro:Logotipo_da_Comg%C3%A1s.svg#/media/Ficheiro:Logotipo_da_Comg%C3%A1s.svg
+url_logo_comgas: [https://pt.wikipedia.org/wiki/Ficheiro:Logotipo_da_Comg%C3%A1s.svg#/media/Ficheiro:Logotipo_da_Comg%C3%A1s.svg](https://upload.wikimedia.org/wikipedia/commons/b/b7/Logotipo_da_Comg%C3%A1s.svg)
 
 **6. Estrutura de UI e UX**
 
