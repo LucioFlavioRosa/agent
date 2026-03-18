@@ -200,7 +200,8 @@ class MongoDBService:
                     "project_id": project_id,
                     "name": name,
                     "description": description,
-                    "members": members
+                    "members": members,
+                    "assigned_group_id": assigned_group_id
                 })
             self.logger.info(f"[get_projects_where_user_is_owner] Projetos encontrados: {projects}")
             return projects
