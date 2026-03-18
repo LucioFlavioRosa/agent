@@ -47,7 +47,7 @@ class ClaudeAWSService:
                     "content": [{"type": "text", "text": prompt}]
                 }
             ],
-            "max_tokens": 15000,
+            "max_tokens": 30000,
             "temperature": 0.2,
         }
         
