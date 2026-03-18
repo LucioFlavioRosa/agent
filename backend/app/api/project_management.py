@@ -65,7 +65,8 @@ async def list_owned_projects(
         project_id=p["project_id"],
         name=p["name"],
         description=p.get("description"),
-        members=p.get("members", [])
+        members=p.get("members", []),
+        assigned_group_id=p.get("assigned_group_id")
     ) for p in projects]
     
     return ListOwnedProjectsResponse(projects=items)
