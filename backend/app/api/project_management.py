@@ -43,7 +43,21 @@ async def list_all_user_projects(
     projects = await mongo_service.get_user_projects_with_access(email)
     if not projects:
         return []
-    return projects
+        
+    # 🚀 CORREÇÃO AQUI: Convertendo explicitamente os dicionários para o modelo, 
+    # garantindo que o assigned_group_id seja incluído na resposta!
+    items = [ProjectWithRoleItem(
+        project_id=p["project_id"],
+        project_name=p["project_name"],
+        role=p["role"],
+        description=p.get("description"),
+        created_at=p.get("created_at"),
+        latest_reports=p.get("latest_reports", {}),
+        assigned_group_id=p.get("assigned_group_id") # 🚀 O Famoso Campo
+    ) for p in projects]
+    
+    return items
+    
 @router.get("/owned", response_model=ListOwnedProjectsResponse, tags=["Project Management"])
 async def list_owned_projects(
     email: str = Query(..., description="Email do usuário owner"),
