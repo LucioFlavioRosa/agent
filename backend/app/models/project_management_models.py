@@ -30,6 +30,7 @@ class OwnedProjectItem(BaseModel):
     name: str = Field(..., description="Nome do projeto")
     description: Optional[str] = Field(None, description="Descrição do projeto")
     members: List[dict] = Field(..., description="Lista de membros do projeto")
+    assigned_group_id: Optional[str] = None
 
 class ListOwnedProjectsResponse(BaseModel):
     projects: List[OwnedProjectItem] = Field(..., description="Lista de projetos onde o usuário é owner")
@@ -98,6 +99,7 @@ class ProjectWithRoleItem(BaseModel):
     description: Optional[str] = None
     created_at: Optional[datetime] = None
     latest_reports: dict
+    assigned_group_id: Optional[str] = None
 
 class LatestReports(BaseModel):
     model_config = ConfigDict(extra='allow')
