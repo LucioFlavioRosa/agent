@@ -98,7 +98,46 @@ class AgentService:
         
         logger.log_saida_funcao("_montar_prompt", job_id=None, company_id=company_id, project_id=project_id, mensagem="Mega-prompt montado")
         return prompt
+        
+    def _limpar_resposta_json(self, texto: str) -> str:
+        """
+        Garante que apenas o bloco JSON retornado pelo LLM seja aproveitado,
+        removendo conversas, introduções ou fechamentos em Markdown.
+        """
+        if not texto: return "{}"
+        
+        texto_limpo = texto.strip()
+        
+        # Estratégia 1: Procura pelo bloco padrão do Markdown ```json ... ```
+        bloco_json = re.search(r"```json(.*?)```", texto_limpo, re.DOTALL | re.IGNORECASE)
+        if bloco_json:
+            return bloco_json.group(1).strip()
+            
+        # Estratégia 2: Procura apenas pelo bloco genérico ``` ... ```
+        bloco_generico = re.search(r"```(.*?)```", texto_limpo, re.DOTALL)
+        if bloco_generico:
+            conteudo = bloco_generico.group(1).strip()
+            # As vezes o modelo manda ```json no começo e esquece de fechar, 
+            # ou manda só ``` e o json dentro. Se começar com { ou [, é json.
+            if conteudo.startswith("{") or conteudo.startswith("["):
+                return conteudo
 
+        # Estratégia 3: Força bruta (Pega do primeiro '{' até o último '}')
+        # Útil caso o modelo não use crases.
+        inicio = texto_limpo.find("{")
+        fim = texto_limpo.rfind("}")
+        if inicio != -1 and fim != -1 and fim > inicio:
+            return texto_limpo[inicio:fim+1].strip()
+            
+        # Estratégia 4 (Fallback para arrays): Pega do primeiro '[' até o último ']'
+        inicio_arr = texto_limpo.find("[")
+        fim_arr = texto_limpo.rfind("]")
+        if inicio_arr != -1 and fim_arr != -1 and fim_arr > inicio_arr:
+            return texto_limpo[inicio_arr:fim_arr+1].strip()
+
+        # Se não achou nada parecido com JSON, retorna o texto original torcendo pro melhor
+        return texto_limpo
+        
     async def executar_analise(self, task_payload: dict, texto_extraido: str) -> str:
         job_id = task_payload.get('job_id')
         analysis_type = task_payload.get("analysis_type")
@@ -138,7 +177,7 @@ class AgentService:
             
             print(f"\n📡 DISPARANDO REQUISIÇÃO PARA {nome_servico} ({nome_modelo})...", flush=True)
 
-            # 🚀 RECEBE AS TRÊS VARIÁVEIS (TEXTO E TOKENS) DA AWS
+           # 🚀 RECEBE AS TRÊS VARIÁVEIS (TEXTO E TOKENS) DA AWS
             resposta_llm, in_tokens, out_tokens = await llm_service.gerar_texto(
                 prompt=mega_prompt, 
                 modelo=nome_modelo,
@@ -148,8 +187,14 @@ class AgentService:
             
             print(f"✅ RESPOSTA RECEBIDA DO LLM! (Tamanho: {len(resposta_llm)} chars)", flush=True)
 
+            # 🚀 CORREÇÃO DE SEGURANÇA: Garante que a variável sempre exista e JÁ LIMPA O JSON!
+            # Como todos os agentes de gestão devolvem JSON (mesmo salvos como .md), limpamos sempre.
+            conteudo_final = self._limpar_resposta_json(resposta_llm) if resposta_llm else "{}"
+            
             if resposta_llm and nome_arquivo_saida:
-                file_bytes = resposta_llm.encode('utf-8')
+                print(f"🧹 Resposta limpa! (Novo tamanho: {len(conteudo_final)} chars)", flush=True)
+
+                file_bytes = conteudo_final.encode('utf-8')
                 logger.log_info_negocio("salvando_blob", f"Salvando relatório final no Blob Storage.", job_id=job_id, company_id=company_id, project_id=project_id, extra={"filename": nome_arquivo_saida})
                 
                 caminho_blob = await self.blob_storage.save_document(
@@ -179,7 +224,9 @@ class AgentService:
             # ====================================================================
                 
             logger.log_saida_funcao("executar_analise", job_id=job_id, company_id=company_id, project_id=project_id, mensagem="Análise IA finalizada")
-            return resposta_llm
+            
+            # 🚀 Retorna com total segurança
+            return conteudo_final
             
         except Exception as e:
             logger.log_erro("erro_executar_analise", f"Erro ao executar análise: {e}", job_id=job_id, company_id=company_id, project_id=project_id)
