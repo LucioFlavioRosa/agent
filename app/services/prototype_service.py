@@ -35,6 +35,7 @@ class AgentService:
         )
         
         if not analysis_type or analysis_type not in AGENT_CONFIG:
+            print("⚠️ [PROMPT BASE] 'analysis_type' não fornecido ou não mapeado. Usando prompt padrão em memória.", flush=True)
             return prompt_padrao
             
         nome_arquivo_prompt = AGENT_CONFIG[analysis_type]["prompt_file"]
@@ -43,10 +44,14 @@ class AgentService:
         
         try:
             if caminho_arquivo.exists() and caminho_arquivo.is_file():
-                return caminho_arquivo.read_text(encoding="utf-8")
-            return prompt_padrao
+                conteudo = caminho_arquivo.read_text(encoding="utf-8")
+                print(f"✅ [PROMPT BASE] Arquivo de instrução lido com sucesso: 'prompts/{nome_arquivo_prompt}' (Tamanho: {len(conteudo)} chars)", flush=True)
+                return conteudo
+            else:
+                print(f"⚠️ [PROMPT BASE] Arquivo 'prompts/{nome_arquivo_prompt}' não encontrado fisicamente. Usando prompt padrão em memória.", flush=True)
+                return prompt_padrao
         except Exception as e:
-            print(f"❌ [ERRO] Falha ao ler arquivo de prompt: {e}", flush=True)
+            print(f"❌ [ERRO] Falha ao ler arquivo de prompt base 'prompts/{nome_arquivo_prompt}': {e}", flush=True)
             traceback.print_exc()
             logger.log_erro("erro_leitura_prompt_base", f"Erro ao ler prompt: {e}")
             return prompt_padrao
