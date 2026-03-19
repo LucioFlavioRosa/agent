@@ -304,6 +304,18 @@ async def start_analysis(
         if action == "fromepic":
             context_used[f"{target_category}_job_id"] = base_job_id
             
+            # 🚀 CORREÇÃO: Salva o ID do Épico no contexto para o Front conseguir ler depois!
+            if target_epic_id:
+                context_used["target_epic_id"] = target_epic_id
+                
+        # 🚀 CORREÇÃO: Se for refinamento de um protótipo, herda o ID do Épico do pai para não perder a referência!
+        if action == "reviwer" and category == "prototype":
+            old_ctx = past_report.get("context_used", {})
+            if "target_epic_id" in old_ctx:
+                context_used["target_epic_id"] = old_ctx["target_epic_id"]
+            elif past_report.get("target_epic_id"):
+                context_used["target_epic_id"] = past_report.get("target_epic_id")
+                
         for cat in reports_to_read:
             if cat == target_category:
                 context_used[f"{cat}_job_id"] = base_job_id
