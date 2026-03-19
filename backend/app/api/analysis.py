@@ -342,24 +342,30 @@ async def start_analysis(
     # ==========================================
     # 7. EXECUÇÃO
     # ==========================================
+    
+    # 🚀 GARANTIA ABSOLUTA DO ÉPICO NO CONTEXTO
+    # Se recebemos do Front, usamos. Se não, tentamos herdar do relatório anterior (útil para o botão Refinar).
+    epic_val = target_epic_id
+    if not epic_val and base_job_id:
+        past_rep = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
+        if past_rep:
+            # Procura na raiz ou no context_used antigo
+            epic_val = past_rep.get("target_epic_id")
+            if not epic_val and past_rep.get("context_used"):
+                ctx = past_rep.get("context_used")
+                epic_val = ctx.get("target_epic_id") if isinstance(ctx, dict) else None
+
+    # Como o Worker já sabe ignorar isso no download, podemos salvar no contexto em paz!
+    if epic_val:
+        context_used["target_epic_id"] = epic_val
+
     job_id = str(uuid.uuid4())
     redis_service = RedisSessionService()
+    
+    # Cria o job mandando o contexto rico para a fila
     job_id = await redis_service.create_job(
         project_id=project_id, analysis_type=analysis_type, email=email, empresa=company_id, context_used=context_used
     )
-
-    # 🚀 SALVA O ID DO ÉPICO NA RAIZ DO MONGO (Para não quebrar o Worker)
-    if target_epic_id or action == "fromepic":
-        epic_val = target_epic_id
-        if not epic_val and base_job_id:
-            past_rep = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
-            epic_val = past_rep.get("target_epic_id") if past_rep else None
-            
-        if epic_val:
-            await mongo_service.db.project_reports_history.update_one(
-                {"job_id": job_id},
-                {"$set": {"target_epic_id": epic_val}}
-            )
 
     mcp_payload = {
         "email": email, 
@@ -374,7 +380,7 @@ async def start_analysis(
         "group_ids": [str(project_group_id)],
         "context_used": context_used,
         "company_template": company_template,
-        "target_epic_id": target_epic_id 
+        "target_epic_id": epic_val
     }
     
     mcp_client = MCPClientService(base_url=agent_cfg.mcp_service_url)
@@ -385,7 +391,7 @@ async def start_analysis(
         raise HTTPException(status_code=502, detail=f"Erro no MCP: {str(e)}")
 
     return StartAnalysisResponse(message="Análise multiagente solicitada com sucesso.", project_id=project_id, job_id=job_id, nome_projeto=nome_projeto_final)
-
+    
 # ============================================================================
 # 🚀 ROTA DO GRAFO (ÁRVORE DE LINHAGEM DO PROJETO) 
 # ============================================================================
