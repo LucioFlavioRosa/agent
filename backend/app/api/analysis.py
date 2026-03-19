@@ -305,12 +305,19 @@ async def start_analysis(
         if action == "fromepic":
             context_used[f"{target_category}_job_id"] = base_job_id
             
+            # 🚀 SEU PEDIDO ATENDIDO: Devolvendo o target_epic_id para o contexto oficial
+            if target_epic_id:
+                context_used["target_epic_id"] = target_epic_id
+                
         # 2️⃣ GARANTE A LIGAÇÃO AO REFINAR UMA TELA
         if action == "reviwer" and category == "prototype":
             old_ctx = past_report.get("context_used", {})
             for k, v in old_ctx.items() if isinstance(old_ctx, dict) else {}:
                 context_used[k] = v
             context_used["prototype_job_id"] = base_job_id
+            
+            if target_epic_id:
+                context_used["target_epic_id"] = target_epic_id
 
         for cat in reports_to_read:
             if cat == target_category:
@@ -325,7 +332,6 @@ async def start_analysis(
                 
                 if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
                 context_used[f"{cat}_job_id"] = dependency_job_id
-
     if strategy == "checkout" and action != "fromepic":
         new_latest_state = {}
         for cat, j_id in context_used.items():
@@ -429,6 +435,12 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
 
         for ctx_key, parent_job_id in context_used.items() if isinstance(context_used, dict) else {}:
             if not parent_job_id: continue
+            
+            # 🚀 CORREÇÃO DA ÁRVORE: Ignora a tag do Épico na hora de desenhar a linha.
+            # Isso impede que o nó fique "solto" igual na sua imagem!
+            if ctx_key == "target_epic_id":
+                continue
+                
             parent_category = job_category_map.get(parent_job_id)
             
             if parent_category == category:
@@ -443,7 +455,6 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
                 "target": job_id, 
                 "type": edge_type
             })
-
         # Evita conectar telas separadas (E01 com E06) em uma linha só
         if not has_refinement_edge and category in last_version_map and not category.startswith("prototype"):
             parent_job_id = last_version_map[category]
