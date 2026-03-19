@@ -107,29 +107,33 @@ class AgentService:
         
         print(f"\n{'='*60}\n🔍 [DEBUG PROTÓTIPO] MONTAGEM DO PROMPT\n{'='*60}", flush=True)
         
-        # 1. Carrega o Prompt Base do Agente
         prompt = self._obter_prompt_base(analysis_type)
         
         is_reviewer = analysis_type and "reviwer" in str(analysis_type).lower()
         is_fromepic = analysis_type and "fromepic" in str(analysis_type).lower()
         
-        # 2. Carrega os Arquivos de Contexto (.md do Blob Storage)
         if (is_reviewer or is_fromepic) and context_used:
-            # Transforma as chaves (ex: 'epics_job_id') em nomes de arquivo visíveis (ex: 'epics.md')
-            nomes_arquivos_contexto = [k.replace('_job_id', '.md') for k in context_used.keys() if k != 'target_epic_id']
-            print(f"📌 [CONTEXTO] Solicitando os seguintes arquivos base do projeto: {nomes_arquivos_contexto}", flush=True)
+            print(f"📌 Chaves de contexto originais no Banco: {list(context_used.keys())}", flush=True)
+            
+            # 🚀 A MÁGICA: Filtramos a tag do Épico APENAS para não quebrar o download do Blob!
+            # O Banco de Dados continua intacto.
+            context_para_baixar = {k: v for k, v in context_used.items() if k != "target_epic_id"}
+            
+            # Formata os logs visualmente para 'epics.md' etc
+            nomes_arquivos_contexto = [k.replace('_job_id', '.md') for k in context_para_baixar.keys()]
+            print(f"📌 [CONTEXTO] Solicitando download dos arquivos base: {nomes_arquivos_contexto}", flush=True)
             
             context_result = self.context_retrieval.build_context_string(
                 company_id=company_id, 
                 project_id=project_id, 
-                context_used=context_used,
+                context_used=context_para_baixar, # <-- Passamos o contexto limpo para o downloader!
                 group_ids=group_ids
             )
             
             codigo_html_anterior = await context_result if asyncio.iscoroutine(context_result) else context_result
             
             if codigo_html_anterior:
-                print(f"✅ [CONTEXTO] Arquivos {nomes_arquivos_contexto} lidos e injetados com sucesso! (Tamanho: {len(codigo_html_anterior)} chars)", flush=True)
+                print(f"✅ [CONTEXTO] Arquivos {nomes_arquivos_contexto} lidos com sucesso! (Tamanho: {len(codigo_html_anterior)} chars)", flush=True)
                 
                 if is_fromepic and target_epic_id:
                     prompt += f"\n\n🎯 ALVO DO PROTÓTIPO: ATENÇÃO MÁXIMA!\n"
@@ -139,12 +143,10 @@ class AgentService:
                 else:
                     prompt += f"\n\n--- CÓDIGO DO PROTÓTIPO DE REFERÊNCIA (CONFORME CONTEXTO) ---\n{codigo_html_anterior}\n\n"
 
-        # 3. Carrega o Template da Empresa
         texto_template = self._obter_template_empresa(company_template)
         if texto_template:
             prompt += f"--- DIRETRIZES DE UI/UX DA EMPRESA ({str(company_template).upper()}) ---\n{texto_template}\n\n"
 
-        # 4. Adiciona Requisitos, Identidade e Extras
         if texto_instrucoes:
             prompt += f"--- REQUISITOS DE TELA E NEGÓCIO ---\n{texto_instrucoes}\n\n"
 
