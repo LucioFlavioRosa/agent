@@ -380,13 +380,31 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
 
     nodes = []
     edges = []
-    job_category_map = {item["job_id"]: item.get("report_category") for item in history}
+    job_category_map = {}
 
     last_version_map = {}
 
     for report in history:
         job_id = report.get("job_id")
         category = report.get("report_category", "unknown")
+        epic_id = report.get("target_epic_id")
+        context_used = report.get("context_used", {})
+        
+        if not epic_id and context_used:
+            if isinstance(context_used, dict):
+                epic_id = context_used.get("target_epic_id")
+            elif isinstance(context_used, str):
+                try:
+                    import json
+                    epic_id = json.loads(context_used).get("target_epic_id")
+                except:
+                    pass
+                    
+        # Se achou o épico, transforma a categoria de "prototype" para "prototype_E06"
+        if category == "prototype" and epic_id:
+            category = f"prototype_{epic_id}"
+            
+        job_category_map[job_id] = category
         version = report.get("version", 1)
         
         nodes.append({
@@ -396,10 +414,9 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
             "created_by": report.get("created_by_email")
         })
 
-        context_used = report.get("context_used", {})
         has_refinement_edge = False
 
-        for ctx_key, parent_job_id in context_used.items():
+        for ctx_key, parent_job_id in context_used.items() if isinstance(context_used, dict) else {}:
             if not parent_job_id: continue
             parent_category = job_category_map.get(parent_job_id)
             
@@ -416,10 +433,8 @@ async def get_project_lineage(project_id: str, mongo_service: MongoDBService = D
                 "type": edge_type
             })
 
-        # 🚀 CORREÇÃO DO MULTIVERSO: 
-        # Só força a linha contínua se NÃO for protótipo. 
-        # Protótipos devem respeitar as linhas exclusivas do contexto injetado (vêm do Épico ou do Refine explícito).
-        if not has_refinement_edge and category in last_version_map and category != "prototype":
+        # Evita conectar telas separadas (E01 com E06) em uma linha só
+        if not has_refinement_edge and category in last_version_map and not category.startswith("prototype"):
             parent_job_id = last_version_map[category]
             edges.append({
                 "id": f"edge_auto_refine_{parent_job_id}_to_{job_id}",
