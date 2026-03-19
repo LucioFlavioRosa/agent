@@ -293,6 +293,7 @@ async def start_analysis(
         return latest_doc.get("job_id") if latest_doc else None
 
     # 🚀 REGRA NOVA PARA LER O BASE_JOB_ID MESMO EM MODO GENERATOR (Para a action fromepic)
+    # 🚀 REGRA NOVA PARA LER O BASE_JOB_ID MESMO EM MODO GENERATOR (Para a action fromepic)
     if base_job_id:
         past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
         if not past_report: raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
@@ -300,22 +301,17 @@ async def start_analysis(
         target_category = past_report.get("report_category")
         historical_tree = await get_historical_lineage(base_job_id, mongo_service.db)
         
-        # Se for a action fromepic, nós garantimos que a linhagem epics seja mapeada!
+        # 1️⃣ GARANTE A LIGAÇÃO (LINHA) NA ÁRVORE
         if action == "fromepic":
             context_used[f"{target_category}_job_id"] = base_job_id
             
-            # 🚀 CORREÇÃO: Salva o ID do Épico no contexto para o Front conseguir ler depois!
-            if target_epic_id:
-                context_used["target_epic_id"] = target_epic_id
-                
-        # 🚀 CORREÇÃO: Se for refinamento de um protótipo, herda o ID do Épico do pai para não perder a referência!
+        # 2️⃣ GARANTE A LIGAÇÃO AO REFINAR UMA TELA
         if action == "reviwer" and category == "prototype":
             old_ctx = past_report.get("context_used", {})
-            if "target_epic_id" in old_ctx:
-                context_used["target_epic_id"] = old_ctx["target_epic_id"]
-            elif past_report.get("target_epic_id"):
-                context_used["target_epic_id"] = past_report.get("target_epic_id")
-                
+            for k, v in old_ctx.items() if isinstance(old_ctx, dict) else {}:
+                context_used[k] = v
+            context_used["prototype_job_id"] = base_job_id
+
         for cat in reports_to_read:
             if cat == target_category:
                 context_used[f"{cat}_job_id"] = base_job_id
@@ -324,28 +320,18 @@ async def start_analysis(
                     dependency_job_id = await fetch_absolute_latest(cat)
                     if not dependency_job_id:
                         dependency_job_id = latest_reports_db.get(cat) or historical_tree.get(cat)
-                    logger.info(f"🔄 [Estratégia] Rebase para '{cat}': Puxando a versão mais moderna do projeto -> {dependency_job_id}")
                 else:
                     dependency_job_id = historical_tree.get(cat)
-                    logger.info(f"❄️ [Estratégia] Checkout para '{cat}': Puxando do histórico congelado -> {dependency_job_id}")
                 
                 if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
                 context_used[f"{cat}_job_id"] = dependency_job_id
 
-        if strategy == "checkout" and action != "fromepic":
-            new_latest_state = {}
-            for cat, j_id in context_used.items():
-                cat_name = cat.replace("_job_id", "")
-                new_latest_state[cat_name] = j_id
-            await mongo_service.update_project_latest_reports(project_id, new_latest_state)
-
-    else:
-        for cat in reports_to_read:
-            dependency_job_id = await fetch_absolute_latest(cat)
-            if not dependency_job_id:
-                dependency_job_id = latest_reports_db.get(cat)
-            if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada para gerar {category}.")
-            context_used[f"{cat}_job_id"] = dependency_job_id
+    if strategy == "checkout" and action != "fromepic":
+        new_latest_state = {}
+        for cat, j_id in context_used.items():
+            cat_name = cat.replace("_job_id", "")
+            new_latest_state[cat_name] = j_id
+        await mongo_service.update_project_latest_reports(project_id, new_latest_state)
 
     # ==========================================
     # 7. EXECUÇÃO
@@ -355,6 +341,19 @@ async def start_analysis(
     job_id = await redis_service.create_job(
         project_id=project_id, analysis_type=analysis_type, email=email, empresa=company_id, context_used=context_used
     )
+
+    # 🚀 SALVA O ID DO ÉPICO NA RAIZ DO MONGO (Para não quebrar o Worker)
+    if target_epic_id or action == "fromepic":
+        epic_val = target_epic_id
+        if not epic_val and base_job_id:
+            past_rep = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
+            epic_val = past_rep.get("target_epic_id") if past_rep else None
+            
+        if epic_val:
+            await mongo_service.db.project_reports_history.update_one(
+                {"job_id": job_id},
+                {"$set": {"target_epic_id": epic_val}}
+            )
 
     mcp_payload = {
         "email": email, 
