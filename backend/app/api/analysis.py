@@ -512,3 +512,51 @@ async def _verify_user_is_owner_helper(email: str, project_id: str, mongo_servic
     members = getattr(project, "members", []) if not isinstance(project, dict) else project.get("members", [])
     return any(m.get("email") == email and m.get("role", "").lower() == "owner" for m in members if isinstance(m, dict)) or \
            any(getattr(m, "email", "") == email and getattr(m, "role", "").lower() == "owner" for m in members if not isinstance(m, dict))
+
+
+# ============================================================================
+# 🚨 ROTA DE SUPORTE: CORREÇÃO DE ESTADO DE CONTEXTO (FORCE UPDATE)
+# ============================================================================
+@router.post("/support/force-update-latest", tags=["Support"])
+async def force_update_project_latest(
+    project_id: str = Form(...), 
+    category: str = Form(...),  # "epics", "features", "timeline", "risks"
+    job_id: str = Form(...), 
+    mongo_service: MongoDBService = Depends(get_mongo_service)
+):
+    """
+    Rota de suporte para corrigir inconsistências onde o Worker teve sucesso,
+    mas o documento principal do projeto não foi atualizado.
+    """
+    logger.info(f"🚨 [SUPPORT] Solicitada atualização forçada. Projeto: {project_id}, Cat: {category}, Job: {job_id}")
+
+    # 1. Verifica se o relatório existe e está DONE
+    report = await mongo_service.db.project_reports_history.find_one({"job_id": job_id, "project_id": project_id})
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatório histórico não encontrado.")
+    
+    if report.get("status") != "done":
+        raise HTTPException(status_code=400, detail=f"O relatório não pode ser definido como atual pois seu status é '{report.get('status')}', não 'done'.")
+
+    if report.get("report_category") != category:
+        raise HTTPException(status_code=400, detail=f"O relatório informado pertence à categoria '{report.get('report_category')}', não '{category}'.")
+
+    # 2. Prepara a atualização do estado
+    new_latest_state = {
+        category: job_id
+    }
+
+    # 3. Atualiza o documento principal do projeto
+    success = await mongo_service.update_project_latest_reports(project_id, new_latest_state)
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Falha ao atualizar o documento do projeto no MongoDB.")
+
+    logger.info(f"✅ [SUPPORT] Estado do projeto {project_id} atualizado com sucesso para {category}={job_id}.")
+    
+    return {
+        "message": f"Ponteiro de '{category}' atualizado com sucesso para o Job '{job_id}'. O grafo deve refletir a mudança no próximo reload.",
+        "project_id": project_id,
+        "updated_category": category,
+        "new_current_job_id": job_id
+    }
