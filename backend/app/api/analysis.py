@@ -293,7 +293,6 @@ async def start_analysis(
         return latest_doc.get("job_id") if latest_doc else None
 
     # 🚀 REGRA NOVA PARA LER O BASE_JOB_ID MESMO EM MODO GENERATOR (Para a action fromepic)
-    # 🚀 REGRA NOVA PARA LER O BASE_JOB_ID MESMO EM MODO GENERATOR (Para a action fromepic)
     if base_job_id:
         past_report = await mongo_service.db.project_reports_history.find_one({"job_id": base_job_id})
         if not past_report: raise HTTPException(status_code=404, detail="Relatório base não encontrado.")
@@ -304,10 +303,6 @@ async def start_analysis(
         # 1️⃣ GARANTE A LIGAÇÃO (LINHA) NA ÁRVORE
         if action == "fromepic":
             context_used[f"{target_category}_job_id"] = base_job_id
-            
-            # 🚀 SEU PEDIDO ATENDIDO: Devolvendo o target_epic_id para o contexto oficial
-            if target_epic_id:
-                context_used["target_epic_id"] = target_epic_id
                 
         # 2️⃣ GARANTE A LIGAÇÃO AO REFINAR UMA TELA
         if action == "reviwer" and category == "prototype":
@@ -315,9 +310,6 @@ async def start_analysis(
             for k, v in old_ctx.items() if isinstance(old_ctx, dict) else {}:
                 context_used[k] = v
             context_used["prototype_job_id"] = base_job_id
-            
-            if target_epic_id:
-                context_used["target_epic_id"] = target_epic_id
 
         for cat in reports_to_read:
             if cat == target_category:
@@ -332,6 +324,21 @@ async def start_analysis(
                 
                 if not dependency_job_id: raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada.")
                 context_used[f"{cat}_job_id"] = dependency_job_id
+
+    # Precisamos puxar as dependências oficiais do projeto!
+    else:
+        for cat in reports_to_read:
+            dependency_job_id = await fetch_absolute_latest(cat)
+            
+            # Se não achar o mais recente absoluto, tenta pegar do dicionário do projeto
+            if not dependency_job_id:
+                dependency_job_id = latest_reports_db.get(cat)
+                
+            if not dependency_job_id: 
+                raise HTTPException(status_code=400, detail=f"Dependência '{cat}' não encontrada para gerar {category}.")
+            
+            context_used[f"{cat}_job_id"] = dependency_job_id
+    
     if strategy == "checkout" and action != "fromepic":
         new_latest_state = {}
         for cat, j_id in context_used.items():
