@@ -157,19 +157,64 @@ class QueueService:
             )
             
         except Exception as e:
-            logger.log_erro("erro_processamento_job", f"Erro ao processar mensagem: {e}", extra={"worker_id": worker_id})
+            
+            # 1. Recupera as informações básicas para o Log, mesmo se algo quebrou cedo
+            task_data = {}
+            job_id_log = "desconhecido"
+            company_id_log = "desconhecido"
+            project_id_log = "desconhecido"
+            analysis_type_log = "unknown"
+            
             try:
                 task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
-                await self._notificar_backend(
-                    job_id=task_data.get("job_id"),
-                    company_id=task_data.get("company_id"),
-                    project_id=task_data.get("project_id"),
-                    status="error",
-                    category=task_data.get("analysis_type", "unknown"),
-                    error_message=str(e)
-                )
-            except Exception:
+                job_id_log = task_data.get("job_id", "desconhecido")
+                company_id_log = task_data.get("company_id", "desconhecido")
+                project_id_log = task_data.get("project_id", "desconhecido")
+                analysis_type_log = task_data.get("analysis_type", "unknown")
+            except:
                 pass
+
+            # 2. Avalia a contagem de tentativas (dequeue_count começa em 1 na primeira vez)
+            tentativa_atual = getattr(msg, 'dequeue_count', 1)
+            MAX_TENTATIVAS = 3
+            
+            if tentativa_atual < MAX_TENTATIVAS:
+                # 🔄 FALHA TEMPORÁRIA (O Azure vai colocar de volta na fila automaticamente)
+                logger.log_erro(
+                    "erro_processamento_job_tentativa", 
+                    f"Falha na tentativa {tentativa_atual} de {MAX_TENTATIVAS}. O Azure reprocessará a mensagem. Erro: {e}", 
+                    job_id=job_id_log, 
+                    company_id=company_id_log,
+                    extra={"worker_id": worker_id}
+                )
+                
+            else:
+                # ❌ FALHA DEFINITIVA (Esgotaram as chances)
+                logger.log_erro(
+                    "erro_processamento_job_definitivo", 
+                    f"Falha definitiva após {MAX_TENTATIVAS} tentativas. Abortando o Job. Erro: {e}", 
+                    job_id=job_id_log, 
+                    company_id=company_id_log,
+                    extra={"worker_id": worker_id}
+                )
+                
+                # Avisa o Backend que falhou de vez
+                try:
+                    await self._notificar_backend(
+                        job_id=job_id_log,
+                        company_id=company_id_log,
+                        project_id=project_id_log,
+                        status="error",
+                        category=analysis_type_log,
+                        error_message=f"Falha persistente após {MAX_TENTATIVAS} tentativas. Último erro: {str(e)}"
+                    )
+                except Exception as ex_notificacao:
+                    logger.log_erro("erro_notificacao_falha", f"Não foi possível notificar o backend do erro fatal: {ex_notificacao}", job_id=job_id_log)
+                
+                try:
+                    await queue_client.delete_message(msg)
+                except:
+                    pass
     
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
