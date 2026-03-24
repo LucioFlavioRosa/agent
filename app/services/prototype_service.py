@@ -115,18 +115,14 @@ class AgentService:
         if (is_reviewer or is_fromepic) and context_used:
             print(f"📌 Chaves de contexto originais no Banco: {list(context_used.keys())}", flush=True)
             
-            # 🚀 A MÁGICA: Filtramos a tag do Épico APENAS para não quebrar o download do Blob!
-            # O Banco de Dados continua intacto.
             context_para_baixar = {k: v for k, v in context_used.items() if k != "target_epic_id"}
-            
-            # Formata os logs visualmente para 'epics.md' etc
             nomes_arquivos_contexto = [k.replace('_job_id', '.md') for k in context_para_baixar.keys()]
             print(f"📌 [CONTEXTO] Solicitando download dos arquivos base: {nomes_arquivos_contexto}", flush=True)
             
             context_result = self.context_retrieval.build_context_string(
                 company_id=company_id, 
                 project_id=project_id, 
-                context_used=context_para_baixar, # <-- Passamos o contexto limpo para o downloader!
+                context_used=context_para_baixar, 
                 group_ids=group_ids
             )
             
@@ -136,9 +132,10 @@ class AgentService:
                 print(f"✅ [CONTEXTO] Arquivos {nomes_arquivos_contexto} lidos com sucesso! (Tamanho: {len(codigo_html_anterior)} chars)", flush=True)
                 
                 if is_fromepic and target_epic_id:
-                    prompt += f"\n\n🎯 ALVO DO PROTÓTIPO: ATENÇÃO MÁXIMA!\n"
-                    prompt += f"Você deve criar a interface EXCLUSIVAMENTE baseada no Épico de Identificador '{target_epic_id}'.\n"
-                    prompt += f"Abaixo está o relatório contendo todos os épicos do projeto. Procure pelo épico '{target_epic_id}' e use os dados dele (Título, Business Case, Entregáveis Macro, etc) para projetar e compor a tela. Ignore completamente as informações dos outros épicos.\n\n"
+                    prompt += f"\n\n🎯 ALVO DO PROTÓTIPO: O ÉPICO BASE\n"
+                    # 🚀 RETIRAMOS O "EXCLUSIVAMENTE" E ADICIONAMOS A REGRA DE MESCLAGEM
+                    prompt += f"A fundação estrutural desta tela é o Épico de Identificador '{target_epic_id}'. Encontre-o no relatório abaixo e use seus dados (Título, Business Case, Entregáveis Macro).\n"
+                    prompt += f"ATENÇÃO: Você DEVE mesclar a base deste épico com as Solicitações e Transcrições de Reunião que serão enviadas logo abaixo. O problema relatado na transcrição tem PRIORIDADE para definir O QUE a tela vai resolver.\n\n"
                     prompt += f"--- RELATÓRIO DE ÉPICOS ---\n{codigo_html_anterior}\n\n"
                 else:
                     prompt += f"\n\n--- CÓDIGO DO PROTÓTIPO DE REFERÊNCIA (CONFORME CONTEXTO) ---\n{codigo_html_anterior}\n\n"
@@ -147,14 +144,22 @@ class AgentService:
         if texto_template:
             prompt += f"--- DIRETRIZES DE UI/UX DA EMPRESA ({str(company_template).upper()}) ---\n{texto_template}\n\n"
 
+        # 🚀 ALERTA MÁXIMO PARA A TRANSCRIÇÃO (ARQUIVO DOCX)
         if texto_instrucoes:
-            prompt += f"--- REQUISITOS DE TELA E NEGÓCIO ---\n{texto_instrucoes}\n\n"
+            print(f"📌 [INSTRUÇÕES] Anexando documento DOCX / Transcrição ({len(texto_instrucoes)} caracteres).", flush=True)
+            prompt += f"🚨 ALERTA MÁXIMO: DOCUMENTO DE REQUISITOS / TRANSCRIÇÃO DE REUNIÃO 🚨\n"
+            prompt += f"O texto abaixo contém o problema central discutido pelo time/cliente. O seu protótipo DEVE resolver os problemas relatados aqui. Integre as funcionalidades descritas à solução final:\n"
+            prompt += f"{texto_instrucoes}\n\n"
 
         if texto_identidade:
             prompt += f"--- DIRETRIZES DE ESTILO E CORES (ARQUIVO EXTRA) ---\n{texto_identidade}\n\n"
 
+        # 🚀 ALERTA MÁXIMO PARA O COMENTÁRIO (TEXTO DIGITADO NO FRONTEND)
         if comentario_extra:
-            prompt += f"--- SOLICITAÇÃO ESPECÍFICA DO USUÁRIO ---\n{comentario_extra}\n\n"
+            print(f"📌 [COMENTÁRIO] Anexando solicitação digitada no Front-end ({len(comentario_extra)} caracteres).", flush=True)
+            prompt += f"🚨 ALERTA MÁXIMO: SOLICITAÇÃO ESPECÍFICA DO USUÁRIO 🚨\n"
+            prompt += f"O usuário fez o seguinte pedido direto para essa tela. Isso tem prioridade ABSOLUTA no layout e nas funcionalidades:\n"
+            prompt += f"{comentario_extra}\n\n"
             
         prompt += "\nRETORNE APENAS O CÓDIGO HTML COMPLETO, SEM EXPLICAÇÕES."
         
