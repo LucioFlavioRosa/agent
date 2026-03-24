@@ -23,18 +23,26 @@ def iterar_blocos_sequenciais(parent):
         elif isinstance(child, CT_Tbl):
             yield Table(child, parent)
 
+# Garanta que a instância do logger está assim no topo do arquivo:
+logger = StructuredLogger("mcp_doc_structured")
+
 def extrair_texto_docx_em_memoria(file_bytes: bytes, job_id: str = None, company_id: str = None, project_id: str = None) -> str:
-    contexto_log = f"job_id={job_id} company_id={company_id} project_id={project_id}" if job_id or company_id or project_id else ""
     try:
-        logger.info(f"docx_extracao_iniciada | tamanho_bytes={len(file_bytes)} | {contexto_log}")
+        # 🚀 CORREÇÃO: Usando log_info_negocio
+        logger.log_info_negocio(
+            "docx_extracao_iniciada", 
+            f"Tamanho bytes={len(file_bytes)}", 
+            job_id=job_id, 
+            company_id=company_id
+        )
+        
         file_stream = io.BytesIO(file_bytes)
         documento = Document(file_stream)
         texto_extraido = []
-        bloco_idx = 0
         paragrafo_count = 0
         tabela_count = 0
+        
         for bloco in iterar_blocos_sequenciais(documento):
-            bloco_idx += 1
             if isinstance(bloco, Paragraph):
                 texto = bloco.text.strip()
                 if texto:
@@ -50,16 +58,32 @@ def extrair_texto_docx_em_memoria(file_bytes: bytes, job_id: str = None, company
                     texto_extraido.append(" | ".join(linha_texto))
                 texto_extraido.append("[--- Fim da Tabela ---]\n")
                 tabela_count += 1
+                
         resultado = "\n".join(texto_extraido)
-        logger.info(f"docx_extracao_finalizada | caracteres_extraidos={len(resultado)} | paragrafos={paragrafo_count} | tabelas={tabela_count} | {contexto_log}")
+        
+        # 🚀 CORREÇÃO: Usando log_info_negocio
+        logger.log_info_negocio(
+            "docx_extracao_finalizada", 
+            f"Caracteres extraidos={len(resultado)} | paragrafos={paragrafo_count} | tabelas={tabela_count}", 
+            job_id=job_id, 
+            company_id=company_id
+        )
+        
         return resultado
+        
     except Exception as e:
-        logger.error(f"docx_extracao_erro | {contexto_log} | erro={str(e)}")
+        # 🚀 AQUI ESTAVA O CRASH! Corrigido para log_erro
+        logger.log_erro(
+            "docx_extracao_erro", 
+            f"Erro ao extrair texto do DOCX: {str(e)}", 
+            job_id=job_id, 
+            company_id=company_id
+        )
         raise
 
 
 
-logger = StructuredLogger("pdf_parser")
+#logger = StructuredLogger("pdf_parser")
 
 async def extrair_texto_pdf_em_memoria(file_bytes: bytes, api_key: str, job_id=None, company_id=None, project_id=None) -> str:
     """
