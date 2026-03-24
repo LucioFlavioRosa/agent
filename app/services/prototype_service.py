@@ -147,7 +147,6 @@ class AgentService:
         # 🚀 ALERTA MÁXIMO PARA A TRANSCRIÇÃO (ARQUIVO DOCX)
         if texto_instrucoes:
             print(f"📌 [INSTRUÇÕES] Anexando documento DOCX / Transcrição ({len(texto_instrucoes)} caracteres).", flush=True)
-            prompt += f"🚨 ALERTA MÁXIMO: DOCUMENTO DE REQUISITOS / TRANSCRIÇÃO DE REUNIÃO 🚨\n"
             prompt += f"O texto abaixo contém o problema central discutido pelo time/cliente. O seu protótipo DEVE resolver os problemas relatados aqui. Integre as funcionalidades descritas à solução final:\n"
             prompt += f"{texto_instrucoes}\n\n"
 
