@@ -1,5 +1,3 @@
-Com certeza. Aqui está o descritivo objetivo com os elementos visuais focados na Comgás, estruturado exatamente nos moldes que você enviou:
-
 # Descritivo Objetivo para o Agente de UI/UX (Comgás)
 
 Aqui está o descritivo objetivo com os elementos visuais da Comgás para a construção do protótipo:
