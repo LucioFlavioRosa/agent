@@ -4,17 +4,42 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 from fastapi.responses import JSONResponse
-from fastapi import APIRouter, HTTPException, status, Query
-from typing import Optional # <-- IMPORTANTE ADICIONAR
+from fastapi import APIRouter, HTTPException, status, Query, Depends
+from typing import Optional
 
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.services.mcp_client_service import MCPClientService
 from backend.app.services.mongodb_service import MongoDBService
+from backend.app.services.permission_service import PermissionService
 
 from backend.app.api.utils import get_user_and_company_id
 from backend.config.agent_mapping import AGENT_TO_CATEGORY
 from backend.app.core.config import settings
+import functools
 
+def get_mongo_service() -> MongoDBService:
+    return MongoDBService()
+
+def get_redis_service() -> RedisSessionService:
+    return RedisSessionService()
+
+def get_mcp_client() -> MCPClientService:
+    return MCPClientService()
+
+def get_permission_service() -> PermissionService:
+    return PermissionService()
+
+@functools.lru_cache()
+def get_mcp_agents_config() -> dict:
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    config_file_path = base_dir / "config" / "mcp_agents.json"
+    if config_file_path.exists():
+        try:
+            with open(config_file_path, "r", encoding="utf-8") as f:
+                return json.load(f).get("agents", {})
+        except Exception:
+            pass
+    return {}
 
 router = APIRouter()
 logger = logging.getLogger("session_api")
@@ -24,7 +49,11 @@ async def get_project_reports(
     project_id: str,
     job_id: str,
     email: str = Query(..., description="Email do usuário"),
-    filename: Optional[str] = Query(None, description="Nome do arquivo desejado (opcional)"), # 🚀 ADICIONADO AQUI
+    filename: Optional[str] = Query(None, description="Nome do arquivo desejado (opcional)"),
+    mongo_service: MongoDBService = Depends(get_mongo_service),
+    redis_service: RedisSessionService = Depends(get_redis_service),
+    mcp_client: MCPClientService = Depends(get_mcp_client),
+    permission_service: PermissionService = Depends(get_permission_service)
 ):
     logger.info(f"[Session] Requisição recebida: project_id={project_id}, job_id={job_id}, email={email}, filename={filename}")
 
@@ -38,13 +67,10 @@ async def get_project_reports(
         raise HTTPException(status_code=400, detail="job_id inválido ou ausente.")
 
     # 2. DESCOBRINDO A EMPRESA
-    mongo_service = MongoDBService()
     user, empresa = await get_user_and_company_id(email, mongo_service)
     
     # Aqui sim logamos a empresa, pois ela já foi carregada do banco!
     logger.info(f"[Session] Empresa resolvida automaticamente: {empresa}")
-
-    redis_service = RedisSessionService()
     
     # 3. BUSCAR METADADOS DO JOB NO REDIS (Apenas dados de controle, super leve)
     logger.info(f"[Session] Buscando metadados do job no Redis para job_id={job_id}")
@@ -73,52 +99,21 @@ async def get_project_reports(
             detail="Acesso negado: Este relatório pertence a outra organização."
         )
 
-    # 4. VALIDAÇÃO DE PERMISSÃO (Segurança RBAC - Nível Usuário/Projeto)
-    logger.info(f"[Session] Verificando permissões do usuário {email} para o projeto {project_id}")
-    user_perms = await redis_service.get_user_permissions(email=email, company_id=empresa)
+    # 4. VALIDAÇÃO DE PERMISSÃO (Segurança RBAC via PermissionService)
+    logger.info(f"[Session] Verificando permissões de {email} via PermissionService")
     
-    # ==========================================================
-    # 🚀 FALLBACK 4.1: SE O REDIS NEGAR, VERIFICA NO MONGODB
-    # ==========================================================
-    is_member = False
+    allowed, role, error_msg = await permission_service.check_user_project_permission(
+        email=email,
+        project_id=project_id,
+        agent_name=job.analysis_type,
+        action_type="view_project"
+    )
     
-    if user_perms and project_id in user_perms.get("project_permissions", {}):
-        # Cenário Feliz: O Redis tinha a informação atualizada
-        is_member = True
-    else:
-        # Fallback: O Redis negou (cache expirado ou projeto recém-criado)
-        logger.warning(f"[Session] Permissão não achada no Redis para {email}. Buscando no MongoDB (Fallback)...")
-        
-        projeto_real = await mongo_service.get_project_by_id(project_id)
-        
-        if projeto_real:
-            # Extrai a lista de membros (suporta dicionário do Mongo ou modelo do Pydantic)
-            membros = getattr(projeto_real, "members", []) if not isinstance(projeto_real, dict) else projeto_real.get("members", [])
-            # Verifica se o email do usuário está na lista
-            is_member = any((getattr(m, "email", None) if not isinstance(m, dict) else m.get("email")) == email for m in membros)
-            
-        if not is_member:
-            logger.error(f"[Session] ACESSO NEGADO DEFINITIVO: {email} não é membro do projeto {project_id}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, 
-                detail="Acesso negado: Você não é membro (owner, editor ou viewer) deste projeto."
-            )
-        else:
-            logger.info(f"[Session] Permissão de {email} confirmada via MongoDB para o projeto recém-criado!")
-            # Cria um "cache fantasma" local na memória só para não quebrar a validação 4.2 abaixo
-            if not user_perms:
-                user_perms = {"allowed_agents": [job.analysis_type]}
-    # ==========================================================
-
-    # 4.2 Verifica se o usuário tem acesso ao agente específico deste job
-    agentes_permitidos = user_perms.get("allowed_agents", [])
-    
-    # Adicionamos um contorno seguro (and not is_member) caso o cache fantasma tenha sido usado
-    if job.analysis_type not in agentes_permitidos and not is_member:
-        logger.error(f"[Session] ACESSO NEGADO: {email} não tem permissão para o agente {job.analysis_type}")
+    if not allowed:
+        logger.error(f"[Session] ACESSO NEGADO DEFINITIVO: {error_msg}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail=f"Acesso negado: Seu perfil não tem permissão para acessar relatórios do agente '{job.analysis_type}'."
+            detail=error_msg or "Acesso negado: Permissão de visualização deste projeto insuficiente."
         )
 
     # 5. VERIFICAR STATUS DO PROCESSAMENTO
@@ -145,24 +140,11 @@ async def get_project_reports(
     logger.info(f"[Session] Job {job_id} concluído. Solicitando relatório ao MCP...")
     
     # ==========================================================
-    # 🚀 LÊ A URL DIRETO DO ARQUIVO mcp_agents.json
+    # 🚀 LÊ A URL DIRETO DA CONFIG CACHEADA (DRY)
     # ==========================================================
-    agents_config = {}
-    try:
-        # Resolve o caminho absoluto (sobe 3 pastas: api -> app -> backend -> entra em config)
-        base_dir = Path(__file__).resolve().parent.parent.parent
-        config_file_path = base_dir / "config" / "mcp_agents.json"
-        
-        if config_file_path.exists():
-            with open(config_file_path, "r", encoding="utf-8") as f:
-                json_data = json.load(f)
-                # O JSON tem a raiz "agents", então extraímos ela
-                agents_config = json_data.get("agents", {})
-        else:
-            logger.warning(f"[Session] Arquivo não encontrado: {config_file_path}. Tentando fallback.")
-            
-    except Exception as e:
-        logger.error(f"[Session] Erro ao ler mcp_agents.json: {e}")
+    agents_config = get_mcp_agents_config()
+    if not agents_config:
+         logger.warning(f"[Session] Configuração mcp_agents.json ausente, tentando fallback de ambiente.")
 
     # Pega as informações específicas do agente que rodou este job
     agente_info = agents_config.get(job.analysis_type, {})
@@ -179,7 +161,6 @@ async def get_project_reports(
     # ==========================================================
     # 🚀 FAZ A REQUISIÇÃO PARA O MCP COM NOME BLINDADO
     # ==========================================================
-    mcp_client = MCPClientService()
     
     # 1. Busca a categoria exata no seu arquivo de configuração
     categoria = AGENT_TO_CATEGORY.get(job.analysis_type)
