@@ -3,32 +3,63 @@ from redis.asyncio.cluster import RedisCluster
 import uuid
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Protocol, Any, TypeVar, Type
 from backend.app.core.config import settings
 from backend.app.models.session_models import SessionData
 import logging
 from backend.app.models.job_models import JobData
 from backend.app.models.permission_models import UserPermissionCache
 
-class RedisSessionService:
-    def __init__(self):
-        self.logger = logging.getLogger("RedisSessionService")
-        redis_use_ssl_val = settings.REDIS_USE_SSL
-        if isinstance(redis_use_ssl_val, str):
-             redis_use_ssl_val = redis_use_ssl_val.lower() in ["true", "1", "yes"]
+T = TypeVar('T')
 
-        self.redis_client = RedisCluster(
-            host=settings.REDIS_HOST,
-            port=int(settings.REDIS_PORT or 6379),
-            password=settings.REDIS_PASSWORD,
-            db=int(settings.REDIS_DB or 0),
-            ssl=redis_use_ssl_val,
-            ssl_cert_reqs=settings.REDIS_SSL_CERT_REQS,
-            decode_responses=True,
-            socket_connect_timeout=3.0, 
-            socket_timeout=3.0
-        )
+class RedisClientProtocol(Protocol):
+    async def get(self, name: str) -> Any: ...
+    async def setex(self, name: str, time: int, value: Any) -> Any: ...
+    async def delete(self, *names: str) -> Any: ...
+
+def get_default_redis_client() -> RedisCluster:
+    redis_use_ssl_val = settings.REDIS_USE_SSL
+    if isinstance(redis_use_ssl_val, str):
+         redis_use_ssl_val = redis_use_ssl_val.lower() in ["true", "1", "yes"]
+
+    return RedisCluster(
+        host=settings.REDIS_HOST,
+        port=int(settings.REDIS_PORT or 6379),
+        password=settings.REDIS_PASSWORD,
+        db=int(settings.REDIS_DB or 0),
+        ssl=redis_use_ssl_val,
+        ssl_cert_reqs=settings.REDIS_SSL_CERT_REQS,
+        decode_responses=True,
+        socket_connect_timeout=3.0, 
+        socket_timeout=3.0
+    )
+
+
+class RedisSessionService:
+    def __init__(self, redis_client: Optional[RedisClientProtocol] = None):
+        self.logger = logging.getLogger("RedisSessionService")
+        self.redis_client = redis_client if redis_client is not None else get_default_redis_client()
         self.session_ttl = int(getattr(settings, 'REDIS_PERM_TTL', 600))
+
+    async def _fetch_dict(self, key: str) -> Optional[dict]:
+        """Helper DRY para ler e converter JSON do Redis."""
+        data_str = await self.redis_client.get(key)
+        if data_str:
+            try:
+                return json.loads(data_str)
+            except Exception as e:
+                self.logger.error(f"[Cache] Erro ao converter JSON (chave: {key}): {e}")
+        return None
+
+    async def _fetch_and_parse(self, key: str, model_class: Type[T]) -> Optional[T]:
+        """Helper DRY para instanciar Pydantic models a partir de JSON."""
+        data = await self._fetch_dict(key)
+        if data:
+            try:
+                return model_class(**data)
+            except Exception as e:
+                self.logger.error(f"[Cache] Erro instanciar {model_class.__name__} (chave: {key}): {e}")
+        return None
 
     # --- Métodos Auxiliares Síncronos ---
     def _serialize_session(self, session_data: dict) -> str:
@@ -51,16 +82,7 @@ class RedisSessionService:
     async def get_session_by_project_id(self, project_id: str) -> Optional[SessionData]:
         key = f"project:{project_id}:resumo"
         self.logger.info(f"[get_session_by_project_id] Buscando sessão para project_id '{project_id}'")
-        
-        session_json = await self.redis_client.get(key)
-        
-        if session_json:
-            try:
-                return SessionData(**self._deserialize_session(session_json))
-            except Exception as e:
-                self.logger.error(f"[get_session_by_project_id] Erro ao converter dados do Redis: {e}")
-                return None
-        return None
+        return await self._fetch_and_parse(key, SessionData)
 
     async def create_session(self, email: str, empresa: str, usuario_executor: str, nome_projeto: str, project_id: str) -> str:
         key = f"project:{project_id}:resumo"
@@ -108,17 +130,7 @@ class RedisSessionService:
     async def get_job(self, job_id: str) -> Optional[JobData]:
         key = f"job:{job_id}"
         self.logger.info(f"[get_job] Buscando job no Redis (chave: '{key}')")
-        
-        job_json = await self.redis_client.get(key)
-        
-        if job_json:
-            try:
-                data = json.loads(job_json)
-                return JobData(**data)
-            except Exception as e:
-                self.logger.error(f"[get_job] Erro ao desserializar JobData do Redis: {e}")
-                return None
-        return None
+        return await self._fetch_and_parse(key, JobData)
 
     async def update_job_status(self, job_id: str, status: str):
         key = f"job:{job_id}"
@@ -149,15 +161,8 @@ class RedisSessionService:
     async def get_error_message_for_job(self, job_id: str) -> Optional[str]:
         key = f"job:{job_id}:error"
         self.logger.info(f"[get_error_message_for_job] Buscando erro para '{job_id}'.")
-        try:
-            error_json = await self.redis_client.get(key)
-            if error_json:
-                data = json.loads(error_json)
-                return data.get("error_message")
-            return None
-        except Exception as e:
-            self.logger.error(f"[get_error_message_for_job] Erro ao recuperar: {e}")
-            return None
+        data = await self._fetch_dict(key)
+        return data.get("error_message") if data else None
 
     # --- Gestão de Cache de Permissões ---
     async def store_user_permissions(self, email: str, company_id: str, permissions: dict):
@@ -179,17 +184,8 @@ class RedisSessionService:
 
     async def get_user_permissions(self, email: str, company_id: str) -> Optional[dict]:
         key = f"perm:{email}:{company_id}"
-        
-        perms_json = await self.redis_client.get(key) 
-        
-        if perms_json:
-            try:
-                cache_obj = UserPermissionCache.parse_raw(perms_json)
-                return cache_obj.dict()
-            except Exception as e:
-                self.logger.error(f"[get_user_permissions] Erro ao carregar cache para {key}: {e}")
-                return None
-        return None
+        cache_obj = await self._fetch_and_parse(key, UserPermissionCache)
+        return cache_obj.dict() if cache_obj else None
 
     async def invalidate_user_permissions(self, email: str, company_id: str):
         key = f"perm:{email}:{company_id}"
