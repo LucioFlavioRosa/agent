@@ -1,24 +1,35 @@
 import logging
-from typing import Tuple, Optional, Set, List
+from typing import Tuple, Optional, Set, List, Protocol, Any
 
 from backend.app.services.mongodb_service import MongoDBService
 from backend.app.services.redis_session_service import RedisSessionService
 from backend.app.models.project_management_models import ProjectRole
 
+class MongoRepo(Protocol):
+    async def get_user_projects_with_access(self, email: str) -> List[Any]: ...
+    async def get_user_by_email(self, email: str) -> Any: ...
+    async def get_group_by_id(self, group_id: str) -> Any: ...
+    async def get_project_by_id(self, project_id: str) -> Any: ...
+
+class CacheRepo(Protocol):
+    async def get_user_permissions(self, email: str, company_id: str) -> Optional[dict]: ...
+    async def store_user_permissions(self, email: str, company_id: str, permissions: dict) -> None: ...
+
+_ROLE_PERMISSIONS = {
+    ProjectRole.OWNER.value: ["add_member", "remove_member", "delete_project", "edit_project", "view_project"],
+    ProjectRole.EDITOR.value: ["edit_project", "view_project"],
+    ProjectRole.VIEWER.value: ["view_project"]
+}
+
 class PermissionService:
-    def __init__(self, mongo_service: Optional[MongoDBService] = None, redis_session_service: Optional[RedisSessionService] = None):
-        self.mongo_service = mongo_service or MongoDBService()
-        self.redis_session_service = redis_session_service or RedisSessionService()
+    def __init__(self, mongo_service: Optional[MongoRepo] = None, redis_session_service: Optional[CacheRepo] = None):
+        self.mongo_service = mongo_service if mongo_service is not None else MongoDBService()
+        self.redis_session_service = redis_session_service if redis_session_service is not None else RedisSessionService()
         self.logger = logging.getLogger("PermissionService")
 
     @staticmethod
     def validate_project_action_by_role(role: str, action: str) -> Tuple[bool, Optional[str]]:
-        role_action_map = {
-            ProjectRole.OWNER.value: {"add_member", "remove_member", "delete_project", "edit_project", "view_project"},
-            ProjectRole.EDITOR.value: {"edit_project", "view_project"},
-            ProjectRole.VIEWER.value: {"view_project"}
-        }
-        allowed_actions = role_action_map.get(role)
+        allowed_actions = _ROLE_PERMISSIONS.get(role)
         if allowed_actions is None:
             return False, f"Role desconhecida: '{role}'."
         if action not in allowed_actions:
@@ -35,14 +46,7 @@ class PermissionService:
         for proj in projects:
             proj_id = proj.get("project_id")
             role = proj.get("role")
-            actions = []
-            if role:
-                if role == "owner":
-                    actions = ["add_member", "remove_member", "delete_project", "edit_project", "view_project"]
-                elif role == "editor":
-                    actions = ["edit_project", "view_project"]
-                elif role == "viewer":
-                    actions = ["view_project"]
+            actions = _ROLE_PERMISSIONS.get(role, []) if role else []
             project_permissions[proj_id] = {
                 "role": role,
                 "actions": actions
