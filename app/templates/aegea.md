@@ -1,5 +1,3 @@
-Aqui está o prompt adaptado para a realidade visual e arquitetural da Aegea Saneamento, seguindo a exata estrutura do modelo que você enviou:
-
 # Descritivo Objetivo para o Agente de UI/UX
 
 Aqui está o descritivo objetivo com os elementos visuais da Aegea Saneamento para a construção do protótipo:
