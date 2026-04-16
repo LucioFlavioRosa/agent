@@ -53,8 +53,7 @@ Estratégia focada em governança corporativa e legibilidade técnica.
 ---
 
 ## 🔗 6. URL de Componentes
-* **Logo Nutreco:** [https://upload.wikimedia.org/wikipedia/commons/4/4b/LogoNutreco_trans.gif](https://upload.wikimedia.org/wikipedia/commons/4/4b/LogoNutreco_trans.gif)
-* **Ativos de Marca:** [https://trouwnutritionpublic.imageshop.no/](https://trouwnutritionpublic.imageshop.no/)
+* **Logo Nutreco:** https://pt.wikipedia.org/wiki/Nutreco#/media/Ficheiro:LogoNutreco.jpg
 
 ---
 
