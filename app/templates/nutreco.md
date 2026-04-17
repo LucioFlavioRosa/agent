@@ -45,6 +45,9 @@ Estratégia focada em clareza, modernidade e legibilidade corporativa.
 * **Floating Action Button (FAB):** Um botão circular persistente no canto inferior direito para acesso rápido a funções contextuais ou comunicação.
 * **Layout de Seções Claras:** O conteúdo é dividido em faixas horizontais de largura total, alternando entre imagens de fundo e áreas brancas apenas com texto.
 
+## 🏗️ 7. Logo URL
+url_logo_comgas: (https://upload.wikimedia.org/wikipedia/commons/5/50/LogoNutreco_trans.gif)
+
 ---
 
 ### Principais correções em relação à versão original:
