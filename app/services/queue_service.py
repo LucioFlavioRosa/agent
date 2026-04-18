@@ -45,10 +45,9 @@ class QueueService:
         self.agent_service = AgentService(
             context_retrieval_service=self.context_retrieval_service,
             blob_storage_service=self.blob_storage_service,
-            llm_services=llm_registry # Injeta o Bedrock aqui!
+            llm_services=llm_registry
         )
 
-    # NOVO MÉTODo: Necessário para o main.py enviar a mensagem
     async def send_message(self, payload: dict):
         queue_conn_str = await self.vault_service.get_secret("queue-connection-string", company_id="default", vault_type="infra", is_global=True)
         if not queue_conn_str:
@@ -69,7 +68,6 @@ class QueueService:
         blob_path: Optional[str] = None,
         error_message: Optional[str] = None
     ):
-        """Envia o payload EXATO que o JobCompletePayload do FastAPI espera."""
         backend_base_url = os.getenv("BACKEND_WEBHOOK_URL", "http://host.docker.internal:8000").rstrip('/')
         webhook_url = f"{backend_base_url}/internal/jobs/{job_id}/complete"
         
@@ -95,23 +93,17 @@ class QueueService:
         except Exception as e:
             logger.log_erro("webhook_erro_rede", f"Falha de rede ao notificar backend: {str(e)}", job_id=job_id, company_id=company_id)
 
-    # 🚀 MÉTODO CORRIGIDO AQUI 🚀
     async def _extract_text_from_blob(self, company_id: str, blob_path: str, group_id: Optional[str]) -> str:
-        """Função auxiliar para baixar o DOCX do Blob e extrair o texto estruturado"""
         if not blob_path: return ""
         try:
-            # Baixa os bytes do blob storage
             file_bytes = await self.blob_storage_service.download_document(
                 company_id=company_id, blob_path=blob_path, group_id=group_id
             )
             
-            # Extrai os metadados do blob_path para os logs estruturados
-            # Geralmente o formato é: company_id/project_id/job_id/arquivo.docx
             partes = blob_path.split('/')
             project_id = partes[1] if len(partes) > 1 else None
             job_id = partes[2] if len(partes) > 2 else None
             
-            # 🚀 Chamada da sua função que entende parágrafos e tabelas!
             texto = extrair_texto_docx_em_memoria(
                 file_bytes=file_bytes,
                 job_id=job_id,
@@ -125,6 +117,7 @@ class QueueService:
             return ""
 
     async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
+        task_data = {}  # 🚀 Correção: Inicializa vazio para evitar que o except quebre
         try:
             decoded_str = base64.b64decode(msg.content).decode('utf-8')
             task_data = json.loads(decoded_str)
@@ -132,94 +125,73 @@ class QueueService:
             job_id = task_data.get('job_id')
             company_id = task_data.get('company_id')
             project_id = task_data.get('project_id')
-            group_id = task_data.get('group_ids') # Vem como string do main.py
+            group_id = task_data.get('group_ids')
             analysis_type = task_data.get("analysis_type", "unknown")
             
-            # 🚀 CORREÇÃO 1: Extrai o ID do épico e cria a categoria dinâmica
             target_epic_id = task_data.get("target_epic_id")
             categoria_salvamento = f"prototype_{target_epic_id}" if target_epic_id else "prototype"
             
-            # Caminhos dos arquivos base (podem vir nulos caso o usuário não envie)
             blob_instrucoes = task_data.get('blob_path') 
             blob_identidade = task_data.get('identidade_visual_blob_path')
             
             logger.log_info_negocio("job_recebido_fila", "Job recebido da fila", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
-            # 1. Extração dos textos (Apenas se os arquivos foram enviados)
             texto_instrucoes = await self._extract_text_from_blob(company_id, blob_instrucoes, group_id)
             texto_identidade = await self._extract_text_from_blob(company_id, blob_identidade, group_id)
 
             logger.log_info_negocio("job_inicio_processamento", "Iniciando processamento com o AgentService", job_id=job_id, company_id=company_id)
             
-            # 2. 🚀 DELEGA TUDO PARA O AGENT SERVICE 🚀
             resultado_html = await self.agent_service.executar_analise(
                 task_payload=task_data,
                 texto_instrucoes=texto_instrucoes,
                 texto_identidade=texto_identidade
             )
             
-            # 3. SUCESSO! Apaga a mensagem da fila para não repetir.
             await queue_client.delete_message(msg)
             
-            # 4. Descobre o caminho onde o Agente salvou o arquivo para avisar o Maestro
             config_do_agente = AGENT_CONFIG.get(analysis_type, {})
             nome_arquivo_saida = config_do_agente.get("output_filename", "index.html")
             caminho_salvo = f"{company_id}/{project_id}/{job_id}/{nome_arquivo_saida}"
             
-            # 5. Notifica o Backend Maestro
             await self._notificar_backend(
                 job_id=job_id,
                 company_id=company_id,
                 project_id=project_id,
                 status="done",
-                category=categoria_salvamento,  # 🚀 CORREÇÃO 2: Usa a categoria dinâmica aqui!
+                category=categoria_salvamento,
                 blob_path=caminho_salvo 
             )
             
             logger.log_info_negocio("job_finalizado", f"Job finalizado com sucesso. Salvo em: {caminho_salvo}", job_id=job_id, company_id=company_id)
             
         except Exception as e:
-            # 🚀 LÓGICA DE RESILIÊNCIA E ANTI-FANTASMAS
-            tentativas_atuais = getattr(msg, 'dequeue_count', 1)
-            limite_tentativas = 3
+            logger.log_erro("erro_processamento_job", f"Erro fatal na execução. Abortando job e limpando fila: {e}", extra={"worker_id": worker_id})
             
-            logger.log_erro("erro_processamento_job", f"Erro na tentativa {tentativas_atuais}/{limite_tentativas}: {e}", extra={"worker_id": worker_id})
-            
-            if tentativas_atuais >= limite_tentativas:
-                # 💀 MATAR O FANTASMA: Já tentou 3 vezes e falhou. Erro permanente.
-                logger.log_info_negocio("mensagem_venenosa", "Limite de tentativas excedido. Abortando job e limpando fila.", job_id=job_id)
-                
-                # Avisa o Frontend que deu erro definitivo
+            job_id = task_data.get("job_id")
+            # 🚀 Correção: Só tentamos notificar se o payload não estava corrompido e conseguimos pegar o job_id
+            if job_id:
                 try:
-                    task_data = json.loads(base64.b64decode(msg.content).decode('utf-8'))
-                    
-                    # 🚀 CORREÇÃO 3: Usa a mesma lógica dinâmica para o erro
                     target_epic_id_err = task_data.get("target_epic_id")
                     cat_err = f"prototype_{target_epic_id_err}" if target_epic_id_err else "prototype"
                     
                     await self._notificar_backend(
-                        job_id=task_data.get("job_id"),
+                        job_id=job_id,
                         company_id=task_data.get("company_id"),
                         project_id=task_data.get("project_id"),
                         status="error",
-                        category=cat_err, # 🚀 Envia o erro pro épico correto
-                        error_message=f"Falha após {limite_tentativas} tentativas: {str(e)}"
+                        category=cat_err,
+                        error_message=f"Falha na execução: {str(e)}"
                     )
-                except Exception:
-                    pass
-                
-                # Deleta a mensagem para limpar a fila de vez
-                try:
-                    await queue_client.delete_message(msg)
-                    logger.log_info_negocio("mensagem_apagada_com_erro", "Mensagem removida da fila após limite de falhas.", job_id=job_id)
-                except Exception as del_err:
-                    logger.log_erro("erro_ao_apagar_mensagem", f"Falha ao tentar remover a mensagem da fila: {del_err}")
-                    
-            else:
-                # ♻️ RESILIÊNCIA: Erro transiente. Tem vidas sobrando.
-                # Não deletamos a mensagem e não avisamos o frontend. A Azure vai tentar de novo.
-                logger.log_info_negocio("mensagem_reagendada", f"A mensagem retornará para a fila em breve. Vidas restantes: {limite_tentativas - tentativas_atuais}", job_id=job_id)
+                except Exception as notify_err:
+                    logger.log_erro("erro_notificacao_falha", f"Não foi possível notificar o erro ao backend: {notify_err}")
+            
+            try:
+                await queue_client.delete_message(msg)
+                logger.log_info_negocio("mensagem_apagada_com_erro", "Mensagem removida da fila para evitar jobs fantasmas.", job_id=job_id or 'unknown')
+            except Exception as del_err:
+                logger.log_erro("erro_ao_apagar_mensagem", f"Falha ao tentar remover a mensagem da fila: {del_err}")
 
+    # 🚀 Correção: O _consumer_loop estava duplicado no final. Removido o extra.
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
         logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
         while True:
@@ -255,7 +227,6 @@ class QueueService:
             
             try:
                 while True:
-                    # 🚀 AQUI: Mudado para 1200 segundos (20 minutos)
                     messages = queue_client.receive_messages(max_messages=5, visibility_timeout=1200)
                     has_messages = False
                     async for msg in messages:
@@ -271,16 +242,3 @@ class QueueService:
                     w.cancel()
                 await asyncio.gather(*workers, return_exceptions=True)
                 logger.log_info_negocio("workers_finalizados", "Todos os workers finalizados.")
-
-    async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
-        logger.log_info_negocio("worker_iniciado", f"Worker-{worker_id} iniciado.", extra={"worker_id": worker_id})
-        while True:
-            try:
-                msg = await self.internal_queue.get()
-                await self.process_single_message(msg, queue_client, worker_id)
-                self.internal_queue.task_done()
-            except asyncio.CancelledError:
-                logger.log_info_negocio("worker_cancelado", f"Worker-{worker_id} cancelado.", extra={"worker_id": worker_id})
-                break
-            except Exception as e:
-                logger.log_erro("erro_consumer_loop", f"Erro crítico no loop do consumidor: {e}", extra={"worker_id": worker_id})
