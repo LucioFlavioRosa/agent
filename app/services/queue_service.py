@@ -117,8 +117,27 @@ class QueueService:
             return ""
 
     async def process_single_message(self, msg, queue_client: QueueClient, worker_id: int):
-        task_data = {}  # 🚀 Correção: Inicializa vazio para evitar que o except quebre
+        # 🚀 1. TRAVA DE SEGURANÇA: Impede múltiplas tentativas se houver concorrência
+        if msg.dequeue_count > 1:
+            logger.log_info_negocio("mensagem_rejeitada", f"Mensagem ignorada pois já teve {msg.dequeue_count} tentativas.", extra={"worker_id": worker_id})
+            try:
+                await queue_client.delete_message(msg)
+            except Exception:
+                pass
+            return
+
+        # 🚀 2. EXCLUSÃO IMEDIATA: Garante estritamente 1 única tentativa (At-Most-Once)
+        # Ao apagarmos agora, se o código der erro ou o servidor cair, a tarefa não será reprocessada.
         try:
+            await queue_client.delete_message(msg)
+            logger.log_info_negocio("mensagem_apagada_inicio", "Mensagem removida da fila para garantir tentativa única.", extra={"worker_id": worker_id})
+        except Exception as del_err:
+            logger.log_erro("erro_ao_apagar_mensagem_inicio", f"Falha ao tentar remover a mensagem antes do processamento: {del_err}")
+
+        task_data = {}
+        
+        try:
+            # 3. Decodifica o payload
             decoded_str = base64.b64decode(msg.content).decode('utf-8')
             task_data = json.loads(decoded_str)
             
@@ -134,7 +153,7 @@ class QueueService:
             blob_instrucoes = task_data.get('blob_path') 
             blob_identidade = task_data.get('identidade_visual_blob_path')
             
-            logger.log_info_negocio("job_recebido_fila", "Job recebido da fila", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
+            logger.log_info_negocio("job_recebido_fila", "Job recebido da fila e iniciando decodificação", job_id=job_id, company_id=company_id, extra={"worker_id": worker_id})
             
             texto_instrucoes = await self._extract_text_from_blob(company_id, blob_instrucoes, group_id)
             texto_identidade = await self._extract_text_from_blob(company_id, blob_identidade, group_id)
@@ -146,8 +165,6 @@ class QueueService:
                 texto_instrucoes=texto_instrucoes,
                 texto_identidade=texto_identidade
             )
-            
-            await queue_client.delete_message(msg)
             
             config_do_agente = AGENT_CONFIG.get(analysis_type, {})
             nome_arquivo_saida = config_do_agente.get("output_filename", "index.html")
@@ -165,10 +182,10 @@ class QueueService:
             logger.log_info_negocio("job_finalizado", f"Job finalizado com sucesso. Salvo em: {caminho_salvo}", job_id=job_id, company_id=company_id)
             
         except Exception as e:
-            logger.log_erro("erro_processamento_job", f"Erro fatal na execução. Abortando job e limpando fila: {e}", extra={"worker_id": worker_id})
+            logger.log_erro("erro_processamento_job", f"Erro fatal na execução. A tarefa falhou e não será reprocessada: {e}", extra={"worker_id": worker_id})
             
             job_id = task_data.get("job_id")
-            # 🚀 Correção: Só tentamos notificar se o payload não estava corrompido e conseguimos pegar o job_id
+            # Notifica o backend sobre o erro, já que a mensagem não existe mais na fila
             if job_id:
                 try:
                     target_epic_id_err = task_data.get("target_epic_id")
@@ -184,12 +201,6 @@ class QueueService:
                     )
                 except Exception as notify_err:
                     logger.log_erro("erro_notificacao_falha", f"Não foi possível notificar o erro ao backend: {notify_err}")
-            
-            try:
-                await queue_client.delete_message(msg)
-                logger.log_info_negocio("mensagem_apagada_com_erro", "Mensagem removida da fila para evitar jobs fantasmas.", job_id=job_id or 'unknown')
-            except Exception as del_err:
-                logger.log_erro("erro_ao_apagar_mensagem", f"Falha ao tentar remover a mensagem da fila: {del_err}")
 
     # 🚀 Correção: O _consumer_loop estava duplicado no final. Removido o extra.
     async def _consumer_loop(self, queue_client: QueueClient, worker_id: int):
